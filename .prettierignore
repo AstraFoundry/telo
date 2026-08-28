@@ -1,0 +1,7 @@
+.agents
+.workspace
+node_modules
+out
+release
+coverage
+reports

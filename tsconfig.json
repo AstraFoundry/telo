@@ -1,0 +1,34 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "useDefineForClassFields": true,
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "allowJs": false,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "strict": true,
+    "forceConsistentCasingInFileNames": true,
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "types": ["node", "vitest/globals"],
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["frontend/src/*"],
+      "app/*": ["frontend/src/app/*"],
+      "pages/*": ["frontend/src/pages/*"],
+      "widgets/*": ["frontend/src/widgets/*"],
+      "features/*": ["frontend/src/features/*"],
+      "entities/*": ["frontend/src/entities/*"],
+      "shared/*": ["frontend/src/shared/*"],
+      "@components/*": ["frontend/src/shared/beui/components/*"],
+      "@beui-lib/*": ["frontend/src/shared/beui/lib/*"],
+      "backend/*": ["backend/src/*"]
+    }
+  },
+  "include": ["backend/src", "frontend/src", "tests", "*.ts"]
+}

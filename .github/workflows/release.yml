@@ -1,0 +1,47 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build release artifacts
+        run: pnpm release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TELO_TELEGRAM_API_ID: ${{ secrets.TELO_TELEGRAM_API_ID }}
+          TELO_TELEGRAM_API_HASH: ${{ secrets.TELO_TELEGRAM_API_HASH }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: telo-${{ matrix.os }}
+          path: release/*
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/**/*

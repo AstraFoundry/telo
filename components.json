@@ -1,0 +1,23 @@
+{
+  "$schema": "https://ui.shadcn.com/schema.json",
+  "style": "new-york",
+  "rsc": false,
+  "tsx": true,
+  "tailwind": {
+    "config": "",
+    "css": "frontend/src/app/styles/index.css",
+    "baseColor": "neutral",
+    "cssVariables": true
+  },
+  "iconLibrary": "phosphor",
+  "aliases": {
+    "components": "@/shared/ui",
+    "ui": "@/shared/ui",
+    "utils": "@/shared/lib/cn",
+    "lib": "@/shared/lib",
+    "hooks": "@/shared/lib"
+  },
+  "registries": {
+    "@beui": "https://beui.dev/r/{name}.json"
+  }
+}
