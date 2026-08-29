@@ -6,7 +6,8 @@
   "description": "Telegram desktop client with a workspace-aware agent.",
   "main": "out/main/index.js",
   "scripts": {
-    "dev": "electron-vite dev",
+    "postinstall": "install-electron",
+    "dev": "install-electron && electron-vite dev",
     "build": "electron-vite build",
     "package": "pnpm build && electron-builder --dir",
     "release": "pnpm build && electron-builder --publish never",
@@ -16,7 +17,7 @@
     "format:check": "prettier --check .",
     "test": "vitest run --coverage",
     "test:unit": "vitest run",
-    "test:e2e": "pnpm build && playwright test",
+    "test:e2e": "electron-vite build --mode e2e && playwright test",
     "docs:check": "markdownlint-cli2 'README*.md' 'docs/**/*.md'",
     "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm docs:check && pnpm test:e2e"
   },
@@ -62,6 +63,7 @@
     "ai": "^7.0.83",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "libphonenumber-js": "^1.13.12",
     "motion": "^13.1.1",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",

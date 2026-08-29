@@ -1,6 +1,28 @@
+export { EASE_OUT } from "@beui-lib/ease";
+
+export { Avatar } from "./avatar";
+export type { AvatarProps } from "./avatar";
+export { LoadIndicator } from "./load-indicator";
+export type { LoadIndicatorProps } from "./load-indicator";
+
 export { Button, StatefulButton } from "@components/motion/button";
 export type { ButtonState } from "@components/motion/button";
 export { Input } from "@components/motion/input";
+export { OTPInput } from "@components/motion/otp-input";
+export type { OTPStatus } from "@components/motion/otp-input";
+export {
+  Combobox,
+  ComboboxContent,
+  ComboboxEmpty,
+  ComboboxGroup,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxLabel,
+  ComboboxList,
+  ComboboxSeparator,
+  ComboboxTrigger,
+  ComboboxValue,
+} from "@components/motion/combobox";
 export { TextReveal } from "@components/motion/text-reveal";
 export { TextShimmer } from "@components/motion/text-shimmer";
 export { MorphingModal } from "@components/motion/morphing-modal";
