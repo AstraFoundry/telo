@@ -20,6 +20,8 @@ function createTest(demoWorkspace: boolean) {
       const application = await electron.launch({
         executablePath: electronPath,
         args: [
+          // GitHub-hosted Linux runners cannot use Chromium's sandbox.
+          ...(process.env.CI ? ["--no-sandbox"] : []),
           ".",
           `--user-data-dir=${testInfo.outputPath(`${browserName}-user-data`)}`,
         ],

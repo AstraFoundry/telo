@@ -20,7 +20,7 @@ make build
 make package
 ```
 
-`make install` runs `pnpm install --frozen-lockfile`, which also downloads the Electron platform binary via `install-electron`. Electron 42 and later no longer download that binary in the package's own install script, and electron-vite still requires `node_modules/electron/path.txt` before it can launch the app. `make dev` runs `make install` first, then starts Electron Vite with hot reload. `make dev DEMO=1` sets `TELO_DEMO_WORKSPACE=1` so the process opens the in-memory demo workspace instead of onboarding; there is no in-app demo-workspace action. `make check` runs formatting, lint, TypeScript, coverage-gated tests, Markdown validation, a production build, and Electron E2E tests.
+`make install` runs `pnpm install --frozen-lockfile`, which also downloads the Electron platform binary via `install-electron`. Electron 42 and later no longer download that binary in the package's own install script, and electron-vite still requires `node_modules/electron/path.txt` before it can launch the app. `make dev` runs `make install` first, then starts Electron Vite with hot reload. `make dev DEMO=1` sets `TELO_DEMO_WORKSPACE=1` so the process opens the in-memory demo workspace instead of onboarding; there is no in-app demo-workspace action. `make check` runs formatting, lint, TypeScript, coverage-gated tests, Markdown validation, and Electron E2E tests. CI runs the same checks as two GitHub Actions jobs (`check` and `e2e`); the e2e job wraps Playwright in `xvfb-run`.
 
 Local Telegram application credentials live in `.env` (gitignored; copy `.env.example`). `electron-vite` loads `TELO_TELEGRAM_API_ID` and `TELO_TELEGRAM_API_HASH` from that file, or from the process environment:
 
