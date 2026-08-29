@@ -1,16 +1,24 @@
 import type {
-  ChatDto,
+  ChatPageDto,
+  ChatPageInput,
   CurrentUserDto,
   DeleteMessageInput,
   EditMessageInput,
   ForwardMessageInput,
   MessageDto,
+  MessagePageDto,
+  MessagePageInput,
+  TelegramWorkspaceEvent,
 } from "../../../../contracts/src/ipc";
 
 export interface TelegramRepository {
+  subscribe(listener: (event: TelegramWorkspaceEvent) => void): () => void;
   getCurrentUser(): Promise<CurrentUserDto>;
-  listChats(): Promise<ReadonlyArray<ChatDto>>;
-  listMessages(chatId: string): Promise<ReadonlyArray<MessageDto>>;
+  listChatPage(input: ChatPageInput): Promise<ChatPageDto>;
+  listMessagePage(
+    chatId: string,
+    input: MessagePageInput,
+  ): Promise<MessagePageDto>;
   sendMessage(
     chatId: string,
     body: string,

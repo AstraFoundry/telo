@@ -14,6 +14,22 @@ export interface ChatDto {
   readonly initials: string;
 }
 
+export interface ChatPageCursorDto {
+  readonly chatId: string;
+  readonly topMessageId: string;
+  readonly updatedAt: string;
+}
+
+export interface ChatPageInput {
+  readonly limit?: number;
+  readonly cursor?: ChatPageCursorDto | null;
+}
+
+export interface ChatPageDto {
+  readonly items: ReadonlyArray<ChatDto>;
+  readonly nextCursor: ChatPageCursorDto | null;
+}
+
 export interface MessageReplyToDto {
   readonly id: string;
   readonly senderName: string;
@@ -33,6 +49,47 @@ export interface MessageDto {
   /** ISO timestamp of the last edit; null/absent when never edited. */
   readonly editedAt?: string | null;
 }
+
+export interface MessagePageInput {
+  readonly limit?: number;
+  /** Exclusive message id; retrieves messages older than this message. */
+  readonly beforeMessageId?: string | null;
+}
+
+export interface MessagePageDto {
+  readonly items: ReadonlyArray<MessageDto>;
+  readonly nextCursor: string | null;
+}
+
+export type TelegramWorkspaceEvent =
+  | {
+      readonly type: "connection-state";
+      readonly state: "offline" | "synchronizing" | "connected";
+    }
+  | {
+      readonly type: "chat-upsert";
+      readonly chat: ChatDto;
+    }
+  | {
+      readonly type: "message-upsert";
+      readonly cause: "new" | "edited";
+      readonly message: MessageDto;
+    }
+  | {
+      readonly type: "message-delete";
+      readonly chatId: string;
+      readonly messageIds: ReadonlyArray<string>;
+    }
+  | {
+      readonly type: "message-read";
+      readonly chatId: string;
+      readonly maxMessageId: string;
+      readonly direction: "inbox" | "outbox";
+    }
+  | {
+      readonly type: "sync-error";
+      readonly message: string;
+    };
 
 export interface SendMessageInput {
   readonly replyToId?: string;
@@ -176,8 +233,11 @@ export type TelegramAuthState =
 export interface TeloDesktopApi {
   readonly workspace: {
     getCurrentUser(): Promise<CurrentUserDto>;
-    listChats(): Promise<ReadonlyArray<ChatDto>>;
-    listMessages(chatId: string): Promise<ReadonlyArray<MessageDto>>;
+    listChatPage(input?: ChatPageInput): Promise<ChatPageDto>;
+    listMessagePage(
+      chatId: string,
+      input?: MessagePageInput,
+    ): Promise<MessagePageDto>;
     sendMessage(
       chatId: string,
       body: string,
@@ -189,6 +249,7 @@ export interface TeloDesktopApi {
     setChatPinned(chatId: string, pinned: boolean): Promise<void>;
     setChatMuted(chatId: string, muted: boolean): Promise<void>;
     setChatRead(chatId: string, read: boolean): Promise<void>;
+    onEvent(listener: (event: TelegramWorkspaceEvent) => void): () => void;
   };
   readonly agent: {
     getConfiguration(): Promise<AgentConfigurationDto>;

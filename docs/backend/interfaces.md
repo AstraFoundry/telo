@@ -16,7 +16,7 @@ The interfaces layer adapts the application layer to the outside world. In Telo 
 
 - **IPC handlers** — receive the invoke payload, call an application service, return its DTO.
 - **Preload bridge methods** — the renderer-facing surface of each capability.
-- **Event push** — `webContents.send` streams for agent events (AG-UI) and Telegram auth state.
+- **Event push** — `webContents.send` streams for agent events (AG-UI), Telegram auth state, and typed Telegram workspace updates (new/edited/deleted/read messages plus synchronization failures).
 - **Input validation** — validate the shape at the boundary; application and domain code re-validate.
 
 ## Rules
@@ -25,6 +25,7 @@ The interfaces layer adapts the application layer to the outside world. In Telo 
 - The preload exposes one method per capability — never raw `ipcRenderer` access or arbitrary channel-send capability.
 - Do not pass Electron event objects into application services; extract the payload first.
 - Everything crossing the bridge uses the DTOs defined in `contracts/src/ipc.ts`.
+- Collection reads expose cursor pages through `workspace:list-chat-page` and `workspace:list-message-page`; do not add fixed-limit list channels beside them.
 - Event subscriptions return an unsubscribe function.
 - Adding a channel requires a contract entry, a preload method, a handler, and a test (see `register-ipc.test.ts`).
 - The renderer must never receive an API key, Telegram session, filesystem path, or Electron object.

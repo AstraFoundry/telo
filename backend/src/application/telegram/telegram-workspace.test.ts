@@ -5,6 +5,9 @@ import { TelegramWorkspaceService } from "./telegram-workspace";
 
 function repository(): TelegramRepository {
   return {
+    subscribe: vi.fn(() => () => {}),
+    listChatPage: vi.fn(async () => ({ items: [], nextCursor: null })),
+    listMessagePage: vi.fn(async () => ({ items: [], nextCursor: null })),
     getCurrentUser: vi.fn(async () => ({
       id: "user",
       displayName: "Telo User",
@@ -12,8 +15,6 @@ function repository(): TelegramRepository {
       initials: "TU",
       avatarDataUrl: null,
     })),
-    listChats: vi.fn(async () => []),
-    listMessages: vi.fn(async () => []),
     sendMessage: vi.fn(async (chatId, body) => ({
       id: "message",
       chatId,
@@ -42,12 +43,19 @@ describe("TelegramWorkspaceService", () => {
     });
   });
 
-  it("lists chats and messages through the port", async () => {
+  it("normalizes pagination defaults and validates page boundaries", async () => {
     const port = repository();
     const service = new TelegramWorkspaceService(port);
-    await expect(service.listChats()).resolves.toEqual([]);
-    await expect(service.listMessages("chat")).resolves.toEqual([]);
-    expect(port.listMessages).toHaveBeenCalledWith("chat");
+
+    await service.listChatPage();
+    await service.listMessagePage("chat");
+
+    expect(port.listChatPage).toHaveBeenCalledWith({ limit: 50 });
+    expect(port.listMessagePage).toHaveBeenCalledWith("chat", { limit: 50 });
+    expect(() => service.listChatPage({ limit: 0 })).toThrow("Page size");
+    expect(() => service.listMessagePage("chat", { limit: 101 })).toThrow(
+      "Page size",
+    );
   });
 
   it("trims outgoing messages", async () => {
@@ -74,9 +82,9 @@ describe("TelegramWorkspaceService", () => {
     ).toThrow(error);
   });
 
-  it("rejects an empty chat id when loading messages", () => {
+  it("rejects an empty chat id when loading a message page", () => {
     expect(() =>
-      new TelegramWorkspaceService(repository()).listMessages(" "),
+      new TelegramWorkspaceService(repository()).listMessagePage(" "),
     ).toThrow("Chat id");
   });
 });

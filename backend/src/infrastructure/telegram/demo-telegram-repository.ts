@@ -1,11 +1,16 @@
 import type {
   ChatDto,
+  ChatPageDto,
+  ChatPageInput,
   CurrentUserDto,
   DeleteMessageInput,
   EditMessageInput,
   ForwardMessageInput,
   MessageDto,
+  MessagePageDto,
+  MessagePageInput,
   MessageReplyToDto,
+  TelegramWorkspaceEvent,
 } from "../../../../contracts/src/ipc";
 import type { TelegramRepository } from "../../domain/telegram/telegram-ports";
 
@@ -91,6 +96,9 @@ const INITIAL_MESSAGES: Record<string, ReadonlyArray<MessageDto>> = {
 };
 
 export class DemoTelegramRepository implements TelegramRepository {
+  private readonly listeners = new Set<
+    (event: TelegramWorkspaceEvent) => void
+  >();
   private readonly chats = new Map(
     INITIAL_CHATS.map((chat) => [chat.id, { ...chat }]),
   );
@@ -100,6 +108,11 @@ export class DemoTelegramRepository implements TelegramRepository {
       [...messages],
     ]),
   );
+
+  subscribe(listener: (event: TelegramWorkspaceEvent) => void): () => void {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  }
 
   async getCurrentUser(): Promise<CurrentUserDto> {
     return {
@@ -111,12 +124,49 @@ export class DemoTelegramRepository implements TelegramRepository {
     };
   }
 
-  async listChats(): Promise<ReadonlyArray<ChatDto>> {
-    return [...this.chats.values()];
+  async listChatPage(input: ChatPageInput): Promise<ChatPageDto> {
+    const chats = [...this.chats.values()];
+    const start = input.cursor
+      ? chats.findIndex((chat) => chat.id === input.cursor?.chatId) + 1
+      : 0;
+    if (input.cursor && start === 0) {
+      throw new Error(`Unknown chat cursor ${input.cursor.chatId}`);
+    }
+    const limit = input.limit ?? chats.length;
+    const items = chats.slice(start, start + limit);
+    const last = items.at(-1);
+    return {
+      items,
+      nextCursor:
+        start + items.length < chats.length && last
+          ? {
+              chatId: last.id,
+              topMessageId: this.messages.get(last.id)?.at(-1)?.id ?? "0",
+              updatedAt: last.updatedAt,
+            }
+          : null,
+    };
   }
 
-  async listMessages(chatId: string): Promise<ReadonlyArray<MessageDto>> {
-    return this.messages.get(chatId) ?? [];
+  async listMessagePage(
+    chatId: string,
+    input: MessagePageInput,
+  ): Promise<MessagePageDto> {
+    this.requireChat(chatId);
+    const messages = this.messages.get(chatId) ?? [];
+    const end = input.beforeMessageId
+      ? messages.findIndex((message) => message.id === input.beforeMessageId)
+      : messages.length;
+    if (input.beforeMessageId && end === -1) {
+      throw new Error(`Unknown message cursor ${input.beforeMessageId}`);
+    }
+    const limit = input.limit ?? messages.length;
+    const start = Math.max(0, end - limit);
+    const items = messages.slice(start, end);
+    return {
+      items,
+      nextCursor: start > 0 ? (items[0]?.id ?? null) : null,
+    };
   }
 
   async sendMessage(
@@ -136,6 +186,12 @@ export class DemoTelegramRepository implements TelegramRepository {
     };
     const current = this.messages.get(chatId) ?? [];
     this.messages.set(chatId, [...current, message]);
+    this.updateChat(chatId, (chat) => ({
+      ...chat,
+      preview: message.body,
+      updatedAt: message.sentAt,
+    }));
+    this.emit({ type: "message-upsert", cause: "new", message });
     return message;
   }
 
@@ -156,6 +212,7 @@ export class DemoTelegramRepository implements TelegramRepository {
       input.chatId,
       messages.map((entry) => (entry.id === edited.id ? edited : entry)),
     );
+    this.emit({ type: "message-upsert", cause: "edited", message: edited });
   }
 
   async deleteMessage(input: DeleteMessageInput): Promise<void> {
@@ -164,6 +221,11 @@ export class DemoTelegramRepository implements TelegramRepository {
       input.chatId,
       messages.filter((entry) => entry.id !== input.messageId),
     );
+    this.emit({
+      type: "message-delete",
+      chatId: input.chatId,
+      messageIds: [input.messageId],
+    });
   }
 
   async forwardMessage(input: ForwardMessageInput): Promise<void> {
@@ -192,6 +254,7 @@ export class DemoTelegramRepository implements TelegramRepository {
       preview: forwarded.body,
       updatedAt: forwarded.sentAt,
     }));
+    this.emit({ type: "message-upsert", cause: "new", message: forwarded });
   }
 
   async setChatPinned(chatId: string, pinned: boolean): Promise<void> {
@@ -238,6 +301,12 @@ export class DemoTelegramRepository implements TelegramRepository {
   private updateChat(chatId: string, update: (chat: ChatDto) => ChatDto): void {
     const chat = this.chats.get(chatId);
     if (!chat) throw new Error(`Unknown chat ${chatId}`);
-    this.chats.set(chatId, update(chat));
+    const updated = update(chat);
+    this.chats.set(chatId, updated);
+    this.emit({ type: "chat-upsert", chat: updated });
+  }
+
+  private emit(event: TelegramWorkspaceEvent): void {
+    for (const listener of this.listeners) listener(event);
   }
 }

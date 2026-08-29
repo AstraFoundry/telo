@@ -67,9 +67,18 @@ function createWindow(): void {
   }
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   const container = createContainer((state) => {
     mainWindow?.webContents.send(channels.telegramAuthEvent, state);
+  });
+  container.workspace.subscribe((event) => {
+    mainWindow?.webContents.send(channels.workspaceEvent, event);
+  });
+  // Demo workspace is a process launch flag, not an in-app opt-in. Sync the
+  // persisted preference on every start so a leftover true cannot reopen demo
+  // after a plain `make dev` / packaged launch.
+  await container.preferences.execute({
+    demoWorkspace: process.env.TELO_DEMO_WORKSPACE === "1",
   });
   registerIpc(container);
   createWindow();

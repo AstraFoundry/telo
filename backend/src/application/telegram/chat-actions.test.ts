@@ -5,9 +5,10 @@ import { ChatActionsService } from "./chat-actions";
 
 function repository(): TelegramRepository {
   return {
+    subscribe: vi.fn(() => () => {}),
+    listChatPage: vi.fn(async () => ({ items: [], nextCursor: null })),
+    listMessagePage: vi.fn(async () => ({ items: [], nextCursor: null })),
     getCurrentUser: vi.fn(),
-    listChats: vi.fn(async () => []),
-    listMessages: vi.fn(async () => []),
     sendMessage: vi.fn(),
     editMessage: vi.fn(async () => undefined),
     deleteMessage: vi.fn(async () => undefined),

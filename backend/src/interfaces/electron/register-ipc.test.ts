@@ -290,6 +290,44 @@ describe("registerIpc chat actions", () => {
   });
 });
 
+describe("registerIpc workspace pagination", () => {
+  it("forwards chat and message page cursors to the workspace service", async () => {
+    const container = {
+      workspace: {
+        listChatPage: vi
+          .fn()
+          .mockResolvedValue({ items: [], nextCursor: null }),
+        listMessagePage: vi
+          .fn()
+          .mockResolvedValue({ items: [], nextCursor: null }),
+      },
+    } as unknown as ApplicationContainer;
+    registerIpc(container);
+    const chats = ipc.handlers.get(channels.chatPageList);
+    const messages = ipc.handlers.get(channels.messagePageList);
+    if (!chats || !messages)
+      throw new Error("page handlers were not registered");
+    const chatInput = {
+      limit: 25,
+      cursor: {
+        chatId: "chat-1",
+        topMessageId: "42",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      },
+    };
+    const messageInput = { limit: 30, beforeMessageId: "42" };
+
+    await chats({}, chatInput);
+    await messages({}, "chat-1", messageInput);
+
+    expect(container.workspace.listChatPage).toHaveBeenCalledWith(chatInput);
+    expect(container.workspace.listMessagePage).toHaveBeenCalledWith(
+      "chat-1",
+      messageInput,
+    );
+  });
+});
+
 describe("registerIpc message actions", () => {
   function messageActionsContainer(): ApplicationContainer {
     return {

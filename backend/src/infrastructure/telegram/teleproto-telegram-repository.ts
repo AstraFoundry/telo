@@ -1,17 +1,33 @@
 import { TelegramClient } from "teleproto";
+import {
+  DeletedMessage,
+  EditedMessage,
+  MessageRead,
+  NewMessage,
+  type DeletedMessageEvent,
+  type EditedMessageEvent,
+  type MessageReadEvent,
+  type NewMessageEvent,
+} from "teleproto/events/index.js";
 import { StringSession } from "teleproto/sessions/index.js";
+import { UpdateConnectionState } from "teleproto/network/index.js";
 
 import type {
   ChatDto,
+  ChatPageDto,
+  ChatPageInput,
   CurrentUserDto,
   DeleteMessageInput,
   EditMessageInput,
   ForwardMessageInput,
   MessageDto,
+  MessagePageDto,
+  MessagePageInput,
   MessageReplyToDto,
   TelegramAuthState,
   TelegramLoginConfigurationDto,
   TelegramLoginInput,
+  TelegramWorkspaceEvent,
 } from "../../../../contracts/src/ipc";
 import type {
   TelegramRepository,
@@ -26,7 +42,11 @@ type Challenge = {
 };
 
 export class TelegramClientCoordinator implements TelegramRepository {
-  private repository: TelegramRepository = new DemoTelegramRepository();
+  private readonly listeners = new Set<
+    (event: TelegramWorkspaceEvent) => void
+  >();
+  private repository: TelegramRepository;
+  private unsubscribeRepository: () => void;
   private state: TelegramAuthState = { status: "idle" };
   private challenge: Challenge | null = null;
   private client: TelegramClient | null = null;
@@ -39,7 +59,17 @@ export class TelegramClientCoordinator implements TelegramRepository {
       readonly apiHash: string;
     } | null,
     private readonly onState: (state: TelegramAuthState) => void,
-  ) {}
+  ) {
+    this.repository = new DemoTelegramRepository();
+    this.unsubscribeRepository = this.repository.subscribe((event) =>
+      this.publish(event),
+    );
+  }
+
+  subscribe(listener: (event: TelegramWorkspaceEvent) => void): () => void {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  }
 
   getAuthState(): TelegramAuthState {
     return this.state;
@@ -74,7 +104,8 @@ export class TelegramClientCoordinator implements TelegramRepository {
         this.setState({ status: "idle" });
         return;
       }
-      this.repository = new TeleprotoRepository(client);
+      this.replaceRepository(new TeleprotoRepository(client));
+      await client.catchUp();
       this.setState({ status: "ready" });
     } catch (error) {
       this.client = null;
@@ -95,7 +126,7 @@ export class TelegramClientCoordinator implements TelegramRepository {
     if (!apiHash) throw new Error("Telegram API hash is required");
     if (!input.phoneNumber.trim()) throw new Error("Phone number is required");
 
-    await this.client?.disconnect();
+    await this.disconnectCurrentClient();
     const client = this.createClient(await this.sessions.get(), apiId, apiHash);
     const profile = { apiId, apiHash, phoneNumber: input.phoneNumber.trim() };
     this.client = client;
@@ -116,7 +147,8 @@ export class TelegramClientCoordinator implements TelegramRepository {
       .then(async () => {
         await this.sessions.save(client.session.save() as string);
         await this.profiles.save(profile);
-        this.repository = new TeleprotoRepository(client);
+        this.replaceRepository(new TeleprotoRepository(client));
+        await client.catchUp();
         this.setState({ status: "ready" });
       })
       .catch((error: unknown) => {
@@ -138,12 +170,15 @@ export class TelegramClientCoordinator implements TelegramRepository {
     return this.repository.getCurrentUser();
   }
 
-  listChats(): Promise<ReadonlyArray<ChatDto>> {
-    return this.repository.listChats();
+  listChatPage(input: ChatPageInput): Promise<ChatPageDto> {
+    return this.repository.listChatPage(input);
   }
 
-  listMessages(chatId: string): Promise<ReadonlyArray<MessageDto>> {
-    return this.repository.listMessages(chatId);
+  listMessagePage(
+    chatId: string,
+    input: MessagePageInput,
+  ): Promise<MessagePageDto> {
+    return this.repository.listMessagePage(chatId, input);
   }
 
   sendMessage(
@@ -179,10 +214,10 @@ export class TelegramClientCoordinator implements TelegramRepository {
   }
 
   async logout(): Promise<void> {
-    await this.client?.disconnect();
+    await this.disconnectCurrentClient();
     this.client = null;
     this.challenge = null;
-    this.repository = new DemoTelegramRepository();
+    this.replaceRepository(new DemoTelegramRepository());
     await this.sessions.clear();
     this.setState({ status: "idle" });
   }
@@ -211,17 +246,85 @@ export class TelegramClientCoordinator implements TelegramRepository {
     this.state = state;
     this.onState(state);
   }
+
+  private async disconnectCurrentClient(): Promise<void> {
+    if (this.repository instanceof TeleprotoRepository) {
+      await this.repository.logout();
+    } else {
+      await this.client?.disconnect();
+    }
+  }
+
+  private replaceRepository(repository: TelegramRepository): void {
+    this.unsubscribeRepository();
+    this.repository = repository;
+    this.unsubscribeRepository = repository.subscribe((event) =>
+      this.publish(event),
+    );
+  }
+
+  private publish(event: TelegramWorkspaceEvent): void {
+    for (const listener of this.listeners) listener(event);
+  }
 }
 
 class TeleprotoRepository implements TelegramRepository {
-  constructor(private readonly client: TelegramClient) {}
+  private readonly listeners = new Set<
+    (event: TelegramWorkspaceEvent) => void
+  >();
+  private readonly messageChats = new Map<string, Set<string>>();
+  private readonly newMessageBuilder = new NewMessage({});
+  private readonly editedMessageBuilder = new EditedMessage({});
+  private readonly deletedMessageBuilder = new DeletedMessage({});
+  private readonly inboxReadBuilder = new MessageRead({ inbox: true });
+  private readonly outboxReadBuilder = new MessageRead({ inbox: false });
+  private readonly onNewMessage = (event: NewMessageEvent) => {
+    void this.handleMessageUpsert("new", event).catch((error: unknown) =>
+      this.emitSyncError(error),
+    );
+  };
+  private readonly onEditedMessage = (event: EditedMessageEvent) => {
+    void this.handleMessageUpsert("edited", event).catch((error: unknown) =>
+      this.emitSyncError(error),
+    );
+  };
+  private readonly onDeletedMessage = (event: DeletedMessageEvent) => {
+    void this.handleMessageDelete(event).catch((error: unknown) =>
+      this.emitSyncError(error),
+    );
+  };
+  private readonly onMessageRead = (event: MessageReadEvent) => {
+    this.handleMessageRead(event);
+  };
+  private readonly stopConnectionListener: () => void;
+
+  constructor(private readonly client: TelegramClient) {
+    client.addEventHandler(this.onNewMessage, this.newMessageBuilder);
+    client.addEventHandler(this.onEditedMessage, this.editedMessageBuilder);
+    client.addEventHandler(this.onDeletedMessage, this.deletedMessageBuilder);
+    client.addEventHandler(this.onMessageRead, this.inboxReadBuilder);
+    client.addEventHandler(this.onMessageRead, this.outboxReadBuilder);
+    this.stopConnectionListener = client.updates.on(
+      "connectionState",
+      async (update, next) => {
+        await this.handleConnectionState(update);
+        await next();
+      },
+    );
+  }
+
+  subscribe(listener: (event: TelegramWorkspaceEvent) => void): () => void {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  }
 
   async getCurrentUser(): Promise<CurrentUserDto> {
     const user = await this.client.getMe();
     const displayName =
       [user.firstName, user.lastName].filter(Boolean).join(" ") ||
       user.username ||
-      "Telegram user";
+      user.phone;
+    if (!displayName) throw new Error("Telegram account has no display name");
     let avatarDataUrl: string | null = null;
 
     try {
@@ -244,36 +347,64 @@ class TeleprotoRepository implements TelegramRepository {
     };
   }
 
-  async listChats(): Promise<ReadonlyArray<ChatDto>> {
-    const dialogs = await this.client.getDialogs({ limit: 60 });
-    return dialogs.map((dialog) => {
-      const title = dialog.title || dialog.name || "Telegram";
-      return {
-        id: dialog.id?.toString() ?? dialog.inputEntity.className,
-        title,
-        preview: dialog.message?.message || "",
-        updatedAt: new Date((dialog.date ?? 0) * 1000).toISOString(),
-        unreadCount: dialog.unreadCount,
-        muted: false,
-        pinned: dialog.pinned,
-        kind: dialog.isChannel
-          ? "channel"
-          : dialog.isGroup
-            ? "group"
-            : "direct",
-        initials: initials(title),
-      };
+  async listChatPage(input: ChatPageInput): Promise<ChatPageDto> {
+    const limit = input.limit ?? 50;
+    const dialogs = await this.client.getDialogs({
+      limit: limit + 1,
+      offsetDate: input.cursor
+        ? Math.floor(Date.parse(input.cursor.updatedAt) / 1000)
+        : undefined,
+      offsetId: input.cursor
+        ? telegramMessageId(input.cursor.topMessageId)
+        : undefined,
+      offsetPeer: input.cursor?.chatId,
+      ignorePinned: Boolean(input.cursor),
     });
+    const page = dialogs.slice(0, limit);
+    const last = page.at(-1);
+    return {
+      items: page.map((dialog) => this.toChat(dialog)),
+      nextCursor:
+        dialogs.length > limit && last
+          ? {
+              chatId: this.dialogId(last),
+              topMessageId: String(last.dialog.topMessage),
+              updatedAt: this.dialogDate(last).toISOString(),
+            }
+          : null,
+    };
   }
 
-  async listMessages(chatId: string): Promise<ReadonlyArray<MessageDto>> {
-    const messages = await this.client.getMessages(chatId, { limit: 80 });
-    const replyTo = await this.replySnapshots(chatId, messages);
-    return messages
-      .map((message) =>
-        toMessage(chatId, message, replyTo.get(message.id.toString()) ?? null),
+  async listMessagePage(
+    chatId: string,
+    input: MessagePageInput,
+  ): Promise<MessagePageDto> {
+    const limit = input.limit ?? 50;
+    const messages = await this.client.getMessages(chatId, {
+      limit: limit + 1,
+      offsetId: input.beforeMessageId
+        ? telegramMessageId(input.beforeMessageId)
+        : undefined,
+    });
+    const page = messages.slice(0, limit);
+    const replyTo = await this.replySnapshots(chatId, page);
+    page.forEach((message) => this.indexMessage(chatId, message));
+    const items = (
+      await Promise.all(
+        page.map((message) =>
+          this.toMessage(
+            chatId,
+            message,
+            replyTo.get(message.id.toString()) ?? null,
+          ),
+        ),
       )
-      .sort((left, right) => left.sentAt.localeCompare(right.sentAt));
+    ).sort((left, right) => left.sentAt.localeCompare(right.sentAt));
+    return {
+      items,
+      nextCursor:
+        messages.length > limit ? (page.at(-1)?.id.toString() ?? null) : null,
+    };
   }
 
   async sendMessage(
@@ -289,7 +420,8 @@ class TeleprotoRepository implements TelegramRepository {
       ? ((await this.replySnapshots(chatId, [sent])).get(sent.id.toString()) ??
         null)
       : null;
-    return toMessage(chatId, sent, replyTo);
+    this.indexMessage(chatId, sent);
+    return this.toMessage(chatId, sent, replyTo);
   }
 
   async editMessage(input: EditMessageInput): Promise<void> {
@@ -336,7 +468,143 @@ class TeleprotoRepository implements TelegramRepository {
   }
 
   async logout(): Promise<void> {
+    this.removeEventHandlers();
+    this.stopConnectionListener();
     await this.client.disconnect();
+  }
+
+  private async handleConnectionState(
+    update: UpdateConnectionState,
+  ): Promise<void> {
+    if (update.state !== UpdateConnectionState.connected) {
+      this.emit({ type: "connection-state", state: "offline" });
+      return;
+    }
+    this.emit({ type: "connection-state", state: "synchronizing" });
+    try {
+      await this.client.catchUp();
+      this.emit({ type: "connection-state", state: "connected" });
+    } catch (error) {
+      this.emitSyncError(error);
+    }
+  }
+
+  private async handleMessageUpsert(
+    cause: "new" | "edited",
+    event: NewMessageEvent | EditedMessageEvent,
+  ): Promise<void> {
+    const chatId = event.message.chatId?.toString();
+    if (!chatId) throw new Error("Telegram update has no chat id");
+    this.indexMessage(chatId, event.message);
+    const replyTo = (await this.replySnapshots(chatId, [event.message])).get(
+      event.message.id.toString(),
+    );
+    const message = await this.toMessage(
+      chatId,
+      event.message,
+      replyTo ?? null,
+    );
+    this.emit({ type: "message-upsert", cause, message });
+  }
+
+  private async handleMessageDelete(event: DeletedMessageEvent): Promise<void> {
+    const ids = event.deletedIds.map(String);
+    const explicitChatId = event.peer
+      ? await this.client.getPeerId(event.peer)
+      : null;
+    const chatIds = new Set<string>();
+    if (explicitChatId) chatIds.add(explicitChatId);
+    for (const id of ids) {
+      for (const chatId of this.messageChats.get(id) ?? []) chatIds.add(chatId);
+    }
+    for (const chatId of chatIds) {
+      this.emit({ type: "message-delete", chatId, messageIds: ids });
+    }
+    for (const id of ids) this.messageChats.delete(id);
+  }
+
+  private handleMessageRead(event: MessageReadEvent): void {
+    const chatId = event.chatId?.toString();
+    if (!chatId || event.contents) return;
+    this.emit({
+      type: "message-read",
+      chatId,
+      maxMessageId: String(event.maxId),
+      direction: event.outbox ? "outbox" : "inbox",
+    });
+  }
+
+  private indexMessage(chatId: string, message: TeleprotoMessage): void {
+    const id = message.id.toString();
+    const chats = this.messageChats.get(id) ?? new Set<string>();
+    chats.add(chatId);
+    this.messageChats.set(id, chats);
+  }
+
+  private removeEventHandlers(): void {
+    this.client.removeEventHandler(this.onNewMessage, this.newMessageBuilder);
+    this.client.removeEventHandler(
+      this.onEditedMessage,
+      this.editedMessageBuilder,
+    );
+    this.client.removeEventHandler(
+      this.onDeletedMessage,
+      this.deletedMessageBuilder,
+    );
+    this.client.removeEventHandler(this.onMessageRead, this.inboxReadBuilder);
+    this.client.removeEventHandler(this.onMessageRead, this.outboxReadBuilder);
+  }
+
+  private emit(event: TelegramWorkspaceEvent): void {
+    for (const listener of this.listeners) listener(event);
+  }
+
+  private emitSyncError(error: unknown): void {
+    this.emit({ type: "sync-error", message: safeError(error) });
+  }
+
+  private toChat(dialog: TeleprotoDialog): ChatDto {
+    const title = dialog.title || dialog.name;
+    if (!title) throw new Error("Telegram dialog has no title");
+    const notifySettings = dialog.dialog.notifySettings;
+    const muted =
+      "muteUntil" in notifySettings &&
+      typeof notifySettings.muteUntil === "number" &&
+      notifySettings.muteUntil > Math.floor(Date.now() / 1000);
+    const saved =
+      dialog.isUser &&
+      Boolean((dialog.entity as { self?: boolean } | undefined)?.self);
+    return {
+      id: this.dialogId(dialog),
+      title,
+      preview: dialog.message?.message || "",
+      updatedAt: this.dialogDate(dialog).toISOString(),
+      unreadCount: dialog.unreadCount,
+      muted,
+      pinned: dialog.pinned,
+      kind: saved
+        ? "saved"
+        : dialog.isChannel
+          ? "channel"
+          : dialog.isGroup
+            ? "group"
+            : "direct",
+      initials: initials(title),
+    };
+  }
+
+  private dialogId(dialog: TeleprotoDialog): string {
+    if (!dialog.id) throw new Error("Telegram dialog has no id");
+    return dialog.id.toString();
+  }
+
+  private dialogDate(dialog: TeleprotoDialog): Date {
+    if (typeof dialog.date !== "number") {
+      throw new Error(
+        `Telegram dialog ${this.dialogId(dialog)} has no timestamp`,
+      );
+    }
+    return new Date(dialog.date * 1000);
   }
 
   private async replySnapshots(
@@ -360,35 +628,66 @@ class TeleprotoRepository implements TelegramRepository {
       if (!source) continue;
       snapshots.set(message.id.toString(), {
         id: source.id.toString(),
-        senderName: source.out ? "You" : "Telegram",
+        senderName: await senderName(source),
         body: source.message,
       });
     }
     return snapshots;
   }
+
+  private async toMessage(
+    chatId: string,
+    message: TeleprotoMessage,
+    replyTo: MessageReplyToDto | null = null,
+  ): Promise<MessageDto> {
+    return {
+      id: message.id.toString(),
+      chatId,
+      senderName: await senderName(message),
+      body: message.message,
+      sentAt: new Date(message.date * 1000).toISOString(),
+      outgoing: Boolean(message.out),
+      status: message.out ? "sent" : "read",
+      replyTo,
+      editedAt:
+        typeof message.editDate === "number"
+          ? new Date(message.editDate * 1000).toISOString()
+          : null,
+    };
+  }
 }
 
 type TeleprotoMessage = Awaited<ReturnType<TelegramClient["sendMessage"]>>;
+type TeleprotoDialog = Awaited<
+  ReturnType<TelegramClient["getDialogs"]>
+>[number];
 
-function toMessage(
-  chatId: string,
-  message: TeleprotoMessage,
-  replyTo: MessageReplyToDto | null = null,
-): MessageDto {
-  return {
-    id: message.id.toString(),
-    chatId,
-    senderName: message.out ? "You" : "Telegram",
-    body: message.message,
-    sentAt: new Date(message.date * 1000).toISOString(),
-    outgoing: Boolean(message.out),
-    status: message.out ? "sent" : "read",
-    replyTo,
-    editedAt:
-      typeof message.editDate === "number"
-        ? new Date(message.editDate * 1000).toISOString()
-        : null,
-  };
+async function senderName(message: TeleprotoMessage): Promise<string> {
+  const sender = (await message.getSender()) as
+    | {
+        firstName?: string;
+        lastName?: string;
+        title?: string;
+        username?: string;
+      }
+    | undefined;
+  const senderDisplayName = sender
+    ? [sender.firstName, sender.lastName].filter(Boolean).join(" ") ||
+      sender.title ||
+      sender.username
+    : undefined;
+  const chat = senderDisplayName
+    ? undefined
+    : ((await message.getChat()) as
+        { title?: string; firstName?: string; username?: string } | undefined);
+  const name =
+    senderDisplayName ||
+    message.postAuthor ||
+    chat?.title ||
+    chat?.firstName ||
+    chat?.username;
+  if (!name) throw new Error(`Telegram message ${message.id} has no sender`);
+  return name;
 }
 
 function initials(title: string): string {
@@ -398,6 +697,12 @@ function initials(title: string): string {
     .slice(0, 2)
     .map((part) => part[0]?.toUpperCase())
     .join("");
+}
+
+function telegramMessageId(value: string): number {
+  if (!/^\d+$/.test(value))
+    throw new Error(`Invalid Telegram message id ${value}`);
+  return Number(value);
 }
 
 function safeError(error: unknown): string {

@@ -1,7 +1,8 @@
 export const channels = {
   currentUserGet: "workspace:get-current-user",
-  chatsList: "workspace:list-chats",
-  messagesList: "workspace:list-messages",
+  chatPageList: "workspace:list-chat-page",
+  messagePageList: "workspace:list-message-page",
+  workspaceEvent: "workspace:event",
   messageSend: "workspace:send-message",
   messageEdit: "workspace:edit-message",
   messageDelete: "workspace:delete-message",

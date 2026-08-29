@@ -5,6 +5,7 @@ import type {
   SaveAgentConfigurationInput,
   TeloDesktopApi,
   TelegramAuthState,
+  TelegramWorkspaceEvent,
   UpdateUserPreferencesInput,
 } from "../../../../contracts/src/ipc";
 import { channels } from "./channels";
@@ -12,8 +13,9 @@ import { channels } from "./channels";
 const api: TeloDesktopApi = {
   workspace: {
     getCurrentUser: () => ipcRenderer.invoke(channels.currentUserGet),
-    listChats: () => ipcRenderer.invoke(channels.chatsList),
-    listMessages: (chatId) => ipcRenderer.invoke(channels.messagesList, chatId),
+    listChatPage: (input) => ipcRenderer.invoke(channels.chatPageList, input),
+    listMessagePage: (chatId, input) =>
+      ipcRenderer.invoke(channels.messagePageList, chatId, input),
     sendMessage: (chatId, body, input) =>
       ipcRenderer.invoke(channels.messageSend, chatId, body, input),
     editMessage: (input) => ipcRenderer.invoke(channels.messageEdit, input),
@@ -26,6 +28,8 @@ const api: TeloDesktopApi = {
       ipcRenderer.invoke(channels.chatMuteSet, chatId, muted),
     setChatRead: (chatId, read) =>
       ipcRenderer.invoke(channels.chatReadSet, chatId, read),
+    onEvent: (listener) =>
+      subscribe<TelegramWorkspaceEvent>(channels.workspaceEvent, listener),
   },
   agent: {
     getConfiguration: () => ipcRenderer.invoke(channels.agentConfigGet),

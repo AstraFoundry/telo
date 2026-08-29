@@ -2,7 +2,32 @@ import { describe, expect, it } from "vitest";
 
 import { DemoTelegramRepository } from "./demo-telegram-repository";
 
+async function listChats(repository: DemoTelegramRepository) {
+  return (await repository.listChatPage({ limit: 100 })).items;
+}
+
+async function listMessages(
+  repository: DemoTelegramRepository,
+  chatId: string,
+) {
+  return (await repository.listMessagePage(chatId, { limit: 100 })).items;
+}
+
 describe("DemoTelegramRepository", () => {
+  it("publishes message and chat changes to subscribers", async () => {
+    const repository = new DemoTelegramRepository();
+    const events: unknown[] = [];
+    const unsubscribe = repository.subscribe((event) => events.push(event));
+
+    const sent = await repository.sendMessage("design", "Live update");
+    unsubscribe();
+    await repository.sendMessage("design", "After unsubscribe");
+
+    expect(events).toEqual([
+      expect.objectContaining({ type: "chat-upsert" }),
+      { type: "message-upsert", cause: "new", message: sent },
+    ]);
+  });
   it("returns the demo account identity", async () => {
     await expect(
       new DemoTelegramRepository().getCurrentUser(),
@@ -14,14 +39,32 @@ describe("DemoTelegramRepository", () => {
   });
 
   it("returns deterministic demo chats", async () => {
-    const chats = await new DemoTelegramRepository().listChats();
+    const chats = await listChats(new DemoTelegramRepository());
     expect(chats).toHaveLength(3);
     expect(chats[0]?.pinned).toBe(true);
   });
 
+  it("paginates chats with an exclusive cursor", async () => {
+    const repository = new DemoTelegramRepository();
+    const first = await repository.listChatPage({ limit: 1 });
+    const second = await repository.listChatPage({
+      limit: 1,
+      cursor: first.nextCursor,
+    });
+    const third = await repository.listChatPage({
+      limit: 1,
+      cursor: second.nextCursor,
+    });
+
+    expect(first.items.map((chat) => chat.id)).toEqual(["saved"]);
+    expect(second.items.map((chat) => chat.id)).toEqual(["design"]);
+    expect(third.items.map((chat) => chat.id)).toEqual(["product"]);
+    expect(third.nextCursor).toBeNull();
+  });
+
   it("returns a snapshot that does not leak internal chat state", async () => {
     const repository = new DemoTelegramRepository();
-    const chats = await repository.listChats();
+    const chats = await listChats(repository);
     await repository.setChatPinned("saved", false);
     expect(chats[0]?.pinned).toBe(true);
   });
@@ -29,7 +72,7 @@ describe("DemoTelegramRepository", () => {
   it("adds a sent message to the selected conversation", async () => {
     const repository = new DemoTelegramRepository();
     const sent = await repository.sendMessage("design", "Hello");
-    const messages = await repository.listMessages("design");
+    const messages = await listMessages(repository, "design");
     expect(sent).toMatchObject({
       body: "Hello",
       outgoing: true,
@@ -38,39 +81,52 @@ describe("DemoTelegramRepository", () => {
     expect(messages.at(-1)).toEqual(sent);
   });
 
+  it("paginates messages backward without duplicating the boundary", async () => {
+    const repository = new DemoTelegramRepository();
+    const first = await repository.listMessagePage("design", { limit: 1 });
+    const second = await repository.listMessagePage("design", {
+      limit: 1,
+      beforeMessageId: first.nextCursor,
+    });
+
+    expect(first.items.map((message) => message.id)).toEqual(["design-2"]);
+    expect(second.items.map((message) => message.id)).toEqual(["design-1"]);
+    expect(second.nextCursor).toBeNull();
+  });
+
   it("pins and unpins a chat persistently", async () => {
     const repository = new DemoTelegramRepository();
     await repository.setChatPinned("product", true);
-    let chats = await repository.listChats();
+    let chats = await listChats(repository);
     expect(chats.find((chat) => chat.id === "product")?.pinned).toBe(true);
 
     await repository.setChatPinned("product", false);
-    chats = await repository.listChats();
+    chats = await listChats(repository);
     expect(chats.find((chat) => chat.id === "product")?.pinned).toBe(false);
   });
 
   it("mutes and unmutes a chat persistently", async () => {
     const repository = new DemoTelegramRepository();
     await repository.setChatMuted("design", true);
-    let chats = await repository.listChats();
+    let chats = await listChats(repository);
     expect(chats.find((chat) => chat.id === "design")?.muted).toBe(true);
 
     await repository.setChatMuted("design", false);
-    chats = await repository.listChats();
+    chats = await listChats(repository);
     expect(chats.find((chat) => chat.id === "design")?.muted).toBe(false);
   });
 
   it("clears the unread counter when a chat is marked read", async () => {
     const repository = new DemoTelegramRepository();
     await repository.setChatRead("design", true);
-    const chats = await repository.listChats();
+    const chats = await listChats(repository);
     expect(chats.find((chat) => chat.id === "design")?.unreadCount).toBe(0);
   });
 
   it("flags a chat with one unread when it is marked unread", async () => {
     const repository = new DemoTelegramRepository();
     await repository.setChatRead("saved", false);
-    const chats = await repository.listChats();
+    const chats = await listChats(repository);
     expect(chats.find((chat) => chat.id === "saved")?.unreadCount).toBe(1);
   });
 
@@ -92,7 +148,7 @@ describe("DemoTelegramRepository", () => {
       senderName: "Mina",
       body: "The conversation list should stay compact at desktop widths.",
     });
-    const messages = await repository.listMessages("design");
+    const messages = await listMessages(repository, "design");
     expect(messages.at(-1)?.replyTo).toEqual(sent.replyTo);
   });
 
@@ -110,7 +166,7 @@ describe("DemoTelegramRepository", () => {
       messageId: "design-2",
       body: "Agreed. Composer stays anchored.",
     });
-    const messages = await repository.listMessages("design");
+    const messages = await listMessages(repository, "design");
     const edited = messages.find((message) => message.id === "design-2");
     expect(edited?.body).toBe("Agreed. Composer stays anchored.");
     expect(edited?.editedAt).toEqual(expect.any(String));
@@ -129,7 +185,7 @@ describe("DemoTelegramRepository", () => {
         body: "hijack",
       }),
     ).rejects.toThrow("Message design-1 is not outgoing");
-    const messages = await repository.listMessages("design");
+    const messages = await listMessages(repository, "design");
     expect(messages.find((message) => message.id === "design-1")?.body).toBe(
       "The conversation list should stay compact at desktop widths.",
     );
@@ -152,7 +208,7 @@ describe("DemoTelegramRepository", () => {
   it("deletes a message from its conversation", async () => {
     const repository = new DemoTelegramRepository();
     await repository.deleteMessage({ chatId: "design", messageId: "design-1" });
-    const messages = await repository.listMessages("design");
+    const messages = await listMessages(repository, "design");
     expect(messages.map((message) => message.id)).toEqual(["design-2"]);
   });
 
@@ -172,7 +228,7 @@ describe("DemoTelegramRepository", () => {
       toChatId: "saved",
     });
 
-    const target = await repository.listMessages("saved");
+    const target = await listMessages(repository, "saved");
     const forwarded = target.at(-1);
     expect(forwarded).toMatchObject({
       chatId: "saved",
@@ -184,7 +240,7 @@ describe("DemoTelegramRepository", () => {
     });
     expect(forwarded?.id).not.toBe("design-1");
     // The source conversation is untouched.
-    const source = await repository.listMessages("design");
+    const source = await listMessages(repository, "design");
     expect(source).toHaveLength(2);
   });
 
@@ -195,7 +251,7 @@ describe("DemoTelegramRepository", () => {
       messageId: "saved-1",
       toChatId: "design",
     });
-    const chats = await repository.listChats();
+    const chats = await listChats(repository);
     const design = chats.find((chat) => chat.id === "design");
     expect(design?.preview).toBe(
       "Release checklist: tests, docs, signed packages.",
@@ -226,7 +282,7 @@ describe("DemoTelegramRepository", () => {
 
     await repository.logout();
 
-    await expect(repository.listChats()).resolves.toHaveLength(3);
+    await expect(listChats(repository)).resolves.toHaveLength(3);
     await expect(repository.getCurrentUser()).resolves.toMatchObject({
       id: "demo-user",
     });

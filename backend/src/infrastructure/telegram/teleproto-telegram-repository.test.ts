@@ -28,6 +28,29 @@ const fake = vi.hoisted(() => {
     connectCalls = 0;
     disconnectCalls = 0;
     readonly session = { save: (): string => "restored-session" };
+    connectionHandler:
+      | ((
+          update: { state: number },
+          next: () => Promise<void>,
+        ) => Promise<void>)
+      | null = null;
+    readonly updates = {
+      on: (
+        _name: string,
+        handler: (
+          update: { state: number },
+          next: () => Promise<void>,
+        ) => Promise<void>,
+      ) => {
+        this.connectionHandler = handler;
+        return () => {
+          this.connectionHandler = null;
+        };
+      },
+    };
+    catchUpCalls = 0;
+    addEventHandler(): void {}
+    removeEventHandler(): void {}
 
     constructor(
       readonly stringSession: unknown,
@@ -47,6 +70,14 @@ const fake = vi.hoisted(() => {
 
     async checkAuthorization(): Promise<boolean> {
       return FakeTelegramClient.authorized;
+    }
+
+    async catchUp(): Promise<void> {
+      this.catchUpCalls += 1;
+    }
+
+    async emitConnectionState(state: number): Promise<void> {
+      await this.connectionHandler?.({ state }, async () => undefined);
     }
 
     async start(params: FakeStartParams): Promise<void> {
@@ -130,7 +161,9 @@ describe("TelegramClientCoordinator", () => {
       id: "demo-user",
       displayName: "Demo User",
     });
-    await expect(coordinator.listChats()).resolves.toHaveLength(3);
+    expect((await coordinator.listChatPage({ limit: 100 })).items).toHaveLength(
+      3,
+    );
   });
 
   it("stays idle when there is no session or credentials to restore", async () => {
@@ -159,6 +192,7 @@ describe("TelegramClientCoordinator", () => {
     expect(client?.apiId).toBe(7);
     expect(client?.apiHash).toBe("hash");
     expect(client?.connectCalls).toBe(1);
+    expect(client?.catchUpCalls).toBe(1);
     expect(client?.disconnectCalls).toBe(0);
   });
 
@@ -176,6 +210,27 @@ describe("TelegramClientCoordinator", () => {
     await expect(coordinator.getCurrentUser()).resolves.toMatchObject({
       id: "demo-user",
     });
+  });
+
+  it("publishes offline and synchronized states around reconnect catch-up", async () => {
+    const { coordinator } = createCoordinator({
+      session: "stored-session",
+      credentials: { apiId: 7, apiHash: "hash" },
+    });
+    const events: unknown[] = [];
+    coordinator.subscribe((event) => events.push(event));
+    await coordinator.initialize();
+    const client = FakeTelegramClient.instances[0];
+
+    await client?.emitConnectionState(-1);
+    await client?.emitConnectionState(1);
+
+    expect(events).toEqual([
+      { type: "connection-state", state: "offline" },
+      { type: "connection-state", state: "synchronizing" },
+      { type: "connection-state", state: "connected" },
+    ]);
+    expect(client?.catchUpCalls).toBe(2);
   });
 
   it("surfaces an error state when session restoration fails", async () => {

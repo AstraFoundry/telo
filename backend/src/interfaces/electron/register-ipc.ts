@@ -3,8 +3,10 @@ import { ipcMain, Notification, type WebContents } from "electron";
 
 import type {
   DeleteMessageInput,
+  ChatPageInput,
   EditMessageInput,
   ForwardMessageInput,
+  MessagePageInput,
   RunAgentInput,
   SaveAgentConfigurationInput,
   SendMessageInput,
@@ -18,9 +20,13 @@ export function registerIpc(container: ApplicationContainer): void {
   ipcMain.handle(channels.currentUserGet, () =>
     container.workspace.getCurrentUser(),
   );
-  ipcMain.handle(channels.chatsList, () => container.workspace.listChats());
-  ipcMain.handle(channels.messagesList, (_event, chatId: string) =>
-    container.workspace.listMessages(chatId),
+  ipcMain.handle(channels.chatPageList, (_event, input?: ChatPageInput) =>
+    container.workspace.listChatPage(input),
+  );
+  ipcMain.handle(
+    channels.messagePageList,
+    (_event, chatId: string, input?: MessagePageInput) =>
+      container.workspace.listMessagePage(chatId, input),
   );
   ipcMain.handle(
     channels.messageSend,
