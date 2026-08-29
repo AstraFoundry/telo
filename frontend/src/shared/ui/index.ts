@@ -71,10 +71,46 @@ export {
   MessageBubbleContent,
   MessageContent,
   MessageFooter,
+  MessageGroup,
   MessageHeader,
+  MessageMarker,
   MessageScroller,
+  MessageTyping,
 } from "@components/agents/message";
+export { MessageBubbleCollapsible } from "@components/agents/message-bubble";
 export { PromptInput } from "@components/agents/prompt-input";
 export { StreamingResponse } from "@components/agents/streaming-response";
 export { AgentActivity } from "@components/agents/agent-activity";
 export type { AgentActivityItem } from "@components/agents/agent-activity";
+export { AgentDisclosure } from "@components/agents/agent-disclosure";
+export {
+  Citation,
+  CitationFavicon,
+  CitationList,
+  CitationStack,
+  Citations,
+} from "@components/agents/citations";
+export type {
+  CitationItem,
+  CitationListProps,
+  CitationProps,
+  CitationStackProps,
+  CitationsProps,
+} from "@components/agents/citations";
+export { TodoList } from "@components/agents/todo-list";
+export type {
+  TodoItem,
+  TodoItemStatus,
+  TodoListProps,
+} from "@components/agents/todo-list";
+export { ApprovalCard } from "@components/agents/approval-card";
+export type {
+  ApprovalCardAnswer,
+  ApprovalCardAnswers,
+  ApprovalCardOption,
+  ApprovalCardProps,
+  ApprovalCardQuestion,
+  ApprovalCardStatus,
+} from "@components/agents/approval-card";
+export { Checkbox } from "@components/motion/checkbox";
+export type { CheckboxProps } from "@components/motion/checkbox";

@@ -123,4 +123,9 @@ export const copy = {
   notificationsDesktopHint:
     "Show a system notification when the agent finishes while the window is unfocused.",
   notifyRunCompleteBody: "Your agent response is ready.",
+  typing: "Typing…",
+  draftPrefix: "Draft:",
+  today: "Today",
+  yesterday: "Yesterday",
+  jumpToMessage: "Jump to original message",
 } as const;

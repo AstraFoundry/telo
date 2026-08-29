@@ -85,6 +85,9 @@ function chat(partial: Partial<ChatDto> & Pick<ChatDto, "id" | "title">) {
     pinned: false,
     kind: "direct",
     initials: "AB",
+    avatarDataUrl: null,
+    draftPreview: null,
+    typing: false,
     ...partial,
   } satisfies ChatDto;
 }
@@ -282,6 +285,31 @@ describe("ConversationSidebar", () => {
     act(() => intersectAll());
 
     expect(telo.workspace.listChatPage).not.toHaveBeenCalled();
+  });
+
+  it("shows a typing indicator instead of the preview text", async () => {
+    await renderSidebar({
+      chats: [chat({ id: "chat-1", title: "Ada Byron", typing: true })],
+    });
+
+    expect(screen.getAllByText(copy.typing).length).toBeGreaterThan(0);
+  });
+
+  it("shows the draft preview with a Draft label instead of the last message", async () => {
+    await renderSidebar({
+      chats: [
+        chat({
+          id: "chat-1",
+          title: "Ada Byron",
+          preview: "Old message",
+          draftPreview: "Unsent reply",
+        }),
+      ],
+    });
+
+    expect(screen.getByText(copy.draftPrefix)).toBeTruthy();
+    expect(screen.getByText(/Unsent reply/)).toBeTruthy();
+    expect(screen.queryByText("Old message")).toBeNull();
   });
 
   it("formats the row timestamp with the 24h preference", async () => {

@@ -81,6 +81,9 @@ function chat(partial: Partial<ChatDto> & Pick<ChatDto, "id" | "title">) {
     pinned: false,
     kind: "direct",
     initials: "AB",
+    avatarDataUrl: null,
+    draftPreview: null,
+    typing: false,
     ...partial,
   } satisfies ChatDto;
 }
@@ -105,16 +108,24 @@ async function renderView({
   chats = [chat({ id: "chat-1", title: "Saved Messages", kind: "saved" })],
   messages = [],
   activeChatId = "chat-1",
+  scrollPositions = {},
 }: {
   prefs?: Partial<UserPreferencesDto>;
   chats?: ChatDto[];
   messages?: MessageDto[];
   activeChatId?: string | null;
+  scrollPositions?: Record<string, number>;
 } = {}) {
   const telo = installTeloApiMock();
   telo.preferences.get.mockResolvedValue(preferences(prefs));
   const { useChatStore } = await import("../../../entities/chat");
-  useChatStore.setState({ chats, messages, activeChatId, loading: false });
+  useChatStore.setState({
+    chats,
+    messages,
+    activeChatId,
+    loading: false,
+    scrollPositions,
+  });
   const { ConversationView } = await import("./conversation-view");
   const result = render(<ConversationView />);
   return { telo, useChatStore, ...result };
@@ -460,6 +471,91 @@ describe("ConversationView", () => {
     expect(quoted).toBeTruthy();
     expect(screen.getByText("Mina")).toBeTruthy();
     expect(quoted.parentElement?.className).toContain("border-l-2");
+  });
+
+  it("shows a typing indicator under the chat title", async () => {
+    await renderView({
+      chats: [chat({ id: "chat-1", title: "Saved Messages", typing: true })],
+    });
+
+    expect(screen.getAllByText(copy.typing).length).toBeGreaterThan(0);
+  });
+
+  it("shows a date marker before the first message of a day", async () => {
+    await renderView({
+      messages: [
+        message({
+          id: "m1",
+          body: "Older day",
+          sentAt: "2026-01-01T10:00:00.000Z",
+        }),
+        message({
+          id: "m2",
+          body: "Same day",
+          sentAt: "2026-01-01T12:00:00.000Z",
+        }),
+      ],
+    });
+
+    expect(screen.getAllByText(/2026|January 1/).length).toBeGreaterThan(0);
+  });
+
+  it("jumps to the quoted message when the reply block is clicked", async () => {
+    Element.prototype.scrollIntoView = vi.fn();
+    await renderView({
+      messages: [
+        message({ id: "m0", body: "Original body" }),
+        message({
+          id: "m1",
+          body: "Reply body",
+          replyTo: { id: "m0", senderName: "Sender", body: "Original body" },
+        }),
+      ],
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: copy.jumpToMessage }));
+
+    expect(Element.prototype.scrollIntoView).toHaveBeenCalled();
+  });
+
+  it("pages older messages until the quoted message is found", async () => {
+    const { telo, useChatStore } = await renderView({
+      messages: [
+        message({
+          id: "m1",
+          body: "Reply body",
+          replyTo: { id: "m0", senderName: "Sender", body: "Original body" },
+        }),
+      ],
+    });
+    Element.prototype.scrollIntoView = vi.fn();
+    telo.workspace.listMessagePage.mockResolvedValue({
+      items: [message({ id: "m0", body: "Original body" })],
+      nextCursor: null,
+    });
+    act(() => useChatStore.setState({ messageCursor: "m1" }));
+
+    fireEvent.click(screen.getByRole("button", { name: copy.jumpToMessage }));
+
+    await vi.waitFor(() => {
+      expect(Element.prototype.scrollIntoView).toHaveBeenCalled();
+    });
+    expect(telo.workspace.listMessagePage).toHaveBeenCalledWith("chat-1", {
+      beforeMessageId: "m1",
+    });
+  });
+
+  it("restores a chat's saved scroll position after reselecting it", async () => {
+    await renderView({
+      messages: [message({ id: "m1", body: "Message body" })],
+      scrollPositions: { "chat-1": 120 },
+    });
+
+    await vi.waitFor(() => {
+      expect(
+        screen.getByRole("region", { name: copy.conversation }).scrollTop,
+      ).toBe(120);
+    });
   });
 
   it("marks edited messages next to the timestamp", async () => {

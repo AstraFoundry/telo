@@ -8,7 +8,14 @@ import {
   WarningCircle,
 } from "@phosphor-icons/react";
 import { AnimatePresence } from "motion/react";
-import { useLayoutEffect, useRef, useState, type CSSProperties } from "react";
+import {
+  Fragment,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 
 import type {
   MessageDto,
@@ -21,6 +28,7 @@ import { AgentToggle } from "features/toggle-agent";
 import { copy } from "shared/config/copy";
 import { useEdgeSentinel } from "shared/lib/use-edge-sentinel";
 import {
+  Avatar,
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
@@ -32,7 +40,9 @@ import {
   MessageContent,
   MessageFooter,
   MessageHeader,
+  MessageMarker,
   MessageScroller,
+  MessageTyping,
   LoadIndicator,
 } from "shared/ui";
 
@@ -49,16 +59,41 @@ function time(value: string, format: TimeFormatPreference): string {
   }).format(new Date(value));
 }
 
+// Groups the transcript into day buckets, Telegram-style: a marker renders
+// once at the start of each calendar day instead of on every message.
+function dayLabel(value: string): string {
+  const date = new Date(value);
+  const today = new Date();
+  const startOfDay = (input: Date) =>
+    new Date(input.getFullYear(), input.getMonth(), input.getDate()).getTime();
+  const diffDays = Math.round(
+    (startOfDay(today) - startOfDay(date)) / (24 * 60 * 60 * 1000),
+  );
+  if (diffDays === 0) return copy.today;
+  if (diffDays === 1) return copy.yesterday;
+  return new Intl.DateTimeFormat(undefined, {
+    month: "long",
+    day: "numeric",
+    year: date.getFullYear() !== today.getFullYear() ? "numeric" : undefined,
+  }).format(date);
+}
+
+function dayKey(value: string): string {
+  return new Date(value).toDateString();
+}
+
 function ConversationMessage({
   message,
   timeFormat,
   onForward,
   onDelete,
+  onJumpToMessage,
 }: {
   message: MessageDto;
   timeFormat: TimeFormatPreference;
   onForward(message: MessageDto): void;
   onDelete(message: MessageDto): void;
+  onJumpToMessage(messageId: string): void;
 }) {
   const startReply = useChatStore((state) => state.startReply);
   const startEdit = useChatStore((state) => state.startEdit);
@@ -67,7 +102,10 @@ function ConversationMessage({
   const [selection, setSelection] = useState("");
 
   return (
-    <Message from={message.outgoing ? "user" : "assistant"}>
+    <Message
+      id={`conversation-message-${message.id}`}
+      from={message.outgoing ? "user" : "assistant"}
+    >
       <MessageContent>
         {!message.outgoing ? (
           <MessageHeader>{message.senderName}</MessageHeader>
@@ -84,14 +122,22 @@ function ConversationMessage({
                   preference resolves. */}
               <MessageBubbleContent className="text-[length:var(--message-font-size,14px)]">
                 {message.replyTo ? (
-                  <div className="mb-1 border-l-2 border-primary pl-2">
+                  <button
+                    type="button"
+                    aria-label={copy.jumpToMessage}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onJumpToMessage(message.replyTo!.id);
+                    }}
+                    className="mb-1 block w-full border-l-2 border-primary pl-2 text-left"
+                  >
                     <div className="truncate font-medium text-primary">
                       {message.replyTo.senderName}
                     </div>
                     <div className="truncate text-foreground/70">
                       {message.replyTo.body}
                     </div>
-                  </div>
+                  </button>
                 ) : null}
                 {message.body}
               </MessageBubbleContent>
@@ -154,6 +200,7 @@ export function ConversationView() {
   );
   const loadOlderMessages = useChatStore((state) => state.loadOlderMessages);
   const send = useChatStore((state) => state.send);
+  const setScrollPosition = useChatStore((state) => state.setScrollPosition);
   const activeChat = chats.find((chat) => chat.id === activeChatId);
   const { value: timeFormat } = useTimeFormat();
   const { value: textSize } = useMessageTextSize();
@@ -165,6 +212,8 @@ export function ConversationView() {
     height: number;
     top: number;
   } | null>(null);
+  const restoredChatIdRef = useRef<string | null>(null);
+  const restoreFrameRef = useRef<{ outer: number; inner: number } | null>(null);
 
   const requestOlderMessages = () => {
     const viewport = transcriptRef.current;
@@ -190,6 +239,60 @@ export function ConversationView() {
     if (delta > 0) viewport.scrollTop = anchor.top + delta;
   }, [messages, firstMessageId]);
 
+  // Reselecting a chat with a saved read position restores it once the page
+  // has painted; MessageScroller's own "follow the live edge" auto-scroll
+  // (which runs on its own rAF) always wins otherwise, so this restore runs a
+  // frame later to have the final word. A brand-new chat (no saved offset)
+  // is left alone and simply lands at the live edge, as before.
+  useLayoutEffect(() => {
+    if (!activeChatId || messages.length === 0) return;
+    if (restoredChatIdRef.current === activeChatId) return;
+    restoredChatIdRef.current = activeChatId;
+    const saved = useChatStore.getState().scrollPositions[activeChatId];
+    if (saved === undefined) return;
+    const outer = requestAnimationFrame(() => {
+      const inner = requestAnimationFrame(() => {
+        const viewport = transcriptRef.current;
+        if (viewport) viewport.scrollTop = saved;
+      });
+      restoreFrameRef.current = { outer, inner };
+    });
+    restoreFrameRef.current = { outer, inner: 0 };
+    return () => {
+      cancelAnimationFrame(outer);
+      if (restoreFrameRef.current) {
+        cancelAnimationFrame(restoreFrameRef.current.inner);
+      }
+    };
+  }, [activeChatId, messages]);
+
+  const jumpToMessage = async (messageId: string) => {
+    const scrollIntoView = (element: HTMLElement) => {
+      element.scrollIntoView({ behavior: "smooth", block: "center" });
+    };
+    const existing = document.getElementById(
+      `conversation-message-${messageId}`,
+    );
+    if (existing) {
+      scrollIntoView(existing);
+      return;
+    }
+    // The reply target may live further back than the loaded page: keep
+    // paging older messages until it appears or history runs out.
+    const maxAttempts = 25;
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+      if (!useChatStore.getState().messageCursor) break;
+      await useChatStore.getState().loadOlderMessages();
+      const found = document.getElementById(
+        `conversation-message-${messageId}`,
+      );
+      if (found) {
+        scrollIntoView(found);
+        return;
+      }
+    }
+  };
+
   // History paging is sentinel-driven (Telegram-style), not a button: when
   // the top marker scrolls into view, the next older page loads.
   const topSentinelRef = useEdgeSentinel({
@@ -197,17 +300,41 @@ export function ConversationView() {
     onReach: requestOlderMessages,
   });
 
+  const messagesWithDayMarkers = useMemo(
+    () =>
+      messages.map((message, index) => ({
+        message,
+        showDayMarker:
+          index === 0 ||
+          dayKey(message.sentAt) !== dayKey(messages[index - 1].sentAt),
+      })),
+    [messages],
+  );
+
   return (
     <main
       className="flex min-w-0 flex-col"
       style={{ "--message-font-size": `${textSize}px` } as CSSProperties}
     >
-      <header className="flex h-14 items-center px-4 [app-region:drag]">
+      <header className="flex h-14 items-center gap-2 px-4 [app-region:drag]">
+        {activeChat ? (
+          <Avatar
+            initials={activeChat.initials}
+            src={activeChat.avatarDataUrl}
+            className="size-8"
+          />
+        ) : null}
         <div className="min-w-0 flex-1">
           {/* deslop-ignore-next-line 12 */}
           <h1 className="truncate text-base font-semibold">
             {activeChat?.title ?? ""}
           </h1>
+          {activeChat?.typing ? (
+            <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <MessageTyping label={copy.typing} />
+              <span aria-hidden="true">{copy.typing}</span>
+            </span>
+          ) : null}
         </div>
         <div className="flex gap-1 [app-region:no-drag]">
           <AgentToggle />
@@ -246,6 +373,13 @@ export function ConversationView() {
         className="min-h-0 flex-1"
         contentClassName="mx-auto flex w-full max-w-3xl flex-col gap-3 px-5 py-5"
         viewportRef={transcriptRef}
+        viewportProps={{
+          onScroll: () => {
+            if (activeChatId && transcriptRef.current) {
+              setScrollPosition(activeChatId, transcriptRef.current.scrollTop);
+            }
+          },
+        }}
       >
         {messageCursor ? (
           <div ref={topSentinelRef} className="flex justify-center">
@@ -258,14 +392,19 @@ export function ConversationView() {
             </AnimatePresence>
           </div>
         ) : null}
-        {messages.map((message) => (
-          <ConversationMessage
-            key={message.id}
-            message={message}
-            timeFormat={timeFormat}
-            onForward={setForwardSource}
-            onDelete={setDeleteSource}
-          />
+        {messagesWithDayMarkers.map(({ message, showDayMarker }) => (
+          <Fragment key={message.id}>
+            {showDayMarker ? (
+              <MessageMarker>{dayLabel(message.sentAt)}</MessageMarker>
+            ) : null}
+            <ConversationMessage
+              message={message}
+              timeFormat={timeFormat}
+              onForward={setForwardSource}
+              onDelete={setDeleteSource}
+              onJumpToMessage={(messageId) => void jumpToMessage(messageId)}
+            />
+          </Fragment>
         ))}
       </MessageScroller>
       <div className="px-5 py-3">

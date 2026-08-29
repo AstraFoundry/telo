@@ -148,6 +148,23 @@ describe("MessageComposer", () => {
     expect((textarea as HTMLTextAreaElement).value).toBe("Retry me");
   });
 
+  it("restores a chat's draft when switching to it and persists edits through the store", async () => {
+    const { useChatStore, textarea } = await renderComposer(true);
+    act(() =>
+      useChatStore.setState({ activeChatId: "a", drafts: { a: "left off" } }),
+    );
+
+    expect((textarea as HTMLTextAreaElement).value).toBe("left off");
+
+    fireEvent.change(textarea, { target: { value: "left off here" } });
+
+    expect(useChatStore.getState().drafts.a).toBe("left off here");
+
+    act(() => useChatStore.setState({ activeChatId: "b" }));
+
+    expect((textarea as HTMLTextAreaElement).value).toBe("");
+  });
+
   it("shows a reply preview bar with the sender and body, and cancels it", async () => {
     const { useChatStore } = await renderComposer(true);
     useChatStore.setState({

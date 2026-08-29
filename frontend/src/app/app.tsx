@@ -50,7 +50,16 @@ export function App() {
   useEffect(() => {
     if (workspaceEnabled) {
       void Promise.all([load(), loadCurrentUser()]);
-      return subscribeToWorkspaceEvents();
+      const unsubscribeWorkspace = subscribeToWorkspaceEvents();
+      const unsubscribeNotificationClick =
+        window.telo.shell.onNotificationClick((chatId) => {
+          setSurface("conversation");
+          void useChatStore.getState().select(chatId);
+        });
+      return () => {
+        unsubscribeWorkspace();
+        unsubscribeNotificationClick();
+      };
     }
     return undefined;
   }, [load, loadCurrentUser, workspaceEnabled]);
