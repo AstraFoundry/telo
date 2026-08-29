@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -22,6 +22,44 @@ function stubMatchMedia(dark: boolean): void {
     onchange: null,
     dispatchEvent: () => false,
   })) as unknown as typeof window.matchMedia;
+}
+
+type IntersectionCallback = (
+  entries: Array<{ isIntersecting: boolean }>,
+) => void;
+
+let intersectionCallbacks: IntersectionCallback[] = [];
+
+// jsdom does not implement IntersectionObserver, which the paging sentinel
+// uses to trigger lazy loading.
+function stubIntersectionObserver(): void {
+  intersectionCallbacks = [];
+  window.IntersectionObserver = class {
+    private readonly callback: IntersectionCallback;
+    constructor(callback: IntersectionObserverCallback) {
+      this.callback = callback as unknown as IntersectionCallback;
+      intersectionCallbacks.push(this.callback);
+    }
+    observe(): void {}
+    unobserve(): void {}
+    disconnect(): void {
+      // Real observers stop reporting after disconnect; mirror that so
+      // unmounted sentinels cannot fire.
+      intersectionCallbacks = intersectionCallbacks.filter(
+        (callback) => callback !== this.callback,
+      );
+    }
+  } as unknown as typeof IntersectionObserver;
+}
+
+function intersectAll(): void {
+  for (const callback of intersectionCallbacks) {
+    callback([{ isIntersecting: true }]);
+  }
+}
+
+function chatCursor(chatId: string) {
+  return { chatId, topMessageId: "m1", updatedAt: "2026-01-01T10:00:00.000Z" };
 }
 
 function preferences(partial: Partial<UserPreferencesDto> = {}) {
@@ -88,11 +126,15 @@ describe("ConversationSidebar", () => {
   beforeEach(() => {
     vi.resetModules();
     stubMatchMedia(false);
+    stubIntersectionObserver();
   });
 
   it("notifies the parent when a chat is selected", async () => {
     const { telo, useChatStore, onSelectChat } = await renderSidebar();
-    telo.workspace.listMessages.mockResolvedValue([]);
+    telo.workspace.listMessagePage.mockResolvedValue({
+      items: [],
+      nextCursor: null,
+    });
     const user = userEvent.setup();
 
     await user.click(screen.getByRole("button", { name: /Ada Byron/ }));
@@ -195,6 +237,51 @@ describe("ConversationSidebar", () => {
     );
     expect(telo.workspace.setChatMuted).toHaveBeenCalledWith("chat-1", true);
     expect(useChatStore.getState().chats[0]?.muted).toBe(true);
+  });
+
+  it("loads the next chat page when the end sentinel enters view", async () => {
+    const { telo, useChatStore } = await renderSidebar();
+    telo.workspace.listChatPage.mockResolvedValue({
+      items: [chat({ id: "chat-2", title: "Grace Hopper" })],
+      nextCursor: null,
+    });
+    act(() => useChatStore.setState({ chatCursor: chatCursor("chat-1") }));
+
+    act(() => intersectAll());
+
+    expect(
+      await screen.findByRole("button", { name: /Grace Hopper/ }),
+    ).toBeTruthy();
+    expect(telo.workspace.listChatPage).toHaveBeenCalledWith({
+      cursor: chatCursor("chat-1"),
+    });
+  });
+
+  it("shows a spinner without visible text while more chats load", async () => {
+    const { telo, useChatStore } = await renderSidebar();
+    telo.workspace.listChatPage.mockImplementation(() => new Promise(() => {}));
+    act(() => useChatStore.setState({ chatCursor: chatCursor("chat-1") }));
+
+    act(() => intersectAll());
+
+    const status = screen.getByRole("status");
+    expect(status.getAttribute("aria-label")).toBe(copy.loadingChats);
+    // Paging feedback is a spinner only — no written "loading" notice.
+    expect(status.textContent).toBe("");
+  });
+
+  it("pauses paging while a search query is active", async () => {
+    const { telo, useChatStore } = await renderSidebar();
+    act(() => useChatStore.setState({ chatCursor: chatCursor("chat-1") }));
+    const user = userEvent.setup();
+
+    await user.type(
+      screen.getByRole("textbox", { name: copy.searchChats }),
+      "Ada",
+    );
+    act(() => intersectAll());
+
+    expect(telo.workspace.listChatPage).not.toHaveBeenCalled();
   });
 
   it("formats the row timestamp with the 24h preference", async () => {

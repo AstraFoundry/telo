@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { subscribeToAgentEvents, useAgentStore } from "entities/agent";
-import { useChatStore } from "entities/chat";
+import { subscribeToWorkspaceEvents, useChatStore } from "entities/chat";
 import { useTelegramStore } from "entities/telegram";
 import { OnboardingPage } from "pages/onboarding";
 import { SettingsPage } from "pages/settings";
@@ -50,7 +50,9 @@ export function App() {
   useEffect(() => {
     if (workspaceEnabled) {
       void Promise.all([load(), loadCurrentUser()]);
+      return subscribeToWorkspaceEvents();
     }
+    return undefined;
   }, [load, loadCurrentUser, workspaceEnabled]);
 
   if (!workspaceEnabled) {
@@ -62,10 +64,6 @@ export function App() {
           !configuration ||
           auth.status === "connecting"
         }
-        onUseDemo={() => {
-          setDemo(true);
-          void window.telo.preferences.update({ demoWorkspace: true });
-        }}
       />
     );
   }

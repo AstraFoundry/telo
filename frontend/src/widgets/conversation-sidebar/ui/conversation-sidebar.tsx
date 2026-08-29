@@ -12,13 +12,18 @@ import { useChatStore } from "entities/chat";
 import { useTimeFormat } from "entities/preferences";
 import { AccountMenu } from "features/account-menu";
 import { ChatSearch } from "features/chat-search";
+import { AnimatePresence } from "motion/react";
+
 import { copy } from "shared/config/copy";
+import { useEdgeSentinel } from "shared/lib/use-edge-sentinel";
+
 import {
   Button,
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
   ContextMenuTrigger,
+  LoadIndicator,
 } from "shared/ui";
 
 // "system" defers to the locale's hour12 default, while 12h/24h pin it
@@ -46,8 +51,18 @@ export function ConversationSidebar({
   const togglePin = useChatStore((state) => state.togglePin);
   const toggleMute = useChatStore((state) => state.toggleMute);
   const toggleRead = useChatStore((state) => state.toggleRead);
+  const chatCursor = useChatStore((state) => state.chatCursor);
+  const loadingMoreChats = useChatStore((state) => state.loadingMoreChats);
+  const loadMoreChats = useChatStore((state) => state.loadMoreChats);
   const [query, setQuery] = useState("");
   const { value: timeFormat } = useTimeFormat();
+
+  // Paging is sentinel-driven: when the list end scrolls into view, the next
+  // chat page loads. Searching paginates nothing — it filters loaded chats.
+  const endSentinelRef = useEdgeSentinel({
+    enabled: Boolean(chatCursor) && !query && !loadingMoreChats,
+    onReach: () => void loadMoreChats(),
+  });
 
   const filtered = useMemo(() => {
     const term = query.trim().toLocaleLowerCase();
@@ -75,6 +90,7 @@ export function ConversationSidebar({
             <ContextMenuTrigger>
               <Button
                 variant="ghost"
+                pressScale={1}
                 onClick={() => {
                   void select(chat.id);
                   onSelectChat();
@@ -94,7 +110,7 @@ export function ConversationSidebar({
                     <span className="min-w-0 flex-1 truncate text-sm font-semibold">
                       {chat.title}
                     </span>
-                    <time className="text-[11px] font-normal text-muted-foreground">
+                    <time className="text-[11px] font-normal text-muted-foreground tabular-nums">
                       {shortTime(chat.updatedAt, timeFormat)}
                     </time>
                   </span>
@@ -107,7 +123,7 @@ export function ConversationSidebar({
                       <span
                         aria-label={`${chat.unreadCount} ${copy.unread}`}
                         /* deslop-ignore-next-line 19 */
-                        className="grid min-w-5 place-items-center rounded-full bg-primary px-1.5 py-0.5 text-[10px] text-primary-foreground"
+                        className="grid min-w-5 place-items-center rounded-full bg-primary px-1.5 py-0.5 text-[10px] text-primary-foreground tabular-nums"
                       >
                         {chat.unreadCount}
                       </span>
@@ -145,6 +161,14 @@ export function ConversationSidebar({
             {copy.noChats}
           </div>
         ) : null}
+        {chatCursor && !query && filtered.length ? (
+          <div ref={endSentinelRef} className="h-px" />
+        ) : null}
+        <AnimatePresence initial={false}>
+          {loadingMoreChats ? (
+            <LoadIndicator label={copy.loadingChats} />
+          ) : null}
+        </AnimatePresence>
       </nav>
       <footer className="border-t">
         <AccountMenu onOpenSettings={onOpenSettings} />

@@ -5,6 +5,7 @@ import { useChatStore } from "entities/chat";
 import { useTelegramStore } from "entities/telegram";
 import { copy } from "shared/config/copy";
 import {
+  Avatar,
   Button,
   MorphPopover,
   MorphPopoverContent,
@@ -42,7 +43,11 @@ export function AccountMenu({ onOpenSettings }: AccountMenuProps) {
           aria-label={copy.openAccountMenu}
           className="h-14 w-full justify-start rounded-none px-3"
         >
-          <AccountAvatar />
+          <Avatar
+            initials={currentUser.initials}
+            src={currentUser.avatarDataUrl}
+            className="size-9"
+          />
           <span className="min-w-0 text-left">
             <strong className="block truncate text-sm font-semibold">
               {currentUser.displayName}
@@ -79,24 +84,5 @@ export function AccountMenu({ onOpenSettings }: AccountMenuProps) {
         </Button>
       </MorphPopoverContent>
     </MorphPopover>
-  );
-}
-
-function AccountAvatar() {
-  const currentUser = useTelegramStore((state) => state.currentUser);
-  if (!currentUser) return null;
-
-  return currentUser.avatarDataUrl ? (
-    <img
-      src={currentUser.avatarDataUrl}
-      alt=""
-      /* deslop-ignore-next-line 19 — circular avatars are a messaging convention */
-      className="size-9 shrink-0 rounded-full object-cover outline outline-1 -outline-offset-1 outline-black/10 dark:outline-white/10"
-    />
-  ) : (
-    /* deslop-ignore-next-line 19 — circular avatars are a messaging convention */
-    <span className="grid size-9 shrink-0 place-items-center rounded-full bg-secondary text-xs font-semibold">
-      {currentUser.initials}
-    </span>
   );
 }

@@ -1,4 +1,10 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type {
@@ -90,7 +96,9 @@ describe("MessageComposer", () => {
     fireEvent.keyDown(textarea, { key: "Enter" });
 
     expect(onSend).toHaveBeenCalledWith("Hello");
-    expect((textarea as HTMLTextAreaElement).value).toBe("");
+    await waitFor(() =>
+      expect((textarea as HTMLTextAreaElement).value).toBe(""),
+    );
   });
 
   it("inserts a newline on Enter when sendWithEnter is off", async () => {
@@ -124,6 +132,20 @@ describe("MessageComposer", () => {
     fireEvent.keyDown(textarea, { key: "Enter", ctrlKey: true });
 
     expect(onSend).toHaveBeenCalledWith("Hello");
+  });
+
+  it("keeps the draft and exposes the error when sending fails", async () => {
+    const { onSend, textarea } = await renderComposer(true);
+    onSend.mockRejectedValue(new Error("Network unavailable"));
+    await flushPreferences();
+
+    fireEvent.change(textarea, { target: { value: "Retry me" } });
+    fireEvent.keyDown(textarea, { key: "Enter" });
+
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      `${copy.messageSendFailed} Network unavailable`,
+    );
+    expect((textarea as HTMLTextAreaElement).value).toBe("Retry me");
   });
 
   it("shows a reply preview bar with the sender and body, and cancels it", async () => {

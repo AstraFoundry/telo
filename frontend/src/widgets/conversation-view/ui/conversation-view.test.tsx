@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type {
@@ -22,6 +22,40 @@ function stubMatchMedia(dark: boolean): void {
     onchange: null,
     dispatchEvent: () => false,
   })) as unknown as typeof window.matchMedia;
+}
+
+type IntersectionCallback = (
+  entries: Array<{ isIntersecting: boolean }>,
+) => void;
+
+let intersectionCallbacks: IntersectionCallback[] = [];
+
+// jsdom does not implement IntersectionObserver, which the paging sentinels
+// use to trigger lazy loading.
+function stubIntersectionObserver(): void {
+  intersectionCallbacks = [];
+  window.IntersectionObserver = class {
+    private readonly callback: IntersectionCallback;
+    constructor(callback: IntersectionObserverCallback) {
+      this.callback = callback as unknown as IntersectionCallback;
+      intersectionCallbacks.push(this.callback);
+    }
+    observe(): void {}
+    unobserve(): void {}
+    disconnect(): void {
+      // Real observers stop reporting after disconnect; mirror that so
+      // unmounted sentinels cannot fire.
+      intersectionCallbacks = intersectionCallbacks.filter(
+        (callback) => callback !== this.callback,
+      );
+    }
+  } as unknown as typeof IntersectionObserver;
+}
+
+function intersectAll(): void {
+  for (const callback of intersectionCallbacks) {
+    callback([{ isIntersecting: true }]);
+  }
 }
 
 function preferences(partial: Partial<UserPreferencesDto> = {}) {
@@ -90,6 +124,7 @@ describe("ConversationView", () => {
   beforeEach(() => {
     vi.resetModules();
     stubMatchMedia(false);
+    stubIntersectionObserver();
   });
 
   afterEach(() => {
@@ -103,6 +138,67 @@ describe("ConversationView", () => {
       screen.getByRole("heading", { name: "Saved Messages" }),
     ).toBeTruthy();
     expect(screen.queryByText("saved")).toBeNull();
+  });
+
+  it("loads an earlier message page when the top sentinel enters view", async () => {
+    const { telo, useChatStore } = await renderView({
+      messages: [message({ id: "2", body: "Newer" })],
+    });
+    telo.workspace.listMessagePage.mockResolvedValue({
+      items: [message({ id: "1", body: "Older" })],
+      nextCursor: null,
+    });
+    act(() => useChatStore.setState({ messageCursor: "2" }));
+
+    // There is no "load earlier" button — scrolling to the top of the
+    // transcript brings the sentinel into view and triggers the fetch.
+    expect(screen.queryByRole("button", { name: /earlier/i })).toBeNull();
+    act(() => intersectAll());
+
+    expect(await screen.findByText("Older")).toBeTruthy();
+    expect(telo.workspace.listMessagePage).toHaveBeenCalledWith("chat-1", {
+      beforeMessageId: "2",
+    });
+  });
+
+  it("shows a spinner without visible text while older messages load", async () => {
+    const { telo, useChatStore } = await renderView({
+      messages: [message({ id: "2", body: "Newer" })],
+    });
+    let resolvePage: (page: {
+      items: ReadonlyArray<MessageDto>;
+      nextCursor: string | null;
+    }) => void = () => {};
+    telo.workspace.listMessagePage.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolvePage = resolve;
+        }),
+    );
+    act(() => useChatStore.setState({ messageCursor: "2" }));
+    act(() => intersectAll());
+
+    const status = screen.getByRole("status");
+    expect(status.getAttribute("aria-label")).toBe(copy.loadingEarlierMessages);
+    expect(status.textContent).toBe("");
+
+    act(() => {
+      resolvePage({ items: [], nextCursor: null });
+    });
+  });
+
+  it("shows explicit offline and synchronizing states", async () => {
+    const { useChatStore } = await renderView();
+
+    act(() => useChatStore.setState({ connectionState: "offline" }));
+    expect(screen.getByRole("status").textContent).toContain(
+      copy.connectionOffline,
+    );
+
+    act(() => useChatStore.setState({ connectionState: "synchronizing" }));
+    expect(screen.getByRole("status").textContent).toContain(
+      copy.connectionSynchronizing,
+    );
   });
 
   it("renders outgoing bubbles with the accent tint variant", async () => {

@@ -41,8 +41,10 @@ export default defineConfig({
           setupFiles: ["frontend/src/shared/test/setup.ts"],
           // Component suites that re-import the module graph per test
           // (resetModules + dynamic import) can exceed the 5s default when
-          // the whole suite runs under load.
-          testTimeout: 15000,
+          // the whole suite runs under load; the same goes for their async
+          // setup hooks against the 10s default.
+          testTimeout: 30000,
+          hookTimeout: 30000,
         },
       },
     ],

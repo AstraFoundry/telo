@@ -13,6 +13,7 @@ interface MessageComposerProps {
 
 export function MessageComposer({ disabled, onSend }: MessageComposerProps) {
   const [value, setValue] = useState("");
+  const [error, setError] = useState<string | null>(null);
   const { value: sendWithEnter } = useSendWithEnter();
   const composerTarget = useChatStore((state) => state.composerTarget);
   const cancelComposerTarget = useChatStore(
@@ -102,7 +103,7 @@ export function MessageComposer({ disabled, onSend }: MessageComposerProps) {
             size="icon"
             variant="ghost"
             aria-label={copy.cancel}
-            className="size-6 shrink-0"
+            className="-mr-2 size-10 shrink-0"
             onClick={cancelComposerTarget}
           >
             <X aria-hidden="true" className="size-3.5" />
@@ -116,15 +117,29 @@ export function MessageComposer({ disabled, onSend }: MessageComposerProps) {
         placeholder={copy.messagePlaceholder}
         aria-label={copy.messagePlaceholder}
         value={value}
-        onValueChange={setValue}
+        onValueChange={(next) => {
+          setValue(next);
+          if (error) setError(null);
+        }}
         onKeyDown={handleKeyDown}
-        onSubmit={(body) => {
-          setValue("");
-          return onSend(body);
+        onSubmit={async (body) => {
+          try {
+            await onSend(body);
+            setValue("");
+            setError(null);
+          } catch (reason) {
+            setError(reason instanceof Error ? reason.message : String(reason));
+          }
         }}
         /* deslop-ignore-next-line 21 — rounded composer on a flat surface, no nesting parent */
         className="rounded-xl"
       />
+      {error ? (
+        <p role="alert" className="px-2 text-xs text-destructive text-pretty">
+          <span className="font-medium">{copy.messageSendFailed}</span>{" "}
+          <span>{error}</span>
+        </p>
+      ) : null}
     </div>
   );
 }

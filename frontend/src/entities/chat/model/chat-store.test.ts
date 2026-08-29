@@ -38,6 +38,12 @@ describe("chat-store", () => {
       messages: [],
       activeChatId: null,
       loading: true,
+      loadingMoreChats: false,
+      loadingOlderMessages: false,
+      chatCursor: null,
+      messageCursor: null,
+      syncError: null,
+      connectionState: "connected",
       composerTarget: null,
     });
   });
@@ -46,8 +52,14 @@ describe("chat-store", () => {
     const telo = installTeloApiMock();
     const chats = [chat("a"), chat("b")];
     const messages = [message("m1", "a")];
-    telo.workspace.listChats.mockResolvedValue(chats);
-    telo.workspace.listMessages.mockResolvedValue(messages);
+    telo.workspace.listChatPage.mockResolvedValue({
+      items: chats,
+      nextCursor: null,
+    });
+    telo.workspace.listMessagePage.mockResolvedValue({
+      items: messages,
+      nextCursor: null,
+    });
 
     await useChatStore.getState().load();
 
@@ -56,12 +68,15 @@ describe("chat-store", () => {
     expect(state.activeChatId).toBe("a");
     expect(state.messages).toEqual(messages);
     expect(state.loading).toBe(false);
-    expect(telo.workspace.listMessages).toHaveBeenCalledWith("a");
+    expect(telo.workspace.listMessagePage).toHaveBeenCalledWith("a");
   });
 
   it("load() leaves no active chat and skips messages when the list is empty", async () => {
     const telo = installTeloApiMock();
-    telo.workspace.listChats.mockResolvedValue([]);
+    telo.workspace.listChatPage.mockResolvedValue({
+      items: [],
+      nextCursor: null,
+    });
 
     await useChatStore.getState().load();
 
@@ -69,7 +84,32 @@ describe("chat-store", () => {
     expect(state.activeChatId).toBeNull();
     expect(state.messages).toEqual([]);
     expect(state.loading).toBe(false);
-    expect(telo.workspace.listMessages).not.toHaveBeenCalled();
+    expect(telo.workspace.listMessagePage).not.toHaveBeenCalled();
+  });
+
+  it("loadMoreChats() appends a page once and advances the cursor", async () => {
+    const telo = installTeloApiMock();
+    const cursor = {
+      chatId: "a",
+      topMessageId: "1",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    };
+    telo.workspace.listChatPage.mockResolvedValue({
+      items: [chat("b")],
+      nextCursor: null,
+    });
+    useChatStore.setState({ chats: [chat("a")], chatCursor: cursor });
+
+    await useChatStore.getState().loadMoreChats();
+    await useChatStore.getState().loadMoreChats();
+
+    expect(telo.workspace.listChatPage).toHaveBeenCalledWith({ cursor });
+    expect(telo.workspace.listChatPage).toHaveBeenCalledTimes(1);
+    expect(useChatStore.getState().chats.map((entry) => entry.id)).toEqual([
+      "a",
+      "b",
+    ]);
+    expect(useChatStore.getState().chatCursor).toBeNull();
   });
 
   it("select() returns early when the chat is already active", async () => {
@@ -78,14 +118,17 @@ describe("chat-store", () => {
 
     await useChatStore.getState().select("a");
 
-    expect(telo.workspace.listMessages).not.toHaveBeenCalled();
+    expect(telo.workspace.listMessagePage).not.toHaveBeenCalled();
     expect(useChatStore.getState().loading).toBe(false);
   });
 
   it("select() switches the active chat and loads its messages", async () => {
     const telo = installTeloApiMock();
     const messages = [message("m2", "b")];
-    telo.workspace.listMessages.mockResolvedValue(messages);
+    telo.workspace.listMessagePage.mockResolvedValue({
+      items: messages,
+      nextCursor: null,
+    });
     useChatStore.setState({ activeChatId: "a", loading: false });
 
     await useChatStore.getState().select("b");
@@ -94,6 +137,77 @@ describe("chat-store", () => {
     expect(state.activeChatId).toBe("b");
     expect(state.messages).toEqual(messages);
     expect(state.loading).toBe(false);
+  });
+
+  it("select() clears stale messages immediately and ignores a slower previous request", async () => {
+    const telo = installTeloApiMock();
+    let resolveB:
+      ((page: { items: MessageDto[]; nextCursor: null }) => void) | undefined;
+    telo.workspace.listMessagePage.mockImplementation((chatId) =>
+      chatId === "b"
+        ? new Promise((resolve) => {
+            resolveB = resolve;
+          })
+        : Promise.resolve({
+            items: [message("m3", "c")],
+            nextCursor: null,
+          }),
+    );
+    useChatStore.setState({
+      activeChatId: "a",
+      messages: [message("m1", "a")],
+      loading: false,
+    });
+
+    const first = useChatStore.getState().select("b");
+    expect(useChatStore.getState().messages).toEqual([]);
+    const second = useChatStore.getState().select("c");
+    await second;
+    resolveB?.({ items: [message("m2", "b")], nextCursor: null });
+    await first;
+
+    expect(useChatStore.getState().activeChatId).toBe("c");
+    expect(useChatStore.getState().messages).toEqual([message("m3", "c")]);
+  });
+
+  it("loadOlderMessages() prepends an exclusive page and advances its cursor", async () => {
+    const telo = installTeloApiMock();
+    telo.workspace.listMessagePage.mockResolvedValue({
+      items: [message("1", "a")],
+      nextCursor: null,
+    });
+    useChatStore.setState({
+      activeChatId: "a",
+      messages: [message("2", "a")],
+      messageCursor: "2",
+    });
+
+    await useChatStore.getState().loadOlderMessages();
+    await useChatStore.getState().loadOlderMessages();
+
+    expect(telo.workspace.listMessagePage).toHaveBeenCalledWith("a", {
+      beforeMessageId: "2",
+    });
+    expect(telo.workspace.listMessagePage).toHaveBeenCalledTimes(1);
+    expect(useChatStore.getState().messages.map((entry) => entry.id)).toEqual([
+      "1",
+      "2",
+    ]);
+    expect(useChatStore.getState().messageCursor).toBeNull();
+  });
+
+  it("receive() exposes connection state transitions", () => {
+    useChatStore.getState().receive({
+      type: "connection-state",
+      state: "offline",
+    });
+    expect(useChatStore.getState().connectionState).toBe("offline");
+
+    useChatStore.getState().receive({
+      type: "connection-state",
+      state: "connected",
+    });
+    expect(useChatStore.getState().connectionState).toBe("connected");
   });
 
   it("send() returns early when no chat is active", async () => {
@@ -120,6 +234,72 @@ describe("chat-store", () => {
     expect(useChatStore.getState().messages).toEqual([
       message("m1", "a"),
       sent,
+    ]);
+  });
+
+  it("receive() upserts live messages without duplicating an IPC response", () => {
+    const live = message("m2", "a");
+    useChatStore.setState({
+      chats: [chat("a")],
+      activeChatId: "a",
+      messages: [message("m1", "a")],
+    });
+
+    useChatStore.getState().receive({
+      type: "message-upsert",
+      cause: "new",
+      message: live,
+    });
+    useChatStore.getState().receive({
+      type: "message-upsert",
+      cause: "new",
+      message: { ...live, status: "sent" },
+    });
+
+    expect(useChatStore.getState().messages).toHaveLength(2);
+    expect(useChatStore.getState().chats[0]?.preview).toBe("Message m2");
+  });
+
+  it("receive() increments unread state only for an inactive incoming chat", () => {
+    useChatStore.setState({
+      chats: [chat("a"), chat("b")],
+      activeChatId: "a",
+    });
+
+    useChatStore.getState().receive({
+      type: "message-upsert",
+      cause: "new",
+      message: message("m2", "b"),
+    });
+
+    expect(useChatStore.getState().chats[1]?.unreadCount).toBe(1);
+    expect(useChatStore.getState().messages).toEqual([]);
+  });
+
+  it("receive() applies deletion and outbox read events", () => {
+    useChatStore.setState({
+      chats: [chat("a")],
+      activeChatId: "a",
+      messages: [
+        { ...message("1", "a"), outgoing: true, status: "sent" },
+        { ...message("2", "a"), outgoing: true, status: "sent" },
+      ],
+    });
+
+    useChatStore.getState().receive({
+      type: "message-read",
+      chatId: "a",
+      maxMessageId: "1",
+      direction: "outbox",
+    });
+    useChatStore.getState().receive({
+      type: "message-delete",
+      chatId: "a",
+      messageIds: ["2"],
+    });
+
+    expect(useChatStore.getState().messages).toEqual([
+      { ...message("1", "a"), outgoing: true, status: "read" },
     ]);
   });
 
@@ -222,7 +402,10 @@ describe("chat-store", () => {
 
   it("select() clears a pending composer target from the previous chat", async () => {
     const telo = installTeloApiMock();
-    telo.workspace.listMessages.mockResolvedValue([]);
+    telo.workspace.listMessagePage.mockResolvedValue({
+      items: [],
+      nextCursor: null,
+    });
     useChatStore.setState({ activeChatId: "a", loading: false });
     useChatStore.getState().startReply(message("m1", "a"));
 
@@ -323,7 +506,10 @@ describe("chat-store", () => {
   it("forwardMessage() forwards through the API and reloads the chat list", async () => {
     const telo = installTeloApiMock();
     const chats = [chat("a"), chat("b")];
-    telo.workspace.listChats.mockResolvedValue(chats);
+    telo.workspace.listChatPage.mockResolvedValue({
+      items: chats,
+      nextCursor: null,
+    });
     useChatStore.setState({
       activeChatId: "a",
       messages: [message("m1", "a")],
@@ -337,14 +523,20 @@ describe("chat-store", () => {
       toChatId: "b",
     });
     expect(useChatStore.getState().chats).toEqual(chats);
-    expect(telo.workspace.listMessages).not.toHaveBeenCalled();
+    expect(telo.workspace.listMessagePage).not.toHaveBeenCalled();
   });
 
   it("forwardMessage() reloads messages when forwarding into the active chat", async () => {
     const telo = installTeloApiMock();
-    telo.workspace.listChats.mockResolvedValue([chat("a")]);
+    telo.workspace.listChatPage.mockResolvedValue({
+      items: [chat("a")],
+      nextCursor: null,
+    });
     const messages = [message("m1", "a"), message("m2", "a")];
-    telo.workspace.listMessages.mockResolvedValue(messages);
+    telo.workspace.listMessagePage.mockResolvedValue({
+      items: messages,
+      nextCursor: null,
+    });
     useChatStore.setState({
       activeChatId: "a",
       messages: [message("m1", "a")],
@@ -352,7 +544,7 @@ describe("chat-store", () => {
 
     await useChatStore.getState().forwardMessage("m1", "a");
 
-    expect(telo.workspace.listMessages).toHaveBeenCalledWith("a");
+    expect(telo.workspace.listMessagePage).toHaveBeenCalledWith("a");
     expect(useChatStore.getState().messages).toEqual(messages);
   });
 });

@@ -18,8 +18,8 @@ export function installTeloApiMock(): TeloApiMock {
   const api: TeloApiMock = {
     workspace: {
       getCurrentUser: vi.fn(),
-      listChats: vi.fn(),
-      listMessages: vi.fn(),
+      listChatPage: vi.fn(async () => ({ items: [], nextCursor: null })),
+      listMessagePage: vi.fn(async () => ({ items: [], nextCursor: null })),
       sendMessage: vi.fn(),
       editMessage: vi.fn(),
       deleteMessage: vi.fn(),
@@ -27,6 +27,7 @@ export function installTeloApiMock(): TeloApiMock {
       setChatPinned: vi.fn(),
       setChatMuted: vi.fn(),
       setChatRead: vi.fn(),
+      onEvent: vi.fn(() => () => {}),
     },
     agent: {
       getConfiguration: vi.fn(),
