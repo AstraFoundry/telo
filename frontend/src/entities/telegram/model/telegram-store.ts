@@ -33,8 +33,17 @@ export const useTelegramStore = create<TelegramState>((set) => ({
     return unsubscribe;
   },
   async loadCurrentUser() {
-    const currentUser = await window.telo.workspace.getCurrentUser();
-    set({ currentUser });
+    // Unlike the other startup loaders, this hits a live Telegram RPC
+    // (`getMe()`), so a transient network failure must not leave an
+    // unhandled rejection or a permanently empty account row: the caller
+    // retries this on the next reconnect (see `App`'s connection-state
+    // effect), so failing here just means "not yet" rather than "never".
+    try {
+      const currentUser = await window.telo.workspace.getCurrentUser();
+      set({ currentUser });
+    } catch (error) {
+      console.error("Failed to load the current Telegram user", error);
+    }
   },
   async beginLogin(input) {
     try {

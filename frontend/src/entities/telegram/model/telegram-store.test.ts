@@ -130,6 +130,25 @@ describe("telegram-store", () => {
     expect(useTelegramStore.getState().currentUser).toEqual(currentUser);
   });
 
+  it("loadCurrentUser() logs and leaves currentUser null when the preload API rejects", async () => {
+    const telo = installTeloApiMock();
+    telo.workspace.getCurrentUser.mockRejectedValue(new Error("RPC timeout"));
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => {});
+
+    await expect(
+      useTelegramStore.getState().loadCurrentUser(),
+    ).resolves.toBeUndefined();
+
+    expect(useTelegramStore.getState().currentUser).toBeNull();
+    expect(consoleError).toHaveBeenCalledWith(
+      "Failed to load the current Telegram user",
+      expect.any(Error),
+    );
+    consoleError.mockRestore();
+  });
+
   it("logout() calls the preload API and resets auth to idle and current user", async () => {
     const telo = installTeloApiMock();
     telo.telegram.logout.mockResolvedValue(undefined);
