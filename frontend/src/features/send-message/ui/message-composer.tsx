@@ -15,6 +15,8 @@ export function MessageComposer({ disabled, onSend }: MessageComposerProps) {
   const [value, setValue] = useState("");
   const [error, setError] = useState<string | null>(null);
   const { value: sendWithEnter } = useSendWithEnter();
+  const activeChatId = useChatStore((state) => state.activeChatId);
+  const setDraft = useChatStore((state) => state.setDraft);
   const composerTarget = useChatStore((state) => state.composerTarget);
   const cancelComposerTarget = useChatStore(
     (state) => state.cancelComposerTarget,
@@ -32,18 +34,35 @@ export function MessageComposer({ disabled, onSend }: MessageComposerProps) {
   } | null>(null);
 
   // Edit mode prefills the input with the original body; leaving edit mode
-  // (cancel or send) clears it again. Reply mode never touches typed text.
-  // State adjusts during render so the textarea updates in the same pass as
-  // the preview bar.
+  // (cancel or send) clears it again. Switching chats swaps the text for that
+  // chat's own draft (typed locally or synced from another Telegram client)
+  // instead of leaking the previous chat's unsent text. Reply mode never
+  // touches typed text. Both transitions are resolved together, during
+  // render, so a chat switch and an edit start landing in the same commit
+  // don't race to overwrite each other's textarea value.
   const [previousTarget, setPreviousTarget] = useState<ComposerTarget | null>(
     null,
   );
-  if (composerTarget !== previousTarget) {
-    setPreviousTarget(composerTarget);
+  const [previousChatId, setPreviousChatId] = useState(activeChatId);
+  const targetChanged = composerTarget !== previousTarget;
+  const chatChanged = activeChatId !== previousChatId;
+  if (targetChanged || chatChanged) {
+    if (targetChanged) setPreviousTarget(composerTarget);
+    if (chatChanged) setPreviousChatId(activeChatId);
     if (composerTarget?.mode === "edit") {
       setValue(composerTarget.preview);
-    } else if (!composerTarget && previousTarget?.mode === "edit") {
+    } else if (
+      targetChanged &&
+      !composerTarget &&
+      previousTarget?.mode === "edit"
+    ) {
       setValue("");
+    } else if (chatChanged) {
+      setValue(
+        activeChatId
+          ? (useChatStore.getState().drafts[activeChatId] ?? "")
+          : "",
+      );
     }
   }
 
@@ -71,9 +90,9 @@ export function MessageComposer({ disabled, onSend }: MessageComposerProps) {
       textarea,
       caret: textarea.selectionStart + 1,
     };
-    setValue(
-      `${textarea.value.slice(0, textarea.selectionStart)}\n${textarea.value.slice(textarea.selectionEnd)}`,
-    );
+    const next = `${textarea.value.slice(0, textarea.selectionStart)}\n${textarea.value.slice(textarea.selectionEnd)}`;
+    setValue(next);
+    if (activeChatId) setDraft(activeChatId, next);
   };
 
   const targetTitle =
@@ -120,6 +139,9 @@ export function MessageComposer({ disabled, onSend }: MessageComposerProps) {
         onValueChange={(next) => {
           setValue(next);
           if (error) setError(null);
+          if (activeChatId && composerTarget?.mode !== "edit") {
+            setDraft(activeChatId, next);
+          }
         }}
         onKeyDown={handleKeyDown}
         onSubmit={async (body) => {

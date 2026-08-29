@@ -85,10 +85,23 @@ const fake = vi.hoisted(() => {
     }
   }
 
-  return { FakeTelegramClient };
+  class FakeUpdateDraftMessage {}
+  class FakeDraftMessage {}
+
+  return {
+    FakeTelegramClient,
+    FakeUpdateDraftMessage,
+    FakeDraftMessage,
+  };
 });
 
-vi.mock("teleproto", () => ({ TelegramClient: fake.FakeTelegramClient }));
+vi.mock("teleproto", () => ({
+  TelegramClient: fake.FakeTelegramClient,
+  Api: {
+    UpdateDraftMessage: fake.FakeUpdateDraftMessage,
+    DraftMessage: fake.FakeDraftMessage,
+  },
+}));
 vi.mock("teleproto/sessions/index.js", () => ({ StringSession: class {} }));
 
 const { FakeTelegramClient } = fake;

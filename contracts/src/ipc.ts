@@ -12,6 +12,12 @@ export interface ChatDto {
   readonly pinned: boolean;
   readonly kind: ChatKind;
   readonly initials: string;
+  /** Profile photo, when Telegram has one; null falls back to `initials`. */
+  readonly avatarDataUrl: string | null;
+  /** Server-synced draft text (e.g. typed on another Telegram client). */
+  readonly draftPreview: string | null;
+  /** Whether the other party is currently typing in this chat. */
+  readonly typing: boolean;
 }
 
 export interface ChatPageCursorDto {
@@ -48,6 +54,11 @@ export interface MessageDto {
   readonly replyTo?: MessageReplyToDto | null;
   /** ISO timestamp of the last edit; null/absent when never edited. */
   readonly editedAt?: string | null;
+  /**
+   * Client-assigned id set on outgoing sends, echoed back by the adapter so
+   * the optimistic placeholder can be reconciled with the delivered message.
+   */
+  readonly clientId?: string | null;
 }
 
 export interface MessagePageInput {
@@ -89,10 +100,32 @@ export type TelegramWorkspaceEvent =
   | {
       readonly type: "sync-error";
       readonly message: string;
+    }
+  | {
+      readonly type: "typing";
+      readonly chatId: string;
+      readonly typing: boolean;
+    }
+  | {
+      readonly type: "draft";
+      readonly chatId: string;
+      readonly draftPreview: string | null;
+    }
+  | {
+      readonly type: "chat-mute";
+      readonly chatId: string;
+      readonly muted: boolean;
+    }
+  | {
+      readonly type: "chat-pin";
+      readonly chatId: string;
+      readonly pinned: boolean;
     };
 
 export interface SendMessageInput {
   readonly replyToId?: string;
+  /** Stable id minted by the renderer for optimistic-send reconciliation. */
+  readonly clientId?: string;
 }
 
 export interface EditMessageInput {
@@ -249,6 +282,10 @@ export interface TeloDesktopApi {
     setChatPinned(chatId: string, pinned: boolean): Promise<void>;
     setChatMuted(chatId: string, muted: boolean): Promise<void>;
     setChatRead(chatId: string, read: boolean): Promise<void>;
+    /** Sends (or cancels) the local user's typing signal for a chat. */
+    setTyping(chatId: string, typing: boolean): Promise<void>;
+    /** Persists the composer draft server-side; an empty string clears it. */
+    saveDraft(chatId: string, text: string): Promise<void>;
     onEvent(listener: (event: TelegramWorkspaceEvent) => void): () => void;
   };
   readonly agent: {
@@ -272,7 +309,9 @@ export interface TeloDesktopApi {
     onAuthState(listener: (state: TelegramAuthState) => void): () => void;
   };
   readonly shell: {
-    notify(title: string, body: string): Promise<void>;
+    /** `tag` is echoed back by `onNotificationClick` (e.g. a chat id). */
+    notify(title: string, body: string, tag?: string): Promise<void>;
+    onNotificationClick(listener: (tag: string) => void): () => void;
   };
   readonly preferences: {
     get(): Promise<UserPreferencesDto>;

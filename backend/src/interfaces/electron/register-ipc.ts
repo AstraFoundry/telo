@@ -59,6 +59,16 @@ export function registerIpc(container: ApplicationContainer): void {
     (_event, chatId: string, read: boolean) =>
       container.chatActions.setRead(chatId, read),
   );
+  ipcMain.handle(
+    channels.chatTypingSet,
+    (_event, chatId: string, typing: boolean) =>
+      container.workspace.setTyping(chatId, typing),
+  );
+  ipcMain.handle(
+    channels.chatDraftSave,
+    (_event, chatId: string, text: string) =>
+      container.workspace.saveDraft(chatId, text),
+  );
   ipcMain.handle(channels.agentConfigGet, () =>
     container.agentConfiguration.get(),
   );
@@ -89,9 +99,19 @@ export function registerIpc(container: ApplicationContainer): void {
     (_event, input: UpdateUserPreferencesInput) =>
       container.preferences.execute(input),
   );
-  ipcMain.handle(channels.notify, (_event, title: string, body: string) => {
-    if (Notification.isSupported()) new Notification({ title, body }).show();
-  });
+  ipcMain.handle(
+    channels.notify,
+    (event, title: string, body: string, tag?: string) => {
+      if (!Notification.isSupported()) return;
+      const notification = new Notification({ title, body });
+      if (tag) {
+        notification.on("click", () =>
+          event.sender.send(channels.notifyClick, tag),
+        );
+      }
+      notification.show();
+    },
+  );
   ipcMain.handle(channels.agentRun, async (event, input: RunAgentInput) => {
     await streamAgentEvents(container, event.sender, input);
   });

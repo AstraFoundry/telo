@@ -23,6 +23,7 @@ export interface TelegramRepository {
     chatId: string,
     body: string,
     replyToId?: string,
+    clientId?: string,
   ): Promise<MessageDto>;
   /**
    * Edits an outgoing message. Telegram only allows editing one's own
@@ -42,6 +43,10 @@ export interface TelegramRepository {
    * flags the dialog (`unreadCount` becomes 1 in the demo workspace).
    */
   setChatRead(chatId: string, read: boolean): Promise<void>;
+  /** Sends (or cancels) the local user's typing signal for a chat. */
+  setTyping(chatId: string, typing: boolean): Promise<void>;
+  /** Persists the composer draft server-side; an empty string clears it. */
+  saveDraft(chatId: string, text: string): Promise<void>;
   /**
    * Ends the current session: disconnects the client and clears the stored
    * session. A no-op for the demo workspace; the demo reset is owned by the

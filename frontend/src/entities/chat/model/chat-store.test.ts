@@ -16,6 +16,9 @@ function chat(id: string): ChatDto {
     pinned: false,
     kind: "direct",
     initials: "C",
+    avatarDataUrl: null,
+    draftPreview: null,
+    typing: false,
   };
 }
 
@@ -45,6 +48,9 @@ describe("chat-store", () => {
       syncError: null,
       connectionState: "connected",
       composerTarget: null,
+      drafts: {},
+      scrollPositions: {},
+      notificationsEnabled: false,
     });
   });
 
@@ -69,6 +75,22 @@ describe("chat-store", () => {
     expect(state.messages).toEqual(messages);
     expect(state.loading).toBe(false);
     expect(telo.workspace.listMessagePage).toHaveBeenCalledWith("a");
+  });
+
+  it("load() hydrates drafts from the server draft preview", async () => {
+    const telo = installTeloApiMock();
+    telo.workspace.listChatPage.mockResolvedValue({
+      items: [{ ...chat("a"), draftPreview: "left off here" }],
+      nextCursor: null,
+    });
+    telo.workspace.listMessagePage.mockResolvedValue({
+      items: [],
+      nextCursor: null,
+    });
+
+    await useChatStore.getState().load();
+
+    expect(useChatStore.getState().drafts.a).toBe("left off here");
   });
 
   it("load() leaves no active chat and skips messages when the list is empty", async () => {
@@ -230,11 +252,57 @@ describe("chat-store", () => {
 
     await useChatStore.getState().send("hello");
 
-    expect(telo.workspace.sendMessage).toHaveBeenCalledWith("a", "hello");
+    expect(telo.workspace.sendMessage).toHaveBeenCalledWith("a", "hello", {
+      clientId: expect.any(String),
+    });
     expect(useChatStore.getState().messages).toEqual([
       message("m1", "a"),
       sent,
     ]);
+  });
+
+  it("send() inserts an optimistic bubble immediately and clears the draft", async () => {
+    const telo = installTeloApiMock();
+    let resolveSend: ((message: MessageDto) => void) | undefined;
+    telo.workspace.sendMessage.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveSend = resolve;
+        }),
+    );
+    useChatStore.setState({
+      activeChatId: "a",
+      messages: [],
+      drafts: { a: "hello" },
+    });
+
+    const pending = useChatStore.getState().send("hello");
+
+    const optimistic = useChatStore
+      .getState()
+      .messages.find((entry) => entry.chatId === "a");
+    expect(optimistic?.status).toBe("sending");
+    expect(optimistic?.outgoing).toBe(true);
+    expect(useChatStore.getState().drafts.a).toBe("");
+
+    resolveSend?.(message("m3", "a"));
+    await pending;
+
+    expect(useChatStore.getState().messages).toEqual([message("m3", "a")]);
+  });
+
+  it("send() removes the optimistic bubble and restores the draft on failure", async () => {
+    const telo = installTeloApiMock();
+    telo.workspace.sendMessage.mockRejectedValue(new Error("Network down"));
+    useChatStore.setState({ activeChatId: "a", messages: [] });
+
+    await expect(useChatStore.getState().send("hello")).rejects.toThrow(
+      "Network down",
+    );
+
+    expect(useChatStore.getState().messages).toEqual([]);
+    expect(useChatStore.getState().drafts.a).toBe("hello");
+    expect(useChatStore.getState().syncError).toBe("Network down");
   });
 
   it("receive() upserts live messages without duplicating an IPC response", () => {
@@ -274,6 +342,108 @@ describe("chat-store", () => {
 
     expect(useChatStore.getState().chats[1]?.unreadCount).toBe(1);
     expect(useChatStore.getState().messages).toEqual([]);
+  });
+
+  it("receive() patches typing state on the matching chat", () => {
+    useChatStore.setState({ chats: [chat("a"), chat("b")] });
+
+    useChatStore
+      .getState()
+      .receive({ type: "typing", chatId: "b", typing: true });
+
+    expect(useChatStore.getState().chats[0]?.typing).toBe(false);
+    expect(useChatStore.getState().chats[1]?.typing).toBe(true);
+  });
+
+  it("receive() patches mute and pin state from another Telegram client", () => {
+    useChatStore.setState({ chats: [chat("a"), chat("b")] });
+
+    useChatStore
+      .getState()
+      .receive({ type: "chat-mute", chatId: "a", muted: true });
+    useChatStore
+      .getState()
+      .receive({ type: "chat-pin", chatId: "a", pinned: true });
+
+    expect(useChatStore.getState().chats[0]?.muted).toBe(true);
+    expect(useChatStore.getState().chats[0]?.pinned).toBe(true);
+    expect(useChatStore.getState().chats[1]?.muted).toBe(false);
+    expect(useChatStore.getState().chats[1]?.pinned).toBe(false);
+  });
+
+  it("receive() applies a remote draft to an inactive chat but not the active one", () => {
+    useChatStore.setState({
+      chats: [chat("a"), chat("b")],
+      activeChatId: "a",
+      drafts: { a: "typing locally" },
+    });
+
+    useChatStore.getState().receive({
+      type: "draft",
+      chatId: "a",
+      draftPreview: "from another device",
+    });
+    useChatStore.getState().receive({
+      type: "draft",
+      chatId: "b",
+      draftPreview: "from another device",
+    });
+
+    expect(useChatStore.getState().chats[0]?.draftPreview).toBe(
+      "from another device",
+    );
+    expect(useChatStore.getState().drafts.a).toBe("typing locally");
+    expect(useChatStore.getState().drafts.b).toBe("from another device");
+  });
+
+  it("receive() notifies for an inactive, unmuted chat while the window is hidden", () => {
+    const telo = installTeloApiMock();
+    Object.defineProperty(document, "hidden", {
+      configurable: true,
+      value: true,
+    });
+    useChatStore.setState({
+      chats: [chat("a"), chat("b")],
+      activeChatId: "a",
+      notificationsEnabled: true,
+    });
+
+    useChatStore.getState().receive({
+      type: "message-upsert",
+      cause: "new",
+      message: message("m2", "b"),
+    });
+
+    expect(telo.shell.notify).toHaveBeenCalledWith("Chat b", "Message m2", "b");
+    Object.defineProperty(document, "hidden", {
+      configurable: true,
+      value: false,
+    });
+  });
+
+  it("receive() does not notify for a muted chat", () => {
+    const telo = installTeloApiMock();
+    Object.defineProperty(document, "hidden", {
+      configurable: true,
+      value: true,
+    });
+    useChatStore.setState({
+      chats: [chat("a"), { ...chat("b"), muted: true }],
+      activeChatId: "a",
+      notificationsEnabled: true,
+    });
+
+    useChatStore.getState().receive({
+      type: "message-upsert",
+      cause: "new",
+      message: message("m2", "b"),
+    });
+
+    expect(telo.shell.notify).not.toHaveBeenCalled();
+    Object.defineProperty(document, "hidden", {
+      configurable: true,
+      value: false,
+    });
   });
 
   it("receive() applies deletion and outbox read events", () => {
@@ -425,6 +595,7 @@ describe("chat-store", () => {
 
     expect(telo.workspace.sendMessage).toHaveBeenCalledWith("a", "hello", {
       replyToId: "m1",
+      clientId: expect.any(String),
     });
     expect(useChatStore.getState().messages).toEqual([sent]);
     expect(useChatStore.getState().composerTarget).toBeNull();

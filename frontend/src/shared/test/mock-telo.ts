@@ -27,6 +27,8 @@ export function installTeloApiMock(): TeloApiMock {
       setChatPinned: vi.fn(),
       setChatMuted: vi.fn(),
       setChatRead: vi.fn(),
+      setTyping: vi.fn(),
+      saveDraft: vi.fn(),
       onEvent: vi.fn(() => () => {}),
     },
     agent: {
@@ -49,6 +51,7 @@ export function installTeloApiMock(): TeloApiMock {
     },
     shell: {
       notify: vi.fn(),
+      onNotificationClick: vi.fn(() => () => {}),
     },
     preferences: {
       get: vi.fn(async () => ({

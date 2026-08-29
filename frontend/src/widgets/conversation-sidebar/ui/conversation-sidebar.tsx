@@ -18,12 +18,14 @@ import { copy } from "shared/config/copy";
 import { useEdgeSentinel } from "shared/lib/use-edge-sentinel";
 
 import {
+  Avatar,
   Button,
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
   ContextMenuTrigger,
   LoadIndicator,
+  MessageTyping,
 } from "shared/ui";
 
 // "system" defers to the locale's hour12 default, while 12h/24h pin it
@@ -101,10 +103,11 @@ export function ConversationSidebar({
                   activeChatId === chat.id ? "bg-accent text-foreground" : ""
                 }`}
               >
-                {/* deslop-ignore-next-line 19 */}
-                <span className="grid size-10 shrink-0 place-items-center rounded-full bg-secondary text-xs font-semibold">
-                  {chat.initials}
-                </span>
+                <Avatar
+                  initials={chat.initials}
+                  src={chat.avatarDataUrl}
+                  className="size-10 text-xs font-semibold"
+                />
                 <span className="min-w-0 flex-1">
                   <span className="flex items-center gap-2">
                     <span className="min-w-0 flex-1 truncate text-sm font-semibold">
@@ -116,7 +119,21 @@ export function ConversationSidebar({
                   </span>
                   <span className="mt-0.5 flex items-center gap-1.5 text-xs font-normal text-muted-foreground">
                     <span className="min-w-0 flex-1 truncate">
-                      {chat.preview}
+                      {chat.typing ? (
+                        <span className="flex items-center gap-1.5 text-primary">
+                          <MessageTyping label={copy.typing} />
+                          <span aria-hidden="true">{copy.typing}</span>
+                        </span>
+                      ) : chat.draftPreview ? (
+                        <span>
+                          <span className="text-destructive">
+                            {copy.draftPrefix}
+                          </span>{" "}
+                          {chat.draftPreview}
+                        </span>
+                      ) : (
+                        chat.preview
+                      )}
                     </span>
                     {chat.muted ? <BellSlash aria-label={copy.muted} /> : null}
                     {chat.unreadCount ? (

@@ -30,6 +30,8 @@ function repository(): TelegramRepository {
     setChatPinned: vi.fn(async () => undefined),
     setChatMuted: vi.fn(async () => undefined),
     setChatRead: vi.fn(async () => undefined),
+    setTyping: vi.fn(async () => undefined),
+    saveDraft: vi.fn(async () => undefined),
     logout: vi.fn(async () => undefined),
   };
 }
@@ -63,15 +65,51 @@ describe("TelegramWorkspaceService", () => {
     const service = new TelegramWorkspaceService(port);
     const message = await service.sendMessage("chat", "  hello  ");
     expect(message.body).toBe("hello");
-    expect(port.sendMessage).toHaveBeenCalledWith("chat", "hello", undefined);
+    expect(port.sendMessage).toHaveBeenCalledWith(
+      "chat",
+      "hello",
+      undefined,
+      undefined,
+    );
   });
 
-  it("forwards the reply target to the port", async () => {
+  it("forwards the reply target and client id to the port", async () => {
     const port = repository();
     const service = new TelegramWorkspaceService(port);
-    await service.sendMessage("chat", "hello", { replyToId: "message-1" });
-    expect(port.sendMessage).toHaveBeenCalledWith("chat", "hello", "message-1");
+    await service.sendMessage("chat", "hello", {
+      replyToId: "message-1",
+      clientId: "client-1",
+    });
+    expect(port.sendMessage).toHaveBeenCalledWith(
+      "chat",
+      "hello",
+      "message-1",
+      "client-1",
+    );
   });
+
+  it("forwards typing and draft signals through the port", async () => {
+    const port = repository();
+    const service = new TelegramWorkspaceService(port);
+
+    await service.setTyping("chat", true);
+    await service.saveDraft("chat", "draft text");
+
+    expect(port.setTyping).toHaveBeenCalledWith("chat", true);
+    expect(port.saveDraft).toHaveBeenCalledWith("chat", "draft text");
+  });
+
+  it.each(["setTyping", "saveDraft"] as const)(
+    "%s() rejects an empty chat id",
+    (method) => {
+      const service = new TelegramWorkspaceService(repository());
+      expect(() =>
+        method === "setTyping"
+          ? service.setTyping(" ", true)
+          : service.saveDraft(" ", "text"),
+      ).toThrow("Chat id is required");
+    },
+  );
 
   it.each([
     ["", "message", "Chat id"],

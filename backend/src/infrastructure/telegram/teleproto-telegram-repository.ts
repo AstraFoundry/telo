@@ -1,13 +1,16 @@
-import { TelegramClient } from "teleproto";
+import { Api, TelegramClient } from "teleproto";
 import {
   DeletedMessage,
   EditedMessage,
   MessageRead,
   NewMessage,
+  Raw,
+  UserUpdate,
   type DeletedMessageEvent,
   type EditedMessageEvent,
   type MessageReadEvent,
   type NewMessageEvent,
+  type UserUpdateEvent,
 } from "teleproto/events/index.js";
 import { StringSession } from "teleproto/sessions/index.js";
 import { UpdateConnectionState } from "teleproto/network/index.js";
@@ -185,8 +188,17 @@ export class TelegramClientCoordinator implements TelegramRepository {
     chatId: string,
     body: string,
     replyToId?: string,
+    clientId?: string,
   ): Promise<MessageDto> {
-    return this.repository.sendMessage(chatId, body, replyToId);
+    return this.repository.sendMessage(chatId, body, replyToId, clientId);
+  }
+
+  setTyping(chatId: string, typing: boolean): Promise<void> {
+    return this.repository.setTyping(chatId, typing);
+  }
+
+  saveDraft(chatId: string, text: string): Promise<void> {
+    return this.repository.saveDraft(chatId, text);
   }
 
   editMessage(input: EditMessageInput): Promise<void> {
@@ -296,6 +308,36 @@ class TeleprotoRepository implements TelegramRepository {
   private readonly onMessageRead = (event: MessageReadEvent) => {
     this.handleMessageRead(event);
   };
+  private readonly userUpdateBuilder = new UserUpdate({});
+  private readonly draftUpdateBuilder = new Raw({
+    types: [Api.UpdateDraftMessage],
+  });
+  private readonly notifySettingsUpdateBuilder = new Raw({
+    types: [Api.UpdateNotifySettings],
+  });
+  private readonly dialogPinnedUpdateBuilder = new Raw({
+    types: [Api.UpdateDialogPinned],
+  });
+  private readonly onUserUpdate = (event: UserUpdateEvent) => {
+    this.handleUserUpdate(event);
+  };
+  private readonly onDraftUpdate = (update: Api.UpdateDraftMessage) => {
+    void this.handleDraftUpdate(update).catch((error: unknown) =>
+      this.emitSyncError(error),
+    );
+  };
+  private readonly onNotifySettingsUpdate = (
+    update: Api.UpdateNotifySettings,
+  ) => {
+    void this.handleNotifySettingsUpdate(update).catch((error: unknown) =>
+      this.emitSyncError(error),
+    );
+  };
+  private readonly onDialogPinnedUpdate = (update: Api.UpdateDialogPinned) => {
+    void this.handleDialogPinnedUpdate(update).catch((error: unknown) =>
+      this.emitSyncError(error),
+    );
+  };
   private readonly stopConnectionListener: () => void;
 
   constructor(private readonly client: TelegramClient) {
@@ -304,6 +346,16 @@ class TeleprotoRepository implements TelegramRepository {
     client.addEventHandler(this.onDeletedMessage, this.deletedMessageBuilder);
     client.addEventHandler(this.onMessageRead, this.inboxReadBuilder);
     client.addEventHandler(this.onMessageRead, this.outboxReadBuilder);
+    client.addEventHandler(this.onUserUpdate, this.userUpdateBuilder);
+    client.addEventHandler(this.onDraftUpdate, this.draftUpdateBuilder);
+    client.addEventHandler(
+      this.onNotifySettingsUpdate,
+      this.notifySettingsUpdateBuilder,
+    );
+    client.addEventHandler(
+      this.onDialogPinnedUpdate,
+      this.dialogPinnedUpdateBuilder,
+    );
     this.stopConnectionListener = client.updates.on(
       "connectionState",
       async (update, next) => {
@@ -325,18 +377,7 @@ class TeleprotoRepository implements TelegramRepository {
       user.username ||
       user.phone;
     if (!displayName) throw new Error("Telegram account has no display name");
-    let avatarDataUrl: string | null = null;
-
-    try {
-      const avatar = await this.client.downloadProfilePhoto("me", {
-        isBig: false,
-      });
-      if (avatar && typeof avatar !== "string" && avatar.byteLength > 0) {
-        avatarDataUrl = `data:image/jpeg;base64,${Buffer.from(avatar).toString("base64")}`;
-      }
-    } catch {
-      // A missing or inaccessible profile photo should not block the workspace.
-    }
+    const avatarDataUrl = await this.avatarDataUrl("me");
 
     return {
       id: user.id.toString(),
@@ -363,7 +404,7 @@ class TeleprotoRepository implements TelegramRepository {
     const page = dialogs.slice(0, limit);
     const last = page.at(-1);
     return {
-      items: page.map((dialog) => this.toChat(dialog)),
+      items: await Promise.all(page.map((dialog) => this.toChat(dialog))),
       nextCursor:
         dialogs.length > limit && last
           ? {
@@ -411,6 +452,7 @@ class TeleprotoRepository implements TelegramRepository {
     chatId: string,
     body: string,
     replyToId?: string,
+    clientId?: string,
   ): Promise<MessageDto> {
     const sent = await this.client.sendMessage(chatId, {
       message: body,
@@ -421,7 +463,8 @@ class TeleprotoRepository implements TelegramRepository {
         null)
       : null;
     this.indexMessage(chatId, sent);
-    return this.toMessage(chatId, sent, replyTo);
+    const message = await this.toMessage(chatId, sent, replyTo);
+    return clientId ? { ...message, clientId } : message;
   }
 
   async editMessage(input: EditMessageInput): Promise<void> {
@@ -465,6 +508,15 @@ class TeleprotoRepository implements TelegramRepository {
         peer: chatId,
       });
     }
+  }
+
+  async setTyping(chatId: string, typing: boolean): Promise<void> {
+    await this.client.setTyping(chatId, typing ? "typing" : "cancel");
+  }
+
+  async saveDraft(chatId: string, text: string): Promise<void> {
+    // An empty message clears the draft (see teleproto's SaveDraftParams).
+    await this.client.saveDraft(chatId, { message: text });
   }
 
   async logout(): Promise<void> {
@@ -523,6 +575,52 @@ class TeleprotoRepository implements TelegramRepository {
     for (const id of ids) this.messageChats.delete(id);
   }
 
+  private handleUserUpdate(event: UserUpdateEvent): void {
+    if (event.typing === undefined && event.cancel === undefined) return;
+    const chatId = event.chatId?.toString();
+    if (!chatId) return;
+    this.emit({
+      type: "typing",
+      chatId,
+      typing: Boolean(event.typing) && !event.cancel,
+    });
+  }
+
+  private async handleDraftUpdate(
+    update: Api.UpdateDraftMessage,
+  ): Promise<void> {
+    const chatId = await this.client.getPeerId(update.peer);
+    this.emit({
+      type: "draft",
+      chatId,
+      draftPreview:
+        update.draft instanceof Api.DraftMessage ? update.draft.message : null,
+    });
+  }
+
+  // Mute/pin changes made from another Telegram client (or the mobile app)
+  // arrive here and patch the sidebar without a full reload; the folder id
+  // carried by UpdateDialogPinned is ignored until Wave 2 ships folder UI.
+  private async handleNotifySettingsUpdate(
+    update: Api.UpdateNotifySettings,
+  ): Promise<void> {
+    if (!(update.peer instanceof Api.NotifyPeer)) return; // Global default, not a single chat.
+    const chatId = await this.client.getPeerId(update.peer.peer);
+    const muteUntil = update.notifySettings.muteUntil;
+    const muted =
+      typeof muteUntil === "number" &&
+      muteUntil > Math.floor(Date.now() / 1000);
+    this.emit({ type: "chat-mute", chatId, muted });
+  }
+
+  private async handleDialogPinnedUpdate(
+    update: Api.UpdateDialogPinned,
+  ): Promise<void> {
+    if (!(update.peer instanceof Api.DialogPeer)) return; // Folder-only pin update.
+    const chatId = await this.client.getPeerId(update.peer.peer);
+    this.emit({ type: "chat-pin", chatId, pinned: Boolean(update.pinned) });
+  }
+
   private handleMessageRead(event: MessageReadEvent): void {
     const chatId = event.chatId?.toString();
     if (!chatId || event.contents) return;
@@ -553,6 +651,16 @@ class TeleprotoRepository implements TelegramRepository {
     );
     this.client.removeEventHandler(this.onMessageRead, this.inboxReadBuilder);
     this.client.removeEventHandler(this.onMessageRead, this.outboxReadBuilder);
+    this.client.removeEventHandler(this.onUserUpdate, this.userUpdateBuilder);
+    this.client.removeEventHandler(this.onDraftUpdate, this.draftUpdateBuilder);
+    this.client.removeEventHandler(
+      this.onNotifySettingsUpdate,
+      this.notifySettingsUpdateBuilder,
+    );
+    this.client.removeEventHandler(
+      this.onDialogPinnedUpdate,
+      this.dialogPinnedUpdateBuilder,
+    );
   }
 
   private emit(event: TelegramWorkspaceEvent): void {
@@ -563,7 +671,7 @@ class TeleprotoRepository implements TelegramRepository {
     this.emit({ type: "sync-error", message: safeError(error) });
   }
 
-  private toChat(dialog: TeleprotoDialog): ChatDto {
+  private async toChat(dialog: TeleprotoDialog): Promise<ChatDto> {
     const title = dialog.title || dialog.name;
     if (!title) throw new Error("Telegram dialog has no title");
     const notifySettings = dialog.dialog.notifySettings;
@@ -574,6 +682,8 @@ class TeleprotoRepository implements TelegramRepository {
     const saved =
       dialog.isUser &&
       Boolean((dialog.entity as { self?: boolean } | undefined)?.self);
+    const draft = "draft" in dialog.dialog ? dialog.dialog.draft : undefined;
+    const avatarDataUrl = await this.avatarDataUrl(this.dialogId(dialog));
     return {
       id: this.dialogId(dialog),
       title,
@@ -590,7 +700,26 @@ class TeleprotoRepository implements TelegramRepository {
             ? "group"
             : "direct",
       initials: initials(title),
+      avatarDataUrl,
+      draftPreview: draft instanceof Api.DraftMessage ? draft.message : null,
+      // A fresh list snapshot has no live typing state; subsequent "typing"
+      // events (see handleUserUpdate) patch it in the renderer's store.
+      typing: false,
     };
+  }
+
+  private async avatarDataUrl(entity: string): Promise<string | null> {
+    try {
+      const photo = await this.client.downloadProfilePhoto(entity, {
+        isBig: false,
+      });
+      if (photo && typeof photo !== "string" && photo.byteLength > 0) {
+        return `data:image/jpeg;base64,${Buffer.from(photo).toString("base64")}`;
+      }
+    } catch {
+      // A missing or inaccessible profile photo should not block the workspace.
+    }
+    return null;
   }
 
   private dialogId(dialog: TeleprotoDialog): string {

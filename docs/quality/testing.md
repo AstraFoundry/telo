@@ -2,7 +2,7 @@
 
 ## Quality gate
 
-`make check` is the release gate. It checks formatting, ESLint (including FSD layer and slice boundaries via `eslint-plugin-boundaries`; see [`docs/frontend/import-rules.md`](../frontend/import-rules.md)), TypeScript, unit/integration coverage, Markdown, production compilation, and Electron E2E behavior.
+`make check` is the local release gate. It checks formatting, ESLint (including FSD layer and slice boundaries via `eslint-plugin-boundaries`; see [`docs/frontend/import-rules.md`](../frontend/import-rules.md)), TypeScript, unit/integration coverage, Markdown, and Electron E2E behavior. GitHub Actions splits that gate into a `check` job (format, lint, TypeScript, coverage-gated tests, Markdown) and a dedicated `e2e` job that launches Electron under Xvfb.
 
 ## Unit and integration tests
 
@@ -12,11 +12,12 @@ Vitest covers domain invariants, application orchestration, adapter behavior, in
 
 ## End-to-end tests
 
-Playwright launches the packaged Electron entry. Specs share the Electron launch/teardown fixtures in `tests/e2e/fixtures.ts` (`test` for onboarding, `demoTest` for `TELO_DEMO_WORKSPACE=1`); each test gets an isolated `--user-data-dir`. The fixture launches Electron with `TELO_PLAINTEXT_SECRETS=1` because `safeStorage` has no keychain under Playwright (see [`docs/backend/database.md`](../backend/database.md)); without it the main process cannot persist an API key. Demo journeys wait on the chat navigation via `waitForDemoWorkspace` — there is no in-app demo button. Ten journeys are covered:
+Playwright launches the packaged Electron entry. Specs share the Electron launch/teardown fixtures in `tests/e2e/fixtures.ts` (`test` for onboarding, `demoTest` for `TELO_DEMO_WORKSPACE=1`); each test gets an isolated `--user-data-dir`. The fixture launches Electron with `TELO_PLAINTEXT_SECRETS=1` because `safeStorage` has no keychain under Playwright (see [`docs/backend/database.md`](../backend/database.md)); without it the main process cannot persist an API key. Under `CI=1` it also passes `--no-sandbox`, which GitHub-hosted Linux runners require. Demo journeys wait on the chat navigation via `waitForDemoWorkspace` — there is no in-app demo button. Eleven journeys are covered:
 
 - `workspace.spec.ts` — first-launch onboarding has no demo-workspace action; with the launch flag, current-account identity area, the dedicated Settings surface from the account menu, the unconfigured Agent panel state, and returning to the conversation surface when a chat is selected while Settings is open.
 - `login-error.spec.ts` — credentials are injected at build time and the e2e build ships none, so clicking Start Messaging on the onboarding welcome step swaps the view straight into the terminal credentials-missing alert; the phone step stays unreachable.
 - `messaging.spec.ts` — chat selection in the demo workspace, composer input, and the sent message rendering in the conversation log.
+- `messaging-sync.spec.ts` — after sending, the demo counterpart types then replies; a composer draft survives switching chats and coming back; clicking a reply quote scrolls the source message into view.
 - `chat-navigation.spec.ts` — switching between demo chats swaps the conversation heading and messages, and the chat-search field filters the conversation list (including the empty-result state).
 - `agent-not-configured.spec.ts` — with no API key configured, the Agent panel blocks the composer and links to the Agent section of Settings; after saving a fake API key through the Settings Agent form, the provider rejection is rendered as a sanitized assistant message (no key material or endpoint URLs) without an empty assistant shell or feedback actions.
 - `settings-persistence.spec.ts` — editing the Agent configuration form in Settings, saving, and reopening Settings shows the persisted values after the form's asynchronous backfill.

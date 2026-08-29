@@ -10,8 +10,10 @@ import { ConversationView } from "widgets/conversation-view";
 
 export function App() {
   const load = useChatStore((state) => state.load);
+  const connectionState = useChatStore((state) => state.connectionState);
   const auth = useTelegramStore((state) => state.auth);
   const configuration = useTelegramStore((state) => state.configuration);
+  const currentUser = useTelegramStore((state) => state.currentUser);
   const loadCurrentUser = useTelegramStore((state) => state.loadCurrentUser);
   const startTelegram = useTelegramStore((state) => state.start);
   const closeAgent = useAgentStore((state) => state.close);
@@ -50,10 +52,30 @@ export function App() {
   useEffect(() => {
     if (workspaceEnabled) {
       void Promise.all([load(), loadCurrentUser()]);
-      return subscribeToWorkspaceEvents();
+      const unsubscribeWorkspace = subscribeToWorkspaceEvents();
+      const unsubscribeNotificationClick =
+        window.telo.shell.onNotificationClick((chatId) => {
+          setSurface("conversation");
+          void useChatStore.getState().select(chatId);
+        });
+      return () => {
+        unsubscribeWorkspace();
+        unsubscribeNotificationClick();
+      };
     }
     return undefined;
   }, [load, loadCurrentUser, workspaceEnabled]);
+
+  // The initial loadCurrentUser() call can lose a transient race against
+  // Telegram's own connection setup (a real getMe() RPC, unlike the local
+  // preference/config reads the other loaders make). Retrying on every
+  // reconnect is the same self-healing the chat store already gets from
+  // Teleproto's catchUp(), so the account row never stays empty forever.
+  useEffect(() => {
+    if (workspaceEnabled && connectionState === "connected" && !currentUser) {
+      void loadCurrentUser();
+    }
+  }, [workspaceEnabled, connectionState, currentUser, loadCurrentUser]);
 
   if (!workspaceEnabled) {
     return (

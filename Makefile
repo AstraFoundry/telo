@@ -10,7 +10,7 @@ else
 	@pnpm dev
 endif
 
-check: ## Run formatting, lint, types, tests, docs, and production build
+check: ## Run formatting, lint, types, tests, docs, and Electron E2E tests
 	@pnpm check
 
 test: ## Run unit and integration tests

@@ -105,7 +105,7 @@ Telo enforces a clean separation of concerns using industry-standard architectur
 
 ### Prerequisites
 
-- **Node.js**: `v20.0.0` or higher
+- **Node.js**: `v22.0.0` or higher
 - **Package Manager**: `pnpm` `v9.0.0` or higher
 - **Build Tool**: `GNU Make`
 - **OS**: macOS, Windows, or Linux with a graphical display session
