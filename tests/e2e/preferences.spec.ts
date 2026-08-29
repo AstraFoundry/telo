@@ -1,4 +1,4 @@
-import { expect, openDemoWorkspace, test } from "./fixtures";
+import { demoTest as test, expect, waitForDemoWorkspace } from "./fixtures";
 
 async function openSettings(window: import("@playwright/test").Page) {
   await window.getByRole("button", { name: "Open account menu" }).click();
@@ -11,7 +11,7 @@ async function openSettings(window: import("@playwright/test").Page) {
 test("persists appearance, messages, and notifications preferences across Settings visits", async ({
   window,
 }) => {
-  await openDemoWorkspace(window);
+  await waitForDemoWorkspace(window);
   await openSettings(window);
 
   const appearance = window.getByRole("region", { name: "Appearance" });
@@ -94,7 +94,7 @@ test("persists appearance, messages, and notifications preferences across Settin
 test("applies the 24h time format and Cmd+Enter sending to the conversation", async ({
   window,
 }) => {
-  await openDemoWorkspace(window);
+  await waitForDemoWorkspace(window);
   await openSettings(window);
 
   await window

@@ -10,8 +10,9 @@
 ## Setup and commands
 
 ```sh
-pnpm install --frozen-lockfile
+make install
 make dev
+make dev DEMO=1
 make check
 make test
 make test-e2e
@@ -19,15 +20,23 @@ make build
 make package
 ```
 
-`make dev` starts Electron Vite with hot reload. `make check` runs formatting, lint, TypeScript, coverage-gated tests, Markdown validation, a production build, and Electron E2E tests.
+`make install` runs `pnpm install --frozen-lockfile`, which also downloads the Electron platform binary via `install-electron`. Electron 42 and later no longer download that binary in the package's own install script, and electron-vite still requires `node_modules/electron/path.txt` before it can launch the app. `make dev` runs `make install` first, then starts Electron Vite with hot reload. `make dev DEMO=1` sets `TELO_DEMO_WORKSPACE=1` so the process opens the in-memory demo workspace instead of onboarding; there is no in-app demo-workspace action. `make check` runs formatting, lint, TypeScript, coverage-gated tests, Markdown validation, a production build, and Electron E2E tests.
 
-Production builds should provide the Telegram application credentials used by all users:
+Local Telegram application credentials live in `.env` (gitignored; copy `.env.example`). `electron-vite` loads `TELO_TELEGRAM_API_ID` and `TELO_TELEGRAM_API_HASH` from that file, or from the process environment:
 
 ```sh
 TELO_TELEGRAM_API_ID=12345 TELO_TELEGRAM_API_HASH=... make dev
 ```
 
+The demo workspace is a local-development and e2e launch flag, not a product surface:
+
+```sh
+make dev DEMO=1
+```
+
 The release workflow reads the same values from the `TELO_TELEGRAM_API_ID` and `TELO_TELEGRAM_API_HASH` repository secrets and embeds them in the Electron main bundle. Users never enter credentials: a configured release shows only phone number, login code, and optional two-factor password, while a build without them shows a "missing credentials" notice instead of the sign-in form. On Linux CI, run Electron tests under `xvfb-run`.
+
+`pnpm test:e2e` builds with Electron Vite's `e2e` mode, which deliberately omits local Telegram application credentials. This keeps the missing-credentials onboarding path deterministic even when the developer has a populated `.env`; production and ordinary development builds continue to embed their configured credentials.
 
 ## Stored data
 

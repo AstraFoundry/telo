@@ -1,9 +1,9 @@
-import { expect, openDemoWorkspace, test } from "./fixtures";
+import { demoTest as test, expect, waitForDemoWorkspace } from "./fixtures";
 
 test("switches the conversation view when a different chat is selected", async ({
   window,
 }) => {
-  await openDemoWorkspace(window);
+  await waitForDemoWorkspace(window);
 
   const conversation = window.getByRole("region", { name: "Conversation" });
   const chats = window.getByRole("navigation", { name: "Chats" });
@@ -36,7 +36,7 @@ test("switches the conversation view when a different chat is selected", async (
 });
 
 test("filters the chat list from the search field", async ({ window }) => {
-  await openDemoWorkspace(window);
+  await waitForDemoWorkspace(window);
 
   const chats = window.getByRole("navigation", { name: "Chats" });
   await expect(

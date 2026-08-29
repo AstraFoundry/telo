@@ -1,9 +1,9 @@
-import { expect, openDemoWorkspace, test } from "./fixtures";
+import { demoTest as test, expect, waitForDemoWorkspace } from "./fixtures";
 
 test("marks a chat as read and offers mark unread from the row context menu", async ({
   window,
 }) => {
-  await openDemoWorkspace(window);
+  await waitForDemoWorkspace(window);
 
   const chats = window.getByRole("navigation", { name: "Chats" });
   const row = chats.getByRole("button", { name: /Telo Design/ });
@@ -28,7 +28,7 @@ test("marks a chat as read and offers mark unread from the row context menu", as
 test("copies the message text from the bubble context menu", async ({
   window,
 }) => {
-  await openDemoWorkspace(window);
+  await waitForDemoWorkspace(window);
 
   const body = "Release checklist: tests, docs, signed packages.";
   await window.getByText(body).click({ button: "right" });

@@ -1,9 +1,9 @@
-import { expect, openDemoWorkspace, test } from "./fixtures";
+import { demoTest as test, expect, waitForDemoWorkspace } from "./fixtures";
 
 test("sends a message from the composer into the active chat", async ({
   window,
 }) => {
-  await openDemoWorkspace(window);
+  await waitForDemoWorkspace(window);
 
   await window
     .getByRole("navigation", { name: "Chats" })

@@ -36,7 +36,7 @@ Designed from the ground up for strict privacy and security, Telo isolates crede
 
 - **Lightweight & Fast**: Powered by `teleproto`, a pure TypeScript implementation of the Telegram MTProto wire protocol. No bloated C++ native binaries or external TDLib build dependencies.
 - **Seamless Authentication**: Standard phone number login supporting SMS/Telegram verification codes and Cloud Password (2FA) challenges.
-- **Zero-Login Demo Workspace**: Instantly explore the client's interface and agent workflows without signing into a Telegram account.
+- **Zero-Login Demo Workspace**: Launch with `make dev DEMO=1` to explore the interface and agent workflows without signing into a Telegram account. There is no in-app demo button.
 
 ### 🤖 Workspace-Aware Global Agent
 
@@ -122,7 +122,7 @@ Telo enforces a clean separation of concerns using industry-standard architectur
 2. **Install dependencies**:
 
    ```sh
-   pnpm install --frozen-lockfile
+   make install
    ```
 
 3. **Start the development application**:
@@ -139,7 +139,13 @@ To connect to live Telegram accounts, supply your application credentials obtain
 TELO_TELEGRAM_API_ID=1234567 TELO_TELEGRAM_API_HASH=0123456789abcdef0123456789abcdef make dev
 ```
 
-_Note: If no credentials are provided at build time, Telo will offer the instant interactive Demo Workspace._
+To open the in-memory demo workspace instead of onboarding:
+
+```sh
+make dev DEMO=1
+```
+
+_Note: If no credentials are provided at build time, a configured release shows a "missing credentials" notice instead of the sign-in form. Demo workspace is a local launch flag, not a fallback._
 
 ---
 
@@ -171,7 +177,8 @@ make format
 
 | Command         | Action                                                                      |
 | --------------- | --------------------------------------------------------------------------- |
-| `make dev`      | Start the Electron app in development mode with hot reloading               |
+| `make install`  | Install dependencies from the lockfile and download the Electron binary     |
+| `make dev`      | Install dependencies, then start the Electron app with hot reloading        |
 | `make check`    | Run formatting, linting, type checks, unit tests, docs check, and E2E tests |
 | `make test`     | Run unit and integration tests with coverage reporting via Vitest           |
 | `make test-e2e` | Run end-to-end Electron tests via Playwright                                |

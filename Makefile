@@ -1,7 +1,14 @@
-.PHONY: dev check test test-e2e lint format docs build package help
+.PHONY: install dev check test test-e2e lint format docs build package help
 
-dev: ## Start the Electron app in development mode
+install: ## Install dependencies and the Electron binary
+	@pnpm install --frozen-lockfile
+
+dev: install ## Start the Electron app (DEMO=1 opens the demo workspace)
+ifeq ($(DEMO),1)
+	@TELO_DEMO_WORKSPACE=1 pnpm dev
+else
 	@pnpm dev
+endif
 
 check: ## Run formatting, lint, types, tests, docs, and production build
 	@pnpm check

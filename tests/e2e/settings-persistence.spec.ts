@@ -1,7 +1,7 @@
-import { expect, openDemoWorkspace, test } from "./fixtures";
+import { demoTest as test, expect, waitForDemoWorkspace } from "./fixtures";
 
 test("persists Agent settings across Settings visits", async ({ window }) => {
-  await openDemoWorkspace(window);
+  await waitForDemoWorkspace(window);
 
   await window.getByRole("button", { name: "Open account menu" }).click();
   await window.getByRole("button", { name: "Settings", exact: true }).click();

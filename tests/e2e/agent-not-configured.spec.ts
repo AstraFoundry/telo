@@ -1,9 +1,9 @@
-import { expect, openDemoWorkspace, test } from "./fixtures";
+import { demoTest as test, expect, waitForDemoWorkspace } from "./fixtures";
 
 test("blocks the composer until an API key is configured and links to Settings", async ({
   window,
 }) => {
-  await openDemoWorkspace(window);
+  await waitForDemoWorkspace(window);
 
   await window.getByRole("button", { name: "Open agent" }).click();
   await expect(window.getByRole("heading", { name: "Agent" })).toBeVisible();
@@ -24,7 +24,7 @@ test("renders a sanitized assistant error for a rejected API key", async ({
 }) => {
   // The run round-trips to the real provider with a fake key.
   test.setTimeout(60_000);
-  await openDemoWorkspace(window);
+  await waitForDemoWorkspace(window);
 
   await window.getByRole("button", { name: "Open account menu" }).click();
   await window.getByRole("button", { name: "Settings", exact: true }).click();

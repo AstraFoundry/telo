@@ -1,9 +1,9 @@
-import { expect, openDemoWorkspace, test } from "./fixtures";
+import { demoTest as test, expect, waitForDemoWorkspace } from "./fixtures";
 
 test("replies to a message and shows the quote block on the sent message", async ({
   window,
 }) => {
-  await openDemoWorkspace(window);
+  await waitForDemoWorkspace(window);
 
   await window
     .getByRole("navigation", { name: "Chats" })
@@ -36,7 +36,7 @@ test("replies to a message and shows the quote block on the sent message", async
 });
 
 test("edits an outgoing message from the context menu", async ({ window }) => {
-  await openDemoWorkspace(window);
+  await waitForDemoWorkspace(window);
 
   const conversation = window.getByRole("region", { name: "Conversation" });
   const original = "Release checklist: tests, docs, signed packages.";
@@ -61,7 +61,7 @@ test("edits an outgoing message from the context menu", async ({ window }) => {
 });
 
 test("deletes a message after confirming in the dialog", async ({ window }) => {
-  await openDemoWorkspace(window);
+  await waitForDemoWorkspace(window);
 
   const conversation = window.getByRole("region", { name: "Conversation" });
   const body = "Release checklist: tests, docs, signed packages.";
@@ -83,7 +83,7 @@ test("deletes a message after confirming in the dialog", async ({ window }) => {
 test("forwards a message to the chat picked in the dialog", async ({
   window,
 }) => {
-  await openDemoWorkspace(window);
+  await waitForDemoWorkspace(window);
 
   const conversation = window.getByRole("region", { name: "Conversation" });
   const body = "Release checklist: tests, docs, signed packages.";

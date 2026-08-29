@@ -10,6 +10,7 @@ This directory is the single source of truth for how this project is built, orga
 - [`operations/`](operations/README.md) — local development, CI/CD, and deployment.
 - [`quality/`](quality/README.md) — testing strategy and code-review expectations.
 - [`decisions/`](decisions/README.md) — architecture decision records (ADRs).
+- [`todo/`](todo/README.md) — product gap checklists and execution waves.
 
 ## How to use this documentation
 

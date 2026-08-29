@@ -36,7 +36,7 @@ Telo 从架构根基上严格遵循隐私与零信任安全规范：所有凭据
 
 - **轻量高效**：基于 `teleproto` 实现纯 TypeScript 的 Telegram MTProto 有线协议，无需引入庞大的 C++ 原生动态库或复杂的 TDLib 编译工具链。
 - **顺畅登录流程**：标准手机号登录，支持短信 / Telegram 应用内验证码，以及两步验证云密码（2FA）。
-- **零登录演示模式（Demo Workspace）**：无需输入任何真实 Telegram 账号凭据，即可立即体验完整的桌面客户端交互与 AI 智能体功能。
+- **零登录演示模式（Demo Workspace）**：使用 `make dev DEMO=1` 启动即可体验完整界面与智能体，无需登录。界面上没有演示入口按钮。
 
 ### 🤖 工作区上下文感知全局智能体
 
@@ -122,7 +122,7 @@ Telo 采用业界成熟的分层与模块化架构设计：
 2. **安装项目依赖**：
 
    ```sh
-   pnpm install --frozen-lockfile
+   make install
    ```
 
 3. **启动开发环境**：
@@ -139,7 +139,13 @@ Telo 采用业界成熟的分层与模块化架构设计：
 TELO_TELEGRAM_API_ID=1234567 TELO_TELEGRAM_API_HASH=0123456789abcdef0123456789abcdef make dev
 ```
 
-_注：若未提供 API 凭据，Telo 将自动提供即开即用的交互式演示工作区（Demo Workspace）。_
+如需打开内存演示工作区而非引导页：
+
+```sh
+make dev DEMO=1
+```
+
+_注：若构建时未提供 API 凭据，正式包会显示凭据缺失提示而非登录表单。演示工作区是本地启动参数，不是回退方案。_
 
 ---
 
@@ -171,7 +177,8 @@ make format
 
 | 命令            | 说明                                                            |
 | --------------- | --------------------------------------------------------------- |
-| `make dev`      | 启动开发模式并开启热更新（Hot Reload）                          |
+| `make install`  | 按 lockfile 安装项目依赖并下载 Electron 二进制                  |
+| `make dev`      | 先安装依赖，再启动开发模式并开启热更新（Hot Reload）            |
 | `make check`    | 运行完整的发布前检查（格式化、Lint、类型、单元测试、文档、E2E） |
 | `make test`     | 运行基于 Vitest 的单元与集成测试，并输出覆盖率报告              |
 | `make test-e2e` | 运行基于 Playwright 的 Electron 端到端全流程测试                |
