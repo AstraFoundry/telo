@@ -52,7 +52,22 @@ export class TelegramWorkspaceService {
   ): Promise<MessageDto> {
     if (!chatId.trim()) throw new Error("Chat id is required");
     if (!body.trim()) throw new Error("Message body is required");
-    return this.repository.sendMessage(chatId, body.trim(), input?.replyToId);
+    return this.repository.sendMessage(
+      chatId,
+      body.trim(),
+      input?.replyToId,
+      input?.clientId,
+    );
+  }
+
+  setTyping(chatId: string, typing: boolean): Promise<void> {
+    if (!chatId.trim()) throw new Error("Chat id is required");
+    return this.repository.setTyping(chatId, typing);
+  }
+
+  saveDraft(chatId: string, text: string): Promise<void> {
+    if (!chatId.trim()) throw new Error("Chat id is required");
+    return this.repository.saveDraft(chatId, text);
   }
 }
 

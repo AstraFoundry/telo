@@ -277,6 +277,109 @@ describe("DemoTelegramRepository", () => {
     await expect(repository.forwardMessage(input)).rejects.toThrow(error);
   });
 
+  it("echoes the clientId back on the sent message for optimistic reconciliation", async () => {
+    const repository = new DemoTelegramRepository();
+    const sent = await repository.sendMessage(
+      "design",
+      "Hello",
+      undefined,
+      "client-1",
+    );
+    expect(sent.clientId).toBe("client-1");
+  });
+
+  it("saveDraft persists the draft and emits a draft event without a chat-upsert", async () => {
+    const repository = new DemoTelegramRepository();
+    const events: unknown[] = [];
+    repository.subscribe((event) => events.push(event));
+
+    await repository.saveDraft("design", "Unsent reply");
+
+    const chats = await listChats(repository);
+    expect(chats.find((chat) => chat.id === "design")?.draftPreview).toBe(
+      "Unsent reply",
+    );
+    expect(events).toEqual([
+      { type: "draft", chatId: "design", draftPreview: "Unsent reply" },
+    ]);
+  });
+
+  it("saveDraft clears the draft when given an empty or blank string", async () => {
+    const repository = new DemoTelegramRepository();
+    await repository.saveDraft("design", "Something");
+
+    await repository.saveDraft("design", "   ");
+
+    const chats = await listChats(repository);
+    expect(chats.find((chat) => chat.id === "design")?.draftPreview).toBeNull();
+  });
+
+  it("saveDraft rejects for an unknown chat", async () => {
+    const repository = new DemoTelegramRepository();
+    await expect(repository.saveDraft("missing", "text")).rejects.toThrow(
+      "Unknown chat missing",
+    );
+  });
+
+  it("sendMessage clears the chat's draft", async () => {
+    const repository = new DemoTelegramRepository();
+    await repository.saveDraft("design", "Draft text");
+
+    await repository.sendMessage("design", "Sent instead");
+
+    const chats = await listChats(repository);
+    expect(chats.find((chat) => chat.id === "design")?.draftPreview).toBeNull();
+  });
+
+  it("setTyping resolves for a known chat and rejects for an unknown one", async () => {
+    const repository = new DemoTelegramRepository();
+    await expect(repository.setTyping("design", true)).resolves.toBeUndefined();
+    await expect(repository.setTyping("missing", true)).rejects.toThrow(
+      "Unknown chat missing",
+    );
+  });
+
+  it("simulates the recipient typing and then replying after a send", async () => {
+    const repository = new DemoTelegramRepository({
+      typingDelayMs: 5,
+      autoReplyDelayMs: 15,
+    });
+    const events: unknown[] = [];
+    repository.subscribe((event) => events.push(event));
+
+    await repository.sendMessage("design", "Ship it?");
+    await new Promise((resolve) => setTimeout(resolve, 30));
+
+    const typingEvents = events.filter(
+      (event): event is { type: "typing"; chatId: string; typing: boolean } =>
+        (event as { type: string }).type === "typing",
+    );
+    expect(typingEvents).toEqual([
+      { type: "typing", chatId: "design", typing: true },
+      { type: "typing", chatId: "design", typing: false },
+    ]);
+    const messages = await listMessages(repository, "design");
+    const reply = messages.at(-1);
+    expect(reply?.outgoing).toBe(false);
+    expect(reply?.body).toBe("Looks good — shipping it.");
+  });
+
+  it("does not schedule an auto-reply for a chat without a demo counterpart", async () => {
+    const repository = new DemoTelegramRepository({
+      typingDelayMs: 5,
+      autoReplyDelayMs: 5,
+    });
+    const events: unknown[] = [];
+    repository.subscribe((event) => events.push(event));
+
+    await repository.sendMessage("saved", "Note to self");
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(
+      events.some((event) => (event as { type: string }).type === "typing"),
+    ).toBe(false);
+  });
+
   it("logout() is a no-op that keeps the demo workspace intact", async () => {
     const repository = new DemoTelegramRepository();
 

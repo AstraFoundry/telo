@@ -28,6 +28,10 @@ const api: TeloDesktopApi = {
       ipcRenderer.invoke(channels.chatMuteSet, chatId, muted),
     setChatRead: (chatId, read) =>
       ipcRenderer.invoke(channels.chatReadSet, chatId, read),
+    setTyping: (chatId, typing) =>
+      ipcRenderer.invoke(channels.chatTypingSet, chatId, typing),
+    saveDraft: (chatId, text) =>
+      ipcRenderer.invoke(channels.chatDraftSave, chatId, text),
     onEvent: (listener) =>
       subscribe<TelegramWorkspaceEvent>(channels.workspaceEvent, listener),
   },
@@ -57,7 +61,10 @@ const api: TeloDesktopApi = {
       subscribe<TelegramAuthState>(channels.telegramAuthEvent, listener),
   },
   shell: {
-    notify: (title, body) => ipcRenderer.invoke(channels.notify, title, body),
+    notify: (title, body, tag) =>
+      ipcRenderer.invoke(channels.notify, title, body, tag),
+    onNotificationClick: (listener) =>
+      subscribe<string>(channels.notifyClick, listener),
   },
   preferences: {
     get: () => ipcRenderer.invoke(channels.preferencesGet),

@@ -16,6 +16,8 @@ function repository(): TelegramRepository {
     setChatPinned: vi.fn(async () => undefined),
     setChatMuted: vi.fn(async () => undefined),
     setChatRead: vi.fn(async () => undefined),
+    setTyping: vi.fn(async () => undefined),
+    saveDraft: vi.fn(async () => undefined),
     logout: vi.fn(async () => undefined),
   };
 }

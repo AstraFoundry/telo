@@ -25,6 +25,9 @@ const INITIAL_CHATS: ReadonlyArray<ChatDto> = [
     pinned: true,
     kind: "saved",
     initials: "SM",
+    avatarDataUrl: null,
+    draftPreview: null,
+    typing: false,
   },
   {
     id: "design",
@@ -36,6 +39,9 @@ const INITIAL_CHATS: ReadonlyArray<ChatDto> = [
     pinned: true,
     kind: "group",
     initials: "TD",
+    avatarDataUrl: null,
+    draftPreview: null,
+    typing: false,
   },
   {
     id: "product",
@@ -47,8 +53,18 @@ const INITIAL_CHATS: ReadonlyArray<ChatDto> = [
     pinned: false,
     kind: "channel",
     initials: "PN",
+    avatarDataUrl: null,
+    draftPreview: null,
+    typing: false,
   },
 ];
+
+// Demo auto-reply copy, keyed by chat id; falls back to a generic reply for
+// any chat added later (e.g. by forwardMessage into a new target).
+const DEMO_AUTO_REPLIES: Record<string, string> = {
+  design: "Looks good — shipping it.",
+  product: "Noted, added to the review doc.",
+};
 
 const INITIAL_MESSAGES: Record<string, ReadonlyArray<MessageDto>> = {
   saved: [
@@ -95,6 +111,13 @@ const INITIAL_MESSAGES: Record<string, ReadonlyArray<MessageDto>> = {
   ],
 };
 
+export interface DemoTelegramRepositoryOptions {
+  /** Delay before the simulated contact starts typing a reply. */
+  readonly typingDelayMs?: number;
+  /** Delay (from send) before the simulated contact's reply lands. */
+  readonly autoReplyDelayMs?: number;
+}
+
 export class DemoTelegramRepository implements TelegramRepository {
   private readonly listeners = new Set<
     (event: TelegramWorkspaceEvent) => void
@@ -108,6 +131,14 @@ export class DemoTelegramRepository implements TelegramRepository {
       [...messages],
     ]),
   );
+  private readonly timers = new Set<ReturnType<typeof setTimeout>>();
+  private readonly typingDelayMs: number;
+  private readonly autoReplyDelayMs: number;
+
+  constructor(options: DemoTelegramRepositoryOptions = {}) {
+    this.typingDelayMs = options.typingDelayMs ?? 500;
+    this.autoReplyDelayMs = options.autoReplyDelayMs ?? 1400;
+  }
 
   subscribe(listener: (event: TelegramWorkspaceEvent) => void): () => void {
     this.listeners.add(listener);
@@ -173,7 +204,9 @@ export class DemoTelegramRepository implements TelegramRepository {
     chatId: string,
     body: string,
     replyToId?: string,
+    clientId?: string,
   ): Promise<MessageDto> {
+    this.requireChat(chatId);
     const message: MessageDto = {
       id: crypto.randomUUID(),
       chatId,
@@ -183,6 +216,7 @@ export class DemoTelegramRepository implements TelegramRepository {
       outgoing: true,
       status: "sent",
       replyTo: replyToId ? this.replySnapshot(chatId, replyToId) : null,
+      clientId: clientId ?? null,
     };
     const current = this.messages.get(chatId) ?? [];
     this.messages.set(chatId, [...current, message]);
@@ -190,9 +224,65 @@ export class DemoTelegramRepository implements TelegramRepository {
       ...chat,
       preview: message.body,
       updatedAt: message.sentAt,
+      draftPreview: null,
     }));
     this.emit({ type: "message-upsert", cause: "new", message });
+    this.scheduleAutoReply(chatId);
     return message;
+  }
+
+  async setTyping(chatId: string, typing: boolean): Promise<void> {
+    // The local user's own typing signal has no counterpart to notify in the
+    // demo workspace; teleproto sends it out over the wire in production.
+    void typing;
+    this.requireChat(chatId);
+  }
+
+  async saveDraft(chatId: string, text: string): Promise<void> {
+    this.requireChat(chatId);
+    const draftPreview = text.trim() ? text : null;
+    this.updateChatSilently(chatId, (chat) => ({ ...chat, draftPreview }));
+    this.emit({ type: "draft", chatId, draftPreview });
+  }
+
+  /**
+   * Demo-only realism: after the user sends a message, the recipient "types"
+   * and then replies, so Wave 1's typing indicator and message sync have
+   * something to show in jsdom/E2E without a live Telegram account.
+   */
+  private scheduleAutoReply(chatId: string): void {
+    const reply = DEMO_AUTO_REPLIES[chatId];
+    if (!reply) return; // Saved Messages and unknown chats have no counterpart.
+    const typingTimer = setTimeout(() => {
+      this.timers.delete(typingTimer);
+      this.emit({ type: "typing", chatId, typing: true });
+    }, this.typingDelayMs);
+    this.timers.add(typingTimer);
+
+    const replyTimer = setTimeout(() => {
+      this.timers.delete(replyTimer);
+      this.emit({ type: "typing", chatId, typing: false });
+      const chat = this.chats.get(chatId);
+      if (!chat) return;
+      const message: MessageDto = {
+        id: crypto.randomUUID(),
+        chatId,
+        senderName: chat.title,
+        body: reply,
+        sentAt: new Date().toISOString(),
+        outgoing: false,
+        status: "read",
+      };
+      const current = this.messages.get(chatId) ?? [];
+      this.messages.set(chatId, [...current, message]);
+      this.updateChat(chatId, (entry) => ({
+        ...entry,
+        preview: message.body,
+        updatedAt: message.sentAt,
+      }));
+      this.emit({ type: "message-upsert", cause: "new", message });
+    }, this.autoReplyDelayMs);
+    this.timers.add(replyTimer);
   }
 
   async editMessage(input: EditMessageInput): Promise<void> {
@@ -299,11 +389,21 @@ export class DemoTelegramRepository implements TelegramRepository {
   }
 
   private updateChat(chatId: string, update: (chat: ChatDto) => ChatDto): void {
+    this.updateChatSilently(chatId, update);
+    const chat = this.chats.get(chatId);
+    if (chat) this.emit({ type: "chat-upsert", chat });
+  }
+
+  // Draft updates emit a dedicated "draft" event instead of "chat-upsert" so
+  // the renderer can distinguish "someone is drafting" from a full chat
+  // refresh; this still keeps the in-memory snapshot consistent.
+  private updateChatSilently(
+    chatId: string,
+    update: (chat: ChatDto) => ChatDto,
+  ): void {
     const chat = this.chats.get(chatId);
     if (!chat) throw new Error(`Unknown chat ${chatId}`);
-    const updated = update(chat);
-    this.chats.set(chatId, updated);
-    this.emit({ type: "chat-upsert", chat: updated });
+    this.chats.set(chatId, update(chat));
   }
 
   private emit(event: TelegramWorkspaceEvent): void {

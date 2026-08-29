@@ -10,6 +10,8 @@ export const channels = {
   chatPinSet: "workspace:set-chat-pinned",
   chatMuteSet: "workspace:set-chat-muted",
   chatReadSet: "workspace:set-chat-read",
+  chatTypingSet: "workspace:set-typing",
+  chatDraftSave: "workspace:save-draft",
   agentConfigGet: "agent:config-get",
   agentConfigSave: "agent:config-save",
   agentRun: "agent:run",
@@ -27,4 +29,5 @@ export const channels = {
   preferencesGet: "preferences:get",
   preferencesUpdate: "preferences:update",
   notify: "shell:notify",
+  notifyClick: "shell:notify-click",
 } as const;
