@@ -19,15 +19,17 @@
 
 没有这些，后面 UI 都是空壳。
 
-- [ ] 订阅 Teleproto typing / draft / pinned / folder / notification-setting 更新
-- [ ] 映射真实用户、会话、发送者、头像；Saved Messages 与 mute 用服务端状态（侧栏不要只画 initials）
-- [ ] 每会话记住滚动位置
-- [ ] 乐观发送：稳定临时 ID、`sending/sent/read/failed`、重试、失败回填 composer
-- [ ] 本地 / 云端草稿；切聊天不丢输入
-- [ ] 输入状态：顶栏 + 会话列表行（先接事件，动效用已有 `MessageTyping`）
-- [ ] 未读消息桌面通知：mute / 焦点 / 点进对应会话（现有 `shell.notify` 只接 Agent 跑完）
-- [ ] 日期分隔、未读分界、点击回复条跳到源消息
-- [ ] 同步脊柱的 application / IPC / E2E 覆盖
+- [x] 订阅 Teleproto typing / draft / mute / pin 更新（folder 级更新留给 Wave 2 文件夹项）
+- [x] 映射真实用户、会话、发送者、头像；Saved Messages 与 mute 用服务端状态（侧栏不要只画 initials）
+- [x] 每会话记住滚动位置
+- [x] 乐观发送：稳定临时 ID、`sending/sent/read`；失败时移除乐观气泡并把 body 回填 composer（不吞错）
+- [ ] 发送失败后的一键重试（现状：body 已回填 composer，需要用户重新按发送）
+- [x] 本地 / 云端草稿；切聊天不丢输入
+- [x] 输入状态：顶栏 + 会话列表行（已接事件，动效用已有 `MessageTyping`）
+- [x] 未读消息桌面通知：mute / 焦点 / 点进对应会话（`shell.notify` 已接收件通知与点击选中会话）
+- [x] 日期分隔、点击回复条跳到源消息
+- [ ] 未读分界线（`MessageMarker` 目前只标日期，不标首条未读消息）
+- [x] 同步脊柱的 application / IPC / Vitest / Playwright 覆盖
 
 ## Wave 2 — 能当主客户端的最低线
 
