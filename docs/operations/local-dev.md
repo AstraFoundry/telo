@@ -2,7 +2,7 @@
 
 ## Requirements
 
-- Node.js 20 or newer
+- Node.js 22 or newer
 - pnpm 9
 - GNU Make
 - macOS, Windows, or Linux with a graphical session
