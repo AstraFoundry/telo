@@ -130,7 +130,7 @@ describe("telegram-store", () => {
     expect(useTelegramStore.getState().currentUser).toEqual(currentUser);
   });
 
-  it("logout() calls the preload API and resets auth and current user", async () => {
+  it("logout() calls the preload API and resets auth to idle and current user", async () => {
     const telo = installTeloApiMock();
     telo.telegram.logout.mockResolvedValue(undefined);
     useTelegramStore.setState({
@@ -147,7 +147,7 @@ describe("telegram-store", () => {
     await useTelegramStore.getState().logout();
 
     expect(telo.telegram.logout).toHaveBeenCalledTimes(1);
-    expect(useTelegramStore.getState().auth).toBeNull();
+    expect(useTelegramStore.getState().auth).toEqual({ status: "idle" });
     expect(useTelegramStore.getState().currentUser).toBeNull();
   });
 

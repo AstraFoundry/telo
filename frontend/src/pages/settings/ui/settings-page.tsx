@@ -21,6 +21,7 @@ import { AgentConfigurationForm } from "features/configure-agent";
 import { TelegramConnectionForm } from "features/connect-telegram";
 import { copy } from "shared/config/copy";
 import {
+  Avatar,
   Button,
   RadioGroup,
   RadioGroupItem,
@@ -293,19 +294,11 @@ export function SettingsPage({ onBack, onLoggedOut }: SettingsPageProps) {
             {currentUser ? (
               <>
                 <div className="flex items-center gap-3">
-                  {currentUser.avatarDataUrl ? (
-                    <img
-                      src={currentUser.avatarDataUrl}
-                      alt=""
-                      /* deslop-ignore-next-line 19 — circular avatars are a messaging convention */
-                      className="size-12 shrink-0 rounded-full object-cover outline outline-1 -outline-offset-1 outline-black/10 dark:outline-white/10"
-                    />
-                  ) : (
-                    /* deslop-ignore-next-line 19 — circular avatars are a messaging convention */
-                    <span className="grid size-12 shrink-0 place-items-center rounded-full bg-secondary text-sm font-semibold">
-                      {currentUser.initials}
-                    </span>
-                  )}
+                  <Avatar
+                    initials={currentUser.initials}
+                    src={currentUser.avatarDataUrl}
+                    className="size-12 text-sm"
+                  />
                   <div className="min-w-0">
                     <strong className="block truncate text-sm font-semibold">
                       {currentUser.displayName}

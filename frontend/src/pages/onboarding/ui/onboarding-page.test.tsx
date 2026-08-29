@@ -1,6 +1,10 @@
-import { render, screen } from "@testing-library/react";
+import {
+  render,
+  screen,
+  waitForElementToBeRemoved,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { useTelegramStore } from "../../../entities/telegram";
 import { copy } from "../../../shared/config/copy";
@@ -49,10 +53,8 @@ describe("OnboardingPage", () => {
     });
   });
 
-  it("renders the welcome step with the primary and demo actions", async () => {
-    const user = userEvent.setup();
-    const onUseDemo = vi.fn();
-    render(<OnboardingPage loading={false} onUseDemo={onUseDemo} />);
+  it("renders the welcome step with the sign-in action only", async () => {
+    render(<OnboardingPage loading={false} />);
 
     // TextReveal splits the copy into per-word spans, so match on the
     // element's textContent rather than the computed accessible name.
@@ -63,25 +65,43 @@ describe("OnboardingPage", () => {
     expect(
       screen.getByRole("button", { name: copy.startMessaging }),
     ).toBeTruthy();
+    // Demo workspace is a process launch flag, not an onboarding action.
+    expect(
+      screen.queryByRole("button", { name: /demo workspace/i }),
+    ).toBeNull();
     // The connection flow stays behind the welcome step until the CTA.
     expect(screen.queryByLabelText(copy.phoneNumber)).toBeNull();
-
-    await user.click(screen.getByRole("button", { name: copy.useDemo }));
-    expect(onUseDemo).toHaveBeenCalledTimes(1);
   });
 
-  it("opens the connection flow from the primary action", async () => {
+  it("swaps to the phone step in place from the primary action", async () => {
     const user = userEvent.setup();
-    render(<OnboardingPage loading={false} onUseDemo={vi.fn()} />);
+    render(<OnboardingPage loading={false} />);
 
     await user.click(screen.getByRole("button", { name: copy.startMessaging }));
 
     expect(screen.getByLabelText(copy.phoneNumber)).toBeTruthy();
     expect(screen.getByRole("button", { name: copy.continue })).toBeTruthy();
+    expect(screen.getByRole("button", { name: copy.back })).toBeTruthy();
+  });
+
+  it("returns to the welcome step from the phone step back button", async () => {
+    const user = userEvent.setup();
+    render(<OnboardingPage loading={false} />);
+
+    await user.click(screen.getByRole("button", { name: copy.startMessaging }));
+    await user.click(screen.getByRole("button", { name: copy.back }));
+
+    expect(
+      screen.getByRole("button", { name: copy.startMessaging }),
+    ).toBeTruthy();
+    // The exiting step stays mounted while AnimatePresence plays its exit.
+    await waitForElementToBeRemoved(() =>
+      screen.queryByLabelText(copy.phoneNumber),
+    );
   });
 
   it("replaces the actions with a shimmer status while connecting", () => {
-    render(<OnboardingPage loading={true} onUseDemo={vi.fn()} />);
+    render(<OnboardingPage loading={true} />);
 
     expect(screen.getByRole("status").textContent).toContain(
       copy.connectionConnecting,
@@ -89,12 +109,11 @@ describe("OnboardingPage", () => {
     expect(
       screen.queryByRole("button", { name: copy.startMessaging }),
     ).toBeNull();
-    expect(screen.queryByRole("button", { name: copy.useDemo })).toBeNull();
   });
 
   it("offers a skip-to-content link that targets the main surface", async () => {
     const user = userEvent.setup();
-    render(<OnboardingPage loading={false} onUseDemo={vi.fn()} />);
+    render(<OnboardingPage loading={false} />);
 
     const link = screen.getByRole("link", { name: copy.skipToContent });
     // Visually hidden until focused.

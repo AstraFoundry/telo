@@ -53,7 +53,10 @@ export const useTelegramStore = create<TelegramState>((set) => ({
   async logout() {
     try {
       await window.telo.telegram.logout();
-      set({ auth: null, currentUser: null });
+      // The post-logout state is known — idle, not "not loaded yet" (null).
+      // Onboarding's loading gate reads null as still-initializing, so a null
+      // here would strand the welcome step on its connecting shimmer.
+      set({ auth: { status: "idle" }, currentUser: null });
     } catch (error) {
       set({ auth: { status: "error", message: safeMessage(error) } });
     }
