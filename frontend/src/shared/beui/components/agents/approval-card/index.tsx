@@ -400,7 +400,7 @@ export function ApprovalCard({
                   ids={questions.map((item) => item.id)}
                 />
                 <Button
-                  size={currentStep === questions.length - 1 ? "sm" : "icon"}
+                  size={currentStep === questions.length - 1 ? "md" : "icon"}
                   aria-label={
                     currentStep === questions.length - 1
                       ? "Submit response"

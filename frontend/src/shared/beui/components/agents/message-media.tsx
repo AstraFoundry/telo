@@ -325,7 +325,9 @@ function VisualMedia({
               <Play
                 aria-hidden="true"
                 weight="fill"
-                className="absolute left-1/2 top-1/2 size-8 -translate-x-1/2 -translate-y-1/2 text-white drop-shadow"
+                // The fill triangle's area centroid sits ~5/256 left of the
+                // glyph box centre, so geometric centring reads off-centre.
+                className="absolute left-1/2 top-1/2 size-8 -translate-y-1/2 translate-x-[calc(-50%+1px)] text-white drop-shadow"
               />
             </>
           ) : (
