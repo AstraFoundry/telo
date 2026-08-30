@@ -135,7 +135,12 @@ function measureUndersized({
       reach(control, outer.top, outerMidX, -1, false) +
       reach(control, outer.bottom, outerMidX, 1, false);
 
-    if (width + 0.5 >= minTarget && height + 0.5 >= minTarget) continue;
+    // The probe steps a whole pixel at a time, so a control sitting on a
+    // fractional offset — which is where sub-pixel layout puts most of them —
+    // under-reports by up to 1px. Tolerate exactly that much and no more:
+    // claiming finer precision than the probe has would just make the failures
+    // arbitrary. A control genuinely under the floor still fails by margin.
+    if (width + 1 >= minTarget && height + 1 >= minTarget) continue;
 
     undersized.push({
       label:
