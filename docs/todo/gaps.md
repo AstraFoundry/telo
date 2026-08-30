@@ -153,12 +153,17 @@ Rejected (gate): chat-row / folder-tab springs (100+/day nav; `pressScale={1}` s
       另修掉 `demo-telegram-repository` 上传取消测试的时序 flake（20ms 步进在并行满载下会在取消到达前跑完整个上传）
 - [x] reduced-motion 替代已自动化 — 新增 `tests/e2e/reduced-motion.spec.ts`：在 `emulateMedia({ reducedMotion: "reduce" })` 下走 emoji 选取、
       媒体查看器开关、回复引用跳转，专门盯「只在过渡过程中才可见 / 可点的元素」在 `reduce` 下过渡不播时是否还成立
-- [ ] 慢放（10%）人工观感走查 — 仍需人在跑起来的应用里眼看，但「过冲」这半已先用数学收窄了范围：
-      阻尼比 ζ = c / (2√(km))，ζ ≥ 1 不过冲，ζ < 1 的峰值超调 = exp(-πζ/√(1-ζ²))。全仓弹簧照此过了一遍，
-      产品可达面里真正会回弹的只有三处：Settings 字号滑块的 `SPRING_BOUNCY`（ζ=0.31，超调 35.5%，571ms 稳定）、
-      OTP 输入格（ζ=0.63，8.0%，286ms）、以及 `Select` 面板开合时那 8px 间隙（`bounce: 0.5` / `duration: 0.6` / `delay: 0.12`）。
-      滑块那处只驱动拇指抓握的 `scaleY` 1→1.35，取值本身走临界阻尼的 `SPRING_GLIDE` 不会在两端回弹，
-      按下时的超调发生在你还按着的过程里并不突兀，但松手回 1 时会先缩到约 0.88 再弹回——留不留是审美判断，故未擅自改。
+- [x] 「过冲」这半已用数学定案，不必再靠眼看 — 阻尼比 ζ = c / (2√(km))，ζ ≥ 1 不过冲；全仓弹簧照此过了一遍，
+      产品可达面里会回弹的只有三处。**其中一处是真缺陷，已改**：Settings 字号滑块的 `SPRING_BOUNCY`
+      （stiffness 500 / damping 14 / mass 0.7，ζ=0.374）。数值解出来的轨迹比先前估的更糟——松手 1.35→1 会先squash 到
+      `scaleY` **0.902** 再弹回，562ms 才稳定：既跌破 make-interfaces-feel-better 的 0.95 下限（「低于 0.95 就显得夸张」），
+      又是 press 反馈 100–160ms 预算的 3.5 倍；更直接的是，同文件 `SPRING_GLIDE` 的注释白纸黑字写着滑块要临界阻尼、
+      「never rebounds off an end」，这个自造常数正好和组件自己的声明相反。改判给房子里现成的 `SPRING_PRESS`：
+      松手只到 0.999（肉眼无 squash）、271ms 稳定、抓握峰值 1.351。1→1.35 那段「长大」才是反馈本身，被保住了；
+      被去掉的只是越界的那点回弹，顺带少一个 bespoke 常数
+      其余两处经判断保留：OTP 输入格（ζ=0.63，8.0%，286ms）属输入成功的一次性庆祝，按 gate 的 rare/first-time 档次允许更活泼；
+      `Select` 那 8px 间隙（`bounce: 0.5` / 共 720ms）只是面板张开后继续安顿的装饰细节，功能性开合（opacity 180ms / height 420ms）早已完成，面板全程可用。
       其余（`SPRING_PRESS` ζ=0.87 超调 0.4%、AnimatedSidebar ζ=0.90 超调 0.2%、`SPRING_SWAP` / `SPRING_PANEL` /
-      `SPRING_LAYOUT` / `SPRING_GLIDE` / switch 均 ζ ≥ 0.94）数学上不过冲，慢放时不必再逐个盯。
-      剩下「时长是否拖沓」仍全靠眼看，重点两处：onboarding 的 `TextReveal`（369ms 稳定且逐字 delay 叠加）与上述 Select 间隙（含 delay 共 720ms）
+      `SPRING_LAYOUT` / `SPRING_GLIDE` / switch 均 ζ ≥ 0.94）数学上不过冲
+- [ ] 慢放（10%）人工观感走查 — 只剩「时长是否拖沓」这半，纯审美，需人在跑起来的应用里眼看。重点两处：
+      onboarding 的 `TextReveal`（369ms 稳定且逐字 delay 叠加）与 `Select` 间隙（含 delay 共 720ms）

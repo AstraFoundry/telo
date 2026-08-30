@@ -20,7 +20,7 @@ import {
   type KeyboardEvent,
   type PointerEvent,
 } from "react";
-import { SPRING_GLIDE } from "@beui-lib/ease";
+import { SPRING_GLIDE, SPRING_PRESS } from "@beui-lib/ease";
 import {
   capturePointer,
   releasePointer,
@@ -216,14 +216,6 @@ function useSlider({
 
 // --- Component (upstream components/motion/range-slider.tsx) ---------------
 
-// Bouncy grab feedback for the thumb scale only.
-const SPRING_BOUNCY = {
-  type: "spring",
-  stiffness: 500,
-  damping: 14,
-  mass: 0.7,
-} as const;
-
 export interface RangeSliderProps extends SliderOptions {
   /** Render a tick dot at each step. */
   showTicks?: boolean;
@@ -300,7 +292,7 @@ export function RangeSlider({
       <motion.div
         {...sliderProps}
         animate={reduce ? undefined : { scaleY: dragging ? 1.35 : 1 }}
-        transition={SPRING_BOUNCY}
+        transition={SPRING_PRESS}
         className="absolute top-1/2 h-5 w-1.5 rounded-sm bg-foreground shadow-sm outline-none ring-inset ring-foreground/30 focus-visible:ring-4"
         style={{ left, x: thumbX, y: "-50%" }}
       />
