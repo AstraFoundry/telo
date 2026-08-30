@@ -1,6 +1,7 @@
 import { BellSlash, Paperclip, X } from "@phosphor-icons/react";
 import {
   useEffect,
+  useId,
   useLayoutEffect,
   useRef,
   useState,
@@ -50,7 +51,7 @@ import {
 import { namePastedFile } from "../model/pasted-file-name";
 import { EmojiPicker } from "./emoji-picker";
 import { FormattingToolbar } from "./formatting-toolbar";
-import { MentionAutocomplete } from "./mention-autocomplete";
+import { MentionAutocomplete, mentionOptionId } from "./mention-autocomplete";
 import { TemplatePicker } from "./template-picker";
 
 interface SelectedFile {
@@ -197,6 +198,15 @@ export function MessageComposer({ disabled, onSend }: MessageComposerProps) {
     mentionQuery && !mentionDismissed
       ? filterMentionMembers(members, mentionQuery.query)
       : [];
+  const mentionOpen = mentionMatches.length > 0;
+  // One derived highlight for the list, the ARIA relationship, and the key
+  // handling, so they cannot disagree about which suggestion is active. The
+  // clamp is belt-and-braces: a new query already resets the index above.
+  const mentionActiveIndex = Math.min(
+    mentionIndex,
+    Math.max(mentionMatches.length - 1, 0),
+  );
+  const mentionListboxId = useId();
 
   useEffect(() => {
     if (!activeChatId) return;
@@ -387,22 +397,22 @@ export function MessageComposer({ disabled, onSend }: MessageComposerProps) {
   };
 
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (mentionMatches.length > 0) {
+    if (mentionOpen) {
       if (event.key === "ArrowDown") {
         event.preventDefault();
-        setMentionIndex((index) => (index + 1) % mentionMatches.length);
+        setMentionIndex((mentionActiveIndex + 1) % mentionMatches.length);
         return;
       }
       if (event.key === "ArrowUp") {
         event.preventDefault();
         setMentionIndex(
-          (index) =>
-            (index - 1 + mentionMatches.length) % mentionMatches.length,
+          (mentionActiveIndex - 1 + mentionMatches.length) %
+            mentionMatches.length,
         );
         return;
       }
       if (event.key === "Enter" || event.key === "Tab") {
-        const member = mentionMatches[mentionIndex];
+        const member = mentionMatches[mentionActiveIndex];
         if (member) {
           event.preventDefault();
           pickMention(member);
@@ -591,10 +601,11 @@ export function MessageComposer({ disabled, onSend }: MessageComposerProps) {
         active={activeFormats}
         onToggle={applyFormat}
       />
-      {mentionMatches.length > 0 ? (
+      {mentionOpen ? (
         <MentionAutocomplete
+          id={mentionListboxId}
           members={mentionMatches}
-          activeIndex={Math.min(mentionIndex, mentionMatches.length - 1)}
+          activeIndex={mentionActiveIndex}
           onHover={setMentionIndex}
           onPick={pickMention}
         />
@@ -605,6 +616,18 @@ export function MessageComposer({ disabled, onSend }: MessageComposerProps) {
         disabled={disabled}
         placeholder={copy.messagePlaceholder}
         aria-label={copy.messagePlaceholder}
+        // The suggestions are a sibling listbox and focus never leaves the
+        // textarea, so the active option has to be named here or a screen
+        // reader never hears the `@` query narrow down. `aria-expanded` is
+        // deliberately absent: `textbox` does not support it, and promoting
+        // this to `combobox` would cost the multiline semantics.
+        aria-autocomplete="list"
+        aria-controls={mentionOpen ? mentionListboxId : undefined}
+        aria-activedescendant={
+          mentionOpen
+            ? mentionOptionId(mentionListboxId, mentionActiveIndex)
+            : undefined
+        }
         value={value}
         loading={uploadId !== null}
         allowEmptySubmit={selectedFiles.length > 0}

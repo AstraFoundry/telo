@@ -758,6 +758,69 @@ describe("MessageComposer", () => {
     expect(screen.queryByRole("option")).toBeNull();
   });
 
+  it("names the highlighted mention so a screen reader follows the query", async () => {
+    const { textarea } = await renderComposer(true, {
+      activeChatId: "design",
+      members: [
+        { id: "m1", displayName: "Mina", username: "mina" },
+        { id: "m2", displayName: "Aron", username: "aron" },
+      ],
+    });
+    await flushPreferences();
+
+    const field = textarea as HTMLTextAreaElement;
+    expect(field.getAttribute("aria-activedescendant")).toBeNull();
+
+    fireEvent.change(field, { target: { value: "hi @" } });
+    field.setSelectionRange(4, 4);
+    fireEvent.keyUp(field);
+
+    const first = await screen.findByRole("option", { name: "Mina, @mina" });
+    expect(first.id).not.toBe("");
+    expect(field.getAttribute("aria-activedescendant")).toBe(first.id);
+    expect(field.getAttribute("aria-controls")).toBe(first.closest("ul")!.id);
+
+    fireEvent.keyDown(field, { key: "ArrowDown" });
+
+    const second = screen.getByRole("option", { name: "Aron, @aron" });
+    await waitFor(() =>
+      expect(field.getAttribute("aria-activedescendant")).toBe(second.id),
+    );
+  });
+
+  it("completes the highlighted mention on Enter instead of sending the draft", async () => {
+    const { textarea, onSend } = await renderComposer(true, {
+      activeChatId: "design",
+      members: [
+        { id: "m1", displayName: "Mina", username: "mina" },
+        { id: "m2", displayName: "Aron", username: "aron" },
+      ],
+    });
+    await flushPreferences();
+
+    const field = textarea as HTMLTextAreaElement;
+    fireEvent.change(field, { target: { value: "hi @" } });
+    field.setSelectionRange(4, 4);
+    fireEvent.keyUp(field);
+    await screen.findByRole("option", { name: "Mina, @mina" });
+
+    // Move onto the second suggestion, then narrow the query so only the
+    // first survives, which also resets the highlight back to it.
+    fireEvent.keyDown(field, { key: "ArrowDown" });
+    fireEvent.change(field, { target: { value: "hi @mi" } });
+    field.setSelectionRange(6, 6);
+    fireEvent.keyUp(field);
+
+    await waitFor(() => expect(screen.getAllByRole("option")).toHaveLength(1));
+
+    // Enter must complete the mention that is actually highlighted rather
+    // than falling through to sending the draft.
+    fireEvent.keyDown(field, { key: "Enter" });
+
+    await waitFor(() => expect(field.value).toBe("hi @mina "));
+    expect(onSend).not.toHaveBeenCalled();
+  });
+
   it("inserts a saved template at the caret", async () => {
     const { textarea } = await renderComposer(true, {
       preferences: {
