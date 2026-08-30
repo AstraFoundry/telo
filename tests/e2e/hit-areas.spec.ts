@@ -25,6 +25,70 @@ interface Target {
   readonly height: number;
 }
 
+interface Collision {
+  readonly a: string;
+  readonly b: string;
+  readonly overlap: string;
+}
+
+/**
+ * The gate asks for 40px targets that do not overlap, and the size sweep only
+ * answers the first half. The overlap that matters is between neighbours: the
+ * way a target reaches 40px here is often a pseudo-element pushing past the
+ * visible control, and pushed far enough it lands on the button beside it, so
+ * the edge of one control quietly activates the other.
+ *
+ * Only controls sharing a parent are compared. Boxes from different stacking
+ * layers intersect constantly and by design — an open popover sits over the
+ * toolbar that spawned it — and reporting those would bury the real thing.
+ */
+function findCollisions(selector: string): Collision[] {
+  const controls = [...document.querySelectorAll(selector)].filter(
+    (control): control is HTMLElement => {
+      if (!(control instanceof HTMLElement)) return false;
+      if (control.hasAttribute("disabled")) return false;
+      if (control.getAttribute("aria-hidden") === "true") return false;
+      const style = getComputedStyle(control);
+      if (style.display === "none" || style.visibility === "hidden") {
+        return false;
+      }
+      if (style.pointerEvents === "none") return false;
+      const box = control.getBoundingClientRect();
+      return box.width > 0 && box.height > 0;
+    },
+  );
+
+  const name = (control: HTMLElement) =>
+    control.getAttribute("aria-label") ??
+    control.getAttribute("placeholder") ??
+    control.textContent?.trim().slice(0, 30) ??
+    control.tagName.toLowerCase();
+
+  const collisions: Collision[] = [];
+  for (let i = 0; i < controls.length; i += 1) {
+    for (let j = i + 1; j < controls.length; j += 1) {
+      const first = controls[i];
+      const second = controls[j];
+      if (first.parentElement !== second.parentElement) continue;
+
+      const a = first.getBoundingClientRect();
+      const b = second.getBoundingClientRect();
+      const x = Math.min(a.right, b.right) - Math.max(a.left, b.left);
+      const y = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+      // A shared edge is how adjacent rows are supposed to sit; only a real
+      // area of intersection is a collision.
+      if (x <= 1 || y <= 1) continue;
+
+      collisions.push({
+        a: name(first),
+        b: name(second),
+        overlap: `${Math.round(x)}x${Math.round(y)}`,
+      });
+    }
+  }
+  return collisions;
+}
+
 const CONTROL_SELECTOR =
   'button, [role="button"], [role="tab"], [role="option"], [role="menuitem"], [role="switch"], input:not([type="hidden"]), textarea, select';
 
@@ -181,12 +245,16 @@ async function waitForSettledLayout(window: Page): Promise<void> {
   );
 }
 
-async function sweep(window: Page): Promise<Target[]> {
+async function sweep(
+  window: Page,
+): Promise<{ undersized: Target[]; collisions: Collision[] }> {
   await waitForSettledLayout(window);
-  return window.evaluate(measureUndersized, {
+  const undersized = await window.evaluate(measureUndersized, {
     minTarget: MIN_TARGET,
     selector: CONTROL_SELECTOR,
   });
+  const collisions = await window.evaluate(findCollisions, CONTROL_SELECTOR);
+  return { undersized, collisions };
 }
 
 async function openDesignChat(window: Page): Promise<void> {
@@ -205,12 +273,12 @@ test("keeps the chat surfaces at a 40px pointer target", async ({ window }) => {
 
   // Chat list, folder strip and search field: the densest surface, and the one
   // whose tabs and field were previously pinned below the floor.
-  expect(await sweep(window)).toEqual([]);
+  expect(await sweep(window)).toEqual({ undersized: [], collisions: [] });
 
   await openDesignChat(window);
 
   // Conversation surface: header actions, transcript affordances, composer rail.
-  expect(await sweep(window)).toEqual([]);
+  expect(await sweep(window)).toEqual({ undersized: [], collisions: [] });
 });
 
 test("keeps the overlays at a 40px pointer target", async ({ window }) => {
@@ -222,7 +290,7 @@ test("keeps the overlays at a 40px pointer target", async ({ window }) => {
   await expect(
     window.getByRole("textbox", { name: "Search emoji…" }),
   ).toBeVisible();
-  expect(await sweep(window)).toEqual([]);
+  expect(await sweep(window)).toEqual({ undersized: [], collisions: [] });
   await window.keyboard.press("Escape");
 
   const conversation = window.getByRole("region", { name: "Conversation" });
@@ -232,7 +300,7 @@ test("keeps the overlays at a 40px pointer target", async ({ window }) => {
   await conversation.getByRole("button", { name: "telo-hero.png" }).click();
   const viewer = window.getByRole("dialog", { name: "Media viewer" });
   await expect(viewer).toBeVisible();
-  expect(await sweep(window)).toEqual([]);
+  expect(await sweep(window)).toEqual({ undersized: [], collisions: [] });
   await window.keyboard.press("Escape");
   await expect(viewer).toHaveCount(0);
 
@@ -250,7 +318,7 @@ test("keeps the overlays at a 40px pointer target", async ({ window }) => {
 
   const dialog = window.getByRole("dialog");
   await expect(dialog).toBeVisible();
-  expect(await sweep(window)).toEqual([]);
+  expect(await sweep(window)).toEqual({ undersized: [], collisions: [] });
 });
 
 test("keeps the right-column panels at a 40px pointer target", async ({
@@ -264,13 +332,13 @@ test("keeps the right-column panels at a 40px pointer target", async ({
   await expect(
     window.getByRole("complementary", { name: "Agent" }),
   ).toBeVisible();
-  expect(await sweep(window)).toEqual([]);
+  expect(await sweep(window)).toEqual({ undersized: [], collisions: [] });
 
   await window.getByRole("button", { name: "Chat info" }).click();
   await expect(
     window.getByRole("complementary", { name: "Chat info" }),
   ).toBeVisible();
-  expect(await sweep(window)).toEqual([]);
+  expect(await sweep(window)).toEqual({ undersized: [], collisions: [] });
 });
 
 test("keeps the menu surfaces at a 40px pointer target", async ({ window }) => {
@@ -285,7 +353,7 @@ test("keeps the menu surfaces at a 40px pointer target", async ({ window }) => {
     )
     .click({ button: "right" });
   await expect(window.getByRole("menu")).toBeVisible();
-  expect(await sweep(window)).toEqual([]);
+  expect(await sweep(window)).toEqual({ undersized: [], collisions: [] });
   await window.keyboard.press("Escape");
 
   // The command palette is a Combobox rather than a menu, so its options are a
@@ -298,7 +366,7 @@ test("keeps the menu surfaces at a 40px pointer target", async ({ window }) => {
   await expect(
     window.getByRole("option", { name: /Product Notes/ }),
   ).toBeVisible();
-  expect(await sweep(window)).toEqual([]);
+  expect(await sweep(window)).toEqual({ undersized: [], collisions: [] });
   await window.keyboard.press("Escape");
 
   // The account menu is the one popover whose rows mix an avatar with text.
@@ -306,7 +374,7 @@ test("keeps the menu surfaces at a 40px pointer target", async ({ window }) => {
   await expect(
     window.getByRole("button", { name: "Settings", exact: true }),
   ).toBeVisible();
-  expect(await sweep(window)).toEqual([]);
+  expect(await sweep(window)).toEqual({ undersized: [], collisions: [] });
 });
 
 test("keeps settings at a 40px pointer target", async ({ window }) => {
@@ -319,7 +387,7 @@ test("keeps settings at a 40px pointer target", async ({ window }) => {
   await expect(
     window.getByRole("heading", { name: "Agent settings" }),
   ).toBeVisible();
-  expect(await sweep(window)).toEqual([]);
+  expect(await sweep(window)).toEqual({ undersized: [], collisions: [] });
 });
 
 // Onboarding never renders in the demo workspace, so it needs the plain
@@ -330,6 +398,6 @@ plainTest(
     await expect(
       window.getByRole("button", { name: "Start Messaging" }),
     ).toBeVisible();
-    expect(await sweep(window)).toEqual([]);
+    expect(await sweep(window)).toEqual({ undersized: [], collisions: [] });
   },
 );
