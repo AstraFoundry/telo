@@ -12,12 +12,7 @@ import {
   EASE_OUT,
   StatefulButton,
   TextReveal,
-  TextShimmer,
 } from "shared/ui";
-
-interface OnboardingPageProps {
-  loading: boolean;
-}
 
 type ShellStep = "welcome" | "auth";
 
@@ -30,7 +25,7 @@ const STEP_ORDER: Record<string, number> = {
   "credentials-missing": 4,
 };
 
-export function OnboardingPage({ loading }: OnboardingPageProps) {
+export function OnboardingPage() {
   const [shellStep, setShellStep] = useState<ShellStep>("welcome");
   const form = useConnectionForm();
   const viewId = shellStep === "welcome" ? "welcome" : form.viewId;
@@ -106,7 +101,7 @@ export function OnboardingPage({ loading }: OnboardingPageProps) {
             <div className="grid flex-1 place-items-center px-6">
               <div className="w-full max-w-[420px]">
                 {shellStep === "welcome" ? (
-                  <WelcomeStep loading={loading} onStart={goToAuth} />
+                  <WelcomeStep onStart={goToAuth} />
                 ) : (
                   <ConnectionStepContent form={form} />
                 )}
@@ -119,13 +114,7 @@ export function OnboardingPage({ loading }: OnboardingPageProps) {
   );
 }
 
-function WelcomeStep({
-  loading,
-  onStart,
-}: {
-  loading: boolean;
-  onStart(): void;
-}) {
+function WelcomeStep({ onStart }: { onStart(): void }) {
   return (
     <>
       <PaperPlaneTilt className="mb-7 size-9 text-primary" weight="fill" />
@@ -140,36 +129,9 @@ function WelcomeStep({
         delay={0.1}
         className="mt-2 text-pretty text-sm text-muted-foreground"
       />
-      <div className="mt-8 grid min-h-11 place-items-center">
-        <AnimatePresence mode="wait" initial={false}>
-          {loading ? (
-            <motion.p
-              key="connecting"
-              role="status"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.2, ease: EASE_OUT }}
-              className="text-sm text-muted-foreground"
-            >
-              <TextShimmer>{copy.connectionConnecting}</TextShimmer>
-            </motion.p>
-          ) : (
-            <motion.div
-              key="start"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.2, ease: EASE_OUT }}
-              className="w-full"
-            >
-              <StatefulButton className="w-full" size="lg" onClick={onStart}>
-                {copy.startMessaging}
-              </StatefulButton>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
+      <StatefulButton className="mt-8 w-full" size="lg" onClick={onStart}>
+        {copy.startMessaging}
+      </StatefulButton>
     </>
   );
 }

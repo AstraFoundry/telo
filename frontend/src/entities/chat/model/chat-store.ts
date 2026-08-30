@@ -465,10 +465,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
   async load() {
     const request = ++selectionRequest;
     try {
-      const [chatPage, preferences, folders] = await Promise.all([
+      const [chatPage, preferences] = await Promise.all([
         window.telo.workspace.listChatPage(),
         window.telo.preferences.get(),
-        window.telo.workspace.listFolders(),
       ]);
       const chats = chatPage.items;
       // The All view is the default landing view, so the default active chat
@@ -477,24 +476,38 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const messagePage = activeChatId
         ? await window.telo.workspace.listMessagePage(activeChatId)
         : { items: [], nextCursor: null };
-      if (request === selectionRequest) {
-        set((state) => ({
-          chats,
-          folders,
-          activeChatId,
-          messages: messagePage.items,
-          chatCursor: chatPage.nextCursor,
-          messageCursor: messagePage.nextCursor,
-          loading: false,
-          loadingMoreChats: false,
-          loadingOlderMessages: false,
-          syncError: null,
-          drafts: hydrateDrafts(state.drafts, chats),
-          notificationsEnabled: preferences.notificationsEnabled,
-          animateInMessageIds: [],
-          animateChatIds: [],
-        }));
-      }
+      if (request !== selectionRequest) return;
+      set((state) => ({
+        chats,
+        activeChatId,
+        messages: messagePage.items,
+        chatCursor: chatPage.nextCursor,
+        messageCursor: messagePage.nextCursor,
+        loading: false,
+        loadingMoreChats: false,
+        loadingOlderMessages: false,
+        syncError: null,
+        drafts: hydrateDrafts(state.drafts, chats),
+        notificationsEnabled: preferences.notificationsEnabled,
+        animateInMessageIds: [],
+        animateChatIds: [],
+      }));
+      // Folder unread walks every dialog and Telegram flood-waits that RPC.
+      // Keep it off the first-paint path so the chat list can appear.
+      void window.telo.workspace.listFolders().then(
+        (folders) => {
+          if (request === selectionRequest) {
+            set((state) => ({
+              folders: withKeywordUnread(folders, state.chats),
+            }));
+          }
+        },
+        (error: unknown) => {
+          if (request === selectionRequest) {
+            set({ syncError: errorMessage(error) });
+          }
+        },
+      );
     } catch (error) {
       if (request === selectionRequest) {
         set({ loading: false, syncError: errorMessage(error) });
@@ -1168,6 +1181,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
       set({ connectionState: event.state });
       return;
     }
+    if (event.type === "chats") {
+      set((state) => ({
+        chats: event.chats,
+        chatCursor: event.nextCursor,
+        drafts: hydrateDrafts(state.drafts, event.chats),
+        folders: withKeywordUnread(state.folders, event.chats),
+      }));
+      return;
+    }
     if (event.type === "folders") {
       set((state) => ({
         folders: withKeywordUnread(event.folders, state.chats),
@@ -1175,6 +1197,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       return;
     }
     if (event.type === "sync-error") {
+      if (isInternalExceptionMessage(event.message)) return;
       set({ syncError: event.message });
       return;
     }
@@ -1610,5 +1633,12 @@ function compareTelegramIds(left: string, right: string): number {
 }
 
 function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+  const message = error instanceof Error ? error.message : String(error);
+  return isInternalExceptionMessage(message) ? copy.syncError : message;
+}
+
+function isInternalExceptionMessage(message: string): boolean {
+  return /is not callable|is not a function|instanceof|Cannot read propert/i.test(
+    message,
+  );
 }

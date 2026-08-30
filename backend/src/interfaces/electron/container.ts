@@ -26,6 +26,7 @@ import { FileKeywordFolderRepository } from "../../infrastructure/keyword-folder
 import { DemoKeywordFolderRepository } from "../../infrastructure/keyword-folder/demo-keyword-folder-repository";
 import { FileTelegramSessionRepository } from "../../infrastructure/telegram/file-telegram-session-repository";
 import { FileTelegramConnectionProfileRepository } from "../../infrastructure/telegram/file-telegram-connection-profile-repository";
+import { FileTelegramDialogSnapshotRepository } from "../../infrastructure/telegram/file-telegram-dialog-snapshot-repository";
 import { TelegramClientCoordinator } from "../../infrastructure/telegram/teleproto-telegram-repository";
 import type { TelegramAuthState } from "../../../../contracts/src/ipc";
 
@@ -102,6 +103,9 @@ export function createContainer(
     applicationCredentials,
     onAuthState,
     path.join(dataDirectory, "media-cache"),
+    new FileTelegramDialogSnapshotRepository(
+      path.join(dataDirectory, "dialogs.json"),
+    ),
   );
 
   // The demo workspace pairs its deterministic Telegram repository with an

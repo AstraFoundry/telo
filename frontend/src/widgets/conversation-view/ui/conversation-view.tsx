@@ -78,6 +78,7 @@ import type { MediaViewerItem, MediaViewerOrigin } from "shared/ui";
 import { DeleteMessageDialog } from "./delete-message-dialog";
 import { ForwardPickerDialog } from "./forward-picker-dialog";
 import { ForwardSelectedDialog } from "./forward-selected-dialog";
+import { PinnedMessageBar } from "./pinned-message-bar";
 import {
   groupTranscript,
   isVisualMedia,
@@ -351,7 +352,7 @@ function ConversationMessage({
   // messages have no text to transform, so the entries stay hidden there.
   const agentActionsAvailable =
     (message.status === "sent" || message.status === "read") &&
-    message.body.trim().length > 0;
+    Boolean(message.body?.trim());
   const runningAction =
     messageAction?.messageId === message.id ? messageAction : null;
 
@@ -886,7 +887,6 @@ export function ConversationView() {
   const messages = useChatStore((state) => state.messages);
   const loading = useChatStore((state) => state.loading);
   const syncError = useChatStore((state) => state.syncError);
-  const connectionState = useChatStore((state) => state.connectionState);
   const messageCursor = useChatStore((state) => state.messageCursor);
   const loadingOlderMessages = useChatStore(
     (state) => state.loadingOlderMessages,
@@ -1053,7 +1053,7 @@ export function ConversationView() {
         (message) =>
           message.outgoing &&
           (message.status === "sent" || message.status === "read") &&
-          message.body.trim().length > 0,
+          Boolean(message.body?.trim()),
       );
     if (!last) return;
     event.preventDefault();
@@ -1269,6 +1269,7 @@ export function ConversationView() {
         </div>
       </header>
       <InChatSearchBar />
+      {activeChatId ? <PinnedMessageBar chatId={activeChatId} /> : null}
       {syncError ? (
         <div
           role="status"
@@ -1281,20 +1282,10 @@ export function ConversationView() {
           />
           <span className="min-w-0">
             <span className="font-medium">{copy.syncError}</span>
-            <span className="ml-1 text-destructive/80">{syncError}</span>
+            {syncError !== copy.syncError ? (
+              <span className="ml-1 text-destructive/80">{syncError}</span>
+            ) : null}
           </span>
-        </div>
-      ) : null}
-      {!syncError && connectionState !== "connected" ? (
-        <div
-          role="status"
-          aria-live="polite"
-          className="mx-5 flex items-center gap-2 rounded-xl bg-muted px-3 py-2 text-sm text-muted-foreground"
-        >
-          <WarningCircle aria-hidden="true" className="size-4 shrink-0" />
-          {connectionState === "offline"
-            ? copy.connectionOffline
-            : copy.connectionSynchronizing}
         </div>
       ) : null}
       <MessageScroller

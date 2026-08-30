@@ -1,14 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type {
+  ChatDto,
   TelegramAuthState,
   TelegramLoginInput,
 } from "../../../../contracts/src/ipc";
 import { ARCHIVE_FOLDER_ID } from "../../../../contracts/src/ipc";
 import type {
   TelegramConnectionProfile,
+  TelegramDialogSnapshotRepository,
   TelegramSessionRepository,
 } from "../../domain/telegram/telegram-ports";
+import { ChannelInvalidError, FloodWaitError } from "teleproto/errors/index.js";
+
+import { MemoryTelegramDialogSnapshotRepository } from "./file-telegram-dialog-snapshot-repository";
 import { TelegramClientCoordinator } from "./teleproto-telegram-repository";
 
 const fake = vi.hoisted(() => {
@@ -42,6 +47,8 @@ const fake = vi.hoisted(() => {
     static authorized = true;
     static startBehavior: StartBehavior | null = null;
     static catchUpBehavior: (() => Promise<void>) | null = null;
+    static connectBehavior: (() => Promise<void>) | null = null;
+    static getDialogsGate: (() => Promise<void>) | null = null;
     static sendFileBehavior: SendFileBehavior | null = null;
     static dialogs: unknown[] = [];
     static dialogFilters: unknown[] = [];
@@ -74,6 +81,9 @@ const fake = vi.hoisted(() => {
       },
     };
     catchUpCalls = 0;
+    getDialogsInFlight = 0;
+    readonly getDialogsParams: unknown[] = [];
+    maxConcurrentGetDialogs = 0;
     readonly sendFileCalls: Array<{
       readonly entity: unknown;
       readonly params: FakeSendFileParams;
@@ -108,12 +118,54 @@ const fake = vi.hoisted(() => {
       readonly stringSession: unknown,
       readonly apiId: number,
       readonly apiHash: string,
+      readonly options: {
+        readonly connection?: { readonly name?: string };
+        readonly connectionRetries?: number;
+        readonly timeout?: number;
+        readonly floodSleepThreshold?: number;
+      } = {},
     ) {
       FakeTelegramClient.instances.push(this);
     }
 
+    errorHandler: ((error: Error) => Promise<void>) | null = null;
+    set onError(handler: (error: Error) => Promise<void>) {
+      this.errorHandler = handler;
+    }
+
+    readonly downloadMediaCalls: unknown[] = [];
+    async downloadMedia(message: unknown): Promise<Buffer> {
+      this.downloadMediaCalls.push(message);
+      if (
+        message &&
+        typeof message === "object" &&
+        "className" in message &&
+        (message as { className?: string }).className === "MessageService"
+      ) {
+        throw new Error("Cannot download media of type MessageService");
+      }
+      return Buffer.from("");
+    }
+
+    async getPeerId(peer: unknown): Promise<string> {
+      if (
+        typeof peer === "string" ||
+        typeof peer === "number" ||
+        typeof peer === "bigint"
+      ) {
+        return String(peer);
+      }
+      if (peer && typeof peer === "object") {
+        const record = peer as { channelId?: unknown; userId?: unknown };
+        if (record.channelId != null) return String(record.channelId);
+        if (record.userId != null) return String(record.userId);
+      }
+      throw new Error("getPeerId is not stubbed");
+    }
+
     async connect(): Promise<void> {
       this.connectCalls += 1;
+      await FakeTelegramClient.connectBehavior?.();
     }
 
     async disconnect(): Promise<void> {
@@ -129,8 +181,19 @@ const fake = vi.hoisted(() => {
       await FakeTelegramClient.catchUpBehavior?.();
     }
 
-    async getDialogs(): Promise<unknown[]> {
-      return FakeTelegramClient.dialogs;
+    async getDialogs(params?: unknown): Promise<unknown[]> {
+      this.getDialogsParams.push(params ?? {});
+      this.getDialogsInFlight += 1;
+      this.maxConcurrentGetDialogs = Math.max(
+        this.maxConcurrentGetDialogs,
+        this.getDialogsInFlight,
+      );
+      try {
+        await FakeTelegramClient.getDialogsGate?.();
+        return FakeTelegramClient.dialogs;
+      } finally {
+        this.getDialogsInFlight -= 1;
+      }
     }
 
     async getDialogFilters(): Promise<{ filters: unknown[] }> {
@@ -188,6 +251,14 @@ const fake = vi.hoisted(() => {
   class FakeInputMessagesFilterPhotoVideo {}
   class FakeInputMessagesFilterDocument {}
   class FakeInputMessagesFilterPinned {}
+  class FakeUpdatePinnedMessages {}
+  class FakeUpdatePinnedChannelMessages {}
+  class FakePeerChannel {
+    channelId: unknown;
+    constructor(params: { channelId: unknown }) {
+      this.channelId = params.channelId;
+    }
+  }
 
   return {
     FakeTelegramClient,
@@ -199,6 +270,9 @@ const fake = vi.hoisted(() => {
     FakeInputMessagesFilterPhotoVideo,
     FakeInputMessagesFilterDocument,
     FakeInputMessagesFilterPinned,
+    FakeUpdatePinnedMessages,
+    FakeUpdatePinnedChannelMessages,
+    FakePeerChannel,
   };
 });
 
@@ -213,6 +287,9 @@ vi.mock("teleproto", () => ({
     InputMessagesFilterPhotoVideo: fake.FakeInputMessagesFilterPhotoVideo,
     InputMessagesFilterDocument: fake.FakeInputMessagesFilterDocument,
     InputMessagesFilterPinned: fake.FakeInputMessagesFilterPinned,
+    UpdatePinnedMessages: fake.FakeUpdatePinnedMessages,
+    UpdatePinnedChannelMessages: fake.FakeUpdatePinnedChannelMessages,
+    PeerChannel: fake.FakePeerChannel,
   },
 }));
 vi.mock("teleproto/sessions/index.js", () => ({ StringSession: class {} }));
@@ -245,12 +322,31 @@ function profileRepository(initial: TelegramConnectionProfile | null = null) {
   return { repository, saved };
 }
 
+function dispatchRawUpdate(
+  client: InstanceType<typeof FakeTelegramClient> | undefined,
+  update: object,
+): void {
+  for (const { callback, builder } of client?.eventHandlers ?? []) {
+    const types = (builder as { types?: unknown[] }).types;
+    if (
+      types?.some(
+        (type) =>
+          typeof type === "function" &&
+          update instanceof (type as new (...args: never[]) => object),
+      )
+    ) {
+      callback(update);
+    }
+  }
+}
+
 function createCoordinator(
   options: {
     session?: string;
     profile?: TelegramConnectionProfile | null;
     credentials?: { apiId: number; apiHash: string } | null;
     sessions?: TelegramSessionRepository;
+    snapshots?: TelegramDialogSnapshotRepository;
   } = {},
 ) {
   const states: TelegramAuthState[] = [];
@@ -261,6 +357,8 @@ function createCoordinator(
     profiles.repository,
     options.credentials ?? null,
     (state) => states.push(state),
+    "",
+    options.snapshots,
   );
   return { coordinator, sessions, profiles, states };
 }
@@ -311,7 +409,9 @@ describe("TelegramClientCoordinator", () => {
     FakeTelegramClient.instances.length = 0;
     FakeTelegramClient.authorized = true;
     FakeTelegramClient.startBehavior = null;
+    FakeTelegramClient.connectBehavior = null;
     FakeTelegramClient.catchUpBehavior = null;
+    FakeTelegramClient.getDialogsGate = null;
     FakeTelegramClient.sendFileBehavior = null;
     FakeTelegramClient.getMessagesBehavior = null;
     FakeTelegramClient.entityBehavior = null;
@@ -352,10 +452,13 @@ describe("TelegramClientCoordinator", () => {
 
     await coordinator.initialize();
 
-    expect(states).toEqual([{ status: "connecting" }, { status: "ready" }]);
+    expect(states).toEqual([{ status: "restoring" }, { status: "ready" }]);
     const client = FakeTelegramClient.instances[0];
     expect(client?.apiId).toBe(7);
     expect(client?.apiHash).toBe("hash");
+    expect(client?.options.connection?.name).toBe("ConnectionTCPObfuscated");
+    expect(client?.options.connectionRetries).toBe(5);
+    expect(client?.options.timeout).toBe(15);
     expect(client?.connectCalls).toBe(1);
     expect(client?.catchUpCalls).toBe(0);
     expect(client?.disconnectCalls).toBe(0);
@@ -370,10 +473,87 @@ describe("TelegramClientCoordinator", () => {
 
     await coordinator.initialize();
 
-    expect(states).toEqual([{ status: "connecting" }, { status: "idle" }]);
+    expect(states).toEqual([{ status: "restoring" }, { status: "idle" }]);
     expect(FakeTelegramClient.instances[0]?.disconnectCalls).toBe(1);
     await expect(coordinator.getCurrentUser()).resolves.toMatchObject({
       id: "demo-user",
+    });
+  });
+
+  it("serves the dialog snapshot while the session is restoring", async () => {
+    const snapshots = new MemoryTelegramDialogSnapshotRepository();
+    const cached: ChatDto = {
+      id: "cached",
+      title: "Cached",
+      preview: "hi",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+      unreadCount: 2,
+      lastReadMessageId: null,
+      muted: false,
+      pinned: false,
+      kind: "direct",
+      initials: "C",
+      avatarDataUrl: null,
+      draftPreview: null,
+      typing: false,
+    };
+    await snapshots.save({
+      version: 1,
+      chats: [cached],
+      folders: [{ id: 2, title: "Work", unreadCount: 2 }],
+      nextCursor: null,
+    });
+    let releaseConnect: (() => void) | undefined;
+    FakeTelegramClient.connectBehavior = () =>
+      new Promise<void>((resolve) => {
+        releaseConnect = resolve;
+      });
+    const { coordinator } = createCoordinator({
+      session: "stored-session",
+      credentials: { apiId: 7, apiHash: "hash" },
+      snapshots,
+    });
+    const init = coordinator.initialize();
+    await vi.waitFor(() => {
+      expect(coordinator.getAuthState()).toEqual({ status: "restoring" });
+    });
+    await expect(coordinator.listChatPage()).resolves.toMatchObject({
+      items: [expect.objectContaining({ id: "cached", title: "Cached" })],
+    });
+    await expect(coordinator.listFolders()).resolves.toEqual([
+      { id: 2, title: "Work", unreadCount: 2 },
+    ]);
+    releaseConnect?.();
+    await init;
+  });
+
+  it("computes folder badges from the cached page instead of a full GetDialogs", async () => {
+    FakeTelegramClient.dialogs = [
+      {
+        id: BigInt(1),
+        title: "Chat 1",
+        name: "Chat 1",
+        dialog: { notifySettings: {}, topMessage: 1 },
+        isUser: true,
+        isChannel: false,
+        isGroup: false,
+        entity: {},
+        message: { message: "Preview" },
+        date: 1,
+        unreadCount: 0,
+        pinned: false,
+        archived: false,
+      },
+    ];
+    const coordinator = await connectedCoordinator();
+    const client = FakeTelegramClient.instances[0];
+    await coordinator.listChatPage({ limit: 10 });
+    const calls = client?.getDialogsParams.length ?? 0;
+    await coordinator.listFolders();
+    expect(client?.getDialogsParams).toHaveLength(calls);
+    expect(client?.getDialogsParams[0]).toMatchObject({
+      limit: 11,
+      ignoreMigrated: true,
     });
   });
 
@@ -393,9 +573,11 @@ describe("TelegramClientCoordinator", () => {
     expect(events).toEqual([
       { type: "connection-state", state: "offline" },
       { type: "connection-state", state: "synchronizing" },
+      { type: "chats", chats: [], nextCursor: null },
       { type: "connection-state", state: "connected" },
     ]);
     expect(client?.catchUpCalls).toBe(1);
+    expect(client?.options.floodSleepThreshold).toBe(0);
   });
 
   it("ignores duplicate connected events after synchronization", async () => {
@@ -416,8 +598,72 @@ describe("TelegramClientCoordinator", () => {
     expect(events).toEqual([
       { type: "connection-state", state: "offline" },
       { type: "connection-state", state: "synchronizing" },
+      { type: "chats", chats: [], nextCursor: null },
       { type: "connection-state", state: "connected" },
     ]);
+  });
+
+  it("logs language-level catch-up failures without publishing a sync-error", async () => {
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    FakeTelegramClient.catchUpBehavior = async () => {
+      throw new TypeError("Right-hand side of 'instanceof' is not callable");
+    };
+    const { coordinator } = createCoordinator({
+      session: "stored-session",
+      credentials: { apiId: 7, apiHash: "hash" },
+    });
+    const events: unknown[] = [];
+    coordinator.subscribe((event) => events.push(event));
+    try {
+      await coordinator.initialize();
+      const client = FakeTelegramClient.instances[0];
+
+      await client?.emitConnectionState(-1);
+      await client?.emitConnectionState(1);
+
+      expect(logged).toHaveBeenCalledWith(
+        "Telegram sync failed",
+        expect.any(TypeError),
+      );
+      expect(events).toEqual([
+        { type: "connection-state", state: "offline" },
+        { type: "connection-state", state: "synchronizing" },
+      ]);
+    } finally {
+      logged.mockRestore();
+    }
+  });
+
+  it("publishes user-facing catch-up failures as sync-error events", async () => {
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    FakeTelegramClient.catchUpBehavior = async () => {
+      throw new Error("FLOOD_WAIT_30");
+    };
+    const { coordinator } = createCoordinator({
+      session: "stored-session",
+      credentials: { apiId: 7, apiHash: "hash" },
+    });
+    const events: unknown[] = [];
+    coordinator.subscribe((event) => events.push(event));
+    try {
+      await coordinator.initialize();
+      const client = FakeTelegramClient.instances[0];
+
+      await client?.emitConnectionState(-1);
+      await client?.emitConnectionState(1);
+
+      expect(logged).toHaveBeenCalledWith(
+        "Telegram sync failed",
+        expect.any(Error),
+      );
+      expect(events).toEqual([
+        { type: "connection-state", state: "offline" },
+        { type: "connection-state", state: "synchronizing" },
+        { type: "sync-error", message: "FLOOD_WAIT_30" },
+      ]);
+    } finally {
+      logged.mockRestore();
+    }
   });
 
   it("does not report connected from a stale catch-up after another disconnect", async () => {
@@ -450,6 +696,174 @@ describe("TelegramClientCoordinator", () => {
     expect(events.at(-1)).toEqual({
       type: "connection-state",
       state: "offline",
+    });
+  });
+
+  it("waits GetDialogs flood outside the exclusive queue and stays Updating until it returns", async () => {
+    const snapshots = new MemoryTelegramDialogSnapshotRepository();
+    await snapshots.save({
+      version: 1,
+      chats: [
+        {
+          id: "cached",
+          title: "Cached",
+          preview: "hi",
+          updatedAt: "2026-01-01T00:00:00.000Z",
+          unreadCount: 0,
+          lastReadMessageId: null,
+          muted: false,
+          pinned: false,
+          kind: "direct",
+          initials: "C",
+          avatarDataUrl: null,
+          draftPreview: null,
+          typing: false,
+        },
+      ],
+      folders: [],
+      nextCursor: null,
+    });
+    let attempts = 0;
+    FakeTelegramClient.getDialogsGate = async () => {
+      attempts += 1;
+      if (attempts === 1) {
+        throw new FloodWaitError({ request: {}, capture: 30 });
+      }
+    };
+    FakeTelegramClient.dialogs = [
+      {
+        id: BigInt(1),
+        title: "Live",
+        name: "Live",
+        dialog: { notifySettings: {}, topMessage: 1 },
+        isUser: true,
+        isChannel: false,
+        isGroup: false,
+        entity: {},
+        message: { message: "Preview" },
+        date: 1,
+        unreadCount: 0,
+        pinned: false,
+      },
+    ];
+    const { coordinator } = createCoordinator({
+      session: "stored-session",
+      credentials: { apiId: 7, apiHash: "hash" },
+      snapshots,
+    });
+    const events: unknown[] = [];
+    coordinator.subscribe((event) => events.push(event));
+    await coordinator.initialize();
+    const client = FakeTelegramClient.instances[0];
+    await client?.emitConnectionState(-1);
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const reconnect = client?.emitConnectionState(1);
+      let spins = 0;
+      while (spins < 50) {
+        const queueIdle = attempts === 1 && client?.getDialogsInFlight === 0;
+        if (queueIdle) break;
+        spins += 1;
+        await Promise.resolve();
+      }
+      expect(attempts).toBe(1);
+      expect(client?.getDialogsInFlight).toBe(0);
+      expect(events).toEqual([
+        { type: "connection-state", state: "offline" },
+        { type: "connection-state", state: "synchronizing" },
+      ]);
+      await expect(coordinator.listChatPage({ limit: 10 })).resolves.toMatchObject({
+        items: [expect.objectContaining({ id: "cached" })],
+      });
+      expect(await snapshots.get()).toMatchObject({
+        chats: [expect.objectContaining({ id: "cached" })],
+      });
+
+      await vi.advanceTimersByTimeAsync(30_000);
+      await reconnect;
+
+      expect(attempts).toBe(2);
+      expect(events).toContainEqual({
+        type: "connection-state",
+        state: "connected",
+      });
+      expect(events).toContainEqual(
+        expect.objectContaining({
+          type: "chats",
+          chats: expect.arrayContaining([
+            expect.objectContaining({ id: "1", title: "Live" }),
+          ]),
+        }),
+      );
+      expect(await snapshots.get()).toMatchObject({
+        chats: expect.arrayContaining([
+          expect.objectContaining({ id: "1", title: "Live" }),
+        ]),
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not download MessageService as user media", async () => {
+    FakeTelegramClient.getMessagesBehavior = async () => [
+      {
+        id: 8,
+        className: "MessageService",
+        action: { photo: { id: 2 } },
+        photo: { id: 2 },
+        file: { name: "chat.jpg" },
+      },
+    ];
+    const coordinator = await connectedCoordinator();
+    const client = FakeTelegramClient.instances.at(-1);
+    const events: unknown[] = [];
+    coordinator.subscribe((event) => events.push(event));
+
+    await expect(coordinator.downloadMedia("chat-1/8")).resolves.toBeUndefined();
+    expect(client?.downloadMediaCalls).toEqual([]);
+    expect(events.some((event) => (event as { type?: string }).type === "media-download")).toBe(
+      false,
+    );
+  });
+
+  it("skips CHANNEL_INVALID instead of publishing a workspace sync-error", async () => {
+    const coordinator = await connectedCoordinator();
+    const events: unknown[] = [];
+    coordinator.subscribe((event) => events.push(event));
+    const client = FakeTelegramClient.instances.at(-1);
+    await client?.errorHandler?.(new ChannelInvalidError({ request: {} }));
+    let resolvedPeer = false;
+    client!.getPeerId = async () => {
+      resolvedPeer = true;
+      throw new ChannelInvalidError({ request: {} });
+    };
+    const update = Object.assign(new fake.FakeUpdatePinnedMessages(), {
+      peer: { userId: 9 },
+    });
+    dispatchRawUpdate(client, update);
+    await vi.waitFor(() => {
+      expect(resolvedPeer).toBe(true);
+    });
+    expect(
+      events.filter((event) => (event as { type?: string }).type === "sync-error"),
+    ).toEqual([]);
+    expect(
+      events.filter((event) => (event as { type?: string }).type === "pinned-messages"),
+    ).toEqual([]);
+  });
+
+  it("emits pinned-messages when Telegram pins change", async () => {
+    const coordinator = await connectedCoordinator();
+    const events: unknown[] = [];
+    coordinator.subscribe((event) => events.push(event));
+    const client = FakeTelegramClient.instances.at(-1);
+    const update = Object.assign(new fake.FakeUpdatePinnedMessages(), {
+      peer: { userId: 9 },
+    });
+    dispatchRawUpdate(client, update);
+    await vi.waitFor(() => {
+      expect(events).toContainEqual({ type: "pinned-messages", chatId: "9" });
     });
   });
 
@@ -528,6 +942,42 @@ describe("TelegramClientCoordinator", () => {
     await expect(coordinator.listFolders()).resolves.toEqual([
       { id: ARCHIVE_FOLDER_ID, title: "Archive", unreadCount: 7 },
     ]);
+  });
+
+  it("does not overlap GetDialogs between the chat page and folder badges", async () => {
+    FakeTelegramClient.dialogs = [
+      {
+        id: BigInt(1),
+        title: "Chat 1",
+        name: "Chat 1",
+        dialog: { notifySettings: {}, topMessage: 1 },
+        isUser: true,
+        isChannel: false,
+        isGroup: false,
+        entity: {},
+        message: { message: "Preview" },
+        date: 1,
+        unreadCount: 0,
+        pinned: false,
+      },
+    ];
+    const coordinator = await connectedCoordinator();
+    const client = FakeTelegramClient.instances[0];
+    let releaseDialogs: (() => void) | undefined;
+    FakeTelegramClient.getDialogsGate = () =>
+      new Promise<void>((resolve) => {
+        releaseDialogs = resolve;
+      });
+
+    const page = coordinator.listChatPage({ limit: 10 });
+    const folders = coordinator.listFolders();
+    await vi.waitFor(() => {
+      expect(client?.getDialogsInFlight).toBe(1);
+    });
+    releaseDialogs?.();
+    await Promise.all([page, folders]);
+
+    expect(client?.maxConcurrentGetDialogs).toBe(1);
   });
 
   it("maps an online direct-chat counterpart to presence", async () => {
@@ -851,6 +1301,27 @@ describe("TelegramClientCoordinator", () => {
       "Mina K",
       null,
     ]);
+  });
+
+  it("maps media-only messages to an empty body string", async () => {
+    const coordinator = await connectedCoordinator();
+    FakeTelegramClient.getMessagesBehavior = async () => [
+      {
+        id: 8,
+        date: 1_700_000_008,
+        out: false,
+        photo: { id: BigInt(8) },
+        getSender: async () => ({ firstName: "Lev" }),
+      },
+    ];
+
+    const page = await coordinator.listMessagePage("chat-1", { limit: 50 });
+
+    expect(page.items[0]).toMatchObject({
+      id: "8",
+      body: "",
+      senderName: "Lev",
+    });
   });
 
   it("reports whether application credentials are configured", async () => {

@@ -1,4 +1,4 @@
-.PHONY: install dev check test test-e2e lint format docs build package help
+.PHONY: install dev reset check test test-e2e lint format docs build package help
 
 install: ## Install dependencies and the Electron binary
 	@pnpm install --frozen-lockfile
@@ -9,6 +9,9 @@ ifeq ($(DEMO),1)
 else
 	@pnpm dev
 endif
+
+reset: ## Delete Electron user data and return to first-run state
+	@node scripts/reset-userdata.mjs
 
 check: ## Run formatting, lint, types, tests, docs, and Electron E2E tests
 	@pnpm check

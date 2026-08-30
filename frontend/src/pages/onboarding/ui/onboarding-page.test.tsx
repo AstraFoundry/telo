@@ -54,7 +54,7 @@ describe("OnboardingPage", () => {
   });
 
   it("renders the welcome step with the sign-in action only", async () => {
-    render(<OnboardingPage loading={false} />);
+    render(<OnboardingPage />);
 
     // TextReveal splits the copy into per-word spans, so match on the
     // element's textContent rather than the computed accessible name.
@@ -75,7 +75,7 @@ describe("OnboardingPage", () => {
 
   it("swaps to the phone step in place from the primary action", async () => {
     const user = userEvent.setup();
-    render(<OnboardingPage loading={false} />);
+    render(<OnboardingPage />);
 
     await user.click(screen.getByRole("button", { name: copy.startMessaging }));
 
@@ -86,7 +86,7 @@ describe("OnboardingPage", () => {
 
   it("returns to the welcome step from the phone step back button", async () => {
     const user = userEvent.setup();
-    render(<OnboardingPage loading={false} />);
+    render(<OnboardingPage />);
 
     await user.click(screen.getByRole("button", { name: copy.startMessaging }));
     await user.click(screen.getByRole("button", { name: copy.back }));
@@ -100,20 +100,18 @@ describe("OnboardingPage", () => {
     );
   });
 
-  it("replaces the actions with a shimmer status while connecting", () => {
-    render(<OnboardingPage loading={true} />);
+  it("keeps Start Messaging on the welcome step instead of a connecting gate", () => {
+    render(<OnboardingPage />);
 
-    expect(screen.getByRole("status").textContent).toContain(
-      copy.connectionConnecting,
-    );
     expect(
-      screen.queryByRole("button", { name: copy.startMessaging }),
-    ).toBeNull();
+      screen.getByRole("button", { name: copy.startMessaging }),
+    ).toBeTruthy();
+    expect(screen.queryByRole("status")).toBeNull();
   });
 
   it("offers a skip-to-content link that targets the main surface", async () => {
     const user = userEvent.setup();
-    render(<OnboardingPage loading={false} />);
+    render(<OnboardingPage />);
 
     const link = screen.getByRole("link", { name: copy.skipToContent });
     // Visually hidden until focused.

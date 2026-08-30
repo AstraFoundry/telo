@@ -1,6 +1,8 @@
 import type {
+  ChatDto,
   ChatFolderDto,
   ChatMemberDto,
+  ChatPageCursorDto,
   ChatPageDto,
   ChatPageInput,
   CurrentUserDto,
@@ -136,4 +138,22 @@ export interface TelegramConnectionProfile {
 export interface TelegramConnectionProfileRepository {
   get(): Promise<TelegramConnectionProfile | null>;
   save(profile: TelegramConnectionProfile): Promise<void>;
+}
+
+/**
+ * Disk snapshot of the dialog list, mirroring Nicegram's SQLite cache: the
+ * workspace can paint chats while Telegram is still connecting, and folder
+ * badges are computed from this list instead of a second full GetDialogs.
+ */
+export interface TelegramDialogSnapshot {
+  readonly version: 1;
+  readonly chats: ReadonlyArray<ChatDto>;
+  readonly folders: ReadonlyArray<ChatFolderDto>;
+  readonly nextCursor: ChatPageCursorDto | null;
+}
+
+export interface TelegramDialogSnapshotRepository {
+  get(): Promise<TelegramDialogSnapshot | null>;
+  save(snapshot: TelegramDialogSnapshot): Promise<void>;
+  clear(): Promise<void>;
 }

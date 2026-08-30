@@ -17,12 +17,20 @@ import {
   type UserUpdateEvent,
 } from "teleproto/events/index.js";
 import { StringSession } from "teleproto/sessions/index.js";
-import { UpdateConnectionState } from "teleproto/network/index.js";
+import {
+  ConnectionTCPObfuscated,
+  UpdateConnectionState,
+} from "teleproto/network/index.js";
+import {
+  ChannelInvalidError,
+  FloodWaitError,
+} from "teleproto/errors/index.js";
 
 import type {
   ChatDto,
   ChatFolderDto,
   ChatMemberDto,
+  ChatPageCursorDto,
   ChatPageDto,
   ChatPageInput,
   CurrentUserDto,
@@ -42,19 +50,30 @@ import type {
   TelegramLoginInput,
   TelegramWorkspaceEvent,
 } from "../../../../contracts/src/ipc";
+import { ARCHIVE_FOLDER_ID } from "../../../../contracts/src/ipc";
 import type {
+  TelegramDialogSnapshot,
+  TelegramDialogSnapshotRepository,
   TelegramRepository,
   TelegramUploadFile,
   TelegramConnectionProfileRepository,
   TelegramSessionRepository,
 } from "../../domain/telegram/telegram-ports";
 import { DemoTelegramRepository } from "./demo-telegram-repository";
+import {
+  MemoryTelegramDialogSnapshotRepository,
+  dialogSnapshotPage,
+} from "./file-telegram-dialog-snapshot-repository";
 import { enforceMediaCacheLimit, touchMediaCacheFile } from "./media-cache";
 import {
   mapMessageEntities,
   mapMessageEntitiesForSend,
 } from "./teleproto-message-entities";
-import { mapMessageMedia, messageGroupedId } from "./teleproto-message-media";
+import {
+  isServiceMessage,
+  mapMessageMedia,
+  messageGroupedId,
+} from "./teleproto-message-media";
 import {
   buildChatFolders,
   dialogFolderId,
@@ -110,6 +129,23 @@ class SerialTaskQueue {
   }
 }
 
+/**
+ * Telegram rate-limits `messages.GetDialogs`. Keep overlapping calls
+ * exclusive so a paged chat-list fetch never races a search scan.
+ */
+class ExclusiveTaskQueue {
+  private tail: Promise<void> = Promise.resolve();
+
+  run<T>(task: () => Promise<T>): Promise<T> {
+    const run = this.tail.then(task, task);
+    this.tail = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  }
+}
+
 export class TelegramClientCoordinator implements TelegramRepository {
   private readonly listeners = new Set<
     (event: TelegramWorkspaceEvent) => void
@@ -119,6 +155,7 @@ export class TelegramClientCoordinator implements TelegramRepository {
   private state: TelegramAuthState = { status: "idle" };
   private challenge: Challenge | null = null;
   private client: TelegramClient | null = null;
+  private snapshot: TelegramDialogSnapshot | null = null;
 
   constructor(
     private readonly sessions: TelegramSessionRepository,
@@ -129,6 +166,7 @@ export class TelegramClientCoordinator implements TelegramRepository {
     } | null,
     private readonly onState: (state: TelegramAuthState) => void,
     private readonly mediaCacheDirectory = "",
+    private readonly snapshots: TelegramDialogSnapshotRepository = new MemoryTelegramDialogSnapshotRepository(),
   ) {
     this.repository = this.createDemoRepository();
     this.unsubscribeRepository = this.repository.subscribe((event) =>
@@ -166,9 +204,10 @@ export class TelegramClientCoordinator implements TelegramRepository {
       const session = await this.sessions.get();
       const profile = await this.profiles.get();
       const credentials = this.applicationCredentials ?? profile;
+      this.snapshot = await this.snapshots.get();
       if (!session || !credentials) return;
 
-      this.setState({ status: "connecting" });
+      this.setState({ status: "restoring" });
       const client = this.createClient(
         session,
         credentials.apiId,
@@ -179,11 +218,18 @@ export class TelegramClientCoordinator implements TelegramRepository {
       if (!(await client.checkAuthorization())) {
         await client.disconnect();
         this.client = null;
+        await this.snapshots.clear();
+        this.snapshot = null;
         this.setState({ status: "idle" });
         return;
       }
       this.replaceRepository(
-        new TeleprotoRepository(client, this.mediaCacheDirectory),
+        new TeleprotoRepository(
+          client,
+          this.mediaCacheDirectory,
+          this.snapshots,
+          this.snapshot,
+        ),
       );
       // This adapter has no persisted pts/qts state to diff from. The paged
       // dialogs/messages reads below are the authoritative startup snapshot;
@@ -232,7 +278,12 @@ export class TelegramClientCoordinator implements TelegramRepository {
         await this.sessions.save(client.session.save() as string);
         await this.profiles.save(profile);
         this.replaceRepository(
-          new TeleprotoRepository(client, this.mediaCacheDirectory),
+          new TeleprotoRepository(
+            client,
+            this.mediaCacheDirectory,
+            this.snapshots,
+            null,
+          ),
         );
         // A newly authorized session starts from Telegram's current update
         // state; dialogs/messages provide the initial workspace snapshot.
@@ -257,11 +308,25 @@ export class TelegramClientCoordinator implements TelegramRepository {
     return this.repository.getCurrentUser();
   }
 
-  listChatPage(input: ChatPageInput): Promise<ChatPageDto> {
+  listChatPage(input: ChatPageInput = {}): Promise<ChatPageDto> {
+    if (
+      !(this.repository instanceof TeleprotoRepository) &&
+      this.snapshot &&
+      this.state.status === "restoring"
+    ) {
+      return Promise.resolve(dialogSnapshotPage(this.snapshot, input));
+    }
     return this.repository.listChatPage(input);
   }
 
   listFolders(): Promise<ReadonlyArray<ChatFolderDto>> {
+    if (
+      !(this.repository instanceof TeleprotoRepository) &&
+      this.snapshot &&
+      this.state.status === "restoring"
+    ) {
+      return Promise.resolve(this.snapshot.folders);
+    }
     return this.repository.listFolders();
   }
 
@@ -385,6 +450,8 @@ export class TelegramClientCoordinator implements TelegramRepository {
     await this.disconnectCurrentClient();
     this.client = null;
     this.challenge = null;
+    this.snapshot = null;
+    await this.snapshots.clear();
     this.replaceRepository(this.createDemoRepository());
     await this.sessions.clear();
     this.setState({ status: "idle" });
@@ -406,7 +473,16 @@ export class TelegramClientCoordinator implements TelegramRepository {
     apiHash: string,
   ): TelegramClient {
     return new TelegramClient(new StringSession(session), apiId, apiHash, {
+      // TCPFull frames each packet with a length+CRC32 header that DPI
+      // middleboxes fingerprint and RST ~5s after connect. Official
+      // clients use obfuscated abridged on :443 instead.
+      connection: ConnectionTCPObfuscated,
       connectionRetries: 5,
+      timeout: 15,
+      // Sleeping inside invoke keeps GetDialogs on the exclusive queue for
+      // the whole flood. Throw instead; the dialog refresh waits the server
+      // delay outside that lock and retries one page.
+      floodSleepThreshold: 0,
     });
   }
 
@@ -452,9 +528,14 @@ class TeleprotoRepository implements TelegramRepository {
     "connected";
   private connectionGeneration = 0;
   private catchUpPromise: Promise<void> | null = null;
+  // True after this connection's first successful dialog page. Reconnect
+  // clears it so the next catch-up refreshes the list again.
+  private dialogsLive = false;
+  private dialogRefresh: Promise<void> | null = null;
   private readonly updateQueue = new SerialTaskQueue((error) =>
     this.emitSyncError(error),
   );
+  private readonly dialogFetchQueue = new ExclusiveTaskQueue();
   private readonly mediaDownloads = new Map<string, AbortController>();
   // In-flight downloads keyed by media id; resolveMediaFile and duplicate
   // downloadMedia calls join the same task instead of re-downloading.
@@ -493,6 +574,9 @@ class TeleprotoRepository implements TelegramRepository {
   private readonly dialogPinnedUpdateBuilder = new Raw({
     types: [Api.UpdateDialogPinned],
   });
+  private readonly pinnedMessagesUpdateBuilder = new Raw({
+    types: [Api.UpdatePinnedMessages, Api.UpdatePinnedChannelMessages],
+  });
   private readonly dialogFilterUpdateBuilder = new Raw({
     types: [
       Api.UpdateDialogFilter,
@@ -523,15 +607,33 @@ class TeleprotoRepository implements TelegramRepository {
   private readonly onDialogPinnedUpdate = (update: Api.UpdateDialogPinned) => {
     this.updateQueue.enqueue(() => this.handleDialogPinnedUpdate(update));
   };
+  private readonly onPinnedMessagesUpdate = (
+    update: Api.UpdatePinnedMessages | Api.UpdatePinnedChannelMessages,
+  ) => {
+    this.updateQueue.enqueue(() => this.handlePinnedMessagesUpdate(update));
+  };
   private readonly onFolderUpdate = () => {
     this.updateQueue.enqueue(() => this.handleFolderUpdate());
   };
   private readonly stopConnectionListener: () => void;
-
+  private cachedDialogs: Array<{
+    chat: ChatDto;
+    facts: FolderDialogFacts;
+  }> = [];
+  private cachedNextCursor: ChatPageCursorDto | null = null;
   constructor(
     private readonly client: TelegramClient,
     private readonly mediaCacheDirectory: string,
+    private readonly snapshots: TelegramDialogSnapshotRepository | null = null,
+    initialSnapshot: TelegramDialogSnapshot | null = null,
   ) {
+    if (initialSnapshot) {
+      this.cachedDialogs = initialSnapshot.chats.map((chat) => ({
+        chat,
+        facts: factsFromChat(chat),
+      }));
+      this.cachedNextCursor = initialSnapshot.nextCursor;
+    }
     client.addEventHandler(this.onNewMessage, this.newMessageBuilder);
     client.addEventHandler(this.onEditedMessage, this.editedMessageBuilder);
     client.addEventHandler(this.onDeletedMessage, this.deletedMessageBuilder);
@@ -547,6 +649,10 @@ class TeleprotoRepository implements TelegramRepository {
       this.onDialogPinnedUpdate,
       this.dialogPinnedUpdateBuilder,
     );
+    client.addEventHandler(
+      this.onPinnedMessagesUpdate,
+      this.pinnedMessagesUpdateBuilder,
+    );
     client.addEventHandler(this.onFolderUpdate, this.dialogFilterUpdateBuilder);
     client.addEventHandler(this.onFolderUpdate, this.folderPeersUpdateBuilder);
     client.addEventHandler(
@@ -560,6 +666,10 @@ class TeleprotoRepository implements TelegramRepository {
         await next();
       },
     );
+    client.onError = async (error) => {
+      if (isSkippableEntityError(error)) return;
+      console.error("Telegram client error", error);
+    };
   }
 
   subscribe(listener: (event: TelegramWorkspaceEvent) => void): () => void {
@@ -586,34 +696,52 @@ class TeleprotoRepository implements TelegramRepository {
   }
 
   async listChatPage(input: ChatPageInput): Promise<ChatPageDto> {
-    // Folder membership rides on each chat, so the filters must be known
-    // before dialogs are mapped.
     await this.ensureDialogFilters();
     const limit = input.limit ?? 50;
-    const dialogs = await this.client.getDialogs({
-      limit: limit + 1,
-      offsetDate: input.cursor
-        ? Math.floor(Date.parse(input.cursor.updatedAt) / 1000)
-        : undefined,
-      offsetId: input.cursor
-        ? telegramMessageId(input.cursor.topMessageId)
-        : undefined,
-      offsetPeer: input.cursor?.chatId,
-      ignorePinned: Boolean(input.cursor),
-    });
+    // The snapshot is the chat list. A live GetDialogs is a refresh, not a
+    // blocking read — otherwise flood-wait sleeps occupy the exclusive queue
+    // and the renderer never paints.
+    if (!input.cursor && this.cachedDialogs.length > 0) {
+      return {
+        items: this.cachedDialogs.slice(0, limit).map((entry) => entry.chat),
+        nextCursor: this.cachedNextCursor,
+      };
+    }
+    return this.fetchDialogPage(input);
+  }
+
+  private async fetchDialogPage(input: ChatPageInput): Promise<ChatPageDto> {
+    const limit = input.limit ?? 50;
+    const dialogs = await this.dialogFetchQueue.run(() =>
+      this.client.getDialogs({
+        limit: limit + 1,
+        offsetDate: input.cursor
+          ? Math.floor(Date.parse(input.cursor.updatedAt) / 1000)
+          : undefined,
+        offsetId: input.cursor
+          ? telegramMessageId(input.cursor.topMessageId)
+          : undefined,
+        offsetPeer: input.cursor?.chatId,
+        ignorePinned: Boolean(input.cursor),
+        ignoreMigrated: true,
+      }),
+    );
     const page = dialogs.slice(0, limit);
     const last = page.at(-1);
-    return {
-      items: page.map((dialog) => this.toChat(dialog)),
-      nextCursor:
-        dialogs.length > limit && last
-          ? {
-              chatId: this.dialogId(last),
-              topMessageId: String(last.dialog.topMessage),
-              updatedAt: this.dialogDate(last).toISOString(),
-            }
-          : null,
-    };
+    const chats = page.map((dialog) => this.toChat(dialog));
+    const facts = page.map((dialog) => this.folderFacts(dialog));
+    this.ingestDialogs(chats, facts, !input.cursor);
+    this.cachedNextCursor =
+      dialogs.length > limit && last
+        ? {
+            chatId: this.dialogId(last),
+            topMessageId: String(last.dialog.topMessage),
+            updatedAt: this.dialogDate(last).toISOString(),
+          }
+        : null;
+    if (!input.cursor) this.dialogsLive = true;
+    await this.persistSnapshot();
+    return { items: chats, nextCursor: this.cachedNextCursor };
   }
 
   async listFolders(): Promise<ReadonlyArray<ChatFolderDto>> {
@@ -633,15 +761,54 @@ class TeleprotoRepository implements TelegramRepository {
       .filter((filter): filter is ChatFolderFilter => filter !== null);
   }
 
-  // Folder unread badges sum the unread counts of all member dialogs, so the
-  // full dialog list (including the Archive) is read here.
+  // Folder unread badges sum the unread counts of dialogs already in the
+  // local snapshot — the same in-memory walk Nicegram does. Never issue a
+  // second unbounded GetDialogs just to compute badges.
   private async computeFolders(): Promise<ReadonlyArray<ChatFolderDto>> {
-    const filters = this.dialogFilters ?? [];
-    const dialogs = await this.client.getDialogs({});
     return buildChatFolders(
-      filters,
-      dialogs.map((dialog) => this.folderFacts(dialog)),
+      this.dialogFilters ?? [],
+      this.cachedDialogs.map((entry) => entry.facts),
     );
+  }
+
+  private ingestDialogs(
+    chats: ReadonlyArray<ChatDto>,
+    facts: ReadonlyArray<FolderDialogFacts>,
+    replacePrefix: boolean,
+  ): void {
+    const incoming = chats.map((chat, index) => ({
+      chat,
+      facts: facts[index]!,
+    }));
+    if (replacePrefix) {
+      const incomingIds = new Set(chats.map((chat) => chat.id));
+      const rest = this.cachedDialogs.filter(
+        (entry) => !incomingIds.has(entry.chat.id),
+      );
+      this.cachedDialogs = [...incoming, ...rest];
+      return;
+    }
+    for (const entry of incoming) {
+      const index = this.cachedDialogs.findIndex(
+        (cached) => cached.chat.id === entry.chat.id,
+      );
+      if (index >= 0) this.cachedDialogs[index] = entry;
+      else this.cachedDialogs.push(entry);
+    }
+  }
+
+  private async persistSnapshot(): Promise<void> {
+    if (!this.snapshots) return;
+    try {
+      await this.snapshots.save({
+        version: 1,
+        chats: this.cachedDialogs.map((entry) => entry.chat),
+        folders: await this.computeFolders(),
+        nextCursor: this.cachedNextCursor,
+      });
+    } catch (error) {
+      console.error("Telegram dialog snapshot failed", error);
+    }
   }
 
   private folderFacts(dialog: TeleprotoDialog): FolderDialogFacts {
@@ -698,7 +865,12 @@ class TeleprotoRepository implements TelegramRepository {
   // messages.searchGlobal (teleproto runs it when getMessages has no entity).
   async searchGlobal(query: string): Promise<GlobalSearchResultDto> {
     const [dialogs, found] = await Promise.all([
-      this.client.getDialogs({ limit: GLOBAL_SEARCH_DIALOG_SCAN }),
+      this.dialogFetchQueue.run(() =>
+        this.client.getDialogs({
+          limit: GLOBAL_SEARCH_DIALOG_SCAN,
+          ignoreMigrated: true,
+        }),
+      ),
       this.client.getMessages(undefined, {
         search: query,
         limit: GLOBAL_SEARCH_MESSAGE_LIMIT,
@@ -883,14 +1055,18 @@ class TeleprotoRepository implements TelegramRepository {
   // Resolves to the cached file path, or null when the user cancelled.
   private async performMediaDownload(mediaId: string): Promise<string | null> {
     const { chatId, messageId } = parseMediaId(mediaId);
-    if (!this.mediaCacheDirectory)
-      throw new Error("Media cache is unavailable");
     const [message] = await this.client.getMessages(chatId, {
       ids: [telegramMessageId(messageId)],
     });
-    if (!message || !mapMessageMedia(message)) {
+    if (!message) {
       throw new Error(`Telegram media ${messageId} was not found`);
     }
+    // MessageService actions (chat photo, pin, title) are not user media.
+    if (isServiceMessage(message) || !mapMessageMedia(message)) {
+      return null;
+    }
+    if (!this.mediaCacheDirectory)
+      throw new Error("Media cache is unavailable");
     await mkdir(this.mediaCacheDirectory, { recursive: true });
     const fileName = cacheFileName(mediaId, message.file?.name);
     const outputFile = path.join(this.mediaCacheDirectory, fileName);
@@ -1121,6 +1297,7 @@ class TeleprotoRepository implements TelegramRepository {
   ): Promise<void> {
     if (update.state !== UpdateConnectionState.connected) {
       this.connectionGeneration += 1;
+      this.dialogsLive = false;
       this.emitConnectionState("offline");
       return;
     }
@@ -1141,13 +1318,16 @@ class TeleprotoRepository implements TelegramRepository {
     this.catchUpPromise = catchUp;
     try {
       await catchUp;
+      if (generation === this.connectionGeneration) {
+        await this.refreshMainDialogs(generation);
+        if (generation === this.connectionGeneration && this.dialogsLive) {
+          this.emitConnectionState("connected");
+        }
+      }
     } catch (error) {
       this.emitSyncError(error);
     } finally {
       if (this.catchUpPromise === catchUp) this.catchUpPromise = null;
-      if (generation === this.connectionGeneration) {
-        this.emitConnectionState("connected");
-      }
     }
   }
 
@@ -1157,6 +1337,39 @@ class TeleprotoRepository implements TelegramRepository {
     if (this.connectionState === state) return;
     this.connectionState = state;
     this.emit({ type: "connection-state", state });
+  }
+
+  private async refreshMainDialogs(generation: number): Promise<void> {
+    if (this.dialogsLive) return;
+    if (this.dialogRefresh) {
+      await this.dialogRefresh;
+      return;
+    }
+    const refresh = this.runDialogRefresh(generation);
+    this.dialogRefresh = refresh;
+    try {
+      await refresh;
+    } finally {
+      if (this.dialogRefresh === refresh) this.dialogRefresh = null;
+    }
+  }
+
+  private async runDialogRefresh(generation: number): Promise<void> {
+    while (generation === this.connectionGeneration) {
+      try {
+        await this.fetchDialogPage({ limit: 50 });
+        this.emit({
+          type: "chats",
+          chats: this.cachedDialogs.map((entry) => entry.chat),
+          nextCursor: this.cachedNextCursor,
+        });
+        return;
+      } catch (error) {
+        const wait = floodWaitSeconds(error);
+        if (wait == null) throw error;
+        await sleep(wait * 1000);
+      }
+    }
   }
 
   private async handleMessageUpsert(
@@ -1243,6 +1456,25 @@ class TeleprotoRepository implements TelegramRepository {
     this.emit({ type: "chat-mute", chatId, muted });
   }
 
+  private async handlePinnedMessagesUpdate(
+    update: Api.UpdatePinnedMessages | Api.UpdatePinnedChannelMessages,
+  ): Promise<void> {
+    try {
+      const chatId =
+        update instanceof Api.UpdatePinnedChannelMessages
+          ? (
+              await this.client.getPeerId(
+                new Api.PeerChannel({ channelId: update.channelId }),
+              )
+            ).toString()
+          : (await this.client.getPeerId(update.peer)).toString();
+      this.emit({ type: "pinned-messages", chatId });
+    } catch (error) {
+      if (isSkippableEntityError(error)) return;
+      throw error;
+    }
+  }
+
   private async handleDialogPinnedUpdate(
     update: Api.UpdateDialogPinned,
   ): Promise<void> {
@@ -1257,7 +1489,9 @@ class TeleprotoRepository implements TelegramRepository {
   // membership on its next page load.
   private async handleFolderUpdate(): Promise<void> {
     await this.refreshDialogFilters();
-    this.emit({ type: "folders", folders: await this.computeFolders() });
+    const folders = await this.computeFolders();
+    await this.persistSnapshot();
+    this.emit({ type: "folders", folders });
   }
 
   private handleMessageRead(event: MessageReadEvent): void {
@@ -1301,6 +1535,10 @@ class TeleprotoRepository implements TelegramRepository {
       this.dialogPinnedUpdateBuilder,
     );
     this.client.removeEventHandler(
+      this.onPinnedMessagesUpdate,
+      this.pinnedMessagesUpdateBuilder,
+    );
+    this.client.removeEventHandler(
       this.onFolderUpdate,
       this.dialogFilterUpdateBuilder,
     );
@@ -1319,6 +1557,11 @@ class TeleprotoRepository implements TelegramRepository {
   }
 
   private emitSyncError(error: unknown): void {
+    // Language-level failures belong in the main-process log. Crossing IPC
+    // with `error.message` would paint TypeError text into the conversation
+    // banner, which is not a user-actionable sync state.
+    console.error("Telegram sync failed", error);
+    if (isLanguageError(error) || isSkippableEntityError(error)) return;
     this.emit({ type: "sync-error", message: safeError(error) });
   }
 
@@ -1479,8 +1722,8 @@ class TeleprotoRepository implements TelegramRepository {
       snapshots.set(message.id.toString(), {
         id: source.id.toString(),
         senderName: await senderName(source),
-        body: source.message,
-        entities: mapMessageEntities(source.message, source.entities),
+        body: telegramMessageBody(source),
+        entities: mapMessageEntities(telegramMessageBody(source), source.entities),
       });
     }
     return snapshots;
@@ -1495,8 +1738,11 @@ class TeleprotoRepository implements TelegramRepository {
       id: message.id.toString(),
       chatId,
       senderName: await senderName(message),
-      body: message.message,
-      entities: mapMessageEntities(message.message, message.entities),
+      body: telegramMessageBody(message),
+      entities: mapMessageEntities(
+        telegramMessageBody(message),
+        message.entities,
+      ),
       media: mapMessageMedia(message, `${chatId}/${message.id}`),
       groupedId: messageGroupedId(message),
       sentAt: new Date(message.date * 1000).toISOString(),
@@ -1641,4 +1887,52 @@ function safeError(error: unknown): string {
   return error instanceof Error && error.message.trim()
     ? error.message
     : "Telegram authentication failed";
+}
+
+function isLanguageError(error: unknown): boolean {
+  return (
+    error instanceof TypeError ||
+    error instanceof ReferenceError ||
+    error instanceof RangeError ||
+    (error instanceof Error && isInternalExceptionMessage(error.message))
+  );
+}
+
+function isInternalExceptionMessage(message: string): boolean {
+  return /is not callable|is not a function|instanceof|Cannot read propert/i.test(
+    message,
+  );
+}
+
+function factsFromChat(chat: ChatDto): FolderDialogFacts {
+  return {
+    peerId: chat.id,
+    isUser: chat.kind === "direct" || chat.kind === "saved",
+    isGroup: chat.kind === "group",
+    isBroadcast: chat.kind === "channel",
+    isBot: false,
+    isContact: false,
+    muted: chat.muted,
+    unreadCount: chat.unreadCount,
+    archived: chat.folderId === ARCHIVE_FOLDER_ID,
+  };
+}
+
+function telegramMessageBody(message: { readonly message?: unknown }): string {
+  return typeof message.message === "string" ? message.message : "";
+}
+
+function floodWaitSeconds(error: unknown): number | null {
+  if (!(error instanceof FloodWaitError)) return null;
+  return error.seconds > 0 ? error.seconds : null;
+}
+
+function isSkippableEntityError(error: unknown): boolean {
+  return error instanceof ChannelInvalidError;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
 }

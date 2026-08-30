@@ -41,8 +41,8 @@ export function buildScopeInput(
   if (scope === "folder") {
     return { scope, folderId: selection.activeFolderId };
   }
-  // No open chat: the main-process validation reports the scope as
-  // unservable instead of the renderer guessing a target.
+  // No open chat: the panel shows an empty preview instead of asking the
+  // main process to reject a known-unservable unread scope.
   return {
     scope,
     ...(selection.activeChatId ? { chatId: selection.activeChatId } : {}),

@@ -187,6 +187,7 @@ make format
 | `make docs`     | Validate all Markdown documentation using markdownlint                      |
 | `make build`    | Compile main, preload, and renderer bundles via electron-vite               |
 | `make package`  | Build unpacked application distribution artifacts                           |
+| `make reset`    | Delete Electron user data and return to a first-run launch                  |
 
 ---
 
@@ -200,6 +201,7 @@ Telo persists user configurations under the platform-specific Electron `userData
 | `agent-threads.json` | Stored AI assistant conversation transcripts and active thread ID     | Plain JSON                        |
 | `telegram.session`   | Telegram MTProto session key                                          | Encrypted (`safeStorage`)         |
 | `telegram.profile`   | Current user profile and cached avatar                                | Encrypted (`safeStorage`)         |
+| `dialogs.json`       | Cached chat list and folder badges for session restore                | Plain JSON                        |
 | `preferences.json`   | Theme, accent color, text size, time format, and shortcut preferences | Plain JSON                        |
 
 _For headless Linux CI environments without an OS keychain, set `TELO_PLAINTEXT_SECRETS=1` to enable local testing fallback._

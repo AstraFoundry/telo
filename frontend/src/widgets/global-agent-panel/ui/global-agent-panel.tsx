@@ -141,7 +141,9 @@ export function GlobalAgentPanel({ onOpenSettings }: GlobalAgentPanelProps) {
     value: AgentContextPreviewDto | null;
     error: string | null;
   } | null>(null);
+  const unreadWithoutChat = currentScope === "unread" && !activeChatId;
   useEffect(() => {
+    if (!open || unreadWithoutChat) return;
     let cancelled = false;
     const key = scopeInput;
     void window.telo.agent.previewContext(key).then(
@@ -161,11 +163,21 @@ export function GlobalAgentPanel({ onOpenSettings }: GlobalAgentPanelProps) {
     return () => {
       cancelled = true;
     };
-  }, [scopeInput, chats, chatMessages]);
-  const preview =
-    previewResult?.key === scopeInput ? previewResult.value : null;
-  const previewError =
-    previewResult?.key === scopeInput ? previewResult.error : null;
+  }, [open, unreadWithoutChat, scopeInput, chats, chatMessages]);
+  const preview = unreadWithoutChat
+    ? {
+        scope: "unread" as const,
+        messages: [],
+        redactionCounts: { emails: 0, phones: 0, tokens: 0 },
+      }
+    : previewResult?.key === scopeInput
+      ? previewResult.value
+      : null;
+  const previewError = unreadWithoutChat
+    ? null
+    : previewResult?.key === scopeInput
+      ? previewResult.error
+      : null;
 
   // The audit list loads with the panel and refreshes when a run settles.
   const [auditRecords, setAuditRecords] = useState<

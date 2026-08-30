@@ -161,6 +161,23 @@ describe("ConversationSidebar", () => {
     expect(useChatStore.getState().activeChatId).toBe("chat-1");
   });
 
+  it("replaces the app title with connection status, never a transcript banner", async () => {
+    const { useChatStore } = await renderSidebar();
+
+    expect(screen.getByText(copy.appName)).toBeTruthy();
+
+    act(() => useChatStore.setState({ connectionState: "offline" }));
+    expect(screen.getByText(copy.connectionOffline)).toBeTruthy();
+    expect(screen.queryByText(copy.appName)).toBeNull();
+
+    act(() => useChatStore.setState({ connectionState: "synchronizing" }));
+    expect(screen.getByText(copy.connectionSynchronizing)).toBeTruthy();
+    expect(screen.queryByText(copy.connectionOffline)).toBeNull();
+
+    act(() => useChatStore.setState({ connectionState: "connected" }));
+    expect(screen.getByText(copy.appName)).toBeTruthy();
+  });
+
   it("notifies the parent even when the chat is already active", async () => {
     const { onSelectChat } = await renderSidebar({ activeChatId: "chat-1" });
     const user = userEvent.setup();

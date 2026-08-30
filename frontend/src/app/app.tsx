@@ -13,7 +13,6 @@ export function App() {
   const load = useChatStore((state) => state.load);
   const connectionState = useChatStore((state) => state.connectionState);
   const auth = useTelegramStore((state) => state.auth);
-  const configuration = useTelegramStore((state) => state.configuration);
   const currentUser = useTelegramStore((state) => state.currentUser);
   const loadCurrentUser = useTelegramStore((state) => state.loadCurrentUser);
   const startTelegram = useTelegramStore((state) => state.start);
@@ -26,7 +25,11 @@ export function App() {
   const [surface, setSurface] = useState<"conversation" | "settings">(
     "conversation",
   );
-  const workspaceEnabled = demo === true || auth?.status === "ready";
+  const workspaceEnabled =
+    demo === true ||
+    auth?.status === "ready" ||
+    auth?.status === "restoring";
+  const workspaceReady = demo === true || auth?.status === "ready";
 
   const openSettings = () => {
     closeAgent();
@@ -51,21 +54,32 @@ export function App() {
   }, [startTelegram]);
 
   useEffect(() => {
-    if (workspaceEnabled) {
-      void Promise.all([load(), loadCurrentUser()]);
-      const unsubscribeWorkspace = subscribeToWorkspaceEvents();
-      const unsubscribeNotificationClick =
-        window.telo.shell.onNotificationClick((chatId) => {
-          setSurface("conversation");
-          void useChatStore.getState().select(chatId);
-        });
-      return () => {
-        unsubscribeWorkspace();
-        unsubscribeNotificationClick();
-      };
+    if (auth?.status === "restoring") {
+      useChatStore.setState({
+        connectionState: "synchronizing",
+        loading: true,
+      });
     }
-    return undefined;
-  }, [load, loadCurrentUser, workspaceEnabled]);
+  }, [auth?.status]);
+
+  useEffect(() => {
+    if (!workspaceEnabled) return undefined;
+    if (demo === true || auth?.status === "ready") {
+      void Promise.all([load(), loadCurrentUser()]);
+    } else {
+      void load();
+    }
+    const unsubscribeWorkspace = subscribeToWorkspaceEvents();
+    const unsubscribeNotificationClick =
+      window.telo.shell.onNotificationClick((chatId) => {
+        useChatStore.getState().select(chatId);
+        setSurface("conversation");
+      });
+    return () => {
+      unsubscribeWorkspace();
+      unsubscribeNotificationClick();
+    };
+  }, [load, loadCurrentUser, workspaceEnabled, demo, auth?.status]);
 
   // The initial loadCurrentUser() call can lose a transient race against
   // Telegram's own connection setup (a real getMe() RPC, unlike the local
@@ -73,22 +87,13 @@ export function App() {
   // reconnect is the same self-healing the chat store already gets from
   // Teleproto's catchUp(), so the account row never stays empty forever.
   useEffect(() => {
-    if (workspaceEnabled && connectionState === "connected" && !currentUser) {
+    if (workspaceReady && connectionState === "connected" && !currentUser) {
       void loadCurrentUser();
     }
-  }, [workspaceEnabled, connectionState, currentUser, loadCurrentUser]);
+  }, [workspaceReady, connectionState, currentUser, loadCurrentUser]);
 
   if (!workspaceEnabled) {
-    return (
-      <OnboardingPage
-        loading={
-          demo === null ||
-          !auth ||
-          !configuration ||
-          auth.status === "connecting"
-        }
-      />
-    );
+    return <OnboardingPage />;
   }
 
   return (

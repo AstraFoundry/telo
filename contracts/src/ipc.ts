@@ -281,6 +281,17 @@ export type TelegramWorkspaceEvent =
       readonly chat: ChatDto;
     }
   | {
+      /** Full dialog snapshot after a successful GetDialogs refresh. */
+      readonly type: "chats";
+      readonly chats: ReadonlyArray<ChatDto>;
+      readonly nextCursor: ChatPageCursorDto | null;
+    }
+  | {
+      /** The chat's pinned-message set changed; reload the pin strip. */
+      readonly type: "pinned-messages";
+      readonly chatId: string;
+    }
+  | {
       readonly type: "chat-avatar";
       readonly chatId: string;
       readonly avatarDataUrl: string;

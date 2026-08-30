@@ -21,6 +21,8 @@ interface TeleprotoWebPageView {
 interface TeleprotoMediaMessage {
   readonly id: { toString(): string } | number;
   readonly groupedId?: { toString(): string };
+  readonly className?: unknown;
+  readonly action?: unknown;
   readonly file?: TeleprotoFileView;
   readonly photo?: unknown;
   readonly video?: unknown;
@@ -34,10 +36,19 @@ interface TeleprotoMediaMessage {
   readonly media?: unknown;
 }
 
+export function isServiceMessage(message: TeleprotoMediaMessage): boolean {
+  return (
+    message.className === "MessageService" || message.action != null
+  );
+}
+
 export function mapMessageMedia(
   message: TeleprotoMediaMessage,
   mediaId = message.id.toString(),
 ): MessageMediaDto | null {
+  // MessageActionChatEditPhoto exposes `photo` on the wrapper, but that is
+  // a ChatPhoto bound to the service action — not downloadable message media.
+  if (isServiceMessage(message)) return null;
   const webPage = webPageOf(message);
   if (webPage) {
     // A WebPageEmpty carries no URL and renders as plain text in Telegram, so
@@ -80,9 +91,13 @@ export function mapMessageMedia(
     fileName: stringValue(file?.name),
     mimeType: stringValue(file?.mimeType),
     size: finiteNumber(file?.size),
-    width: finiteNumber(file?.width),
-    height: finiteNumber(file?.height),
-    duration: finiteNumber(file?.duration),
+    // Teleproto File.width/height/duration call `_fromAttr([Cls, Cls])`,
+    // which does `attr instanceof [Cls, Cls]` and throws TypeError.
+    width: fileMetric(file, "width") ?? attributeMetric(message.document, "w"),
+    height: fileMetric(file, "height") ?? attributeMetric(message.document, "h"),
+    duration:
+      fileMetric(file, "duration") ??
+      attributeMetric(message.document, "duration"),
     spoiler: Boolean(
       typeof message.media === "object" &&
       message.media &&
@@ -128,4 +143,30 @@ function finiteNumber(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) && value >= 0
     ? value
     : null;
+}
+
+function fileMetric(
+  file: TeleprotoFileView | undefined,
+  key: "width" | "height" | "duration",
+): number | null {
+  if (!file) return null;
+  try {
+    return finiteNumber(file[key]);
+  } catch {
+    return null;
+  }
+}
+
+function attributeMetric(document: unknown, key: string): number | null {
+  if (typeof document !== "object" || document === null) return null;
+  const attributes = (document as { attributes?: unknown }).attributes;
+  if (!Array.isArray(attributes)) return null;
+  for (const attribute of attributes) {
+    if (typeof attribute !== "object" || attribute === null) continue;
+    if (key in attribute) {
+      const value = finiteNumber((attribute as Record<string, unknown>)[key]);
+      if (value !== null) return value;
+    }
+  }
+  return null;
 }

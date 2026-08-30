@@ -187,6 +187,7 @@ make format
 | `make docs`     | markdownlint を使用して Markdown ドキュメントの構文を検証    |
 | `make build`    | electron-vite でメイン、プリロード、レンダラーをビルド       |
 | `make package`  | 配布用パッケージ（展開済み形式）を生成                       |
+| `make reset`    | Electron のユーザーデータを削除し初回起動状態に戻す          |
 
 ---
 
@@ -200,6 +201,7 @@ Telo は各種設定情報を OS 標準の Electron `userData` ディレクト�
 | `agent-threads.json` | AI との会話スレッド履歴および選択中スレッド ID           | プレーン JSON                   |
 | `telegram.session`   | Telegram MTProto セッション鍵                            | `safeStorage` 暗号化            |
 | `telegram.profile`   | ユーザープロファイルおよびキャッシュ画像                 | `safeStorage` 暗号化            |
+| `dialogs.json`       | 復元用のチャット一覧とフォルダ未読バッジ                 | プレーン JSON                   |
 | `preferences.json`   | テーマ、強調色、文字サイズ、時刻表記、ショートカット設定 | プレーン JSON                   |
 
 _※ キーチェーンが存在しないヘッドレス Linux CI 環境では、`TELO_PLAINTEXT_SECRETS=1` を指定してテストを実行可能です。_

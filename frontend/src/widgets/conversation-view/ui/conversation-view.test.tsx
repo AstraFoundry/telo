@@ -321,18 +321,14 @@ describe("ConversationView", () => {
     });
   });
 
-  it("shows explicit offline and synchronizing states", async () => {
+  it("keeps connection copy out of the transcript so the pin strip stays free", async () => {
     const { useChatStore } = await renderView();
 
     act(() => useChatStore.setState({ connectionState: "offline" }));
-    expect(screen.getByRole("status").textContent).toContain(
-      copy.connectionOffline,
-    );
+    expect(screen.queryByText(copy.connectionOffline)).toBeNull();
 
     act(() => useChatStore.setState({ connectionState: "synchronizing" }));
-    expect(screen.getByRole("status").textContent).toContain(
-      copy.connectionSynchronizing,
-    );
+    expect(screen.queryByText(copy.connectionSynchronizing)).toBeNull();
   });
 
   it("renders outgoing bubbles with the accent tint variant", async () => {

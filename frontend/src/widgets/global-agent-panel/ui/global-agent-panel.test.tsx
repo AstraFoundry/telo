@@ -589,6 +589,24 @@ describe("GlobalAgentPanel scope controls", () => {
     });
   });
 
+  it("does not request a preview when no chat is open", async () => {
+    useChatStore.setState({ activeChatId: null });
+    render(<GlobalAgentPanel onOpenSettings={vi.fn()} />);
+    await vi.waitFor(() => {
+      expect(telo.agent.listThreads).toHaveBeenCalled();
+    });
+    expect(telo.agent.previewContext).not.toHaveBeenCalled();
+  });
+
+  it("does not request a preview while the panel is closed", async () => {
+    useAgentStore.setState({ open: false });
+    render(<GlobalAgentPanel onOpenSettings={vi.fn()} />);
+    await vi.waitFor(() => {
+      expect(telo.agent.listThreads).toHaveBeenCalled();
+    });
+    expect(telo.agent.previewContext).not.toHaveBeenCalled();
+  });
+
   it("defaults to the unread scope and previews the exact payload", async () => {
     telo.agent.previewContext.mockResolvedValue({
       scope: "unread",

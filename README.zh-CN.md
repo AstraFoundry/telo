@@ -187,6 +187,7 @@ make format
 | `make docs`     | 使用 markdownlint 校验所有 Markdown 文档规范                    |
 | `make build`    | 使用 electron-vite 编译主进程、Preload 与渲染层代码             |
 | `make package`  | 构建未打包的应用程序产物目录                                    |
+| `make reset`    | 删除 Electron 用户数据，下次启动回到首次运行                    |
 
 ---
 
@@ -200,6 +201,7 @@ Telo 将所有用户数据与配置持久化在 Electron 的系统 `userData` �
 | `agent-threads.json` | 历史智能体对话流记录与当前活动会话 ID        | 明文 JSON                          |
 | `telegram.session`   | Telegram MTProto 登录鉴权 Session 密钥       | 经 `safeStorage` 系统钥匙串加密    |
 | `telegram.profile`   | 当前登录用户信息与头像缓存                   | 经 `safeStorage` 加密              |
+| `dialogs.json`       | 会话列表与文件夹角标快照，供恢复登录时使用   | 明文 JSON                          |
 | `preferences.json`   | 主题、强调色、字体大小、时间格式与快捷键偏好 | 明文 JSON                          |
 
 _在无桌面钥匙串的无头 Linux CI 环境中，可通过配置 `TELO_PLAINTEXT_SECRETS=1` 启用 base64 回退模式进行自动化测试。_

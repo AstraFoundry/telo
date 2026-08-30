@@ -274,6 +274,7 @@ export function ConversationSidebar({
     (state) => state.requestJumpToMessage,
   );
   const animateChatIds = useChatStore((state) => state.animateChatIds);
+  const connectionState = useChatStore((state) => state.connectionState);
   const { value: timeFormat } = useTimeFormat();
 
   const searching = query.trim().length > 0;
@@ -318,7 +319,16 @@ export function ConversationSidebar({
   return (
     <aside className="flex min-w-0 flex-col" aria-label={copy.chats}>
       <header className="flex h-14 items-center px-3 [app-region:drag]">
-        <strong className="text-base tracking-tight">{copy.appName}</strong>
+        <strong
+          className="truncate text-base tracking-tight"
+          aria-live="polite"
+        >
+          {connectionState === "offline"
+            ? copy.connectionOffline
+            : connectionState === "synchronizing"
+              ? copy.connectionSynchronizing
+              : copy.appName}
+        </strong>
       </header>
       <div className="px-3 pb-2">
         <ChatSearch value={query} onChange={setSearchQuery} />

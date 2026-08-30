@@ -148,10 +148,12 @@ describe("chat-store", () => {
 
     await useChatStore.getState().load();
 
-    expect(useChatStore.getState().folders).toEqual([
-      { id: 2, title: "Work", unreadCount: 3 },
-      { id: ARCHIVE_FOLDER_ID, title: "Archive", unreadCount: 1 },
-    ]);
+    await vi.waitFor(() => {
+      expect(useChatStore.getState().folders).toEqual([
+        { id: 2, title: "Work", unreadCount: 3 },
+        { id: ARCHIVE_FOLDER_ID, title: "Archive", unreadCount: 1 },
+      ]);
+    });
   });
 
   it("load() lands on the first non-archived chat, never an archived one", async () => {
@@ -316,6 +318,51 @@ describe("chat-store", () => {
       state: "connected",
     });
     expect(useChatStore.getState().connectionState).toBe("connected");
+  });
+
+  it("receive() ignores language-level sync failures", () => {
+    useChatStore.getState().receive({
+      type: "sync-error",
+      message: "Right-hand side of 'instanceof' is not callable",
+    });
+    expect(useChatStore.getState().syncError).toBeNull();
+  });
+
+  it("receive() keeps user-facing sync failures", () => {
+    useChatStore.getState().receive({
+      type: "sync-error",
+      message: "FLOOD_WAIT_30",
+    });
+    expect(useChatStore.getState().syncError).toBe("FLOOD_WAIT_30");
+  });
+
+  it("receive() replaces the chat list after a live GetDialogs refresh", () => {
+    useChatStore.setState({
+      chats: [chat("cached")],
+      chatCursor: {
+        chatId: "cached",
+        topMessageId: "1",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      },
+    });
+    useChatStore.getState().receive({
+      type: "chats",
+      chats: [chat("1")],
+      nextCursor: null,
+    });
+    expect(useChatStore.getState().chats.map((entry) => entry.id)).toEqual(["1"]);
+    expect(useChatStore.getState().chatCursor).toBeNull();
+  });
+
+  it("load() maps language-level failures to the generic sync copy", async () => {
+    const telo = installTeloApiMock();
+    telo.workspace.listChatPage.mockRejectedValue(
+      new TypeError("Right-hand side of 'instanceof' is not callable"),
+    );
+
+    await useChatStore.getState().load();
+
+    expect(useChatStore.getState().syncError).toBe(copy.syncError);
   });
 
   it("send() returns early when no chat is active", async () => {

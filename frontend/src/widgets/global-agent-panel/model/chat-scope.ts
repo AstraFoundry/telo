@@ -18,7 +18,7 @@ export function collectChatScope(
     : -1;
   const scoped = boundary >= 0 ? messages.slice(boundary + 1) : messages;
   const scopeMessages = scoped
-    .filter((message) => message.body.trim().length > 0)
+    .filter((message) => Boolean(message.body?.trim()))
     .map(({ id, senderName, body }) => ({ id, senderName, body }));
   if (scopeMessages.length === 0) return null;
   return { chatId: chat.id, chatTitle: chat.title, messages: scopeMessages };

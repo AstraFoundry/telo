@@ -2,11 +2,10 @@
 
 This document defines logging and error-observability conventions for Telo's Electron main process.
 
-> **Status: target state, not yet implemented.** The codebase currently has no
-> logging facility — no logger dependency and no `console.*` calls under
-> `backend/src`. The rules below are the minimal conventions to apply when
-> logging is introduced. Until then, do not leave incidental `console.log`
-> debugging in committed code.
+> **Status: partial.** There is no structured logger yet. Telegram catch-up
+> and update-queue failures are written with `console.error` from
+> `TeleprotoRepository.emitSyncError`. Do not add incidental `console.log`
+> debugging.
 
 ## Scope
 
@@ -64,3 +63,4 @@ Mask sensitive fields with a consistent pattern:
 - Log unexpected errors with full context in the main process.
 - Do not swallow errors with silent `catch` blocks.
 - Translate low-level errors into domain/application errors before they cross IPC; the renderer only receives concise, user-safe messages (see [`api-conventions.md`](api-conventions.md)).
+- Language-level Telegram sync failures (`TypeError`, `instanceof` not callable, and similar) stay in the main-process log. They are not published as `sync-error` workspace events.

@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { mapMessageMedia, messageGroupedId } from "./teleproto-message-media";
+import {
+  isServiceMessage,
+  mapMessageMedia,
+  messageGroupedId,
+} from "./teleproto-message-media";
 
 describe("teleproto message media", () => {
   it("maps photo metadata, spoiler state, and album id", () => {
@@ -42,6 +46,26 @@ describe("teleproto message media", () => {
     expect(
       mapMessageMedia({ id: 1, [field]: {}, file: { name: "asset.bin" } }),
     ).toMatchObject({ kind, fileName: "asset.bin" });
+  });
+
+  it("does not treat a service message as downloadable media", () => {
+    expect(
+      isServiceMessage({
+        id: 1,
+        className: "MessageService",
+        action: { photo: { id: 2 } },
+        photo: { id: 2 },
+      }),
+    ).toBe(true);
+    expect(
+      mapMessageMedia({
+        id: 1,
+        className: "MessageService",
+        action: { photo: { id: 2 } },
+        photo: { id: 2 },
+        file: { name: "chat.jpg" },
+      }),
+    ).toBeNull();
   });
 
   it("returns null for text and rejects unusable numeric metadata", () => {
@@ -112,5 +136,43 @@ describe("teleproto message media", () => {
   it("returns null for a webpage without a URL", () => {
     expect(mapMessageMedia({ id: 10, webPreview: {} })).toBeNull();
     expect(mapMessageMedia({ id: 10, media: { webpage: {} } })).toBeNull();
+  });
+
+  it("maps video metrics from document attributes when File getters throw", () => {
+    const throwing = (): number => {
+      throw new TypeError("Right-hand side of 'instanceof' is not callable");
+    };
+    const file = {
+      name: "clip.mp4",
+      mimeType: "video/mp4",
+      size: 4096,
+      get width() {
+        return throwing();
+      },
+      get height() {
+        return throwing();
+      },
+      get duration() {
+        return throwing();
+      },
+    };
+    expect(
+      mapMessageMedia({
+        id: 8,
+        video: {},
+        document: { attributes: [{ w: 1280, h: 720, duration: 12 }] },
+        file,
+      }),
+    ).toEqual({
+      id: "8",
+      kind: "video",
+      fileName: "clip.mp4",
+      mimeType: "video/mp4",
+      size: 4096,
+      width: 1280,
+      height: 720,
+      duration: 12,
+      spoiler: false,
+    });
   });
 });
