@@ -76,7 +76,7 @@ function FolderTab({ label, selected, unread, onSelect }: FolderTabProps) {
       role="tab"
       aria-selected={selected}
       onClick={onSelect}
-      className={`h-8 shrink-0 gap-1.5 rounded-lg px-2.5 text-xs font-medium transition-colors ${
+      className={`shrink-0 gap-1.5 rounded-lg px-2.5 text-xs font-medium transition-colors ${
         selected ? "bg-accent text-foreground" : "text-muted-foreground"
       }`}
     >

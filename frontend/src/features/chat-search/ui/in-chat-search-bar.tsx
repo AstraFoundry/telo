@@ -45,7 +45,7 @@ export function InChatSearchBar() {
           }
         }}
         /* deslop-ignore-next-line 21 — matches the sidebar search field */
-        classNames={{ field: "h-9 rounded-xl bg-muted/55 border-transparent" }}
+        classNames={{ field: "h-10 rounded-xl bg-muted/55 border-transparent" }}
       />
       {term && !chatSearch.loading ? (
         <span

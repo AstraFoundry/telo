@@ -459,7 +459,7 @@ export function GlobalAgentPanel({ onOpenSettings }: GlobalAgentPanelProps) {
                           size="sm"
                           aria-pressed={currentScope === option}
                           disabled={unavailable || running}
-                          className={`h-7 rounded-full px-2.5${
+                          className={`rounded-full px-2.5${
                             currentScope === option
                               ? " bg-primary/10 text-foreground"
                               : ""
@@ -489,7 +489,7 @@ export function GlobalAgentPanel({ onOpenSettings }: GlobalAgentPanelProps) {
                   size="sm"
                   aria-expanded={previewOpen}
                   aria-label={copy.agentPayloadPreview}
-                  className="h-7 w-full justify-between px-1.5 text-xs text-muted-foreground"
+                  className="w-full justify-between px-1.5 text-xs text-muted-foreground"
                   onClick={() => setPreviewOpen(!previewOpen)}
                 >
                   <span className="flex items-center gap-1">
@@ -556,7 +556,7 @@ export function GlobalAgentPanel({ onOpenSettings }: GlobalAgentPanelProps) {
                   size="sm"
                   aria-expanded={runsOpen}
                   aria-label={copy.agentRecentRuns}
-                  className="h-7 w-full justify-between px-1.5 text-xs text-muted-foreground"
+                  className="w-full justify-between px-1.5 text-xs text-muted-foreground"
                   onClick={() => setRunsOpen(!runsOpen)}
                 >
                   <span className="flex items-center gap-1">

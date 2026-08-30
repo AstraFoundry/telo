@@ -17,7 +17,7 @@ export function ChatSearch({ value, onChange }: ChatSearchProps) {
       placeholder={copy.searchChats}
       leftIcon={<MagnifyingGlass />}
       /* deslop-ignore-next-line 21 — rounded search field on a flat toolbar, no nesting parent */
-      classNames={{ field: "h-9 rounded-xl bg-muted/55 border-transparent" }}
+      classNames={{ field: "h-10 rounded-xl bg-muted/55 border-transparent" }}
     />
   );
 }
