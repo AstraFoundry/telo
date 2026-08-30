@@ -141,7 +141,10 @@ export function EmojiPicker({
         align="start"
         sideOffset={8}
         radius={12}
-        className="w-84 p-2"
+        // Eight 40px cells plus seven 2px gaps need 334px of content box; at
+        // w-84 the grid and the category row both compressed their buttons to
+        // 38px to fit, quietly undercutting the 40px pointer target.
+        className="w-88 p-2"
       >
         <div className="flex flex-col gap-2">
           <Input

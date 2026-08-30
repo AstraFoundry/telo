@@ -70,7 +70,11 @@ export function Switch({
           initial={false}
           data-state={checked ? "checked" : "unchecked"}
           className={cn(
-            "group peer inline-flex h-7 w-12 shrink-0 cursor-pointer items-center px-1 rounded-full outline-none transition-colors duration-200",
+            // The 28px track is the design; the pointer target is not. A
+            // pseudo-element carries it to 40px without moving the pill or
+            // touching the row's layout.
+            "group peer relative inline-flex h-7 w-12 shrink-0 cursor-pointer items-center px-1 rounded-full outline-none transition-colors duration-200",
+            "before:absolute before:inset-x-0 before:-inset-y-2 before:content-['']",
             "focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
             "disabled:cursor-not-allowed disabled:opacity-60",
             checked

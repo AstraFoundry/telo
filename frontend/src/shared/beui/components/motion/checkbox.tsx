@@ -42,7 +42,9 @@ export function Checkbox({
     <label
       htmlFor={id}
       className={cn(
-        "inline-flex items-center gap-3",
+        // The disc stays 20px, but the label is what the pointer actually
+        // hits, so the row carries the 40px desktop target.
+        "inline-flex min-h-10 items-center gap-3",
         disabled ? "cursor-not-allowed" : "cursor-pointer",
         className,
       )}
