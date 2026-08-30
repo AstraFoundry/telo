@@ -158,7 +158,11 @@ Rejected (gate): chat-row / folder-tab springs (100+/day nav; `pressScale={1}` s
       右键菜单项当场露馅：13px 字号配 `py-2` 只有 36px，差 4px，而它是全 app 点得最勤的控件之一，整个 gate 期间一直在floor 以下
       （所有菜单项变体共用一个 base，故 `min-h-10` 一处落地）。扫描器最后还把容差从 0.5px 调到 1px：探针本就是 1px 步进，
       亚像素落位会让一个真 40px 的控件量成 39（`Close dialog` 就是 32px + 4px 伪元素 = 40，被量成 39），
-      容差比探针精度还细只会让「合规控件是否通过」取决于它恰好落在哪——真正不合规的差得远不止 1px，42px floor 下依然照抓不误
+      容差比探针精度还细只会让「合规控件是否通过」取决于它恰好落在哪——真正不合规的差得远不止 1px，42px floor 下依然照抓不误。
+      最后补上这条门里一直没被机器验过的另一半：「命中不重叠」。此前只量大小，而这里把 40px 凑够的手法多半是伪元素往外撑，
+      撑过头就压到旁边那颗按钮上，点 A 的边缘触发 B。只比同一 parent 下的兄弟节点：跨层相交是常态且合理
+      （浮层本就盖在唤起它的工具栏上），首版没排除时真信号全被埋掉。当前无重叠；把阈值放宽到「间距 <3px 即报」，
+      会准确点出 emoji 分类页签那 2px 间距，说明这条检查确实在量它声称在量的东西
 - [x] `make check` 无被压制的架构 / 质量失败 — `format:check` / `lint --max-warnings=0` / `typecheck` / 799 unit / `docs:check` / 60 e2e 全绿；
       过程中修掉两个真问题：composer 两处 effect 内同步 setState（成员缓存改为按 chatId 派生，`@` 查询重置改成渲染期，与同文件 draft 镜像同一写法）
       和 caret 恢复的 `useLayoutEffect` 里 setState（收敛成 `queueCaret`，DOM 与 `selection` 状态一处写）；
