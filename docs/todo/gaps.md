@@ -153,7 +153,12 @@ Rejected (gate): chat-row / folder-tab springs (100+/day nav; `pressScale={1}` s
       分辨不出 40 与 38，改成 1px。剩下的 11 条是真的，连同 emoji 一起共三处「声明合规、渲染不合规」，class 名 grep 永远抓不到：
       emoji 格子与分类页签写着 `size-10`，但 8 列 40px + 7 个 2px 间隙要 334px 而浮层只给 320px，grid 与 flex 各自把每颗按钮压掉 2px（浮层 `w-84` → `w-88`）；
       radio / checkbox 的 20px 圆点所在 label 行只有 20px 高（label 加 `min-h-10`，圆点不变）；
-      switch 无 label 可借，28px 轨道用伪元素撑到 44px（不取 40 是因为亚像素落位会量到 39）
+      switch 无 label 可借，28px 轨道用伪元素撑到 44px（不取 40 是因为亚像素落位会量到 39）。
+      门里写的是「全部 dialog / popover」，而扫描只覆盖了两种原语各一个，于是再补菜单面（右键菜单 / Cmd+K palette / 账号菜单）——
+      右键菜单项当场露馅：13px 字号配 `py-2` 只有 36px，差 4px，而它是全 app 点得最勤的控件之一，整个 gate 期间一直在floor 以下
+      （所有菜单项变体共用一个 base，故 `min-h-10` 一处落地）。扫描器最后还把容差从 0.5px 调到 1px：探针本就是 1px 步进，
+      亚像素落位会让一个真 40px 的控件量成 39（`Close dialog` 就是 32px + 4px 伪元素 = 40，被量成 39），
+      容差比探针精度还细只会让「合规控件是否通过」取决于它恰好落在哪——真正不合规的差得远不止 1px，42px floor 下依然照抓不误
 - [x] `make check` 无被压制的架构 / 质量失败 — `format:check` / `lint --max-warnings=0` / `typecheck` / 799 unit / `docs:check` / 60 e2e 全绿；
       过程中修掉两个真问题：composer 两处 effect 内同步 setState（成员缓存改为按 chatId 派生，`@` 查询重置改成渲染期，与同文件 draft 镜像同一写法）
       和 caret 恢复的 `useLayoutEffect` 里 setState（收敛成 `queueCaret`，DOM 与 `selection` 状态一处写）；
