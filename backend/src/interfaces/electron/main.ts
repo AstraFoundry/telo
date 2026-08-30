@@ -7,6 +7,7 @@ import { createContainer } from "./container";
 import { channels } from "./channels";
 import { isSafeExternalUrl } from "./external-url";
 import { registerIpc } from "./register-ipc";
+import { DEMO_MESSAGE_TEMPLATES } from "../../domain/preferences/user-preferences";
 import {
   handleMediaProtocol,
   registerMediaScheme,
@@ -100,9 +101,15 @@ app.whenReady().then(async () => {
   });
   // Demo workspace is a process launch flag, not an in-app opt-in. Sync the
   // persisted preference on every start so a leftover true cannot reopen demo
-  // after a plain `make dev` / packaged launch.
+  // after a plain `make dev` / packaged launch. Empty templates get the two
+  // demo replies so the composer picker has something to insert.
+  const demoWorkspace = process.env.TELO_DEMO_WORKSPACE === "1";
+  const current = await container.preferences.get();
   await container.preferences.execute({
-    demoWorkspace: process.env.TELO_DEMO_WORKSPACE === "1",
+    demoWorkspace,
+    ...(demoWorkspace && current.messageTemplates.length === 0
+      ? { messageTemplates: [...DEMO_MESSAGE_TEMPLATES] }
+      : {}),
   });
   registerIpc(container);
   createWindow();

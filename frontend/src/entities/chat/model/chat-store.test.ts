@@ -75,6 +75,8 @@ describe("chat-store", () => {
       notificationsEnabled: false,
       mediaDownloads: {},
       mediaUploads: {},
+      animateInMessageIds: [],
+      animateChatIds: [],
     });
   });
 
@@ -345,6 +347,24 @@ describe("chat-store", () => {
     ]);
   });
 
+  it("send() forwards composer entities to the workspace", async () => {
+    const telo = installTeloApiMock();
+    const sent = message("m4", "a");
+    telo.workspace.sendMessage.mockResolvedValue(sent);
+    useChatStore.setState({
+      activeChatId: "a",
+      messages: [],
+    });
+    const entities = [{ type: "bold" as const, offset: 0, length: 5 }];
+
+    await useChatStore.getState().send("hello", { entities });
+
+    expect(telo.workspace.sendMessage).toHaveBeenCalledWith("a", "hello", {
+      clientId: expect.any(String),
+      entities,
+    });
+  });
+
   it("send() inserts an optimistic bubble immediately and clears the draft", async () => {
     const telo = installTeloApiMock();
     let resolveSend: ((message: MessageDto) => void) | undefined;
@@ -486,8 +506,103 @@ describe("chat-store", () => {
       message: message("m2", "b"),
     });
 
-    expect(useChatStore.getState().chats[1]?.unreadCount).toBe(1);
+    const chats = useChatStore.getState().chats;
+    expect(chats.find((entry) => entry.id === "b")?.unreadCount).toBe(1);
+    expect(chats[0]?.id).toBe("b");
+    expect(useChatStore.getState().animateChatIds).toEqual(["b"]);
     expect(useChatStore.getState().messages).toEqual([]);
+  });
+
+  it("flags a newly arrived active-chat message for animateIn, not an edit", () => {
+    useChatStore.setState({
+      chats: [chat("a")],
+      activeChatId: "a",
+      messages: [message("m1", "a")],
+      animateInMessageIds: [],
+    });
+
+    useChatStore.getState().receive({
+      type: "message-upsert",
+      cause: "new",
+      message: message("m2", "a"),
+    });
+    expect(useChatStore.getState().animateInMessageIds).toEqual(["m2"]);
+
+    useChatStore.getState().receive({
+      type: "message-upsert",
+      cause: "edited",
+      message: { ...message("m2", "a"), body: "edited" },
+    });
+    expect(useChatStore.getState().animateInMessageIds).toEqual(["m2"]);
+  });
+
+  it("send() flags the optimistic bubble for animateIn", async () => {
+    const telo = installTeloApiMock();
+    let resolveSend: ((message: MessageDto) => void) | undefined;
+    telo.workspace.sendMessage.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveSend = resolve;
+        }),
+    );
+    useChatStore.setState({
+      activeChatId: "a",
+      messages: [],
+      animateInMessageIds: [],
+    });
+
+    const pending = useChatStore.getState().send("hello");
+    const optimistic = useChatStore.getState().messages[0];
+    expect(optimistic?.status).toBe("sending");
+    expect(useChatStore.getState().animateInMessageIds).toEqual([
+      optimistic?.id,
+    ]);
+
+    resolveSend?.(message("m3", "a"));
+    await pending;
+    expect(useChatStore.getState().animateInMessageIds).toEqual([
+      optimistic?.id,
+    ]);
+    expect(useChatStore.getState().animateInMessageIds).not.toContain("m3");
+  });
+
+  it("loadOlderMessages() does not flag prepended history for animateIn", async () => {
+    const telo = installTeloApiMock();
+    telo.workspace.listMessagePage.mockResolvedValue({
+      items: [message("m0", "a")],
+      nextCursor: null,
+    });
+    useChatStore.setState({
+      activeChatId: "a",
+      messages: [message("m1", "a")],
+      messageCursor: "m1",
+      animateInMessageIds: [],
+    });
+
+    await useChatStore.getState().loadOlderMessages();
+
+    expect(useChatStore.getState().messages.map((entry) => entry.id)).toEqual([
+      "m0",
+      "m1",
+    ]);
+    expect(useChatStore.getState().animateInMessageIds).toEqual([]);
+  });
+
+  it("togglePin() moves the chat to the pinned slot and flags it for a fade", async () => {
+    installTeloApiMock();
+    useChatStore.setState({
+      chats: [chat("a"), chat("b")],
+      animateChatIds: [],
+    });
+
+    await useChatStore.getState().togglePin("b");
+
+    expect(useChatStore.getState().chats.map((entry) => entry.id)).toEqual([
+      "b",
+      "a",
+    ]);
+    expect(useChatStore.getState().chats[0]?.pinned).toBe(true);
+    expect(useChatStore.getState().animateChatIds).toEqual(["b"]);
   });
 
   it("receive() patches typing state on the matching chat", () => {
@@ -1238,6 +1353,55 @@ describe("folder views", () => {
     expect(
       chatsForFolder(chats, ARCHIVE_FOLDER_ID).map((entry) => entry.id),
     ).toEqual(["archived"]);
+  });
+
+  it("a keyword folder shows chats by virtual membership, including archived", () => {
+    const withKeyword = [
+      { ...chat("main"), folderId: null },
+      {
+        ...chat("design"),
+        folderId: 2,
+        unreadCount: 3,
+        keywordFolderIds: [-1],
+      },
+      {
+        ...chat("archived"),
+        folderId: ARCHIVE_FOLDER_ID,
+        unreadCount: 2,
+        keywordFolderIds: [-1],
+      },
+    ];
+    expect(chatsForFolder(withKeyword, -1).map((entry) => entry.id)).toEqual([
+      "design",
+      "archived",
+    ]);
+  });
+
+  it("collects a chat into a keyword folder when a matching body arrives", () => {
+    useChatStore.setState({
+      chats: [{ ...chat("design"), folderId: 2, unreadCount: 1 }],
+      folders: [
+        {
+          id: -1,
+          title: "Spacing",
+          unreadCount: 0,
+          kind: "keyword",
+          query: "spacing",
+        },
+      ],
+    });
+    useChatStore.getState().receive({
+      type: "message-upsert",
+      cause: "new",
+      message: {
+        ...message("design-new", "design"),
+        body: "The spacing pass landed.",
+        outgoing: false,
+      },
+    });
+    const state = useChatStore.getState();
+    expect(state.chats[0]?.keywordFolderIds).toEqual([-1]);
+    expect(state.folders[0]?.unreadCount).toBe(2);
   });
 
   it("sums the All badge over its visible chats only", () => {

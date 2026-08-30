@@ -89,6 +89,7 @@ function preferences() {
     sidebarWidth: 280,
     agentPanelWidth: 380,
     recentEmojis: [],
+    messageTemplates: [],
   } satisfies UserPreferencesDto;
 }
 

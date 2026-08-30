@@ -11,11 +11,13 @@ import { ARCHIVE_FOLDER_ID } from "../../../../../contracts/src/ipc";
 import { copy } from "../../../shared/config/copy";
 import { installTeloApiMock } from "../../../shared/test/mock-telo";
 
-function stubMatchMedia(dark: boolean): void {
+function stubMatchMedia(dark: boolean, reducedMotion = false): void {
   // jsdom does not implement matchMedia, which the preferences slice applies
   // at module scope.
   window.matchMedia = ((query: string) => ({
-    matches: dark,
+    matches: query.includes("prefers-reduced-motion")
+      ? reducedMotion
+      : query.includes("prefers-color-scheme: dark") && dark,
     media: query,
     addEventListener: () => {},
     removeEventListener: () => {},
@@ -77,6 +79,7 @@ function preferences(partial: Partial<UserPreferencesDto> = {}) {
     sidebarWidth: 280,
     agentPanelWidth: 380,
     recentEmojis: [],
+    messageTemplates: [],
     ...partial,
   } satisfies UserPreferencesDto;
 }
@@ -552,5 +555,48 @@ describe("ConversationSidebar", () => {
     expect(
       within(list).queryByRole("button", { name: /Work Chat/ }),
     ).toBeNull();
+  });
+
+  it("shows Typing text instead of dots when the user prefers reduced motion", async () => {
+    stubMatchMedia(false, true);
+    await renderSidebar({
+      chats: [chat({ id: "chat-1", title: "Ada Byron", typing: true })],
+    });
+
+    expect(screen.getByText(copy.typing)).toBeTruthy();
+    expect(document.querySelector('[data-slot="message-typing"]')).toBeNull();
+  });
+
+  it("promotes a chat with a new message to the top with an opacity-only flag", async () => {
+    const { useChatStore } = await renderSidebar({
+      chats: [
+        chat({ id: "chat-1", title: "Ada Byron" }),
+        chat({ id: "chat-2", title: "Mina Loy" }),
+      ],
+    });
+
+    act(() => {
+      useChatStore.getState().receive({
+        type: "message-upsert",
+        cause: "new",
+        message: {
+          id: "m-new",
+          chatId: "chat-2",
+          senderName: "Mina",
+          body: "Hello",
+          entities: [],
+          media: null,
+          groupedId: null,
+          sentAt: "2026-01-01T12:00:00.000Z",
+          outgoing: false,
+          status: "sent",
+        },
+      });
+    });
+
+    const rows = screen.getAllByRole("button", { name: /Byron|Loy/ });
+    expect(rows[0]?.textContent).toContain("Mina Loy");
+    expect(rows[0]?.getAttribute("data-promote")).toBe("true");
+    expect(rows[1]?.getAttribute("data-promote")).toBeNull();
   });
 });

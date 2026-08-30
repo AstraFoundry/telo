@@ -19,6 +19,7 @@ import {
 import { useTelegramStore } from "entities/telegram";
 import { AgentConfigurationForm } from "features/configure-agent";
 import { TelegramConnectionForm } from "features/connect-telegram";
+import { KeywordFoldersSettings } from "features/manage-keyword-folders";
 import { copy } from "shared/config/copy";
 import {
   Avatar,
@@ -347,6 +348,10 @@ export function SettingsPage({ onBack, onLoggedOut }: SettingsPageProps) {
               <TelegramConnectionForm compact />
             )}
           </section>
+
+          <div className="border-t pt-8">
+            <KeywordFoldersSettings />
+          </div>
 
           <section
             aria-labelledby="agent-settings-title"

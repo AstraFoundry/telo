@@ -150,4 +150,12 @@ export default tseslint.config(
       "no-restricted-imports": "off",
     },
   },
+  {
+    // Pre-paint boot scripts are plain browser scripts served from public/,
+    // outside the TS program and its DOM lib.
+    files: ["frontend/public/**/*.js"],
+    languageOptions: {
+      globals: { window: "readonly", document: "readonly" },
+    },
+  },
 );

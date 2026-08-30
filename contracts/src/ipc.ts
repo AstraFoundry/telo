@@ -37,17 +37,46 @@ export interface ChatDto {
    * custom folders; the adapter reports the first matching filter.
    */
   readonly folderId?: number | null;
+  /**
+   * Keyword folders this chat currently matches. Virtual membership: a chat
+   * keeps its native `folderId` and may also appear in any number of
+   * keyword folders. Ids are negative so they never collide with Telegram's.
+   */
+  readonly keywordFolderIds?: ReadonlyArray<number>;
 }
 
 /** Reserved Telegram folder id for the Archive. */
 export const ARCHIVE_FOLDER_ID = 1;
 
+/**
+ * Native Telegram dialog filters versus local keyword folders. Keyword
+ * folder ids are negative so they never collide with Telegram's. Omitted
+ * `kind` is treated as `"native"` (Telegram adapters only emit those).
+ */
+export type ChatFolderKind = "native" | "keyword";
+
 export interface ChatFolderDto {
-  /** Telegram dialog filter id; `ARCHIVE_FOLDER_ID` is the Archive. */
+  /** Telegram dialog filter id, `ARCHIVE_FOLDER_ID`, or a negative keyword id. */
   readonly id: number;
   readonly title: string;
   /** Unread messages across the folder's chats, computed server-side. */
   readonly unreadCount: number;
+  /** Discriminator; omitted means a native Telegram folder. */
+  readonly kind?: ChatFolderKind;
+  /**
+   * Search term for keyword folders. A chat belongs to the folder when any
+   * message body contains this term as a case-insensitive substring.
+   */
+  readonly query?: string;
+}
+
+export interface KeywordFolderInput {
+  readonly title: string;
+  readonly query: string;
+}
+
+export interface UpdateKeywordFolderInput extends KeywordFolderInput {
+  readonly id: number;
 }
 
 export interface ChatPageCursorDto {
@@ -678,10 +707,18 @@ export interface TeloDesktopApi {
     listChatPage(input?: ChatPageInput): Promise<ChatPageDto>;
     /**
      * Lists the chat folders (custom folders plus the Archive when it holds
-     * chats) with server-computed unread counts. The implicit "All chats"
-     * view is not part of the list.
+     * chats, plus local keyword folders) with server-computed unread counts.
+     * The implicit "All chats" view is not part of the list.
      */
     listFolders(): Promise<ReadonlyArray<ChatFolderDto>>;
+    /** Creates a local keyword folder; the search term auto-collects matching chats. */
+    createKeywordFolder(input: KeywordFolderInput): Promise<ChatFolderDto>;
+    /** Updates a local keyword folder's title and search term. */
+    updateKeywordFolder(
+      input: UpdateKeywordFolderInput,
+    ): Promise<ChatFolderDto>;
+    /** Deletes a local keyword folder. Native Telegram folders cannot be deleted here. */
+    deleteKeywordFolder(id: number): Promise<void>;
     listMessagePage(
       chatId: string,
       input?: MessagePageInput,

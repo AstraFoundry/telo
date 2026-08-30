@@ -38,6 +38,20 @@ export const MESSAGE_TEMPLATES_MAX = 50;
 export const MESSAGE_TEMPLATE_TITLE_MAX = 80;
 export const MESSAGE_TEMPLATE_BODY_MAX = 2000;
 
+/** Seeded into an empty demo workspace so the composer picker has replies to insert. */
+export const DEMO_MESSAGE_TEMPLATES: ReadonlyArray<MessageTemplateDto> = [
+  {
+    id: "demo-template-on-it",
+    title: "On it",
+    body: "On it \u2014 I'll take this.",
+  },
+  {
+    id: "demo-template-thanks",
+    title: "Thanks",
+    body: "Thanks, this is exactly what we needed.",
+  },
+];
+
 export class UserPreferences {
   private constructor(private readonly value: UserPreferencesSnapshot) {}
 
@@ -160,8 +174,7 @@ function normalizeMessageTemplates(
     const trimmedBody = body.trim();
     if (!trimmedTitle || !trimmedBody) continue;
     templates.push({
-      id:
-        typeof id === "string" && id.trim() ? id : crypto.randomUUID(),
+      id: typeof id === "string" && id.trim() ? id : crypto.randomUUID(),
       title: trimmedTitle.slice(0, MESSAGE_TEMPLATE_TITLE_MAX),
       body: trimmedBody.slice(0, MESSAGE_TEMPLATE_BODY_MAX),
     });

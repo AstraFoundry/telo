@@ -11,6 +11,7 @@ import type {
   MessageAgentActionOutput,
   MessageAgentActionTone,
   MessageDto,
+  MessageEntityDto,
   MessageMediaDto,
   MessageMediaKind,
   MessageReplyToDto,
@@ -262,6 +263,16 @@ interface ChatState {
   jumpTarget: JumpTarget | null;
   /** Message currently tinted as a search/jump target. */
   highlightedMessageId: string | null;
+  /**
+   * Message ids that should play `Message animateIn` (newly arrived or
+   * just-sent). History loads and prepends never join this list.
+   */
+  animateInMessageIds: ReadonlyArray<string>;
+  /**
+   * Chat ids that just jumped to the pin/new-message top slot. The sidebar
+   * may fade those rows; it must not run a list layout spring.
+   */
+  animateChatIds: ReadonlyArray<string>;
   chatSearch: ChatSearchState;
   /** In-flight message AI action; null while no action streams. */
   messageAction: MessageActionState | null;
@@ -324,6 +335,9 @@ interface ChatState {
   ): Promise<void>;
   setScrollPosition(chatId: string, top: number): void;
   selectFolder(folderId: number | null): void;
+  createKeywordFolder(title: string, query: string): Promise<void>;
+  updateKeywordFolder(id: number, title: string, query: string): Promise<void>;
+  deleteKeywordFolder(id: number): Promise<void>;
   setSearchQuery(query: string): void;
   /** Selects the chat when needed, then asks the view to scroll to the message. */
   requestJumpToMessage(chatId: string, messageId: string): Promise<void>;
@@ -340,14 +354,71 @@ interface ChatState {
 }
 
 // The All view is every chat that is not archived, mirroring Telegram's main
-// list; a folder view is the chats whose folderId matches the tab.
+// list. A native folder view is the chats whose folderId matches the tab.
+// Keyword folders are virtual: membership is `keywordFolderIds`, so a chat
+// can sit in a native folder and any number of keyword folders at once.
 export function chatsForFolder(
   chats: ReadonlyArray<ChatDto>,
   folderId: number | null,
 ): ReadonlyArray<ChatDto> {
-  return folderId === null
-    ? chats.filter((chat) => chat.folderId !== ARCHIVE_FOLDER_ID)
-    : chats.filter((chat) => chat.folderId === folderId);
+  if (folderId === null) {
+    return chats.filter((chat) => chat.folderId !== ARCHIVE_FOLDER_ID);
+  }
+  return chats.filter(
+    (chat) =>
+      chat.folderId === folderId ||
+      (chat.keywordFolderIds ?? []).includes(folderId),
+  );
+}
+
+function isKeywordFolder(folder: ChatFolderDto): boolean {
+  return folder.kind === "keyword";
+}
+
+function messageBodyMatchesKeyword(body: string, query: string): boolean {
+  const term = query.trim().toLocaleLowerCase();
+  if (!term) return false;
+  return body.toLocaleLowerCase().includes(term);
+}
+
+/** Recompute keyword-folder unread badges from the chats they currently collect. */
+function withKeywordUnread(
+  folders: ReadonlyArray<ChatFolderDto>,
+  chats: ReadonlyArray<ChatDto>,
+): ReadonlyArray<ChatFolderDto> {
+  return folders.map((folder) => {
+    if (!isKeywordFolder(folder)) return folder;
+    return {
+      ...folder,
+      unreadCount: chatsForFolder(chats, folder.id).reduce(
+        (total, chat) => total + chat.unreadCount,
+        0,
+      ),
+    };
+  });
+}
+
+function assignKeywordMembership(
+  chat: ChatDto,
+  folders: ReadonlyArray<ChatFolderDto>,
+  body: string,
+): ChatDto {
+  const extra = folders
+    .filter(
+      (folder) =>
+        isKeywordFolder(folder) &&
+        folder.query !== undefined &&
+        messageBodyMatchesKeyword(body, folder.query),
+    )
+    .map((folder) => folder.id);
+  if (extra.length === 0) return chat;
+  const current = chat.keywordFolderIds ?? [];
+  const keywordFolderIds = [...current];
+  for (const id of extra) {
+    if (!keywordFolderIds.includes(id)) keywordFolderIds.push(id);
+  }
+  if (keywordFolderIds.length === current.length) return chat;
+  return { ...chat, keywordFolderIds };
 }
 
 // The All tab has no server folder entry; its badge sums the unread counts
@@ -384,6 +455,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
   globalSearching: false,
   jumpTarget: null,
   highlightedMessageId: null,
+  animateInMessageIds: [],
+  animateChatIds: [],
   chatSearch: CLOSED_CHAT_SEARCH,
   messageAction: null,
   messageActionError: null,
@@ -418,6 +491,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
           syncError: null,
           drafts: hydrateDrafts(state.drafts, chats),
           notificationsEnabled: preferences.notificationsEnabled,
+          animateInMessageIds: [],
+          animateChatIds: [],
         }));
       }
     } catch (error) {
@@ -465,6 +540,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       highlightedMessageId: null,
       jumpTarget: null,
       selectedMessageIds: [],
+      animateInMessageIds: [],
     });
     try {
       const page = await window.telo.workspace.listMessagePage(chatId);
@@ -474,6 +550,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           messageCursor: page.nextCursor,
           loading: false,
           syncError: null,
+          animateInMessageIds: [],
         });
       }
     } catch (error) {
@@ -524,7 +601,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
             ? {
                 ...message,
                 body,
-                entities: [],
+                entities: options?.entities ?? [],
                 editedAt: new Date().toISOString(),
               }
             : message,
@@ -540,7 +617,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       chatId,
       senderName: "",
       body,
-      entities: [],
+      entities: options?.entities ?? [],
       media: null,
       groupedId: null,
       sentAt: new Date().toISOString(),
@@ -556,20 +633,24 @@ export const useChatStore = create<ChatState>((set, get) => ({
       messages: upsertMessage(state.messages, optimistic),
       composerTarget: null,
       drafts: { ...state.drafts, [chatId]: "" },
+      animateInMessageIds: withIds(state.animateInMessageIds, [clientId]),
     }));
     clearDraftState(chatId);
     try {
+      const sendInput = {
+        clientId,
+        ...(options?.silent ? { silent: true } : {}),
+        ...(options?.entities && options.entities.length > 0
+          ? { entities: options.entities }
+          : {}),
+      };
       const message =
         target?.mode === "reply"
           ? await window.telo.workspace.sendMessage(chatId, body, {
+              ...sendInput,
               replyToId: target.messageId,
-              clientId,
-              silent: options?.silent,
             })
-          : await window.telo.workspace.sendMessage(chatId, body, {
-              clientId,
-              silent: options?.silent,
-            });
+          : await window.telo.workspace.sendMessage(chatId, body, sendInput);
       set((state) => ({
         messages: upsertMessage(
           state.messages.filter((entry) => entry.id !== clientId),
@@ -612,6 +693,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         {
           replyToId: failed.replyTo?.id,
           clientId: failed.clientId ?? failed.id,
+          ...(failed.entities.length > 0 ? { entities: failed.entities } : {}),
         },
       );
       set((state) => ({
@@ -684,6 +766,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
       messages: mergeMessages(state.messages, optimistic),
       composerTarget: null,
       drafts: { ...state.drafts, [chatId]: "" },
+      animateInMessageIds: withIds(
+        state.animateInMessageIds,
+        optimistic.map((entry) => entry.id),
+      ),
     }));
     clearDraftState(chatId);
     try {
@@ -800,7 +886,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
     if (!chat) return;
     const pinned = !chat.pinned;
     await window.telo.workspace.setChatPinned(chatId, pinned);
-    set((state) => patchChat(state.chats, chatId, { pinned }));
+    set((state) => {
+      const patched = patchChat(state.chats, chatId, { pinned }).chats;
+      const { chats, moved } = relocateChat(patched, chatId, "pin");
+      return {
+        chats,
+        animateChatIds: moved ? [chatId] : [],
+      };
+    });
   },
   async toggleMute(chatId) {
     const chat = get().chats.find((entry) => entry.id === chatId);
@@ -891,6 +984,20 @@ export const useChatStore = create<ChatState>((set, get) => ({
   selectFolder(folderId) {
     if (folderId === get().activeFolderId) return;
     set({ activeFolderId: folderId });
+  },
+  async createKeywordFolder(title, query) {
+    await window.telo.workspace.createKeywordFolder({ title, query });
+    await reloadKeywordFolders();
+  },
+  async updateKeywordFolder(id, title, query) {
+    await window.telo.workspace.updateKeywordFolder({ id, title, query });
+    await reloadKeywordFolders();
+  },
+  async deleteKeywordFolder(id) {
+    await window.telo.workspace.deleteKeywordFolder(id);
+    const { activeFolderId } = get();
+    if (activeFolderId === id) set({ activeFolderId: null });
+    await reloadKeywordFolders();
   },
   setSearchQuery(query) {
     set({ searchQuery: query });
@@ -1062,7 +1169,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
       return;
     }
     if (event.type === "folders") {
-      set({ folders: event.folders });
+      set((state) => ({
+        folders: withKeywordUnread(event.folders, state.chats),
+      }));
       return;
     }
     if (event.type === "sync-error") {
@@ -1070,10 +1179,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
       return;
     }
     if (event.type === "chat-upsert") {
-      set((state) => ({
-        chats: upsertChat(state.chats, event.chat),
-        drafts: hydrateDrafts(state.drafts, [event.chat]),
-      }));
+      set((state) => {
+        const chats = upsertChat(state.chats, event.chat);
+        return {
+          chats,
+          folders: withKeywordUnread(state.folders, chats),
+          drafts: hydrateDrafts(state.drafts, [event.chat]),
+        };
+      });
       return;
     }
     if (event.type === "chat-avatar") {
@@ -1100,23 +1213,36 @@ export const useChatStore = create<ChatState>((set, get) => ({
             event.message,
           );
         }
+        const chats = state.chats.map((c) => {
+          if (c.id !== event.message.chatId) return c;
+          const next = {
+            ...c,
+            preview: event.message.body,
+            updatedAt: event.message.sentAt,
+            unreadCount:
+              incomingNew && !isActive ? c.unreadCount + 1 : c.unreadCount,
+          };
+          return assignKeywordMembership(
+            next,
+            state.folders,
+            event.message.body,
+          );
+        });
+        const promoted =
+          event.cause === "new"
+            ? relocateChat(chats, event.message.chatId, "new-message")
+            : { chats, moved: false };
         return {
           messages: isActive
             ? upsertMessage(state.messages, event.message)
             : state.messages,
-          chats: state.chats.map((c) =>
-            c.id === event.message.chatId
-              ? {
-                  ...c,
-                  preview: event.message.body,
-                  updatedAt: event.message.sentAt,
-                  unreadCount:
-                    incomingNew && !isActive
-                      ? c.unreadCount + 1
-                      : c.unreadCount,
-                }
-              : c,
-          ),
+          chats: promoted.chats,
+          folders: withKeywordUnread(state.folders, promoted.chats),
+          animateInMessageIds:
+            isActive && !existing && event.cause === "new"
+              ? withIds(state.animateInMessageIds, [event.message.id])
+              : state.animateInMessageIds,
+          animateChatIds: promoted.moved ? [event.message.chatId] : [],
           syncError: null,
         };
       });
@@ -1181,9 +1307,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
       return;
     }
     if (event.type === "chat-pin") {
-      set((state) =>
-        patchChat(state.chats, event.chatId, { pinned: event.pinned }),
-      );
+      set((state) => {
+        const patched = patchChat(state.chats, event.chatId, {
+          pinned: event.pinned,
+        }).chats;
+        const { chats, moved } = relocateChat(patched, event.chatId, "pin");
+        return {
+          chats,
+          animateChatIds: moved ? [event.chatId] : [],
+        };
+      });
       return;
     }
     if (event.type === "chat-presence") {
@@ -1335,6 +1468,45 @@ function patchChat(
   };
 }
 
+function withIds(
+  current: ReadonlyArray<string> | undefined,
+  add: ReadonlyArray<string>,
+): ReadonlyArray<string> {
+  const base = current ?? [];
+  if (add.length === 0) return base;
+  const seen = new Set(base);
+  const extra = add.filter((id) => !seen.has(id));
+  return extra.length === 0 ? base : [...base, ...extra];
+}
+
+// Pin moves the chat to the front of the pinned group; a new message bumps
+// an unpinned chat to the first unpinned slot. Pinned chats keep pin order
+// on new messages. The sidebar may fade the moved row; nothing here starts
+// a layout spring.
+function relocateChat(
+  chats: ReadonlyArray<ChatDto>,
+  chatId: string,
+  reason: "pin" | "new-message",
+): { chats: ReadonlyArray<ChatDto>; moved: boolean } {
+  const index = chats.findIndex((chat) => chat.id === chatId);
+  if (index === -1) return { chats, moved: false };
+  const chat = chats[index];
+  if (reason === "new-message" && chat.pinned) {
+    return { chats, moved: false };
+  }
+  const without = chats.filter((entry) => entry.id !== chatId);
+  const insertAt = chat.pinned
+    ? 0
+    : (() => {
+        const firstUnpinned = without.findIndex((entry) => !entry.pinned);
+        return firstUnpinned === -1 ? without.length : firstUnpinned;
+      })();
+  if (index === insertAt) return { chats, moved: false };
+  const next = [...without];
+  next.splice(insertAt, 0, chat);
+  return { chats: next, moved: true };
+}
+
 // Local mirror of a server-side delete: drops the messages and, when the
 // transcript tail went away, patches the chat list preview to the new tail.
 // A composer reply/edit aimed at a removed message is cancelled.
@@ -1395,6 +1567,20 @@ function mergeChats(
   incoming: ReadonlyArray<ChatDto>,
 ): ReadonlyArray<ChatDto> {
   return incoming.reduce(upsertChat, current);
+}
+
+async function reloadKeywordFolders(): Promise<void> {
+  const [folders, chatPage] = await Promise.all([
+    window.telo.workspace.listFolders(),
+    window.telo.workspace.listChatPage(),
+  ]);
+  useChatStore.setState((state) => {
+    const chats = mergeChats(state.chats, chatPage.items);
+    return {
+      folders: withKeywordUnread(folders, chats),
+      chats,
+    };
+  });
 }
 
 function upsertMessage(

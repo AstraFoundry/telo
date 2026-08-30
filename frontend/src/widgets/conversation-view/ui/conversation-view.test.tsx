@@ -11,11 +11,13 @@ import { MESSAGE_ACTION_EVENT_NAME } from "../../../../../contracts/src/ipc";
 import { copy } from "../../../shared/config/copy";
 import { installTeloApiMock } from "../../../shared/test/mock-telo";
 
-function stubMatchMedia(dark: boolean): void {
+function stubMatchMedia(dark: boolean, reducedMotion = false): void {
   // jsdom does not implement matchMedia, which the preferences slice applies
   // at module scope.
   window.matchMedia = ((query: string) => ({
-    matches: dark,
+    matches: query.includes("prefers-reduced-motion")
+      ? reducedMotion
+      : query.includes("prefers-color-scheme: dark") && dark,
     media: query,
     addEventListener: () => {},
     removeEventListener: () => {},
@@ -73,6 +75,7 @@ function preferences(partial: Partial<UserPreferencesDto> = {}) {
     sidebarWidth: 280,
     agentPanelWidth: 380,
     recentEmojis: [],
+    messageTemplates: [],
     ...partial,
   } satisfies UserPreferencesDto;
 }
@@ -1259,5 +1262,77 @@ describe("ConversationView Wave 4 message interaction", () => {
     await vi.waitFor(() => {
       expect(useChatStore.getState().activeChatId).toBe("chat-2");
     });
+  });
+
+  it("animates only a newly arrived message, not history", async () => {
+    const { useChatStore } = await renderView({
+      messages: [message({ id: "m1", body: "History body" })],
+    });
+
+    expect(
+      screen.getByText("History body").closest("article")?.dataset.animateIn,
+    ).toBeUndefined();
+
+    act(() => {
+      useChatStore.getState().receive({
+        type: "message-upsert",
+        cause: "new",
+        message: message({
+          id: "m2",
+          body: "Live body",
+          sentAt: "2026-01-01T11:00:00.000Z",
+        }),
+      });
+    });
+
+    expect(
+      screen.getByText("Live body").closest("article")?.dataset.animateIn,
+    ).toBe("true");
+    expect(
+      screen.getByText("History body").closest("article")?.dataset.animateIn,
+    ).toBeUndefined();
+  });
+
+  it("crossfades the outgoing delivery glyph without swapping the timestamp", async () => {
+    const { useChatStore } = await renderView({
+      messages: [
+        message({
+          id: "m1",
+          body: "Outgoing",
+          outgoing: true,
+          status: "sending",
+        }),
+      ],
+    });
+
+    expect(screen.getByRole("img", { name: copy.messageSending })).toBeTruthy();
+
+    act(() => {
+      useChatStore.setState({
+        messages: [
+          message({
+            id: "m1",
+            body: "Outgoing",
+            outgoing: true,
+            status: "sent",
+          }),
+        ],
+      });
+    });
+
+    expect(screen.getByRole("img", { name: copy.messageSent })).toBeTruthy();
+    expect(
+      screen.getByText("Outgoing").closest("article")?.querySelector("time"),
+    ).toBeTruthy();
+  });
+
+  it("shows Typing text instead of dots when the user prefers reduced motion", async () => {
+    stubMatchMedia(false, true);
+    await renderView({
+      chats: [chat({ id: "chat-1", title: "Saved Messages", typing: true })],
+    });
+
+    expect(screen.getByText(copy.typing)).toBeTruthy();
+    expect(document.querySelector('[data-slot="message-typing"]')).toBeNull();
   });
 });

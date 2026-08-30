@@ -9,23 +9,31 @@ import { createPreferenceStore } from "./preference-store";
 
 export type ThemeChoice = UserPreferencesDto["theme"];
 
-// One-time migration source: the theme lived under this localStorage key
-// before the preferences port owned it.
-const LEGACY_STORAGE_KEY = "telo:theme";
+// Write-through cache so the boot script in index.html can paint the stored
+// theme before JS. Also the one-time migration source from pre-preferences.
+const THEME_CACHE_KEY = "telo:theme";
 
 let currentChoice: ThemeChoice = "system";
 const listeners = new Set<() => void>();
+let themeOriginX = 50;
+let themeOriginY = 50;
 
 function isThemeChoice(value: string | null): value is ThemeChoice {
   return value === "light" || value === "dark" || value === "system";
 }
 
-// Reads and removes the pre-preferences localStorage value, if any.
-function readLegacyThemeChoice(): ThemeChoice | null {
-  const stored = window.localStorage.getItem(LEGACY_STORAGE_KEY);
+function readCachedTheme(): ThemeChoice | null {
+  const stored = window.localStorage.getItem(THEME_CACHE_KEY);
   if (stored === null) return null;
-  window.localStorage.removeItem(LEGACY_STORAGE_KEY);
-  return isThemeChoice(stored) ? stored : null;
+  if (!isThemeChoice(stored)) {
+    window.localStorage.removeItem(THEME_CACHE_KEY);
+    return null;
+  }
+  return stored;
+}
+
+function writeCachedTheme(choice: ThemeChoice): void {
+  window.localStorage.setItem(THEME_CACHE_KEY, choice);
 }
 
 export function applyThemeChoice(choice: ThemeChoice): void {
@@ -34,11 +42,32 @@ export function applyThemeChoice(choice: ThemeChoice): void {
     (choice === "system" &&
       window.matchMedia("(prefers-color-scheme: dark)").matches);
   document.documentElement.classList.toggle("dark", dark);
+  document.documentElement.style.colorScheme = dark ? "dark" : "light";
+  writeCachedTheme(choice);
 }
 
-function publish(choice: ThemeChoice): void {
+function revealTheme(apply: () => void): void {
+  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const start = document.startViewTransition?.bind(document);
+  if (reduce || !start) {
+    apply();
+    return;
+  }
+  document.documentElement.style.setProperty(
+    "--telo-theme-x",
+    `${themeOriginX}%`,
+  );
+  document.documentElement.style.setProperty(
+    "--telo-theme-y",
+    `${themeOriginY}%`,
+  );
+  start(apply);
+}
+
+function publish(choice: ThemeChoice, reveal = false): void {
   currentChoice = choice;
-  applyThemeChoice(choice);
+  if (reveal) revealTheme(() => applyThemeChoice(choice));
+  else applyThemeChoice(choice);
   listeners.forEach((listener) => listener());
 }
 
@@ -49,12 +78,15 @@ function subscribe(listener: () => void): () => void {
   };
 }
 
+// Captured before this session writes the cache so a default "system" apply
+// does not look like a user-stored choice and override IPC.
+let bootCache: ThemeChoice | null = null;
+
 async function loadPersistedChoice(): Promise<ThemeChoice> {
-  const legacy = readLegacyThemeChoice();
   const preferences = await window.telo.preferences.get();
-  if (legacy && legacy !== preferences.theme) {
-    void window.telo.preferences.update({ theme: legacy });
-    return legacy;
+  if (bootCache && bootCache !== preferences.theme) {
+    void window.telo.preferences.update({ theme: bootCache });
+    return bootCache;
   }
   return preferences.theme;
 }
@@ -71,7 +103,7 @@ export function useTheme() {
   }, [choice]);
 
   const select = (next: ThemeChoice) => {
-    publish(next);
+    publish(next, true);
     window.telo.preferences.update({ theme: next }).catch(() => {
       void window.telo.preferences
         .get()
@@ -80,6 +112,19 @@ export function useTheme() {
   };
 
   return { choice, select };
+}
+
+if (typeof window !== "undefined") {
+  window.addEventListener(
+    "pointerdown",
+    (event) => {
+      const width = window.innerWidth || 1;
+      const height = window.innerHeight || 1;
+      themeOriginX = (event.clientX / width) * 100;
+      themeOriginY = (event.clientY / height) * 100;
+    },
+    { capture: true, passive: true },
+  );
 }
 
 export const MESSAGE_TEXT_SIZE_MIN = 12;
@@ -252,13 +297,13 @@ export const useAgentPanelWidth = agentPanelWidthStore.usePreference;
 export const useRecentEmojis = recentEmojisStore.usePreference;
 export const useMessageTemplates = messageTemplatesStore.usePreference;
 
-// Applied at module scope so the system theme takes effect immediately: the
-// app entry imports this slice eagerly (through the settings page and the
-// conversation widgets), and IPC is asynchronous. The persisted choice
-// replaces it as soon as preferences resolve, so users with a non-system
-// theme may see a brief flash of the system theme at startup.
+// Applied at module scope from the local cache (or system if none) so IPC
+// cannot flash the wrong theme. The boot script in index.html does the same
+// before first paint; this keeps React in sync if that script did not run.
+bootCache = readCachedTheme();
+if (bootCache) currentChoice = bootCache;
 applyThemeChoice(currentChoice);
-void loadPersistedChoice().then(publish);
+void loadPersistedChoice().then((choice) => publish(choice));
 
 // Eager application, like the theme model: the accent and the text size are
 // visible app-wide, so they load at import time instead of waiting for the

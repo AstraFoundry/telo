@@ -14,6 +14,7 @@ const DEFAULTS = {
   sidebarWidth: 280,
   agentPanelWidth: 380,
   recentEmojis: [],
+  messageTemplates: [],
 } as const;
 
 describe("UserPreferences", () => {
@@ -210,6 +211,28 @@ describe("UserPreferences", () => {
       );
     },
   );
+
+  it("keeps templates with a title and body, capped, and mints missing ids", () => {
+    const preferences = UserPreferences.default().update({
+      messageTemplates: [
+        { id: "keep", title: "  Hello  ", body: "  Hi there  " },
+        { id: " ", title: "Thanks", body: "Thank you" },
+        { id: "drop", title: "   ", body: "nope" },
+        { title: "No id", body: "still valid" } as never,
+      ],
+    });
+
+    const templates = preferences.snapshot().messageTemplates;
+    expect(templates).toHaveLength(3);
+    expect(templates[0]).toEqual({
+      id: "keep",
+      title: "Hello",
+      body: "Hi there",
+    });
+    expect(templates[1]).toMatchObject({ title: "Thanks", body: "Thank you" });
+    expect(templates[1]?.id.length).toBeGreaterThan(0);
+    expect(templates[2]).toMatchObject({ title: "No id", body: "still valid" });
+  });
 
   it("falls back to defaults when the persisted file predates the new preferences", () => {
     const stored = {

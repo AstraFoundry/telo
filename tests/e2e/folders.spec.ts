@@ -68,3 +68,27 @@ test("the Archive tab shows the archived chat", async ({ window }) => {
     0,
   );
 });
+
+test("a keyword folder lists chats whose bodies match the search term", async ({
+  window,
+}) => {
+  await waitForDemoWorkspace(window);
+
+  const tabs = window.getByRole("tablist", { name: "Chat folders" });
+  const spacing = tabs.getByRole("tab", { name: /Spacing/ });
+  await expect(spacing).toBeVisible();
+  await expect(spacing.getByLabel("3 unread")).toBeVisible();
+
+  await spacing.click();
+
+  const chats = window.getByRole("navigation", { name: "Chats" });
+  await expect(
+    chats.getByRole("button", { name: /Telo Design/ }),
+  ).toBeVisible();
+  await expect(
+    chats.getByRole("button", { name: /Saved Messages/ }),
+  ).toHaveCount(0);
+  await expect(
+    chats.getByRole("button", { name: /Product Notes/ }),
+  ).toHaveCount(0);
+});

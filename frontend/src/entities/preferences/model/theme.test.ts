@@ -34,6 +34,7 @@ function preferences(
     sidebarWidth: 280,
     agentPanelWidth: 380,
     recentEmojis: [],
+    messageTemplates: [],
     demoWorkspace: false,
     theme: "system",
     ...partial,
@@ -100,7 +101,7 @@ describe("theme model", () => {
       expect(document.documentElement.classList.contains("dark")).toBe(false);
     });
     expect(telo.preferences.update).toHaveBeenCalledWith({ theme: "light" });
-    expect(window.localStorage.getItem("telo:theme")).toBeNull();
+    expect(window.localStorage.getItem("telo:theme")).toBe("light");
   });
 
   it("discards an unrecognized legacy value and keeps the persisted theme", async () => {
@@ -113,7 +114,25 @@ describe("theme model", () => {
       expect(document.documentElement.classList.contains("dark")).toBe(true);
     });
     expect(telo.preferences.update).not.toHaveBeenCalled();
-    expect(window.localStorage.getItem("telo:theme")).toBeNull();
+    expect(window.localStorage.getItem("telo:theme")).toBe("dark");
+  });
+
+  it("applies a cached non-system theme at import before preferences resolve", async () => {
+    stubMatchMedia(false);
+    window.localStorage.setItem("telo:theme", "dark");
+    const resolvers: ((value: UserPreferencesDto) => void)[] = [];
+    telo.preferences.get.mockImplementation(
+      () => new Promise((resolve) => resolvers.push(resolve)),
+    );
+
+    await importHooks();
+
+    expect(document.documentElement.classList.contains("dark")).toBe(true);
+
+    resolvers.forEach((resolve) => resolve(preferences({ theme: "dark" })));
+    await vi.waitFor(() => {
+      expect(document.documentElement.classList.contains("dark")).toBe(true);
+    });
   });
 
   it("persists the selected theme and applies it optimistically", async () => {
@@ -130,5 +149,6 @@ describe("theme model", () => {
     expect(result.current.choice).toBe("dark");
     expect(document.documentElement.classList.contains("dark")).toBe(true);
     expect(telo.preferences.update).toHaveBeenCalledWith({ theme: "dark" });
+    expect(window.localStorage.getItem("telo:theme")).toBe("dark");
   });
 });

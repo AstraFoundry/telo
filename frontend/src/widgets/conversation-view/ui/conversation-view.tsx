@@ -17,7 +17,7 @@ import {
   WarningCircle,
   X,
 } from "@phosphor-icons/react";
-import { AnimatePresence } from "motion/react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import {
   Fragment,
   useCallback,
@@ -70,6 +70,7 @@ import {
   MorphPopoverContent,
   MorphPopoverTrigger,
   Tooltip,
+  EASE_OUT,
 } from "shared/ui";
 import type { MediaViewerItem, MediaViewerOrigin } from "shared/ui";
 
@@ -237,6 +238,59 @@ function MessageHoverRail({
   );
 }
 
+const DELIVERY_CROSSFADE = { duration: 0.14, ease: EASE_OUT } as const;
+
+function ChatTypingIndicator({ className }: { className?: string }) {
+  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (reduce) {
+    return <span className={className}>{copy.typing}</span>;
+  }
+  return <MessageTyping label={copy.typing} className={className} />;
+}
+
+function deliveryLabel(status: MessageDto["status"]): string {
+  if (status === "failed") return copy.messageSendFailed;
+  if (status === "sending") return copy.messageSending;
+  if (status === "read") return copy.messageRead;
+  return copy.messageSent;
+}
+
+function DeliveryGlyph({ status }: { status: MessageDto["status"] }) {
+  const reduce = useReducedMotion() ?? false;
+  const glyph =
+    status === "failed" ? (
+      <WarningCircle weight="fill" className="size-3.5 text-destructive" />
+    ) : status === "sending" ? (
+      <CircleNotch
+        className={`size-3.5 ${reduce ? "" : "motion-safe:animate-spin"}`}
+      />
+    ) : (
+      <Checks
+        className="size-3.5"
+        weight={status === "read" ? "bold" : "regular"}
+      />
+    );
+
+  return (
+    <span className="relative inline-flex size-4 shrink-0 items-center justify-center">
+      <AnimatePresence initial={false} mode="sync">
+        <motion.span
+          key={status}
+          role="img"
+          aria-label={deliveryLabel(status)}
+          className="absolute inset-0 grid place-items-center"
+          initial={reduce ? false : { opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={reduce ? undefined : { opacity: 0 }}
+          transition={reduce ? { duration: 0 } : DELIVERY_CROSSFADE}
+        >
+          {glyph}
+        </motion.span>
+      </AnimatePresence>
+    </span>
+  );
+}
+
 function ConversationMessage({
   message,
   timeFormat,
@@ -267,6 +321,9 @@ function ConversationMessage({
   );
   const highlighted = useChatStore(
     (state) => state.highlightedMessageId === message.id,
+  );
+  const animateIn = useChatStore((state) =>
+    state.animateInMessageIds.includes(message.id),
   );
   const mediaKey = message.media ? mediaDownloadKey(message.media) : null;
   const fileMedia =
@@ -340,8 +397,10 @@ function ConversationMessage({
     <Message
       id={`conversation-message-${message.id}`}
       from={message.outgoing ? "user" : "assistant"}
+      animateIn={animateIn}
       // Search/jump highlight: a static background tint, never motion.
       data-highlighted={highlighted ? "true" : undefined}
+      data-animate-in={animateIn ? "true" : undefined}
       className={highlighted ? "rounded-xl bg-primary/10" : undefined}
     >
       {message.outgoing ? null : selectionToggle}
@@ -569,21 +628,7 @@ function ConversationMessage({
         <MessageFooter className="text-foreground/70 tabular-nums">
           {message.editedAt ? <span>{copy.edited}</span> : null}
           <time>{time(message.sentAt, timeFormat)}</time>
-          {message.outgoing ? (
-            message.status === "failed" ? (
-              <WarningCircle
-                role="img"
-                aria-label={copy.messageSendFailed}
-                weight="fill"
-                className="text-destructive"
-              />
-            ) : (
-              <Checks
-                aria-hidden="true"
-                weight={message.status === "read" ? "bold" : "regular"}
-              />
-            )
-          ) : null}
+          {message.outgoing ? <DeliveryGlyph status={message.status} /> : null}
         </MessageFooter>
       </MessageContent>
       {message.outgoing ? selectionToggle : null}
@@ -604,6 +649,9 @@ function AlbumMessage({
   const mediaDownloads = useChatStore((state) => state.mediaDownloads);
   const highlighted = useChatStore((state) =>
     messages.some((message) => message.id === state.highlightedMessageId),
+  );
+  const animateIn = useChatStore((state) =>
+    messages.some((message) => state.animateInMessageIds.includes(message.id)),
   );
   const downloadMedia = useChatStore((state) => state.downloadMedia);
   const cancelMediaDownload = useChatStore(
@@ -630,7 +678,9 @@ function AlbumMessage({
     <Message
       id={`conversation-message-${first.id}`}
       from={first.outgoing ? "user" : "assistant"}
+      animateIn={animateIn}
       data-highlighted={highlighted ? "true" : undefined}
+      data-animate-in={animateIn ? "true" : undefined}
       className={highlighted ? "rounded-xl bg-primary/10" : undefined}
     >
       <MessageContent>
@@ -678,21 +728,7 @@ function AlbumMessage({
         <MessageFooter className="text-foreground/70 tabular-nums">
           {first.editedAt ? <span>{copy.edited}</span> : null}
           <time>{time(first.sentAt, timeFormat)}</time>
-          {first.outgoing ? (
-            first.status === "failed" ? (
-              <WarningCircle
-                role="img"
-                aria-label={copy.messageSendFailed}
-                weight="fill"
-                className="text-destructive"
-              />
-            ) : (
-              <Checks
-                aria-hidden="true"
-                weight={first.status === "read" ? "bold" : "regular"}
-              />
-            )
-          ) : null}
+          {first.outgoing ? <DeliveryGlyph status={first.status} /> : null}
         </MessageFooter>
       </MessageContent>
     </Message>
@@ -1189,9 +1225,8 @@ export function ConversationView() {
             {activeChat?.title ?? ""}
           </h1>
           {activeChat?.typing ? (
-            <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <MessageTyping label={copy.typing} />
-              <span aria-hidden="true">{copy.typing}</span>
+            <span className="block text-xs text-muted-foreground">
+              <ChatTypingIndicator />
             </span>
           ) : activeChat?.presence === "online" ? (
             <span className="block text-xs text-primary">{copy.online}</span>

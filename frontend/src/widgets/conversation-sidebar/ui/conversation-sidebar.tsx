@@ -96,15 +96,30 @@ function FolderTab({ label, selected, unread, onSelect }: FolderTabProps) {
   );
 }
 
+function ChatTypingIndicator({ className }: { className?: string }) {
+  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (reduce) {
+    return <span className={className}>{copy.typing}</span>;
+  }
+  return <MessageTyping label={copy.typing} className={className} />;
+}
+
 interface ChatListRowProps {
   readonly chat: ChatDto;
   readonly active: boolean;
   readonly timeFormat: TimeFormatPreference;
+  readonly promoted?: boolean;
   onSelect(): void;
 }
 
 // One chat row, shared by the plain list and the server search results.
-function ChatListRow({ chat, active, timeFormat, onSelect }: ChatListRowProps) {
+function ChatListRow({
+  chat,
+  active,
+  timeFormat,
+  promoted = false,
+  onSelect,
+}: ChatListRowProps) {
   const togglePin = useChatStore((state) => state.togglePin);
   const toggleMute = useChatStore((state) => state.toggleMute);
   const toggleRead = useChatStore((state) => state.toggleRead);
@@ -117,6 +132,7 @@ function ChatListRow({ chat, active, timeFormat, onSelect }: ChatListRowProps) {
           pressScale={1}
           onClick={onSelect}
           aria-current={active ? "page" : undefined}
+          data-promote={promoted ? "true" : undefined}
           /* deslop-ignore-next-line 21 — compact chat-row radius is a messaging convention */
           className={`mb-0.5 h-auto w-full justify-start rounded-xl px-2.5 py-2 text-left ${
             active ? "bg-accent text-foreground" : ""
@@ -139,10 +155,7 @@ function ChatListRow({ chat, active, timeFormat, onSelect }: ChatListRowProps) {
             <span className="mt-0.5 flex items-center gap-1.5 text-xs font-normal text-muted-foreground">
               <span className="min-w-0 flex-1 truncate">
                 {chat.typing ? (
-                  <span className="flex items-center gap-1.5 text-primary">
-                    <MessageTyping label={copy.typing} />
-                    <span aria-hidden="true">{copy.typing}</span>
-                  </span>
+                  <ChatTypingIndicator className="text-primary" />
                 ) : chat.draftPreview ? (
                   <span>
                     <span className="text-destructive">{copy.draftPrefix}</span>{" "}
@@ -258,6 +271,7 @@ export function ConversationSidebar({
   const requestJumpToMessage = useChatStore(
     (state) => state.requestJumpToMessage,
   );
+  const animateChatIds = useChatStore((state) => state.animateChatIds);
   const { value: timeFormat } = useTimeFormat();
 
   const searching = query.trim().length > 0;
@@ -402,6 +416,7 @@ export function ConversationSidebar({
                     chat={chat}
                     active={activeChatId === chat.id}
                     timeFormat={timeFormat}
+                    promoted={animateChatIds.includes(chat.id)}
                     onSelect={() => {
                       void select(chat.id);
                       onSelectChat();
@@ -416,6 +431,7 @@ export function ConversationSidebar({
                 chat={chat}
                 active={activeChatId === chat.id}
                 timeFormat={timeFormat}
+                promoted={animateChatIds.includes(chat.id)}
                 onSelect={() => {
                   void select(chat.id);
                   onSelectChat();

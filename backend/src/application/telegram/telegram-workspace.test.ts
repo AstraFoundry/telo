@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 
+import type { ChatDto, MessageDto } from "../../../../contracts/src/ipc";
+import { KeywordFolder } from "../../domain/keyword-folder/keyword-folder";
+import type { KeywordFolderRepository } from "../../domain/keyword-folder/keyword-folder-ports";
 import type { TelegramRepository } from "../../domain/telegram/telegram-ports";
+import { KeywordFolderService } from "../keyword-folder/keyword-folders";
 import { TelegramWorkspaceService } from "./telegram-workspace";
 
 function repository(): TelegramRepository {
@@ -11,6 +15,7 @@ function repository(): TelegramRepository {
     listMessagePage: vi.fn(async () => ({ items: [], nextCursor: null })),
     listSharedMedia: vi.fn(async () => ({ items: [], nextCursor: null })),
     listPinnedMessages: vi.fn(async () => []),
+    listChatMembers: vi.fn(async () => []),
     searchGlobal: vi.fn(async () => ({ chats: [], messages: [] })),
     searchMessages: vi.fn(async () => ({
       messageIds: [],
@@ -71,6 +76,77 @@ describe("TelegramWorkspaceService", () => {
     await expect(service.listFolders()).resolves.toEqual(folders);
   });
 
+  it("merges keyword folders into listFolders and annotates chats", async () => {
+    const design: ChatDto = {
+      id: "design",
+      title: "Telo Design",
+      preview: "Ship it.",
+      updatedAt: "2026-08-27T14:32:00.000Z",
+      unreadCount: 3,
+      lastReadMessageId: null,
+      muted: false,
+      pinned: false,
+      kind: "group",
+      initials: "TD",
+      avatarDataUrl: null,
+      draftPreview: null,
+      typing: false,
+      folderId: 2,
+    };
+    const match: MessageDto = {
+      id: "design-3",
+      chatId: "design",
+      senderName: "Aron",
+      body: "This write-up nails the spacing rules.",
+      entities: [],
+      media: null,
+      groupedId: null,
+      sentAt: "2026-08-27T14:26:00.000Z",
+      outgoing: false,
+      status: "read",
+    };
+    const port = repository();
+    port.listFolders = vi.fn(async () => [
+      { id: 2, title: "Work", unreadCount: 3 },
+    ]);
+    port.listChatPage = vi.fn(async () => ({
+      items: [design],
+      nextCursor: null,
+    }));
+    port.searchGlobal = vi.fn(async () => ({ chats: [], messages: [match] }));
+    const store: KeywordFolderRepository = {
+      async list() {
+        return [
+          KeywordFolder.create({
+            id: -1,
+            title: "Spacing",
+            query: "spacing",
+          }),
+        ];
+      },
+      async save() {},
+      async remove() {},
+    };
+    const service = new TelegramWorkspaceService(
+      port,
+      new KeywordFolderService(store, port),
+    );
+
+    await expect(service.listFolders()).resolves.toEqual([
+      { id: 2, title: "Work", unreadCount: 3 },
+      {
+        id: -1,
+        title: "Spacing",
+        unreadCount: 3,
+        kind: "keyword",
+        query: "spacing",
+      },
+    ]);
+    await expect(service.listChatPage()).resolves.toMatchObject({
+      items: [{ id: "design", keywordFolderIds: [-1] }],
+    });
+  });
+
   it("normalizes pagination defaults and validates page boundaries", async () => {
     const port = repository();
     const service = new TelegramWorkspaceService(port);
@@ -80,7 +156,9 @@ describe("TelegramWorkspaceService", () => {
 
     expect(port.listChatPage).toHaveBeenCalledWith({ limit: 50 });
     expect(port.listMessagePage).toHaveBeenCalledWith("chat", { limit: 50 });
-    expect(() => service.listChatPage({ limit: 0 })).toThrow("Page size");
+    await expect(service.listChatPage({ limit: 0 })).rejects.toThrow(
+      "Page size",
+    );
     expect(() => service.listMessagePage("chat", { limit: 101 })).toThrow(
       "Page size",
     );
@@ -94,6 +172,7 @@ describe("TelegramWorkspaceService", () => {
     expect(port.sendMessage).toHaveBeenCalledWith(
       "chat",
       "hello",
+      undefined,
       undefined,
       undefined,
       undefined,
@@ -113,6 +192,7 @@ describe("TelegramWorkspaceService", () => {
       "message-1",
       "client-1",
       undefined,
+      undefined,
     );
   });
 
@@ -126,6 +206,23 @@ describe("TelegramWorkspaceService", () => {
       undefined,
       undefined,
       true,
+      undefined,
+    );
+  });
+
+  it("forwards composer entities and shifts them when the body is trimmed", async () => {
+    const port = repository();
+    const service = new TelegramWorkspaceService(port);
+    await service.sendMessage("chat", "  hello  ", {
+      entities: [{ type: "bold", offset: 2, length: 5 }],
+    });
+    expect(port.sendMessage).toHaveBeenCalledWith(
+      "chat",
+      "hello",
+      undefined,
+      undefined,
+      undefined,
+      [{ type: "bold", offset: 0, length: 5 }],
     );
   });
 
@@ -146,25 +243,30 @@ describe("TelegramWorkspaceService", () => {
 
     await service.listSharedMedia("chat", { beforeMessageId: "42" });
     await service.listPinnedMessages("chat");
+    await service.listChatMembers("chat");
 
     expect(port.listSharedMedia).toHaveBeenCalledWith("chat", {
       beforeMessageId: "42",
       limit: 50,
     });
     expect(port.listPinnedMessages).toHaveBeenCalledWith("chat");
+    expect(port.listChatMembers).toHaveBeenCalledWith("chat");
   });
 
-  it.each(["listSharedMedia", "listPinnedMessages"] as const)(
-    "%s() rejects an empty chat id",
-    (method) => {
-      const service = new TelegramWorkspaceService(repository());
-      expect(() =>
-        method === "listSharedMedia"
-          ? service.listSharedMedia(" ")
-          : service.listPinnedMessages(" "),
-      ).toThrow("Chat id is required");
-    },
-  );
+  it.each([
+    "listSharedMedia",
+    "listPinnedMessages",
+    "listChatMembers",
+  ] as const)("%s() rejects an empty chat id", (method) => {
+    const service = new TelegramWorkspaceService(repository());
+    expect(() =>
+      method === "listSharedMedia"
+        ? service.listSharedMedia(" ")
+        : method === "listPinnedMessages"
+          ? service.listPinnedMessages(" ")
+          : service.listChatMembers(" "),
+    ).toThrow("Chat id is required");
+  });
 
   it("rejects an invalid shared media cursor", () => {
     const service = new TelegramWorkspaceService(repository());

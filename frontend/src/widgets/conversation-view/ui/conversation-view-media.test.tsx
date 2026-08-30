@@ -131,6 +131,7 @@ async function renderView({
     sidebarWidth: 280,
     agentPanelWidth: 380,
     recentEmojis: [],
+    messageTemplates: [],
   } satisfies UserPreferencesDto);
   const { useChatStore } = await import("../../../entities/chat");
   useChatStore.setState({

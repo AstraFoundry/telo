@@ -50,7 +50,10 @@ import type {
 } from "../../domain/telegram/telegram-ports";
 import { DemoTelegramRepository } from "./demo-telegram-repository";
 import { enforceMediaCacheLimit, touchMediaCacheFile } from "./media-cache";
-import { mapMessageEntities, mapMessageEntitiesForSend } from "./teleproto-message-entities";
+import {
+  mapMessageEntities,
+  mapMessageEntitiesForSend,
+} from "./teleproto-message-entities";
 import { mapMessageMedia, messageGroupedId } from "./teleproto-message-media";
 import {
   buildChatFolders,
@@ -278,6 +281,10 @@ export class TelegramClientCoordinator implements TelegramRepository {
 
   listPinnedMessages(chatId: string): Promise<ReadonlyArray<MessageDto>> {
     return this.repository.listPinnedMessages(chatId);
+  }
+
+  listChatMembers(chatId: string): Promise<ReadonlyArray<ChatMemberDto>> {
+    return this.repository.listChatMembers(chatId);
   }
 
   searchGlobal(query: string): Promise<GlobalSearchResultDto> {
@@ -806,9 +813,7 @@ class TeleprotoRepository implements TelegramRepository {
     );
   }
 
-  async listChatMembers(
-    chatId: string,
-  ): Promise<ReadonlyArray<ChatMemberDto>> {
+  async listChatMembers(chatId: string): Promise<ReadonlyArray<ChatMemberDto>> {
     // Mention autocomplete works from one page of participants; groups far
     // outgrow the useful suggestion set long before 200 members.
     const participants = await this.client.getParticipants(chatId, {

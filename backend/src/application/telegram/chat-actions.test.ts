@@ -11,6 +11,7 @@ function repository(): TelegramRepository {
     listMessagePage: vi.fn(async () => ({ items: [], nextCursor: null })),
     listSharedMedia: vi.fn(async () => ({ items: [], nextCursor: null })),
     listPinnedMessages: vi.fn(async () => []),
+    listChatMembers: vi.fn(async () => []),
     searchGlobal: vi.fn(async () => ({ chats: [], messages: [] })),
     searchMessages: vi.fn(async () => ({
       messageIds: [],

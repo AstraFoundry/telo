@@ -167,6 +167,7 @@ describe("agent-store actions", () => {
       sidebarWidth: 280,
       agentPanelWidth: 380,
       recentEmojis: [],
+      messageTemplates: [],
       demoWorkspace: false,
       theme: "system",
     });
@@ -194,6 +195,7 @@ describe("agent-store actions", () => {
       sidebarWidth: 280,
       agentPanelWidth: 380,
       recentEmojis: [],
+      messageTemplates: [],
       demoWorkspace: false,
       theme: "system",
     });
@@ -216,6 +218,7 @@ describe("agent-store actions", () => {
       sidebarWidth: 280,
       agentPanelWidth: 380,
       recentEmojis: [],
+      messageTemplates: [],
       demoWorkspace: false,
       theme: "system",
     });
@@ -237,6 +240,7 @@ describe("agent-store actions", () => {
       sidebarWidth: 280,
       agentPanelWidth: 380,
       recentEmojis: [],
+      messageTemplates: [],
       demoWorkspace: false,
       theme: "system",
     });
@@ -270,6 +274,7 @@ describe("agent-store actions", () => {
       sidebarWidth: 280,
       agentPanelWidth: 380,
       recentEmojis: [],
+      messageTemplates: [],
       demoWorkspace: false,
       theme: "system",
     });

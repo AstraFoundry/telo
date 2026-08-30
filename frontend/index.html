@@ -9,6 +9,17 @@
       content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https: telo-media:; media-src 'self' telo-media:; connect-src 'self' http: https: ws: wss:"
     />
     <title>Telo</title>
+    <style>
+      html {
+        background: oklch(0.985 0.003 250);
+        color-scheme: light;
+      }
+      html.dark {
+        background: oklch(0.17 0.014 250);
+        color-scheme: dark;
+      }
+    </style>
+    <script src="/theme-boot.js"></script>
   </head>
   <body>
     <div id="root"></div>

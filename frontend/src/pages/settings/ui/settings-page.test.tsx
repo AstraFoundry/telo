@@ -61,6 +61,7 @@ describe("SettingsPage", () => {
       sidebarWidth: 280,
       agentPanelWidth: 380,
       recentEmojis: [],
+      messageTemplates: [],
       demoWorkspace: false,
       theme: "system",
     });
@@ -75,6 +76,7 @@ describe("SettingsPage", () => {
         sidebarWidth: 280,
         agentPanelWidth: 380,
         recentEmojis: [],
+        messageTemplates: [],
         demoWorkspace: false,
         theme: "system",
         ...input,
@@ -136,6 +138,7 @@ describe("SettingsPage", () => {
       copy.messages,
       copy.notifications,
       copy.telegramAccount,
+      copy.keywordFolders,
       copy.agentSettings,
     ]) {
       expect(screen.getByRole("heading", { name }).className).toContain(
@@ -239,6 +242,7 @@ describe("SettingsPage", () => {
       sidebarWidth: 280,
       agentPanelWidth: 380,
       recentEmojis: [],
+      messageTemplates: [],
       demoWorkspace: true,
       theme: "system",
     });

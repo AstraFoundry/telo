@@ -578,9 +578,7 @@ export class DemoTelegramRepository implements TelegramRepository {
     });
   }
 
-  async listChatMembers(
-    chatId: string,
-  ): Promise<ReadonlyArray<ChatMemberDto>> {
+  async listChatMembers(chatId: string): Promise<ReadonlyArray<ChatMemberDto>> {
     this.requireChat(chatId);
     return DEMO_CHAT_MEMBERS[chatId] ?? [];
   }

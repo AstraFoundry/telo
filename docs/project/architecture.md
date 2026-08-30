@@ -22,8 +22,8 @@ The renderer's imports from `contracts/src` are an intentional exception to FSD.
 
 ## Backend
 
-- `domain`: agent configuration and thread invariants, user preferences, and Telegram/agent ports.
-- `application`: save configuration, run agent, manage agent threads, update preferences, and Telegram workspace, chat-state, message-action, and logout use cases.
+- `domain`: agent configuration and thread invariants, user preferences, keyword folders, and Telegram/agent ports.
+- `application`: save configuration, run agent, manage agent threads, update preferences, keyword-folder CRUD and projection, and Telegram workspace, chat-state, message-action, and logout use cases.
 - `infrastructure`: AI SDK, Teleproto, encrypted JSON, session storage, and demo adapters.
 - `interfaces`: Electron lifecycle, context bridge, IPC channels, and AG-UI event mapping.
 

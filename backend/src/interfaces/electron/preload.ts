@@ -15,6 +15,12 @@ const api: TeloDesktopApi = {
     getCurrentUser: () => ipcRenderer.invoke(channels.currentUserGet),
     listChatPage: (input) => ipcRenderer.invoke(channels.chatPageList, input),
     listFolders: () => ipcRenderer.invoke(channels.folderList),
+    createKeywordFolder: (input) =>
+      ipcRenderer.invoke(channels.keywordFolderCreate, input),
+    updateKeywordFolder: (input) =>
+      ipcRenderer.invoke(channels.keywordFolderUpdate, input),
+    deleteKeywordFolder: (id) =>
+      ipcRenderer.invoke(channels.keywordFolderDelete, id),
     listMessagePage: (chatId, input) =>
       ipcRenderer.invoke(channels.messagePageList, chatId, input),
     listSharedMedia: (chatId, input) =>

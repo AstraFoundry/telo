@@ -11,6 +11,7 @@ import { RunMessageActionService } from "../../application/agent/run-message-act
 import { AgentThreadService } from "../../application/agent/agent-threads";
 import { SaveAgentConfigurationService } from "../../application/agent/save-agent-configuration";
 import { UpdateUserPreferencesService } from "../../application/preferences/update-user-preferences";
+import { KeywordFolderService } from "../../application/keyword-folder/keyword-folders";
 import { ChatActionsService } from "../../application/telegram/chat-actions";
 import { MessageActionsService } from "../../application/telegram/message-actions";
 import { TelegramLogoutService } from "../../application/telegram/telegram-logout";
@@ -21,6 +22,8 @@ import { FileAgentConfigurationRepository } from "../../infrastructure/agent/fil
 import { FileAgentAuditRepository } from "../../infrastructure/agent/file-agent-audit-repository";
 import { FileAgentThreadRepository } from "../../infrastructure/agent/file-agent-thread-repository";
 import { FileUserPreferencesRepository } from "../../infrastructure/preferences/file-user-preferences-repository";
+import { FileKeywordFolderRepository } from "../../infrastructure/keyword-folder/file-keyword-folder-repository";
+import { DemoKeywordFolderRepository } from "../../infrastructure/keyword-folder/demo-keyword-folder-repository";
 import { FileTelegramSessionRepository } from "../../infrastructure/telegram/file-telegram-session-repository";
 import { FileTelegramConnectionProfileRepository } from "../../infrastructure/telegram/file-telegram-connection-profile-repository";
 import { TelegramClientCoordinator } from "../../infrastructure/telegram/teleproto-telegram-repository";
@@ -107,6 +110,14 @@ export function createContainer(
     process.env.TELO_DEMO_WORKSPACE === "1"
       ? new DemoAgentGateway()
       : new AiSdkAgentGateway();
+  const keywordFolders = new KeywordFolderService(
+    process.env.TELO_DEMO_WORKSPACE === "1"
+      ? new DemoKeywordFolderRepository()
+      : new FileKeywordFolderRepository(
+          path.join(dataDirectory, "keyword-folders.json"),
+        ),
+    telegram,
+  );
   const agentContext = new AgentContextService(telegram);
   const runAgent = new RunAgentService(
     configurations,
@@ -117,7 +128,7 @@ export function createContainer(
   );
 
   return {
-    workspace: new TelegramWorkspaceService(telegram),
+    workspace: new TelegramWorkspaceService(telegram, keywordFolders),
     chatActions: new ChatActionsService(telegram),
     messageActions: new MessageActionsService(telegram),
     agentConfiguration: new SaveAgentConfigurationService(configurations),

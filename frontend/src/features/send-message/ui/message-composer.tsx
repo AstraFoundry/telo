@@ -10,12 +10,20 @@ import {
   type KeyboardEvent,
 } from "react";
 
+import type {
+  ChatMemberDto,
+  MessageEntityDto,
+} from "../../../../../contracts/src/ipc";
 import {
   useChatStore,
   type ComposerTarget,
   type SendOptions,
 } from "entities/chat";
-import { useRecentEmojis, useSendWithEnter } from "entities/preferences";
+import {
+  useMessageTemplates,
+  useRecentEmojis,
+  useSendWithEnter,
+} from "entities/preferences";
 import { copy } from "shared/config/copy";
 import {
   Button,
@@ -24,9 +32,26 @@ import {
   PromptInput,
 } from "shared/ui";
 
+import {
+  diffEdit,
+  insertAt,
+  selectionHasFormat,
+  shiftEntities,
+  toggleFormat,
+  trimOutgoingMessage,
+  type ComposerFormatType,
+} from "../model/composer-entities";
 import { RECENT_EMOJIS_MAX } from "../model/emoji-data";
+import {
+  filterMentionMembers,
+  mentionInsert,
+  mentionQueryAtCaret,
+} from "../model/mention-query";
 import { namePastedFile } from "../model/pasted-file-name";
 import { EmojiPicker } from "./emoji-picker";
+import { FormattingToolbar } from "./formatting-toolbar";
+import { MentionAutocomplete } from "./mention-autocomplete";
+import { TemplatePicker } from "./template-picker";
 
 interface SelectedFile {
   readonly id: string;
@@ -41,6 +66,14 @@ interface MessageComposerProps {
 
 export function MessageComposer({ disabled, onSend }: MessageComposerProps) {
   const [value, setValue] = useState("");
+  const [entities, setEntities] = useState<MessageEntityDto[]>([]);
+  const [selection, setSelection] = useState({ start: 0, end: 0 });
+  const [memberCache, setMemberCache] = useState<{
+    readonly chatId: string | null;
+    readonly list: ReadonlyArray<ChatMemberDto>;
+  }>({ chatId: null, list: [] });
+  const [mentionIndex, setMentionIndex] = useState(0);
+  const [mentionDismissed, setMentionDismissed] = useState(false);
   // Fully-formed failure copy: the title names what failed (send, upload, or
   // selection), the detail carries the underlying error message.
   const [failure, setFailure] = useState<{
@@ -54,6 +87,7 @@ export function MessageComposer({ disabled, onSend }: MessageComposerProps) {
   const [dropActive, setDropActive] = useState(false);
   const { value: sendWithEnter } = useSendWithEnter();
   const { value: recentEmojis, select: selectRecentEmojis } = useRecentEmojis();
+  const { value: templates, select: selectTemplates } = useMessageTemplates();
   const activeChatId = useChatStore((state) => state.activeChatId);
   const setDraft = useChatStore((state) => state.setDraft);
   const composerTarget = useChatStore((state) => state.composerTarget);
@@ -107,18 +141,21 @@ export function MessageComposer({ disabled, onSend }: MessageComposerProps) {
     if (chatChanged) setPreviousChatId(activeChatId);
     if (composerTarget?.mode === "edit") {
       setValue(composerTarget.preview);
+      setEntities([]);
     } else if (
       targetChanged &&
       !composerTarget &&
       previousTarget?.mode === "edit"
     ) {
       setValue("");
+      setEntities([]);
     } else if (chatChanged) {
       setValue(
         activeChatId
           ? (useChatStore.getState().drafts[activeChatId] ?? "")
           : "",
       );
+      setEntities([]);
     }
   }
 
@@ -137,11 +174,48 @@ export function MessageComposer({ disabled, onSend }: MessageComposerProps) {
       composerTarget?.mode !== "edit"
     ) {
       setValue(draftStream.text);
+      setEntities([]);
     }
   }
 
-  // Restores the caret after a manually inserted newline re-renders the
-  // controlled textarea, which would otherwise move it to the end.
+  // A new `@` query is a fresh suggestion list: drop the roving index and any
+  // earlier dismissal during render, the same way the draft mirror above does,
+  // so `mentionMatches` below already reflects the reset.
+  const mentionQuery = mentionQueryAtCaret(value, selection.start);
+  const mentionKey = mentionQuery
+    ? `${mentionQuery.start}:${mentionQuery.query}`
+    : null;
+  const [previousMentionKey, setPreviousMentionKey] = useState(mentionKey);
+  if (mentionKey !== previousMentionKey) {
+    setPreviousMentionKey(mentionKey);
+    setMentionIndex(0);
+    setMentionDismissed(false);
+  }
+
+  const members = memberCache.chatId === activeChatId ? memberCache.list : [];
+  const mentionMatches =
+    mentionQuery && !mentionDismissed
+      ? filterMentionMembers(members, mentionQuery.query)
+      : [];
+
+  useEffect(() => {
+    if (!activeChatId) return;
+    let cancelled = false;
+    void window.telo.workspace.listChatMembers(activeChatId).then(
+      (next) => {
+        if (!cancelled) setMemberCache({ chatId: activeChatId, list: next });
+      },
+      () => {
+        if (!cancelled) setMemberCache({ chatId: activeChatId, list: [] });
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [activeChatId]);
+
+  // Restores the caret after a controlled re-render moved it to the end. The
+  // matching `selection` state is written by `queueCaret`, so this is DOM-only.
   useLayoutEffect(() => {
     const pending = pendingCaret.current;
     if (!pending) return;
@@ -163,6 +237,78 @@ export function MessageComposer({ disabled, onSend }: MessageComposerProps) {
     },
     [],
   );
+
+  const rememberDraft = (next: string) => {
+    if (activeChatId && composerTarget?.mode !== "edit") {
+      setDraft(activeChatId, next);
+    }
+  };
+
+  const syncSelection = (textarea: HTMLTextAreaElement) => {
+    setSelection({
+      start: textarea.selectionStart,
+      end: textarea.selectionEnd,
+    });
+  };
+
+  // Every caret move goes through here: it records the DOM work for the layout
+  // effect below and the matching `selection` state in one step, so the effect
+  // stays DOM-only and no writer can leave the two out of sync.
+  const queueCaret = (textarea: HTMLTextAreaElement, caret: number) => {
+    pendingCaret.current = { textarea, caret };
+    setSelection({ start: caret, end: caret });
+  };
+
+  // Inserts at the caret (emoji, templates, mentions) and restores it after
+  // the controlled re-render, the same draft write path as agent draft-reply.
+  const insertAtCaret = (
+    text: string,
+    extra: ReadonlyArray<MessageEntityDto> = [],
+  ) => {
+    const textarea = textareaRef.current;
+    const start = textarea?.selectionStart ?? value.length;
+    const end = textarea?.selectionEnd ?? value.length;
+    const next = insertAt(value, entities, start, end, text, extra);
+    setValue(next.body);
+    setEntities(next.entities);
+    rememberDraft(next.body);
+    if (textarea) {
+      queueCaret(textarea, start + text.length);
+      textarea.focus({ preventScroll: true });
+    }
+  };
+
+  const applyFormat = (type: ComposerFormatType) => {
+    const textarea = textareaRef.current;
+    const start = textarea?.selectionStart ?? selection.start;
+    const end = textarea?.selectionEnd ?? selection.end;
+    const length = end - start;
+    if (length <= 0) return;
+    setEntities(toggleFormat(entities, type, start, length));
+    textarea?.focus({ preventScroll: true });
+  };
+
+  const pickMention = (member: ChatMemberDto) => {
+    if (!mentionQuery || !member.username) return;
+    const insert = mentionInsert(member.username);
+    const next = insertAt(
+      value,
+      entities,
+      mentionQuery.start,
+      selection.start,
+      insert.text,
+      [insert.entity],
+    );
+    setValue(next.body);
+    setEntities(next.entities);
+    rememberDraft(next.body);
+    const caret = mentionQuery.start + insert.text.length;
+    const textarea = textareaRef.current;
+    if (textarea) {
+      queueCaret(textarea, caret);
+      textarea.focus({ preventScroll: true });
+    }
+  };
 
   const clearSelectedFiles = () => {
     for (const selected of selectedFiles) {
@@ -240,27 +386,87 @@ export function MessageComposer({ disabled, onSend }: MessageComposerProps) {
     addFiles(files.map((file) => namePastedFile(file)));
   };
 
-  // With sendWithEnter off, beui would still submit on a bare Enter (it only
-  // exempts Shift+Enter), so the keydown is intercepted first. preventDefault
-  // also suppresses the textarea's native newline, so it is inserted manually.
-  // Cmd/Ctrl+Enter keeps submitting through beui untouched, as does IME
-  // composition.
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (mentionMatches.length > 0) {
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        setMentionIndex((index) => (index + 1) % mentionMatches.length);
+        return;
+      }
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        setMentionIndex(
+          (index) =>
+            (index - 1 + mentionMatches.length) % mentionMatches.length,
+        );
+        return;
+      }
+      if (event.key === "Enter" || event.key === "Tab") {
+        const member = mentionMatches[mentionIndex];
+        if (member) {
+          event.preventDefault();
+          pickMention(member);
+          return;
+        }
+      }
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setMentionDismissed(true);
+        return;
+      }
+    }
+
+    if (event.metaKey || event.ctrlKey) {
+      const key = event.key.toLowerCase();
+      const format: ComposerFormatType | null =
+        key === "b"
+          ? "bold"
+          : key === "i"
+            ? "italic"
+            : key === "u"
+              ? "underline"
+              : event.shiftKey && key === "x"
+                ? "strikethrough"
+                : event.shiftKey && key === "m"
+                  ? "code"
+                  : event.shiftKey && key === "p"
+                    ? "spoiler"
+                    : null;
+      if (format) {
+        event.preventDefault();
+        applyFormat(format);
+        return;
+      }
+    }
+
     if (sendWithEnter) return;
     if (event.key !== "Enter" || event.nativeEvent.isComposing) return;
     if (event.shiftKey || event.metaKey || event.ctrlKey) return;
     event.preventDefault();
     const textarea = event.currentTarget;
-    pendingCaret.current = {
-      textarea,
-      caret: textarea.selectionStart + 1,
-    };
+    const caret = textarea.selectionStart + 1;
+    queueCaret(textarea, caret);
     const next = `${textarea.value.slice(0, textarea.selectionStart)}\n${textarea.value.slice(textarea.selectionEnd)}`;
+    setEntities(
+      shiftEntities(
+        entities,
+        textarea.selectionStart,
+        textarea.selectionEnd,
+        1,
+      ),
+    );
     setValue(next);
     if (activeChatId) setDraft(activeChatId, next);
   };
 
   const submit = async (body: string, options?: SendOptions) => {
+    const trimmed = trimOutgoingMessage(value, entities);
+    const payload: SendOptions = {
+      ...options,
+      ...(trimmed.entities.length > 0 ? { entities: trimmed.entities } : {}),
+    };
+    const hasOptions =
+      payload.silent === true || payload.entities !== undefined;
     const currentUploadId =
       selectedFiles.length > 0 ? crypto.randomUUID() : null;
     try {
@@ -268,17 +474,19 @@ export function MessageComposer({ disabled, onSend }: MessageComposerProps) {
         setUploadId(currentUploadId);
         await sendMedia(
           selectedFiles.map((selected) => selected.file),
-          body,
+          trimmed.body,
           currentUploadId,
         );
         // A cancel whose promise still resolves is done: drop the marker.
         cancelledUploads.current.delete(currentUploadId);
         clearSelectedFiles();
       } else {
-        // Callers that don't model send options still see a single argument.
-        await (options ? onSend(body, options) : onSend(body));
+        await (hasOptions
+          ? onSend(trimmed.body || body, payload)
+          : onSend(trimmed.body || body));
       }
       setValue("");
+      setEntities([]);
       setFailure(null);
     } catch (reason) {
       // A cancelled upload is the user's own action, not a failure. Any
@@ -303,24 +511,13 @@ export function MessageComposer({ disabled, onSend }: MessageComposerProps) {
   // The silent flag rides SendMessageInput only; the context-menu item is
   // disabled while attachments are staged, so this always sends plain text.
   const sendSilently = () => {
-    const body = value.trim();
-    if (!body) return;
-    void submit(body, { silent: true });
+    const trimmed = trimOutgoingMessage(value, entities);
+    if (!trimmed.body) return;
+    void submit(trimmed.body, { silent: true });
   };
 
   const insertEmoji = (glyph: string) => {
-    const textarea = textareaRef.current;
-    const start = textarea?.selectionStart ?? value.length;
-    const end = textarea?.selectionEnd ?? value.length;
-    const next = `${value.slice(0, start)}${glyph}${value.slice(end)}`;
-    setValue(next);
-    if (activeChatId && composerTarget?.mode !== "edit") {
-      setDraft(activeChatId, next);
-    }
-    if (textarea) {
-      pendingCaret.current = { textarea, caret: start + glyph.length };
-      textarea.focus({ preventScroll: true });
-    }
+    insertAtCaret(glyph);
     selectRecentEmojis(
       [glyph, ...recentEmojis.filter((recent) => recent !== glyph)].slice(
         0,
@@ -328,6 +525,26 @@ export function MessageComposer({ disabled, onSend }: MessageComposerProps) {
       ),
     );
   };
+
+  const activeFormats = new Set(
+    (
+      [
+        "bold",
+        "italic",
+        "underline",
+        "strikethrough",
+        "code",
+        "spoiler",
+      ] as const
+    ).filter((type) =>
+      selectionHasFormat(
+        entities,
+        type,
+        Math.min(selection.start, selection.end),
+        Math.abs(selection.end - selection.start),
+      ),
+    ),
+  );
 
   const targetTitle =
     composerTarget?.mode === "edit"
@@ -338,7 +555,7 @@ export function MessageComposer({ disabled, onSend }: MessageComposerProps) {
 
   return (
     <div
-      className="flex flex-col gap-2"
+      className="relative flex flex-col gap-2"
       onDragEnter={handleDragEnter}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
@@ -369,6 +586,19 @@ export function MessageComposer({ disabled, onSend }: MessageComposerProps) {
           </Button>
         </div>
       ) : null}
+      <FormattingToolbar
+        disabled={disabled || uploadId !== null}
+        active={activeFormats}
+        onToggle={applyFormat}
+      />
+      {mentionMatches.length > 0 ? (
+        <MentionAutocomplete
+          members={mentionMatches}
+          activeIndex={Math.min(mentionIndex, mentionMatches.length - 1)}
+          onHover={setMentionIndex}
+          onPick={pickMention}
+        />
+      ) : null}
       <PromptInput
         minRows={1}
         maxRows={5}
@@ -380,6 +610,9 @@ export function MessageComposer({ disabled, onSend }: MessageComposerProps) {
         allowEmptySubmit={selectedFiles.length > 0}
         inputRef={textareaRef}
         onPaste={handlePaste}
+        onSelect={(event) => syncSelection(event.currentTarget)}
+        onClick={(event) => syncSelection(event.currentTarget)}
+        onKeyUp={(event) => syncSelection(event.currentTarget)}
         sendMenuLabel={copy.sendOptions}
         sendMenuContent={
           <ContextMenuItem
@@ -445,14 +678,22 @@ export function MessageComposer({ disabled, onSend }: MessageComposerProps) {
               recentEmojis={recentEmojis}
               onPick={insertEmoji}
             />
+            <TemplatePicker
+              disabled={disabled || uploadId !== null}
+              templates={templates}
+              onPick={insertAtCaret}
+              onChange={selectTemplates}
+            />
           </>
         }
         onValueChange={(next) => {
+          const edit = diffEdit(value, next);
+          setEntities(
+            shiftEntities(entities, edit.start, edit.end, edit.inserted.length),
+          );
           setValue(next);
           if (failure) setFailure(null);
-          if (activeChatId && composerTarget?.mode !== "edit") {
-            setDraft(activeChatId, next);
-          }
+          rememberDraft(next);
         }}
         onKeyDown={handleKeyDown}
         onSubmit={(body) => submit(body)}

@@ -9,6 +9,7 @@ import {
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type {
+  ChatMemberDto,
   MessageDto,
   UserPreferencesDto,
 } from "../../../../../contracts/src/ipc";
@@ -43,6 +44,7 @@ function preferences(partial: Partial<UserPreferencesDto> = {}) {
     sidebarWidth: 280,
     agentPanelWidth: 380,
     recentEmojis: [],
+    messageTemplates: [],
     ...partial,
   } satisfies UserPreferencesDto;
 }
@@ -65,15 +67,26 @@ function message(id: string, chatId: string): MessageDto {
 // The preferences slice is a module-level store that loads once per key, so
 // each test imports a fresh module graph after resetting the registry; the
 // chat store must come from the same graph as the component.
-async function renderComposer(sendWithEnter: boolean) {
+async function renderComposer(
+  sendWithEnter: boolean,
+  options: {
+    readonly preferences?: Partial<UserPreferencesDto>;
+    readonly activeChatId?: string;
+    readonly members?: ReadonlyArray<ChatMemberDto>;
+  } = {},
+) {
   const telo = installTeloApiMock();
-  telo.preferences.get.mockResolvedValue(preferences({ sendWithEnter }));
-  telo.preferences.update.mockResolvedValue(preferences({ sendWithEnter }));
+  const stored = preferences({ sendWithEnter, ...options.preferences });
+  telo.preferences.get.mockResolvedValue(stored);
+  telo.preferences.update.mockResolvedValue(stored);
+  if (options.members) {
+    telo.workspace.listChatMembers.mockResolvedValue(options.members);
+  }
   const { useChatStore } = await import("../../../entities/chat");
   useChatStore.setState({
     chats: [],
     messages: [],
-    activeChatId: null,
+    activeChatId: options.activeChatId ?? null,
     loading: true,
     composerTarget: null,
   });
@@ -705,5 +718,65 @@ describe("MessageComposer", () => {
       target: { value: "no such emoji exists" },
     });
     expect(await screen.findByText(copy.noEmojiFound)).toBeTruthy();
+  });
+  it("sends the draft with the formatting entities the toolbar authored", async () => {
+    const { onSend, textarea } = await renderComposer(true);
+    await flushPreferences();
+
+    const field = textarea as HTMLTextAreaElement;
+    fireEvent.change(field, { target: { value: "Hello team" } });
+    field.setSelectionRange(0, 5);
+    fireEvent.select(field);
+
+    fireEvent.click(screen.getByRole("button", { name: copy.formatBold }));
+    fireEvent.keyDown(field, { key: "Enter" });
+
+    expect(onSend).toHaveBeenCalledWith("Hello team", {
+      entities: [{ type: "bold", offset: 0, length: 5 }],
+    });
+  });
+
+  it("replaces the @ query with the picked mention and closes the listbox", async () => {
+    const { textarea } = await renderComposer(true, {
+      activeChatId: "design",
+      members: [
+        { id: "m1", displayName: "Mina", username: "mina" },
+        { id: "m2", displayName: "Aron", username: "aron" },
+      ],
+    });
+    await flushPreferences();
+
+    const field = textarea as HTMLTextAreaElement;
+    fireEvent.change(field, { target: { value: "hi @mi" } });
+    field.setSelectionRange(6, 6);
+    fireEvent.keyUp(field);
+
+    const option = await screen.findByRole("option", { name: "Mina, @mina" });
+    fireEvent.click(option);
+
+    await waitFor(() => expect(field.value).toBe("hi @mina "));
+    expect(screen.queryByRole("option")).toBeNull();
+  });
+
+  it("inserts a saved template at the caret", async () => {
+    const { textarea } = await renderComposer(true, {
+      preferences: {
+        messageTemplates: [
+          { id: "t1", title: "Standup", body: "Standup notes:" },
+        ],
+      },
+    });
+    await flushPreferences();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: copy.messageTemplates }),
+    );
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Standup, Standup notes:" }),
+    );
+
+    await waitFor(() =>
+      expect((textarea as HTMLTextAreaElement).value).toBe("Standup notes:"),
+    );
   });
 });

@@ -550,6 +550,34 @@ describe("DemoTelegramRepository", () => {
     );
   });
 
+  it("lists deterministic group members for mention autocomplete", async () => {
+    const repository = new DemoTelegramRepository();
+
+    await expect(repository.listChatMembers("design")).resolves.toEqual([
+      { id: "demo-mina", displayName: "Mina", username: "mina" },
+      { id: "demo-aron", displayName: "Aron", username: "aron" },
+      { id: "demo-lev", displayName: "Lev", username: "lev" },
+    ]);
+    await expect(repository.listChatMembers("saved")).resolves.toEqual([]);
+    await expect(repository.listChatMembers("missing")).rejects.toThrow(
+      "Unknown chat missing",
+    );
+  });
+
+  it("stores composer-authored entities on a sent message", async () => {
+    const repository = new DemoTelegramRepository();
+    const entities = [{ type: "bold" as const, offset: 0, length: 5 }];
+    const sent = await repository.sendMessage(
+      "design",
+      "Hello",
+      undefined,
+      undefined,
+      undefined,
+      entities,
+    );
+    expect(sent.entities).toEqual(entities);
+  });
+
   it("echoes the clientId back on the sent message for optimistic reconciliation", async () => {
     const repository = new DemoTelegramRepository();
     const sent = await repository.sendMessage(
@@ -831,7 +859,9 @@ describe("DemoTelegramRepository", () => {
   });
 
   it("cancels an in-flight upload without delivering messages", async () => {
-    const repository = new DemoTelegramRepository({ uploadStepMs: 20 });
+    // The step has to outlast scheduler jitter under a parallel suite run:
+    // if all four steps elapse before the cancel lands, the upload delivers.
+    const repository = new DemoTelegramRepository({ uploadStepMs: 120 });
     const events: unknown[] = [];
     repository.subscribe((event) => events.push(event));
 

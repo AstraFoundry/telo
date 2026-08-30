@@ -29,6 +29,7 @@
 }
 
 :root {
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --background: oklch(0.985 0.003 250);
   --foreground: oklch(0.22 0.018 250);
   --card: oklch(1 0 0);
@@ -84,6 +85,7 @@
 
   html {
     -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
     text-size-adjust: 100%;
   }
 
@@ -124,5 +126,54 @@
       transition-duration: 0.01ms !important;
       scroll-behavior: auto !important;
     }
+  }
+}
+
+/* Chat list pin / new-message bump: opacity only, never a layout spring. */
+@keyframes telo-chat-promote {
+  from {
+    opacity: 0.4;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+[data-promote="true"] {
+  animation: telo-chat-promote 150ms var(--ease-out);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-promote="true"] {
+    animation: none;
+  }
+}
+
+/* Theme toggle: circular reveal from the last pointer. No page blur. */
+::view-transition-old(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+::view-transition-new(root) {
+  animation: telo-theme-reveal 280ms var(--ease-out);
+  mix-blend-mode: normal;
+}
+
+@keyframes telo-theme-reveal {
+  from {
+    clip-path: circle(0px at var(--telo-theme-x, 50%) var(--telo-theme-y, 50%));
+  }
+  to {
+    clip-path: circle(
+      150vmax at var(--telo-theme-x, 50%) var(--telo-theme-y, 50%)
+    );
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation: none;
   }
 }

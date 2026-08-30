@@ -6,6 +6,8 @@ export { LoadIndicator } from "./load-indicator";
 export type { LoadIndicatorProps } from "./load-indicator";
 export { LinkPreview } from "./link-preview";
 export type { LinkPreviewProps } from "./link-preview";
+export { OptionRow } from "./option-row";
+export type { OptionRowProps } from "./option-row";
 export { MediaViewer } from "./media-viewer";
 export type {
   MediaViewerItem,

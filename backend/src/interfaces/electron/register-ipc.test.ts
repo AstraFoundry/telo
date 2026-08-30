@@ -514,6 +514,7 @@ describe("registerIpc preferences", () => {
     sidebarWidth: 280,
     agentPanelWidth: 380,
     recentEmojis: [],
+    messageTemplates: [],
   };
 
   function preferencesContainer(

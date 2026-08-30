@@ -18,6 +18,7 @@ import type {
   ForwardMessageInput,
   MessagePageInput,
   MessageSearchPageInput,
+  KeywordFolderInput,
   LocalMediaFileInput,
   RunAgentInput,
   RunChatAgentInput,
@@ -25,6 +26,7 @@ import type {
   SendMessageInput,
   SendMediaInput,
   TelegramLoginInput,
+  UpdateKeywordFolderInput,
   UpdateUserPreferencesInput,
 } from "../../../../contracts/src/ipc";
 import { MESSAGE_ACTION_EVENT_NAME } from "../../../../contracts/src/ipc";
@@ -40,6 +42,19 @@ export function registerIpc(container: ApplicationContainer): void {
     container.workspace.listChatPage(input),
   );
   ipcMain.handle(channels.folderList, () => container.workspace.listFolders());
+  ipcMain.handle(
+    channels.keywordFolderCreate,
+    (_event, input: KeywordFolderInput) =>
+      container.workspace.createKeywordFolder(input),
+  );
+  ipcMain.handle(
+    channels.keywordFolderUpdate,
+    (_event, input: UpdateKeywordFolderInput) =>
+      container.workspace.updateKeywordFolder(input),
+  );
+  ipcMain.handle(channels.keywordFolderDelete, (_event, id: number) =>
+    container.workspace.deleteKeywordFolder(id),
+  );
   ipcMain.handle(
     channels.messagePageList,
     (_event, chatId: string, input?: MessagePageInput) =>

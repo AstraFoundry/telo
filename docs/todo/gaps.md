@@ -74,24 +74,38 @@ Telo 该赢的面。账本「Telo workspace differentiation」目前全空。Age
 
 BEUI 里已有能力，产品没接到聊天主路径。Onboarding（横滑 + TextReveal + OTP 翻滚）不必再加。Agent 面板现有 offcanvas 弹簧够用，不要从 Sparkle 做 FLIP morph。
 
-- [ ] 仅对**新到达 / 刚发送**开 `Message animateIn`；历史分页保持无动画（现有 prepend 补偿保留）
-- [ ] 顶栏 + 列表行 `MessageTyping` 三个点；reduced-motion 用「Typing」文字
-- [ ] 对话列表重排：置顶 / 新消息上顶 ≤150ms opacity，或不动；禁止整表 layout 弹簧
-- [ ] 投递状态字形交叉淡入（pending → sent/read/failed），120–160ms，行本身不动
-- [ ] 主题切换：避免启动闪系统主题；可选 Telegram 式圆形揭示，不要全页 blur
-- [ ] 有媒体之后再做灯箱（缩略图 → 全屏，可打断）；没内容不做空动画
-- [ ] 有语音 / 贴纸后再做波形与循环播放
-- [ ] reduced-motion：高频路径能关则关；补 typing / 新消息的静态替代（无位移淡入）
+find-animation-opportunities（只读，全部落在本波清单；闸门四问已过）：
+
+| #   | Location                                      | Today                                                                         | Purpose                     | Frequency                                    | Suggested motion                                                                                                                                              |
+| --- | --------------------------------------------- | ----------------------------------------------------------------------------- | --------------------------- | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | `conversation-view.tsx` transcript `Message`  | History, prepend, and live sends all mount still (`animateIn` default false)  | Preventing a jarring change | Occasional (live send / arrival), not paging | `animateIn` only for store-flagged new/just-sent ids; BEUI pop-up spring. Prepend stays `animateIn={false}`. Reduced-motion: BEUI opacity-only (no translate) |
+| 2   | Header + `conversation-sidebar` `ChatListRow` | Dots **and** visible “Typing…” always                                         | State indication            | Tens/day                                     | Motion: `MessageTyping` three dots (`EASE_OUT` 1.05s loop). Reduced-motion: static `copy.typing` text, no dots                                                |
+| 3   | Sidebar list order on pin / new-top           | Pin regroups instantly; new message patches in place (no bump)                | Preventing a jarring change | Tens/day                                     | Relocate the row (pinned → slot 0, unpinned → first unpinned). `opacity` 150ms `cubic-bezier(0.16, 1, 0.3, 1)` on that row only. **No** `layout` spring       |
+| 4   | `MessageFooter` delivery glyph                | Instant `Checks` / `WarningCircle` swap; sending looks like sent              | State indication            | Tens/day                                     | Crossfade 140ms `EASE_OUT` in a fixed `size-4` slot (`mode="sync"`). Row does not move                                                                        |
+| 5   | Theme (`hooks.ts` + `index.html`)             | Module applies `system` until IPC; users with a stored light/dark see a flash | Preventing a jarring change | Occasional (toggle); startup is not a reveal | Sync `telo:theme` cache + boot script (no motion). User toggle: View Transition circular `clip-path` 280ms from pointer, **no** `filter: blur()`              |
+| 6   | `MediaViewer` via `ConversationMediaViewer`   | Origin scale already wired (`origin` from thumbnail rect)                     | Spatial consistency         | Occasional                                   | Keep origin-aware Motion enter/exit (interruptible transitions). Do not ship an empty lightbox                                                                |
+| 7   | Voice / stickers                              | No voice notes or stickers in the product                                     | —                           | —                                            | **Skip** waveforms and looping playback until Wave 6 content exists                                                                                           |
+
+Rejected (gate): chat-row / folder-tab springs (100+/day nav; `pressScale={1}` stays); history prepend motion (fights scroll compensation, user is reading); Agent Sparkle FLIP (Wave 5 intro); full-page theme blur (checklist forbids it); list `layoutId` (checklist forbids it).
+
+- [x] 仅对**新到达 / 刚发送**开 `Message animateIn`；历史分页保持无动画（现有 prepend 补偿保留）— `chat-store.animateInMessageIds`；`select` / `load` / prepend 不写入
+- [x] 顶栏 + 列表行 `MessageTyping` 三个点；reduced-motion 用「Typing」文字
+- [x] 对话列表重排：置顶 / 新消息上顶 ≤150ms opacity，或不动；禁止整表 layout 弹簧 — 行 `data-promote` 150ms opacity，无 layout
+- [x] 投递状态字形交叉淡入（pending → sent/read/failed），120–160ms，行本身不动 — 140ms opacity，固定槽位
+- [x] 主题切换：避免启动闪系统主题；可选 Telegram 式圆形揭示，不要全页 blur — `telo:theme` 同步缓存 + 圆形 View Transition
+- [x] 有媒体之后再做灯箱（缩略图 → 全屏，可打断）；没内容不做空动画 — Wave 2 `MediaViewer` 已原点缩放，可打断；无新媒体动画
+- [x] 有语音 / 贴纸后再做波形与循环播放 — 暂无语音/贴纸，跳过
+- [x] reduced-motion：高频路径能关则关；补 typing / 新消息的静态替代（无位移淡入）— Typing 文案；新消息无位移；列表 promote / 投递淡入降为瞬时
 
 ## Wave 6 — 工作区定位增强
 
 符合 Telo 工作区，而不是再做一个通用聊天客户端。
 
-- [ ] 关键词文件夹 / 关键词追踪（搜词 → 自动归集未来匹配）
-- [ ] 快捷回复 / 模板（与 Agent「起草」共用 composer）
+- [x] 关键词文件夹 / 关键词追踪（搜词 → 自动归集未来匹配）— `ChatFolderDto.kind: "keyword"` 与 native 分型；匹配规则为消息 `body` 的大小写不敏感子串；未读随 workspace 事件重算；CRUD 走 settings 对话框 + DDD 持久化；demo 预置 Spacing 文件夹匹配 Telo Design
+- [x] 快捷回复 / 模板（与 Agent「起草」共用 composer）— `MessageTemplateDto` 存进 `UserPreferencesDto.messageTemplates`，域层 `normalizeMessageTemplates` 兜住形状与上限（50 条 / 标题 80 / 正文 2000，缺 id 补 uuid，空白项丢弃）；`TemplatePicker` 为 BEUI MorphPopover：列表 + 新建 / 编辑 / 删除表单，选中经 `insertAtCaret` 插在光标处并恢复 caret——与 emoji 和 Agent 起草回流是同一条 draft 写入路径（共用 composer 的要求即此）；列表行走 `shared/ui` 新原语 `OptionRow`
 - [ ] 语音转写（依赖 Wave 2 语音消息）
 - [ ] 多账号：Telegram 级 3 个即可，不追求无限账号
-- [ ] 表情 / 贴纸 / GIF 选择器、格式化、mention
+- [x] 表情 / 贴纸 / GIF 选择器、格式化、mention — 表情选择器在 Wave 4 已落地；格式化为 `composer-entities.ts` 的 UTF-16 实体运算（`diffEdit` / `shiftEntities` / `toggleFormat` / `insertAt` / `trimOutgoingMessage`，受控 textarea 只报新值，故用前后缀 diff 推出改动区间再迁移实体），`FormattingToolbar` 六项（粗 / 斜 / 下划线 / 删除线 / 等宽 / 剧透）带 `aria-pressed` 与 40px 命中区，`SendMessageInput.entities` 端到端（teleproto `mapMessageEntitiesForSend` 只映射用户显式授权的 span，不做自动解析；demo 存回实体）；mention 为 `mention-query.ts`（光标处 `@` 查询 / 成员过滤 / 插入）+ 新 `ChatMemberDto` 与 `listChatMembers` IPC（teleproto `getParticipants`，demo 确定性成员），`MentionAutocomplete` 是 `OptionRow` 组成的 listbox，上下键 + Enter 选中、Esc 关闭。**贴纸 / GIF 暂缓**：contracts / teleproto / demo 均无 sticker / GIF 支持，按「不 ship 死按钮」省略入口（同 Wave 4 反应位的处理）
 - [ ] 语音 / 视频笔记收发
 
 ## Wave 7 — 默认不做
@@ -106,10 +120,17 @@ BEUI 里已有能力，产品没接到聊天主路径。Onboarding（横滑 + Te
 
 ## 质量门（每波都要过）
 
-- [ ] UI 只走 `shared/ui`；缺组件向上游 BEUI 补，不在产品 slice 再造一套
-- [ ] 文案进 `shared/config/copy.ts`
-- [ ] 高频聊天导航无 motion 或 ≤150ms 色/透明度
-- [ ] 偶发浮层 / 对话框 / 面板：原点可打断；保留 reduced-motion 静态提示
-- [ ] 桌面点击区域 ≥40px，命中不重叠
-- [ ] `make check` 无被压制的架构 / 质量失败
-- [ ] 慢放检查新增动画及其 reduced-motion 替代
+- [x] UI 只走 `shared/ui`；缺组件向上游 BEUI 补，不在产品 slice 再造一套 — Wave 6 的 mention / 模板列表原本各自手写 `<button>` 行，
+      已收进 `shared/ui` 新原语 `OptionRow`（两种排版、`min-h-10`、press scale 0.96、显式 `aria-label` 免得两行文字连读，
+      并在类型上 omit 掉 Motion 的 `layout` / `layoutId`——列表里的 layout 动画会和滚动打架）；composer 的隐藏 `<input type=file>` 是平台机制，不算自造控件
+- [x] 文案进 `shared/config/copy.ts` — Wave 5 / 6 新面全部经 `copy.*`，无硬编码用户可见文案
+- [x] 高频聊天导航无 motion 或 ≤150ms 色/透明度 — 侧栏行 `pressScale={1}` 不变；新增只有列表 promote 150ms opacity 与投递字形 140ms 淡入
+- [x] 偶发浮层 / 对话框 / 面板：原点可打断；保留 reduced-motion 静态提示 — 模板 / emoji 走 MorphPopover（原点感知），关键词文件夹走 CenterMorphModal（保持居中）；
+      `OptionRow` 在 reduced-motion 下不做 press 缩放，`index.css` 的 reduced-motion 兜底覆盖动画 / 过渡 / View Transition
+- [x] 桌面点击区域 ≥40px，命中不重叠 — BEUI `Button` 的 `sm` 由 32px 提到 40px（只在字号和内边距上保持紧凑），
+      `PromptInput` 的发送 / 附件钮 32px → 40px（行高同步到 `min-h-10`），模板行去掉 `<li>` 上与行内按钮重叠的 hover 底色
+- [x] `make check` 无被压制的架构 / 质量失败 — `format:check` / `lint --max-warnings=0` / `typecheck` / 797 unit / `docs:check` / 58 e2e 全绿；
+      过程中修掉两个真问题：composer 两处 effect 内同步 setState（成员缓存改为按 chatId 派生，`@` 查询重置改成渲染期，与同文件 draft 镜像同一写法）
+      和 caret 恢复的 `useLayoutEffect` 里 setState（收敛成 `queueCaret`，DOM 与 `selection` 状态一处写）；
+      另修掉 `demo-telegram-repository` 上传取消测试的时序 flake（20ms 步进在并行满载下会在取消到达前跑完整个上传）
+- [ ] 慢放检查新增动画及其 reduced-motion 替代 — 需要可交互跑起来的应用，留待人工走查

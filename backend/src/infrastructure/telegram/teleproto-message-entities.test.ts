@@ -1,7 +1,10 @@
 import { Api } from "teleproto";
 import { describe, expect, it } from "vitest";
 
-import { mapMessageEntities } from "./teleproto-message-entities";
+import {
+  mapMessageEntities,
+  mapMessageEntitiesForSend,
+} from "./teleproto-message-entities";
 
 describe("mapMessageEntities", () => {
   it("maps every metadata-free Telegram entity kind", () => {
@@ -108,5 +111,33 @@ describe("mapMessageEntities", () => {
         new Api.MessageEntityCode({ offset: 0, length: 0 }),
       ]),
     ).toEqual([]);
+  });
+});
+
+describe("mapMessageEntitiesForSend", () => {
+  it("maps composer formatting and mention spans onto Teleproto entities", () => {
+    const mapped = mapMessageEntitiesForSend("hi @mina", [
+      { type: "bold", offset: 0, length: 2 },
+      { type: "mention", offset: 3, length: 5 },
+    ]);
+    expect(mapped).toHaveLength(2);
+    expect(mapped?.[0]).toBeInstanceOf(Api.MessageEntityBold);
+    expect(mapped?.[0]).toMatchObject({ offset: 0, length: 2 });
+    expect(mapped?.[1]).toBeInstanceOf(Api.MessageEntityMention);
+    expect(mapped?.[1]).toMatchObject({ offset: 3, length: 5 });
+  });
+
+  it("drops out-of-range and receive-only kinds instead of sending them", () => {
+    expect(
+      mapMessageEntitiesForSend("hello", [
+        { type: "bold", offset: 0, length: 9 },
+        { type: "url", offset: 0, length: 5 },
+      ]),
+    ).toBeUndefined();
+  });
+
+  it("returns undefined when there is nothing to send", () => {
+    expect(mapMessageEntitiesForSend("hello", [])).toBeUndefined();
+    expect(mapMessageEntitiesForSend("hello", undefined)).toBeUndefined();
   });
 });

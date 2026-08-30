@@ -5,6 +5,7 @@ import type {
   ChatPageInput,
   CurrentUserDto,
   GlobalSearchResultDto,
+  KeywordFolderInput,
   MessageDto,
   MessagePageDto,
   MessagePageInput,
@@ -13,11 +14,14 @@ import type {
   SendMessageInput,
   SendMediaInput,
   TelegramWorkspaceEvent,
+  UpdateKeywordFolderInput,
 } from "../../../../contracts/src/ipc";
 import type {
   TelegramRepository,
   TelegramUploadFile,
 } from "../../domain/telegram/telegram-ports";
+import { trimOutgoingMessage } from "../../domain/telegram/outgoing-message";
+import type { KeywordFolderService } from "../keyword-folder/keyword-folders";
 
 const DEFAULT_CHAT_PAGE_SIZE = 50;
 const DEFAULT_MESSAGE_PAGE_SIZE = 50;
@@ -25,26 +29,102 @@ const MAX_PAGE_SIZE = 100;
 const MAX_ALBUM_ITEMS = 10;
 
 export class TelegramWorkspaceService {
-  constructor(private readonly repository: TelegramRepository) {}
+  constructor(
+    private readonly repository: TelegramRepository,
+    private readonly keywordFolders: KeywordFolderService | null = null,
+  ) {}
 
   subscribe(listener: (event: TelegramWorkspaceEvent) => void): () => void {
-    return this.repository.subscribe(listener);
+    const emitMergedFolders = (): void => {
+      if (!this.keywordFolders) return;
+      void this.listFolders().then((folders) => {
+        listener({ type: "folders", folders });
+      });
+    };
+    const unsubKeyword =
+      this.keywordFolders?.onChange(emitMergedFolders) ?? (() => {});
+    const unsubRepository = this.repository.subscribe((event) => {
+      if (!this.keywordFolders) {
+        listener(event);
+        return;
+      }
+      if (event.type === "folders") {
+        void this.keywordFolders.mergeNative(event.folders).then((folders) => {
+          listener({ type: "folders", folders });
+        });
+        return;
+      }
+      if (event.type === "chat-upsert") {
+        listener({
+          type: "chat-upsert",
+          chat: this.keywordFolders.annotate(event.chat),
+        });
+        emitMergedFolders();
+        return;
+      }
+      if (event.type === "message-upsert") {
+        this.keywordFolders.noteMessage(event.message);
+        listener(event);
+        emitMergedFolders();
+        return;
+      }
+      if (event.type === "message-read" || event.type === "message-delete") {
+        listener(event);
+        emitMergedFolders();
+        return;
+      }
+      listener(event);
+    });
+    return () => {
+      unsubKeyword();
+      unsubRepository();
+    };
   }
 
   getCurrentUser(): Promise<CurrentUserDto> {
     return this.repository.getCurrentUser();
   }
 
-  listChatPage(input: ChatPageInput = {}): Promise<ChatPageDto> {
+  async listChatPage(input: ChatPageInput = {}): Promise<ChatPageDto> {
     if (input.cursor) validateChatCursor(input.cursor);
-    return this.repository.listChatPage({
+    const page = await this.repository.listChatPage({
       ...input,
       limit: pageSize(input.limit, DEFAULT_CHAT_PAGE_SIZE),
     });
+    const keywords = this.keywordFolders;
+    if (!keywords) return page;
+    await keywords.mergeNative(await this.repository.listFolders());
+    return {
+      ...page,
+      items: page.items.map((chat) => keywords.annotate(chat)),
+    };
   }
 
-  listFolders(): Promise<ReadonlyArray<ChatFolderDto>> {
-    return this.repository.listFolders();
+  async listFolders(): Promise<ReadonlyArray<ChatFolderDto>> {
+    const native = await this.repository.listFolders();
+    if (!this.keywordFolders) return native;
+    return this.keywordFolders.mergeNative(native);
+  }
+
+  createKeywordFolder(input: KeywordFolderInput): Promise<ChatFolderDto> {
+    if (!this.keywordFolders) {
+      throw new Error("Keyword folders are unavailable");
+    }
+    return this.keywordFolders.create(input);
+  }
+
+  updateKeywordFolder(input: UpdateKeywordFolderInput): Promise<ChatFolderDto> {
+    if (!this.keywordFolders) {
+      throw new Error("Keyword folders are unavailable");
+    }
+    return this.keywordFolders.update(input);
+  }
+
+  deleteKeywordFolder(id: number): Promise<void> {
+    if (!this.keywordFolders) {
+      throw new Error("Keyword folders are unavailable");
+    }
+    return this.keywordFolders.remove(id);
   }
 
   listMessagePage(
@@ -107,13 +187,14 @@ export class TelegramWorkspaceService {
   ): Promise<MessageDto> {
     if (!chatId.trim()) throw new Error("Chat id is required");
     if (!body.trim()) throw new Error("Message body is required");
+    const trimmed = trimOutgoingMessage(body, input?.entities);
     return this.repository.sendMessage(
       chatId,
-      body.trim(),
+      trimmed.body,
       input?.replyToId,
       input?.clientId,
       input?.silent,
-      input?.entities,
+      trimmed.entities,
     );
   }
 
