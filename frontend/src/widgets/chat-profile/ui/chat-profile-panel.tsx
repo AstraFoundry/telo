@@ -479,7 +479,9 @@ export function ChatProfilePanel() {
                   className="size-20 text-2xl font-semibold"
                 />
                 {/* deslop-ignore-next-line 12 */}
-                <div className="text-base font-semibold">{chat.title}</div>
+                <div className="text-base font-semibold text-balance">
+                  {chat.title}
+                </div>
                 {subtitle(chat) ? (
                   <div className="text-sm text-muted-foreground">
                     {subtitle(chat)}
