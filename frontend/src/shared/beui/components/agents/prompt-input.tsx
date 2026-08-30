@@ -207,7 +207,7 @@ export function PromptInput({
       disabled={loading ? !onStop : !canSubmit}
       aria-label={loading ? "Stop generating" : "Send prompt"}
       onClick={loading ? onStop : undefined}
-      className="ml-auto size-8 rounded-full"
+      className="ml-auto size-10 rounded-full"
     >
       <AnimatePresence initial={false} mode="popLayout">
         <motion.span
@@ -258,7 +258,7 @@ export function PromptInput({
         className="scrollbar-hide block w-full resize-none overflow-y-auto bg-transparent px-2 pt-1.5 text-sm leading-6 text-foreground outline-none placeholder:text-muted-foreground/55"
       />
 
-      <div className="mt-1 flex min-h-8 items-center gap-1">
+      <div className="mt-1 flex min-h-10 items-center gap-1">
         {actions.length ? (
           <MorphPopover open={actionsOpen} onOpenChange={setActionsOpen}>
             <MorphPopoverTrigger>
@@ -268,7 +268,7 @@ export function PromptInput({
                 size="icon"
                 disabled={disabled || loading}
                 aria-label="Add to prompt"
-                className="size-8 rounded-full"
+                className="size-10 rounded-full"
               >
                 <motion.span
                   aria-hidden="true"

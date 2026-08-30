@@ -53,7 +53,9 @@ const VARIANT_CLASS: Record<ButtonVariant, string> = {
 };
 
 const SIZE_CLASS: Record<ButtonSize, string> = {
-  sm: "h-8 px-3 text-xs gap-1.5 rounded-full",
+  // Compact only in type and padding: the vertical target stays at 40px so
+  // dense action rows keep a desktop-sized hit area without overlapping.
+  sm: "h-10 px-3.5 text-xs gap-1.5 rounded-full",
   md: "h-10 px-5 text-sm gap-2 rounded-full",
   lg: "h-12 px-6 text-base gap-2 rounded-full",
   // Dense desktop controls still owe a 40px target, so icon buttons carry it by
