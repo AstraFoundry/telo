@@ -595,7 +595,9 @@ function ContextMenuItemBase({
         if (closeOnSelect) context.setOpen(false);
       }}
       className={cn(
-        "relative isolate flex w-full select-none items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] outline-none",
+        // 13px type with py-2 lands at 36px; menu items are among the most
+        // clicked controls in the app, so the row carries the 40px floor.
+        "relative isolate flex min-h-10 w-full select-none items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] outline-none",
         "focus-visible:ring-2 focus-visible:ring-foreground/15",
         "disabled:pointer-events-none disabled:opacity-40",
         inset && "pl-8",

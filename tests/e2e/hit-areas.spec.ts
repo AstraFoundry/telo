@@ -273,6 +273,42 @@ test("keeps the right-column panels at a 40px pointer target", async ({
   expect(await sweep(window)).toEqual([]);
 });
 
+test("keeps the menu surfaces at a 40px pointer target", async ({ window }) => {
+  await openDesignChat(window);
+
+  // Right-click menus carry the densest run of menuitems and are reached far
+  // more often than any dialog.
+  const conversation = window.getByRole("region", { name: "Conversation" });
+  await conversation
+    .getByText(
+      "Agreed. Keep the composer anchored and let only the message list scroll.",
+    )
+    .click({ button: "right" });
+  await expect(window.getByRole("menu")).toBeVisible();
+  expect(await sweep(window)).toEqual([]);
+  await window.keyboard.press("Escape");
+
+  // The command palette is a Combobox rather than a menu, so its options are a
+  // different control type from everything above. Type first, because an empty
+  // palette has no option rows to measure.
+  await window.keyboard.press("ControlOrMeta+K");
+  const field = window.getByRole("combobox", { name: "Search everywhere" });
+  await expect(field).toBeVisible();
+  await field.fill("Product Notes");
+  await expect(
+    window.getByRole("option", { name: /Product Notes/ }),
+  ).toBeVisible();
+  expect(await sweep(window)).toEqual([]);
+  await window.keyboard.press("Escape");
+
+  // The account menu is the one popover whose rows mix an avatar with text.
+  await window.getByRole("button", { name: "Open account menu" }).click();
+  await expect(
+    window.getByRole("button", { name: "Settings", exact: true }),
+  ).toBeVisible();
+  expect(await sweep(window)).toEqual([]);
+});
+
 test("keeps settings at a 40px pointer target", async ({ window }) => {
   await waitForDemoWorkspace(window);
 
