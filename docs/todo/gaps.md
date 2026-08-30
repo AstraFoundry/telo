@@ -146,7 +146,14 @@ Rejected (gate): chat-row / folder-tab springs (100+/day nav; `pressScale={1}` s
       外层 wrapper 可以把小图标垫成合格目标，`::before` 撑出来的命中区 `getBoundingClientRect` 又根本不报，
       所以改成从控件中心向外探点直到不再命中它本身，覆盖会话列表 / 会话内 / 打开的对话框三个面；
       这一扫就逮出真缺陷：composer 输入框按行数算高但盒模型含纵向 padding，单行算出 24px 而 scrollHeight 是 30px，
-      每条消息的第一行其实一直在自己框里溢出滚动，把自身 padding 加回去后单行回到 40px（顺带过了点击区），composer 整体高 16px
+      每条消息的第一行其实一直在自己框里溢出滚动，把自身 padding 加回去后单行回到 40px（顺带过了点击区），composer 整体高 16px。
+      收尾又把扫描面从 3 个扩到 objective 点名的全部 9 个（emoji 浮层 / 媒体查看器 / agent 面板 / chat-profile / settings / onboarding），拆成 5 个并行 test；
+      过程中先修了扫描器自己的两个错：一是 20px 的 radio 圆点被判违规，但点它的 label 就能选中（实测点 label 最右端确实选中了），
+      真正命中区是整行，故改为与 `control.labels` 求并集——settings 的 57 条误报由此降到 11 条；二是探针以 2px 步进，
+      分辨不出 40 与 38，改成 1px。剩下的 11 条是真的，连同 emoji 一起共三处「声明合规、渲染不合规」，class 名 grep 永远抓不到：
+      emoji 格子与分类页签写着 `size-10`，但 8 列 40px + 7 个 2px 间隙要 334px 而浮层只给 320px，grid 与 flex 各自把每颗按钮压掉 2px（浮层 `w-84` → `w-88`）；
+      radio / checkbox 的 20px 圆点所在 label 行只有 20px 高（label 加 `min-h-10`，圆点不变）；
+      switch 无 label 可借，28px 轨道用伪元素撑到 44px（不取 40 是因为亚像素落位会量到 39）
 - [x] `make check` 无被压制的架构 / 质量失败 — `format:check` / `lint --max-warnings=0` / `typecheck` / 799 unit / `docs:check` / 60 e2e 全绿；
       过程中修掉两个真问题：composer 两处 effect 内同步 setState（成员缓存改为按 chatId 派生，`@` 查询重置改成渲染期，与同文件 draft 镜像同一写法）
       和 caret 恢复的 `useLayoutEffect` 里 setState（收敛成 `queueCaret`，DOM 与 `selection` 状态一处写）；
