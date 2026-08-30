@@ -1,4 +1,9 @@
-import { demoTest as test, expect, waitForDemoWorkspace } from "./fixtures";
+import {
+  demoTest as test,
+  expect,
+  test as plainTest,
+  waitForDemoWorkspace,
+} from "./fixtures";
 import type { Page } from "@playwright/test";
 
 /**
@@ -99,18 +104,36 @@ function measureUndersized({
       outer = ancestorBox;
     }
 
+    // A labelled control is activated by clicking its label, so the pointer
+    // target is the union of the two boxes even when the label sits beside the
+    // control rather than around it. Without this a 20px radio disc reads as a
+    // 20px target when its real one spans the whole row.
+    const labels = (control as HTMLButtonElement).labels;
+    for (const label of labels ?? []) {
+      const labelBox = label.getBoundingClientRect();
+      if (labelBox.width === 0 || labelBox.height === 0) continue;
+      const left = Math.min(outer.left, labelBox.left);
+      const top = Math.min(outer.top, labelBox.top);
+      outer = new DOMRect(
+        left,
+        top,
+        Math.max(outer.right, labelBox.right) - left,
+        Math.max(outer.bottom, labelBox.bottom) - top,
+      );
+    }
+
     // Then probe past the edges, which is the only way `::before` hit
     // expansion shows up at all.
     const outerMidX = outer.left + outer.width / 2;
     const outerMidY = outer.top + outer.height / 2;
     const width =
       outer.width +
-      reach(control, outer.left, outerMidY, -2, true) +
-      reach(control, outer.right, outerMidY, 2, true);
+      reach(control, outer.left, outerMidY, -1, true) +
+      reach(control, outer.right, outerMidY, 1, true);
     const height =
       outer.height +
-      reach(control, outer.top, outerMidX, -2, false) +
-      reach(control, outer.bottom, outerMidX, 2, false);
+      reach(control, outer.top, outerMidX, -1, false) +
+      reach(control, outer.bottom, outerMidX, 1, false);
 
     if (width + 0.5 >= minTarget && height + 0.5 >= minTarget) continue;
 
@@ -161,15 +184,8 @@ async function sweep(window: Page): Promise<Target[]> {
   });
 }
 
-test("keeps every reachable control at a 40px pointer target", async ({
-  window,
-}) => {
+async function openDesignChat(window: Page): Promise<void> {
   await waitForDemoWorkspace(window);
-
-  // Chat list, folder strip and search field: the densest surface, and the one
-  // whose tabs and field were previously pinned below the floor.
-  expect(await sweep(window)).toEqual([]);
-
   await window
     .getByRole("navigation", { name: "Chats" })
     .getByRole("button", { name: /Telo Design/ })
@@ -177,13 +193,46 @@ test("keeps every reachable control at a 40px pointer target", async ({
   await expect(
     window.getByRole("heading", { name: "Telo Design" }),
   ).toBeVisible();
+}
+
+test("keeps the chat surfaces at a 40px pointer target", async ({ window }) => {
+  await waitForDemoWorkspace(window);
+
+  // Chat list, folder strip and search field: the densest surface, and the one
+  // whose tabs and field were previously pinned below the floor.
+  expect(await sweep(window)).toEqual([]);
+
+  await openDesignChat(window);
 
   // Conversation surface: header actions, transcript affordances, composer rail.
   expect(await sweep(window)).toEqual([]);
+});
+
+test("keeps the overlays at a 40px pointer target", async ({ window }) => {
+  await openDesignChat(window);
+
+  // A popover, whose grid of emoji cells is the densest run of controls in the
+  // app and so the likeliest place for a container to squeeze them.
+  await window.getByRole("button", { name: "Emoji" }).click();
+  await expect(
+    window.getByRole("textbox", { name: "Search emoji…" }),
+  ).toBeVisible();
+  expect(await sweep(window)).toEqual([]);
+  await window.keyboard.press("Escape");
+
+  const conversation = window.getByRole("region", { name: "Conversation" });
+
+  // The media viewer puts its controls over the image rather than beside it,
+  // so nothing pads them if they are undersized.
+  await conversation.getByRole("button", { name: "telo-hero.png" }).click();
+  const viewer = window.getByRole("dialog", { name: "Media viewer" });
+  await expect(viewer).toBeVisible();
+  expect(await sweep(window)).toEqual([]);
+  await window.keyboard.press("Escape");
+  await expect(viewer).toHaveCount(0);
 
   // A centered modal, whose close button keeps a 32px disc on purpose, so this
   // is the case that only passes because its hit box is padded past the disc.
-  const conversation = window.getByRole("region", { name: "Conversation" });
   // Outgoing, because only an own message offers Delete.
   const target =
     "Agreed. Keep the composer anchored and let only the message list scroll.";
@@ -197,7 +246,49 @@ test("keeps every reachable control at a 40px pointer target", async ({
   const dialog = window.getByRole("dialog");
   await expect(dialog).toBeVisible();
   expect(await sweep(window)).toEqual([]);
-
-  await window.keyboard.press("Escape");
-  await expect(dialog).toHaveCount(0);
 });
+
+test("keeps the right-column panels at a 40px pointer target", async ({
+  window,
+}) => {
+  await openDesignChat(window);
+
+  // Agent panel and chat profile share the right column and close each other,
+  // so they have to be swept in sequence rather than together.
+  await window.getByRole("button", { name: "Open agent" }).click();
+  await expect(
+    window.getByRole("complementary", { name: "Agent" }),
+  ).toBeVisible();
+  expect(await sweep(window)).toEqual([]);
+
+  await window.getByRole("button", { name: "Chat info" }).click();
+  await expect(
+    window.getByRole("complementary", { name: "Chat info" }),
+  ).toBeVisible();
+  expect(await sweep(window)).toEqual([]);
+});
+
+test("keeps settings at a 40px pointer target", async ({ window }) => {
+  await waitForDemoWorkspace(window);
+
+  // Settings is the one surface built from form controls rather than icon
+  // buttons: switches, radios, a slider and several selects.
+  await window.getByRole("button", { name: "Open account menu" }).click();
+  await window.getByRole("button", { name: "Settings", exact: true }).click();
+  await expect(
+    window.getByRole("heading", { name: "Agent settings" }),
+  ).toBeVisible();
+  expect(await sweep(window)).toEqual([]);
+});
+
+// Onboarding never renders in the demo workspace, so it needs the plain
+// fixture and a test of its own.
+plainTest(
+  "keeps onboarding controls at a 40px pointer target",
+  async ({ window }) => {
+    await expect(
+      window.getByRole("button", { name: "Start Messaging" }),
+    ).toBeVisible();
+    expect(await sweep(window)).toEqual([]);
+  },
+);
