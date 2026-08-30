@@ -20,10 +20,17 @@ interface Target {
   readonly height: number;
 }
 
-function measureUndersized(minTarget: number): Target[] {
-  const controls = document.querySelectorAll(
-    'button, [role="button"], [role="tab"], [role="option"], [role="menuitem"], [role="switch"], input:not([type="hidden"]), textarea, select',
-  );
+const CONTROL_SELECTOR =
+  'button, [role="button"], [role="tab"], [role="option"], [role="menuitem"], [role="switch"], input:not([type="hidden"]), textarea, select';
+
+function measureUndersized({
+  minTarget,
+  selector,
+}: {
+  minTarget: number;
+  selector: string;
+}): Target[] {
+  const controls = document.querySelectorAll(selector);
 
   const hits = (x: number, y: number, control: Element): boolean => {
     const found = document.elementFromPoint(x, y);
@@ -120,8 +127,39 @@ function measureUndersized(minTarget: number): Target[] {
   return undersized;
 }
 
-const sweep = (window: Page): Promise<Target[]> =>
-  window.evaluate(measureUndersized, MIN_TARGET);
+/**
+ * A control measured mid-animation reports its transient size, not its settled
+ * one: the morphing dialog caught at scale 0.95 makes a compliant 40px button
+ * read as 38px. In isolation that window closes before the assertion runs, but
+ * under a loaded suite it does not, so wait for two consecutive polls to agree
+ * on every control's geometry before believing any of it.
+ */
+async function waitForSettledLayout(window: Page): Promise<void> {
+  await window.waitForFunction(
+    (selector: string) => {
+      const geometry = [...document.querySelectorAll(selector)]
+        .map((control) => {
+          const box = control.getBoundingClientRect();
+          return `${Math.round(box.x)},${Math.round(box.y)},${Math.round(box.width)},${Math.round(box.height)}`;
+        })
+        .join("|");
+      const scope = globalThis as { __teloLayout?: string };
+      const settled = scope.__teloLayout === geometry;
+      scope.__teloLayout = geometry;
+      return settled;
+    },
+    CONTROL_SELECTOR,
+    { polling: 100 },
+  );
+}
+
+async function sweep(window: Page): Promise<Target[]> {
+  await waitForSettledLayout(window);
+  return window.evaluate(measureUndersized, {
+    minTarget: MIN_TARGET,
+    selector: CONTROL_SELECTOR,
+  });
+}
 
 test("keeps every reachable control at a 40px pointer target", async ({
   window,
