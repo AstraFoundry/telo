@@ -1,4 +1,4 @@
-export { EASE_OUT } from "@beui-lib/ease";
+export { EASE_OUT, SPRING_PRESS } from "./motion";
 
 export { Avatar } from "./avatar";
 export type { AvatarProps } from "./avatar";

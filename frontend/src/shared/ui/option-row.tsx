@@ -2,15 +2,9 @@
 
 import { type HTMLMotionProps, motion, useReducedMotion } from "motion/react";
 
-import { cn } from "@/shared/lib/cn";
+import { SPRING_PRESS } from "./motion";
 
-/** Mirrors the press spring the BEUI button uses, which this layer cannot import. */
-const SPRING_PRESS = {
-  type: "spring",
-  stiffness: 500,
-  damping: 30,
-  mass: 0.6,
-} as const;
+import { cn } from "@/shared/lib/cn";
 
 export interface OptionRowProps extends Omit<
   HTMLMotionProps<"button">,
