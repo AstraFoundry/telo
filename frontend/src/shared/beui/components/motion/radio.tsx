@@ -118,7 +118,7 @@ export function RadioGroupItem({
         aria-checked={selected}
         disabled={disabled}
         onClick={() => !disabled && setValue(value)}
-        whileTap={reduce || disabled ? undefined : { scale: 0.92 }}
+        whileTap={reduce || disabled ? undefined : { scale: 0.96 }}
         transition={SPRING_PRESS}
         data-state={selected ? "checked" : "unchecked"}
         className={cn(

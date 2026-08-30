@@ -72,15 +72,16 @@ function EmojiGrid({
   return (
     <div className="grid grid-cols-8 gap-0.5">
       {entries.map((entry) => (
-        <button
+        <Button
           key={entry.glyph}
-          type="button"
+          size="icon"
+          variant="ghost"
           aria-label={entry.name}
           onClick={() => onPick(entry.glyph)}
-          className="grid size-10 place-items-center rounded-lg text-xl leading-none transition-colors hover:bg-muted focus-visible:bg-muted focus-visible:outline-none"
+          className="text-xl leading-none hover:bg-muted focus-visible:bg-muted focus-visible:outline-none"
         >
           {entry.glyph}
-        </button>
+        </Button>
       ))}
     </div>
   );
@@ -171,20 +172,21 @@ export function EmojiPicker({
               ) : null}
               <div className="flex items-center gap-0.5 border-t border-border pt-1.5">
                 {EMOJI_CATEGORIES.map((group) => (
-                  <button
+                  <Button
                     key={group.id}
-                    type="button"
+                    size="icon"
+                    variant="ghost"
                     aria-label={CATEGORY_LABELS[group.id]}
                     aria-pressed={group.id === activeCategory}
                     onClick={() => setActiveCategory(group.id)}
-                    className={`grid size-10 place-items-center rounded-lg transition-colors hover:bg-muted focus-visible:bg-muted focus-visible:outline-none ${
+                    className={`hover:bg-muted focus-visible:bg-muted focus-visible:outline-none ${
                       group.id === activeCategory
                         ? "bg-muted text-foreground"
-                        : "text-muted-foreground"
+                        : ""
                     }`}
                   >
                     {CATEGORY_ICONS[group.id]}
-                  </button>
+                  </Button>
                 ))}
               </div>
               <div className="max-h-56 overflow-y-auto">

@@ -8,6 +8,8 @@ export { LinkPreview } from "./link-preview";
 export type { LinkPreviewProps } from "./link-preview";
 export { OptionRow } from "./option-row";
 export type { OptionRowProps } from "./option-row";
+export { PressableBlock } from "./pressable-block";
+export type { PressableBlockProps } from "./pressable-block";
 export { MediaViewer } from "./media-viewer";
 export type {
   MediaViewerItem,

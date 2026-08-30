@@ -69,6 +69,7 @@ import {
   MorphPopover,
   MorphPopoverContent,
   MorphPopoverTrigger,
+  PressableBlock,
   Tooltip,
   EASE_OUT,
 } from "shared/ui";
@@ -428,14 +429,13 @@ function ConversationMessage({
                   </div>
                 ) : null}
                 {message.replyTo ? (
-                  <button
-                    type="button"
+                  <PressableBlock
                     aria-label={copy.jumpToMessage}
                     onClick={(event) => {
                       event.stopPropagation();
                       onJumpToMessage(message.replyTo!.id);
                     }}
-                    className="mb-1 block w-full border-l-2 border-primary pl-2 text-left"
+                    className="mb-1 rounded-none border-l-2 border-primary pl-2"
                   >
                     <div className="truncate font-medium text-primary">
                       {message.replyTo.senderName}
@@ -447,7 +447,7 @@ function ConversationMessage({
                       entities={message.replyTo.entities}
                       revealSpoilerLabel={copy.revealSpoiler}
                     />
-                  </button>
+                  </PressableBlock>
                 ) : null}
                 {message.media ? (
                   <div ref={mediaKey ? preloadRef : undefined}>

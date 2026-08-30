@@ -122,15 +122,22 @@ Rejected (gate): chat-row / folder-tab springs (100+/day nav; `pressScale={1}` s
 
 - [x] UI 只走 `shared/ui`；缺组件向上游 BEUI 补，不在产品 slice 再造一套 — Wave 6 的 mention / 模板列表原本各自手写 `<button>` 行，
       已收进 `shared/ui` 新原语 `OptionRow`（两种排版、`min-h-10`、press scale 0.96、显式 `aria-label` 免得两行文字连读，
-      并在类型上 omit 掉 Motion 的 `layout` / `layoutId`——列表里的 layout 动画会和滚动打架）；composer 的隐藏 `<input type=file>` 是平台机制，不算自造控件
+      并在类型上 omit 掉 Motion 的 `layout` / `layoutId`——列表里的 layout 动画会和滚动打架）；
+      收尾复查又清掉三处遗留自造控件：emoji 表情格与分类页签改用 `Button size="icon"`（本就是 `size-10 rounded-lg`，顺带白拿 press spring 与 ripple 关闭态），
+      回复引用块改用新原语 `PressableBlock`（`Button` 的尺寸档表达不了「整块可按、自带左边框和两行富文本」，该原语只给按压弹簧 / 0.96 / focus ring，视觉全交调用方）；
+      composer 的隐藏 `<input type=file>` 是平台机制，不算自造控件
+- [x] press scale 全仓一律 0.96 — 收尾把漂移的 vendored BEUI 拉平：checkbox / radio 0.92、action-swap 0.97、animated-sidebar 四处 0.98，
+      以及当前未被引用的 tool-approval 0.97 与 file-diff / tool-result / code-block 0.9 也一并归一，避免它们日后被引入时再把偏差带回来
 - [x] 文案进 `shared/config/copy.ts` — Wave 5 / 6 新面全部经 `copy.*`，无硬编码用户可见文案
 - [x] 高频聊天导航无 motion 或 ≤150ms 色/透明度 — 侧栏行 `pressScale={1}` 不变；新增只有列表 promote 150ms opacity 与投递字形 140ms 淡入
 - [x] 偶发浮层 / 对话框 / 面板：原点可打断；保留 reduced-motion 静态提示 — 模板 / emoji 走 MorphPopover（原点感知），关键词文件夹走 CenterMorphModal（保持居中）；
       `OptionRow` 在 reduced-motion 下不做 press 缩放，`index.css` 的 reduced-motion 兜底覆盖动画 / 过渡 / View Transition
 - [x] 桌面点击区域 ≥40px，命中不重叠 — BEUI `Button` 的 `sm` 由 32px 提到 40px（只在字号和内边距上保持紧凑），
       `PromptInput` 的发送 / 附件钮 32px → 40px（行高同步到 `min-h-10`），模板行去掉 `<li>` 上与行内按钮重叠的 hover 底色
-- [x] `make check` 无被压制的架构 / 质量失败 — `format:check` / `lint --max-warnings=0` / `typecheck` / 797 unit / `docs:check` / 58 e2e 全绿；
+- [x] `make check` 无被压制的架构 / 质量失败 — `format:check` / `lint --max-warnings=0` / `typecheck` / 797 unit / `docs:check` / 59 e2e 全绿；
       过程中修掉两个真问题：composer 两处 effect 内同步 setState（成员缓存改为按 chatId 派生，`@` 查询重置改成渲染期，与同文件 draft 镜像同一写法）
       和 caret 恢复的 `useLayoutEffect` 里 setState（收敛成 `queueCaret`，DOM 与 `selection` 状态一处写）；
       另修掉 `demo-telegram-repository` 上传取消测试的时序 flake（20ms 步进在并行满载下会在取消到达前跑完整个上传）
-- [ ] 慢放检查新增动画及其 reduced-motion 替代 — 需要可交互跑起来的应用，留待人工走查
+- [x] reduced-motion 替代已自动化 — 新增 `tests/e2e/reduced-motion.spec.ts`：在 `emulateMedia({ reducedMotion: "reduce" })` 下走 emoji 选取、
+      媒体查看器开关、回复引用跳转，专门盯「只在过渡过程中才可见 / 可点的元素」在 `reduce` 下过渡不播时是否还成立
+- [ ] 慢放（10%）人工观感走查 — 只剩审美判断这半：动画是否过冲、时长是否拖沓，需要人在跑起来的应用里眼看，无法自动化

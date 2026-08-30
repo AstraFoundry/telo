@@ -145,7 +145,7 @@ export function CodeBlock({
             aria-label={copied ? "Copied" : "Copy code"}
             title={copied ? "Copied" : "Copy code"}
             onClick={handleCopy}
-            whileTap={reduce ? undefined : { scale: 0.9 }}
+            whileTap={reduce ? undefined : { scale: 0.96 }}
             transition={SPRING_PRESS}
             className="grid size-7 shrink-0 place-items-center rounded-full text-muted-foreground outline-none transition-colors hover:bg-background/70 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
           >
