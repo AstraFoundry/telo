@@ -130,6 +130,10 @@ Rejected (gate): chat-row / folder-tab springs (100+/day nav; `pressScale={1}` s
       收尾复查又清掉三处遗留自造控件：emoji 表情格与分类页签改用 `Button size="icon"`（本就是 `size-10 rounded-lg`，顺带白拿 press spring 与 ripple 关闭态），
       回复引用块改用新原语 `PressableBlock`（`Button` 的尺寸档表达不了「整块可按、自带左边框和两行富文本」，该原语只给按压弹簧 / 0.96 / focus ring，视觉全交调用方）；
       composer 的隐藏 `<input type=file>` 是平台机制，不算自造控件
+      最后一处不是自造控件而是自造常数：`OptionRow` / `PressableBlock` 各抄了一份按压弹簧的字面量，注释还写着「本层无法 import」——
+      层级策略其实放行 `shared → shared`，真正拦住的是 `no-restricted-imports`，而豁免只发给了 barrel；
+      从被 barrel re-export 的原语再 import barrel 会成环，所以给常数单开 `shared/ui/motion.ts` 作缝，barrel 与同级原语都从它读。
+      抄下来的弹簧不会在原件被 retune 时出声：这两个原语会独自留在旧手感上，正是 0.96 那一轮刚清掉的漂移
 - [x] press scale 全仓一律 0.96 — 收尾把漂移的 vendored BEUI 拉平：checkbox / radio 0.92、action-swap 0.97、animated-sidebar 四处 0.98，
       以及当前未被引用的 tool-approval 0.97 与 file-diff / tool-result / code-block 0.9 也一并归一，避免它们日后被引入时再把偏差带回来
 - [x] 文案进 `shared/config/copy.ts` — Wave 5 / 6 新面全部经 `copy.*`，无硬编码用户可见文案
@@ -149,4 +153,12 @@ Rejected (gate): chat-row / folder-tab springs (100+/day nav; `pressScale={1}` s
       另修掉 `demo-telegram-repository` 上传取消测试的时序 flake（20ms 步进在并行满载下会在取消到达前跑完整个上传）
 - [x] reduced-motion 替代已自动化 — 新增 `tests/e2e/reduced-motion.spec.ts`：在 `emulateMedia({ reducedMotion: "reduce" })` 下走 emoji 选取、
       媒体查看器开关、回复引用跳转，专门盯「只在过渡过程中才可见 / 可点的元素」在 `reduce` 下过渡不播时是否还成立
-- [ ] 慢放（10%）人工观感走查 — 只剩审美判断这半：动画是否过冲、时长是否拖沓，需要人在跑起来的应用里眼看，无法自动化
+- [ ] 慢放（10%）人工观感走查 — 仍需人在跑起来的应用里眼看，但「过冲」这半已先用数学收窄了范围：
+      阻尼比 ζ = c / (2√(km))，ζ ≥ 1 不过冲，ζ < 1 的峰值超调 = exp(-πζ/√(1-ζ²))。全仓弹簧照此过了一遍，
+      产品可达面里真正会回弹的只有三处：Settings 字号滑块的 `SPRING_BOUNCY`（ζ=0.31，超调 35.5%，571ms 稳定）、
+      OTP 输入格（ζ=0.63，8.0%，286ms）、以及 `Select` 面板开合时那 8px 间隙（`bounce: 0.5` / `duration: 0.6` / `delay: 0.12`）。
+      滑块那处只驱动拇指抓握的 `scaleY` 1→1.35，取值本身走临界阻尼的 `SPRING_GLIDE` 不会在两端回弹，
+      按下时的超调发生在你还按着的过程里并不突兀，但松手回 1 时会先缩到约 0.88 再弹回——留不留是审美判断，故未擅自改。
+      其余（`SPRING_PRESS` ζ=0.87 超调 0.4%、AnimatedSidebar ζ=0.90 超调 0.2%、`SPRING_SWAP` / `SPRING_PANEL` /
+      `SPRING_LAYOUT` / `SPRING_GLIDE` / switch 均 ζ ≥ 0.94）数学上不过冲，慢放时不必再逐个盯。
+      剩下「时长是否拖沓」仍全靠眼看，重点两处：onboarding 的 `TextReveal`（369ms 稳定且逐字 delay 叠加）与上述 Select 间隙（含 delay 共 720ms）
