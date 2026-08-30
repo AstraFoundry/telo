@@ -129,6 +129,8 @@ function ChatListRow({
       <ContextMenuTrigger>
         <Button
           variant="ghost"
+          // Navigation target: pressed dozens of times a session, so it stays
+          // motion-free and signals state through colour alone.
           pressScale={1}
           onClick={onSelect}
           aria-current={active ? "page" : undefined}

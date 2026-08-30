@@ -137,8 +137,13 @@ Rejected (gate): chat-row / folder-tab springs (100+/day nav; `pressScale={1}` s
 - [x] 偶发浮层 / 对话框 / 面板：原点可打断；保留 reduced-motion 静态提示 — 模板 / emoji 走 MorphPopover（原点感知），关键词文件夹走 CenterMorphModal（保持居中）；
       `OptionRow` 在 reduced-motion 下不做 press 缩放，`index.css` 的 reduced-motion 兜底覆盖动画 / 过渡 / View Transition
 - [x] 桌面点击区域 ≥40px，命中不重叠 — BEUI `Button` 的 `sm` 由 32px 提到 40px（只在字号和内边距上保持紧凑），
-      `PromptInput` 的发送 / 附件钮 32px → 40px（行高同步到 `min-h-10`），模板行去掉 `<li>` 上与行内按钮重叠的 hover 底色
-- [x] `make check` 无被压制的架构 / 质量失败 — `format:check` / `lint --max-warnings=0` / `typecheck` / 797 unit / `docs:check` / 59 e2e 全绿；
+      `PromptInput` 的发送 / 附件钮 32px → 40px，模板行去掉 `<li>` 上与行内按钮重叠的 hover 底色；
+      收尾补了 `tests/e2e/hit-areas.spec.ts` 做运行时扫描——class 名 grep 证不了 40px：最终高度是 Tailwind merge 后谁胜出，
+      外层 wrapper 可以把小图标垫成合格目标，`::before` 撑出来的命中区 `getBoundingClientRect` 又根本不报，
+      所以改成从控件中心向外探点直到不再命中它本身，覆盖会话列表 / 会话内 / 打开的对话框三个面；
+      这一扫就逮出真缺陷：composer 输入框按行数算高但盒模型含纵向 padding，单行算出 24px 而 scrollHeight 是 30px，
+      每条消息的第一行其实一直在自己框里溢出滚动，把自身 padding 加回去后单行回到 40px（顺带过了点击区），composer 整体高 16px
+- [x] `make check` 无被压制的架构 / 质量失败 — `format:check` / `lint --max-warnings=0` / `typecheck` / 799 unit / `docs:check` / 60 e2e 全绿；
       过程中修掉两个真问题：composer 两处 effect 内同步 setState（成员缓存改为按 chatId 派生，`@` 查询重置改成渲染期，与同文件 draft 镜像同一写法）
       和 caret 恢复的 `useLayoutEffect` 里 setState（收敛成 `queueCaret`，DOM 与 `selection` 状态一处写）；
       另修掉 `demo-telegram-repository` 上传取消测试的时序 flake（20ms 步进在并行满载下会在取消到达前跑完整个上传）
