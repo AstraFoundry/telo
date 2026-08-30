@@ -11,6 +11,9 @@ const DEFAULTS = {
   timeFormat: "system",
   sendWithEnter: true,
   notificationsEnabled: true,
+  sidebarWidth: 280,
+  agentPanelWidth: 380,
+  recentEmojis: [],
 } as const;
 
 describe("UserPreferences", () => {
@@ -146,6 +149,67 @@ describe("UserPreferences", () => {
 
     expect(UserPreferences.create(stored).snapshot()).toEqual(DEFAULTS);
   });
+
+  it("accepts column widths inside the supported ranges", () => {
+    const preferences = UserPreferences.default().update({
+      sidebarWidth: 320,
+      agentPanelWidth: 480,
+    });
+
+    expect(preferences.snapshot()).toEqual({
+      ...DEFAULTS,
+      sidebarWidth: 320,
+      agentPanelWidth: 480,
+    });
+  });
+
+  it.each([199, 481, Number.NaN, "280", null])(
+    "falls back to the default sidebar width for %s",
+    (sidebarWidth) => {
+      const stored = {
+        ...DEFAULTS,
+        sidebarWidth,
+      } as unknown as Parameters<typeof UserPreferences.create>[0];
+
+      expect(UserPreferences.create(stored).snapshot().sidebarWidth).toBe(280);
+    },
+  );
+
+  it.each([279, 601, Number.NaN, "380", null])(
+    "falls back to the default agent panel width for %s",
+    (agentPanelWidth) => {
+      const stored = {
+        ...DEFAULTS,
+        agentPanelWidth,
+      } as unknown as Parameters<typeof UserPreferences.create>[0];
+
+      expect(UserPreferences.create(stored).snapshot().agentPanelWidth).toBe(
+        380,
+      );
+    },
+  );
+
+  it("keeps unique non-empty recent emoji glyphs, capped and in order", () => {
+    const preferences = UserPreferences.default().update({
+      recentEmojis: ["😀", "😀", "", "😂"],
+    });
+
+    expect(preferences.snapshot().recentEmojis).toEqual(["😀", "😂"]);
+  });
+
+  it.each([null, "😀", [1, null]])(
+    "falls back to no recent emojis for malformed persisted values: %s",
+    (recentEmojis) => {
+      const stored = {
+        ...DEFAULTS,
+        recentEmojis,
+      } as unknown as Parameters<typeof UserPreferences.create>[0];
+
+      expect(UserPreferences.create(stored).snapshot().recentEmojis).toEqual(
+        [],
+      );
+    },
+  );
 
   it("falls back to defaults when the persisted file predates the new preferences", () => {
     const stored = {

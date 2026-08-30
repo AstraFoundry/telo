@@ -18,6 +18,13 @@ export class MessageActionsService {
   deleteMessage(input: DeleteMessageInput): Promise<void> {
     if (!input.chatId.trim()) throw new Error("Chat id is required");
     if (!input.messageId.trim()) throw new Error("Message id is required");
+    if (
+      input.scope !== undefined &&
+      input.scope !== "me" &&
+      input.scope !== "everyone"
+    ) {
+      throw new Error("Delete scope must be me or everyone");
+    }
     return this.repository.deleteMessage(input);
   }
 

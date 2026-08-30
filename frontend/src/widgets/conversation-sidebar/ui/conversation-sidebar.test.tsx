@@ -4,8 +4,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type {
   ChatDto,
+  ChatFolderDto,
   UserPreferencesDto,
 } from "../../../../../contracts/src/ipc";
+import { ARCHIVE_FOLDER_ID } from "../../../../../contracts/src/ipc";
 import { copy } from "../../../shared/config/copy";
 import { installTeloApiMock } from "../../../shared/test/mock-telo";
 
@@ -72,6 +74,9 @@ function preferences(partial: Partial<UserPreferencesDto> = {}) {
     timeFormat: "system",
     sendWithEnter: true,
     notificationsEnabled: true,
+    sidebarWidth: 280,
+    agentPanelWidth: 380,
+    recentEmojis: [],
     ...partial,
   } satisfies UserPreferencesDto;
 }
@@ -81,6 +86,7 @@ function chat(partial: Partial<ChatDto> & Pick<ChatDto, "id" | "title">) {
     preview: "",
     updatedAt: "2026-01-01T10:00:00.000Z",
     unreadCount: 0,
+    lastReadMessageId: null,
     muted: false,
     pinned: false,
     kind: "direct",
@@ -98,10 +104,14 @@ function chat(partial: Partial<ChatDto> & Pick<ChatDto, "id" | "title">) {
 async function renderSidebar({
   prefs = {},
   chats = [chat({ id: "chat-1", title: "Ada Byron" })],
+  folders = [],
+  activeFolderId = null,
   activeChatId = null,
 }: {
   prefs?: Partial<UserPreferencesDto>;
   chats?: ChatDto[];
+  folders?: ChatFolderDto[];
+  activeFolderId?: number | null;
   activeChatId?: string | null;
 } = {}) {
   const telo = installTeloApiMock();
@@ -109,6 +119,8 @@ async function renderSidebar({
   const { useChatStore } = await import("../../../entities/chat");
   useChatStore.setState({
     chats,
+    folders,
+    activeFolderId,
     messages: [],
     activeChatId,
     loading: false,
@@ -155,7 +167,7 @@ describe("ConversationSidebar", () => {
     expect(onSelectChat).toHaveBeenCalledTimes(1);
   });
 
-  it("shows the empty-search message when no chat matches the query", async () => {
+  it("shows the empty-search message when the server finds nothing", async () => {
     await renderSidebar();
     const user = userEvent.setup();
 
@@ -164,12 +176,16 @@ describe("ConversationSidebar", () => {
       "no-such-chat",
     );
 
-    expect(screen.getByText(copy.noChats)).toBeTruthy();
+    expect(await screen.findByText(copy.noChats)).toBeTruthy();
     expect(screen.queryByRole("button", { name: /Ada Byron/ })).toBeNull();
   });
 
-  it("hides the empty-search message while chats match the query", async () => {
-    await renderSidebar();
+  it("queries the server and shows matching chats", async () => {
+    const { telo } = await renderSidebar();
+    telo.workspace.searchGlobal.mockResolvedValue({
+      chats: [chat({ id: "chat-1", title: "Ada Byron" })],
+      messages: [],
+    });
     const user = userEvent.setup();
 
     await user.type(
@@ -177,8 +193,57 @@ describe("ConversationSidebar", () => {
       "Ada",
     );
 
+    expect(
+      await screen.findByRole("button", { name: /Ada Byron/ }),
+    ).toBeTruthy();
     expect(screen.queryByText(copy.noChats)).toBeNull();
-    expect(screen.getByRole("button", { name: /Ada Byron/ })).toBeTruthy();
+    expect(telo.workspace.searchGlobal).toHaveBeenCalledWith("Ada");
+  });
+
+  it("shows server message results and jumps to the match on click", async () => {
+    const { telo, useChatStore, onSelectChat } = await renderSidebar();
+    telo.workspace.listMessagePage.mockResolvedValue({
+      items: [],
+      nextCursor: null,
+    });
+    telo.workspace.searchGlobal.mockResolvedValue({
+      chats: [],
+      messages: [
+        {
+          id: "m9",
+          chatId: "chat-2",
+          senderName: "Grace Hopper",
+          body: "The compiler notes are ready.",
+          entities: [],
+          media: null,
+          groupedId: null,
+          sentAt: "2026-01-01T10:00:00.000Z",
+          outgoing: false,
+          status: "read",
+        },
+      ],
+    });
+    const user = userEvent.setup();
+
+    await user.type(
+      screen.getByRole("textbox", { name: copy.searchChats }),
+      "compiler",
+    );
+
+    const result = await screen.findByRole("button", {
+      name: /Grace Hopper/,
+    });
+    expect(within(result).getByText(/compiler notes/)).toBeTruthy();
+    expect(screen.getByText(copy.messages)).toBeTruthy();
+
+    await user.click(result);
+
+    expect(onSelectChat).toHaveBeenCalledTimes(1);
+    expect(useChatStore.getState().activeChatId).toBe("chat-2");
+    expect(useChatStore.getState().jumpTarget).toMatchObject({
+      chatId: "chat-2",
+      messageId: "m9",
+    });
   });
 
   it("marks a chat as read from the row context menu, then offers mark unread", async () => {
@@ -232,7 +297,9 @@ describe("ConversationSidebar", () => {
     expect(telo.workspace.setChatPinned).toHaveBeenCalledWith("chat-1", false);
     expect(useChatStore.getState().chats[0]?.pinned).toBe(false);
 
-    fireEvent.contextMenu(row);
+    // Unpinning moves the chat out of the Pinned group, which remounts the
+    // row — re-query it before opening the menu again.
+    fireEvent.contextMenu(screen.getByRole("button", { name: /Ada Byron/ }));
     await user.click(
       within(await screen.findByRole("menu")).getByRole("menuitem", {
         name: copy.muteChat,
@@ -240,6 +307,57 @@ describe("ConversationSidebar", () => {
     );
     expect(telo.workspace.setChatMuted).toHaveBeenCalledWith("chat-1", true);
     expect(useChatStore.getState().chats[0]?.muted).toBe(true);
+  });
+
+  it("groups pinned chats under a Pinned section above the rest", async () => {
+    await renderSidebar({
+      chats: [
+        chat({ id: "chat-1", title: "Ada Byron" }),
+        chat({ id: "chat-2", title: "Grace Hopper", pinned: true }),
+      ],
+    });
+
+    const nav = screen.getByRole("navigation", { name: copy.chats });
+    const text = nav.textContent ?? "";
+    expect(text).toContain(copy.pinnedChats);
+    expect(text.indexOf(copy.pinnedChats)).toBeLessThan(
+      text.indexOf("Grace Hopper"),
+    );
+    // The pinned chat leads the list even though the store order has it last.
+    expect(text.indexOf("Grace Hopper")).toBeLessThan(
+      text.indexOf("Ada Byron"),
+    );
+  });
+
+  it("groups pinned chats inside the active folder only", async () => {
+    const { useChatStore } = await renderSidebar({
+      chats: [
+        chat({ id: "chat-1", title: "Ada Byron", folderId: 2 }),
+        chat({ id: "chat-2", title: "Grace Hopper", pinned: true }),
+      ],
+      folders: [{ id: 2, title: "Work", unreadCount: 0 }],
+    });
+
+    // The All view keeps the pinned chat grouped at the top; custom-folder
+    // chats stay in the unpinned rest, like Telegram's All list.
+    let nav = screen.getByRole("navigation", { name: copy.chats });
+    let text = nav.textContent ?? "";
+    expect(text).toContain(copy.pinnedChats);
+    expect(text.indexOf(copy.pinnedChats)).toBeLessThan(
+      text.indexOf("Grace Hopper"),
+    );
+    expect(text.indexOf("Grace Hopper")).toBeLessThan(
+      text.indexOf("Ada Byron"),
+    );
+
+    act(() => useChatStore.getState().selectFolder(2));
+
+    // Inside the folder no pinned chat remains, so the section label is gone.
+    nav = screen.getByRole("navigation", { name: copy.chats });
+    text = nav.textContent ?? "";
+    expect(text).not.toContain(copy.pinnedChats);
+    expect(text).toContain("Ada Byron");
+    expect(text).not.toContain("Grace Hopper");
   });
 
   it("loads the next chat page when the end sentinel enters view", async () => {
@@ -345,5 +463,94 @@ describe("ConversationSidebar", () => {
       expect(screen.queryByText(/23:30/)).toBeNull();
       expect(screen.getByText(/11:30/)).toBeTruthy();
     });
+  });
+
+  it("hides the folder tab bar when the server reports no folders", async () => {
+    await renderSidebar();
+
+    expect(screen.queryByRole("tablist")).toBeNull();
+  });
+
+  it("renders folder tabs with the server unread badges", async () => {
+    await renderSidebar({
+      chats: [
+        chat({ id: "main", title: "Main Chat", folderId: null }),
+        chat({
+          id: "work",
+          title: "Work Chat",
+          folderId: 2,
+          unreadCount: 3,
+        }),
+      ],
+      folders: [
+        { id: 2, title: "Work", unreadCount: 3 },
+        { id: ARCHIVE_FOLDER_ID, title: "Archive", unreadCount: 2 },
+      ],
+    });
+
+    const tabs = screen.getByRole("tablist", { name: copy.chatFolders });
+    // The All badge sums its visible chats; folder badges are server counts.
+    expect(
+      within(tabs).getByRole("tab", {
+        name: `${copy.allChats} 3 ${copy.unread}`,
+      }),
+    ).toBeTruthy();
+    expect(within(tabs).getByRole("tab", { name: /Work/ })).toBeTruthy();
+    expect(
+      within(within(tabs).getByRole("tab", { name: /Work/ })).getByLabelText(
+        "3 unread",
+      ),
+    ).toBeTruthy();
+    const archive = within(tabs).getByRole("tab", {
+      name: new RegExp(copy.archiveFolder),
+    });
+    expect(within(archive).getByLabelText("2 unread")).toBeTruthy();
+  });
+
+  it("filters the chat list by the selected folder tab", async () => {
+    const { useChatStore } = await renderSidebar({
+      chats: [
+        chat({ id: "main", title: "Main Chat", folderId: null }),
+        chat({ id: "work", title: "Work Chat", folderId: 2 }),
+        chat({
+          id: "offsite",
+          title: "Offsite Planning",
+          folderId: ARCHIVE_FOLDER_ID,
+        }),
+      ],
+      folders: [
+        { id: 2, title: "Work", unreadCount: 0 },
+        { id: ARCHIVE_FOLDER_ID, title: "Archive", unreadCount: 0 },
+      ],
+    });
+    const user = userEvent.setup();
+    const list = screen.getByRole("navigation", { name: copy.chats });
+
+    // The All view keeps archived chats out of the main list.
+    expect(within(list).queryByRole("button", { name: /Offsite/ })).toBeNull();
+    expect(
+      within(list).getByRole("button", { name: /Main Chat/ }),
+    ).toBeTruthy();
+
+    await user.click(screen.getByRole("tab", { name: /Work/ }));
+
+    expect(useChatStore.getState().activeFolderId).toBe(2);
+    expect(
+      within(list).getByRole("button", { name: /Work Chat/ }),
+    ).toBeTruthy();
+    expect(
+      within(list).queryByRole("button", { name: /Main Chat/ }),
+    ).toBeNull();
+
+    await user.click(
+      screen.getByRole("tab", { name: new RegExp(copy.archiveFolder) }),
+    );
+
+    expect(
+      within(list).getByRole("button", { name: /Offsite Planning/ }),
+    ).toBeTruthy();
+    expect(
+      within(list).queryByRole("button", { name: /Work Chat/ }),
+    ).toBeNull();
   });
 });

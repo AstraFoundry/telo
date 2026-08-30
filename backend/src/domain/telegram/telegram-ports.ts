@@ -1,13 +1,19 @@
 import type {
+  ChatFolderDto,
+  ChatMemberDto,
   ChatPageDto,
   ChatPageInput,
   CurrentUserDto,
   DeleteMessageInput,
   EditMessageInput,
   ForwardMessageInput,
+  GlobalSearchResultDto,
   MessageDto,
+  MessageEntityDto,
   MessagePageDto,
   MessagePageInput,
+  MessageSearchPageDto,
+  MessageSearchPageInput,
   TelegramWorkspaceEvent,
 } from "../../../../contracts/src/ipc";
 
@@ -15,16 +21,68 @@ export interface TelegramRepository {
   subscribe(listener: (event: TelegramWorkspaceEvent) => void): () => void;
   getCurrentUser(): Promise<CurrentUserDto>;
   listChatPage(input: ChatPageInput): Promise<ChatPageDto>;
+  /**
+   * Lists the chat folders (custom folders plus the Archive when it holds
+   * chats) with server-computed unread counts.
+   */
+  listFolders(): Promise<ReadonlyArray<ChatFolderDto>>;
   listMessagePage(
     chatId: string,
     input: MessagePageInput,
   ): Promise<MessagePageDto>;
+  /**
+   * The chat's shared media: photo, video, and file messages, paged with the
+   * same cursor semantics as `listMessagePage`.
+   */
+  listSharedMedia(
+    chatId: string,
+    input: MessagePageInput,
+  ): Promise<MessagePageDto>;
+  /** The chat's pinned messages, most recently pinned first. */
+  listPinnedMessages(chatId: string): Promise<ReadonlyArray<MessageDto>>;
+  /**
+   * Members of a group chat, for mention autocomplete. Empty for chats
+   * without a member list (direct, channel, Saved Messages).
+   */
+  listChatMembers(chatId: string): Promise<ReadonlyArray<ChatMemberDto>>;
+  /** Server-side global search across chat titles and message bodies. */
+  searchGlobal(query: string): Promise<GlobalSearchResultDto>;
+  /** Server-side search within one chat; ids come back newest first. */
+  searchMessages(
+    chatId: string,
+    query: string,
+    input: MessageSearchPageInput,
+  ): Promise<MessageSearchPageDto>;
   sendMessage(
     chatId: string,
     body: string,
     replyToId?: string,
     clientId?: string,
+    /** Telegram "send without sound" flag. */
+    silent?: boolean,
+    /**
+     * Composer-authored formatting spans (UTF-16 ranges over `body`);
+     * adapters map them onto Telegram message entities at send time.
+     */
+    entities?: ReadonlyArray<MessageEntityDto>,
   ): Promise<MessageDto>;
+  downloadMedia(mediaId: string): Promise<void>;
+  cancelMediaDownload(mediaId: string): Promise<void>;
+  /**
+   * Ensures the media is present in the local cache (downloading it when
+   * needed) and resolves to the cached file's absolute path. The path is an
+   * opaque infrastructure detail, like `TelegramUploadFile.source`.
+   */
+  resolveMediaFile(mediaId: string): Promise<string>;
+  sendMedia(
+    chatId: string,
+    files: ReadonlyArray<TelegramUploadFile>,
+    caption: string,
+    replyToId: string | undefined,
+    clientId: string | undefined,
+    uploadId: string,
+  ): Promise<ReadonlyArray<MessageDto>>;
+  cancelMediaUpload(uploadId: string): Promise<void>;
   /**
    * Edits an outgoing message. Telegram only allows editing one's own
    * messages; adapters reject non-outgoing targets.
@@ -53,6 +111,14 @@ export interface TelegramRepository {
    * renderer clearing the demoWorkspace preference.
    */
   logout(): Promise<void>;
+}
+
+export interface TelegramUploadFile {
+  /** Opaque source understood only by the infrastructure adapter. */
+  readonly source: string;
+  readonly name: string;
+  readonly mimeType: string;
+  readonly size: number;
 }
 
 export interface TelegramSessionRepository {

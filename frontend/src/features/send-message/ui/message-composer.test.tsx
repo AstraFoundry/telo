@@ -4,6 +4,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -39,6 +40,9 @@ function preferences(partial: Partial<UserPreferencesDto> = {}) {
     timeFormat: "system",
     sendWithEnter: true,
     notificationsEnabled: true,
+    sidebarWidth: 280,
+    agentPanelWidth: 380,
+    recentEmojis: [],
     ...partial,
   } satisfies UserPreferencesDto;
 }
@@ -49,6 +53,9 @@ function message(id: string, chatId: string): MessageDto {
     chatId,
     senderName: "Sender",
     body: `Message ${id}`,
+    entities: [],
+    media: null,
+    groupedId: null,
     sentAt: "2026-01-01T00:00:00.000Z",
     outgoing: false,
     status: "read",
@@ -61,6 +68,7 @@ function message(id: string, chatId: string): MessageDto {
 async function renderComposer(sendWithEnter: boolean) {
   const telo = installTeloApiMock();
   telo.preferences.get.mockResolvedValue(preferences({ sendWithEnter }));
+  telo.preferences.update.mockResolvedValue(preferences({ sendWithEnter }));
   const { useChatStore } = await import("../../../entities/chat");
   useChatStore.setState({
     chats: [],
@@ -86,6 +94,15 @@ describe("MessageComposer", () => {
   beforeEach(() => {
     vi.resetModules();
     stubMatchMedia(false);
+    // jsdom does not implement object URLs, which image previews rely on.
+    URL.createObjectURL = vi.fn(() => "blob:preview");
+    URL.revokeObjectURL = vi.fn();
+    // jsdom has no ResizeObserver, which the beui popover positioning uses.
+    window.ResizeObserver = class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    } as unknown as typeof ResizeObserver;
   });
 
   it("submits on Enter when sendWithEnter is on", async () => {
@@ -236,5 +253,457 @@ describe("MessageComposer", () => {
     expect(useChatStore.getState().composerTarget).toBeNull();
     expect(screen.queryByText(copy.editingMessage)).toBeNull();
     expect((textarea as HTMLTextAreaElement).value).toBe("");
+  });
+
+  function attachFiles(files: ReadonlyArray<File>): void {
+    const input = document.querySelector(
+      'input[type="file"]',
+    ) as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [...files] } });
+  }
+
+  it("lists picked files in the tray and removes a single one", async () => {
+    await renderComposer(true);
+    await flushPreferences();
+
+    attachFiles([
+      new File(["a"], "photo.png", { type: "image/png" }),
+      new File(["b"], "notes.txt", { type: "text/plain" }),
+    ]);
+
+    expect(screen.getByText("notes.txt")).toBeTruthy();
+    expect(
+      screen.getByRole("button", {
+        name: `${copy.removeAttachment}: photo.png`,
+      }),
+    ).toBeTruthy();
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: `${copy.removeAttachment}: notes.txt`,
+      }),
+    );
+
+    expect(screen.queryByText("notes.txt")).toBeNull();
+    expect(
+      screen.getByRole("button", {
+        name: `${copy.removeAttachment}: photo.png`,
+      }),
+    ).toBeTruthy();
+  });
+
+  it("rejects picking more than 10 attachments at once", async () => {
+    await renderComposer(true);
+    await flushPreferences();
+
+    attachFiles(
+      Array.from(
+        { length: 11 },
+        (_, index) =>
+          new File(["x"], `file-${index}.txt`, { type: "text/plain" }),
+      ),
+    );
+
+    expect(screen.getByRole("alert").textContent).toContain(
+      copy.tooManyAttachments,
+    );
+    expect(
+      screen.queryByRole("button", { name: /Remove attachment/ }),
+    ).toBeNull();
+  });
+
+  it("sends attachments with the caption through the store and clears the tray", async () => {
+    const { telo, useChatStore, textarea } = await renderComposer(true);
+    const sent = {
+      ...message("m9", "a"),
+      outgoing: true,
+      status: "sent" as const,
+    };
+    telo.workspace.sendMedia.mockResolvedValue([sent]);
+    act(() => useChatStore.setState({ activeChatId: "a", messages: [] }));
+    await flushPreferences();
+
+    const files = [new File(["a"], "photo.png", { type: "image/png" })];
+    attachFiles(files);
+    fireEvent.change(textarea, { target: { value: "look" } });
+    fireEvent.keyDown(textarea, { key: "Enter" });
+
+    await waitFor(() =>
+      expect(telo.workspace.sendMedia).toHaveBeenCalledWith(
+        "a",
+        files,
+        expect.objectContaining({
+          caption: "look",
+          uploadId: expect.any(String),
+        }),
+      ),
+    );
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("button", { name: /Remove attachment/ }),
+      ).toBeNull(),
+    );
+    expect((textarea as HTMLTextAreaElement).value).toBe("");
+    expect(useChatStore.getState().messages).toEqual([sent]);
+  });
+
+  it("keeps the files and caption after a failed upload for a one-click retry", async () => {
+    const { telo, useChatStore, textarea } = await renderComposer(true);
+    telo.workspace.sendMedia.mockRejectedValue(new Error("Upload failed"));
+    act(() => useChatStore.setState({ activeChatId: "a", messages: [] }));
+    await flushPreferences();
+
+    const files = [new File(["a"], "photo.png", { type: "image/png" })];
+    attachFiles(files);
+    fireEvent.change(textarea, { target: { value: "look" } });
+    fireEvent.keyDown(textarea, { key: "Enter" });
+
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      `${copy.mediaUploadFailed} Upload failed`,
+    );
+    expect((textarea as HTMLTextAreaElement).value).toBe("look");
+    expect(
+      screen.getByRole("button", {
+        name: `${copy.removeAttachment}: photo.png`,
+      }),
+    ).toBeTruthy();
+
+    telo.workspace.sendMedia.mockResolvedValue([
+      { ...message("m9", "a"), outgoing: true, status: "sent" as const },
+    ]);
+    fireEvent.keyDown(textarea, { key: "Enter" });
+
+    await waitFor(() =>
+      expect(telo.workspace.sendMedia).toHaveBeenCalledTimes(2),
+    );
+    await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
+  });
+
+  it("cancelling an in-flight upload calls cancelMediaUpload without an error", async () => {
+    const { telo, useChatStore, textarea } = await renderComposer(true);
+    let resolveSend: ((messages: MessageDto[]) => void) | undefined;
+    telo.workspace.sendMedia.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveSend = resolve;
+        }),
+    );
+    act(() => useChatStore.setState({ activeChatId: "a", messages: [] }));
+    await flushPreferences();
+
+    attachFiles([new File(["a"], "photo.png", { type: "image/png" })]);
+    fireEvent.keyDown(textarea, { key: "Enter" });
+
+    await waitFor(() =>
+      expect(telo.workspace.sendMedia).toHaveBeenCalledTimes(1),
+    );
+    const uploadId = telo.workspace.sendMedia.mock.calls[0]?.[2].uploadId;
+    fireEvent.click(screen.getByRole("button", { name: "Stop generating" }));
+
+    expect(telo.workspace.cancelMediaUpload).toHaveBeenCalledWith(uploadId);
+
+    resolveSend?.([]);
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("button", { name: "Stop generating" }),
+      ).toBeNull(),
+    );
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("disables the attach action while editing a message", async () => {
+    const { useChatStore } = await renderComposer(true);
+    useChatStore.setState({
+      activeChatId: "a",
+      messages: [message("m1", "a")],
+    });
+    act(() => useChatStore.getState().startEdit(message("m1", "a")));
+    await flushPreferences();
+
+    expect(
+      screen
+        .getByRole("button", { name: copy.attachFiles })
+        .hasAttribute("disabled"),
+    ).toBe(true);
+  });
+
+  it("reflects draft text a message action streams into the store", async () => {
+    const { useChatStore, textarea } = await renderComposer(true);
+    act(() => useChatStore.setState({ activeChatId: "a", messages: [] }));
+    await flushPreferences();
+
+    // A message AI action streams into the draft through the store; the
+    // textarea must follow without a keystroke.
+    act(() =>
+      useChatStore.setState({
+        draftStream: { chatId: "a", text: "Demo translation: hi" },
+      }),
+    );
+
+    expect((textarea as HTMLTextAreaElement).value).toBe(
+      "Demo translation: hi",
+    );
+  });
+
+  it("keeps the edited message text when an action stream lands", async () => {
+    const { useChatStore, textarea } = await renderComposer(true);
+    useChatStore.setState({
+      activeChatId: "a",
+      messages: [message("m1", "a")],
+    });
+    act(() => useChatStore.getState().startEdit(message("m1", "a")));
+    await flushPreferences();
+
+    act(() =>
+      useChatStore.setState({
+        draftStream: { chatId: "a", text: "external" },
+      }),
+    );
+
+    expect((textarea as HTMLTextAreaElement).value).toBe("Message m1");
+  });
+
+  function composerDropZone(): HTMLElement {
+    const form = document.querySelector("form");
+    if (!form?.parentElement) throw new Error("Composer form is not mounted");
+    return form.parentElement;
+  }
+
+  function dropFiles(files: ReadonlyArray<File>): void {
+    fireEvent.drop(composerDropZone(), {
+      dataTransfer: { types: ["Files"], files: [...files] },
+    });
+  }
+
+  it("lands dropped files in the tray through the same validation as the picker", async () => {
+    await renderComposer(true);
+    await flushPreferences();
+
+    dropFiles([new File(["a"], "dropped.txt", { type: "text/plain" })]);
+
+    expect(screen.getByText("dropped.txt")).toBeTruthy();
+
+    dropFiles(
+      Array.from(
+        { length: 10 },
+        (_, index) =>
+          new File(["x"], `extra-${index}.txt`, { type: "text/plain" }),
+      ),
+    );
+
+    expect(screen.getByRole("alert").textContent).toContain(
+      copy.tooManyAttachments,
+    );
+    expect(screen.getByText("dropped.txt")).toBeTruthy();
+    expect(screen.queryByText("extra-0.txt")).toBeNull();
+  });
+
+  it("highlights the drop zone only while a file drag is over it", async () => {
+    await renderComposer(true);
+    await flushPreferences();
+    const form = document.querySelector("form") as HTMLFormElement;
+    const dataTransfer = { types: ["Files"], files: [] };
+
+    fireEvent.dragEnter(composerDropZone(), { dataTransfer });
+    expect(form.className).toContain("border-primary/60");
+
+    fireEvent.dragLeave(composerDropZone(), { dataTransfer });
+    expect(form.className).not.toContain("border-primary/60");
+  });
+
+  it("ignores dropped files while editing a message", async () => {
+    const { useChatStore } = await renderComposer(true);
+    useChatStore.setState({
+      activeChatId: "a",
+      messages: [message("m1", "a")],
+    });
+    act(() => useChatStore.getState().startEdit(message("m1", "a")));
+    await flushPreferences();
+
+    dropFiles([new File(["a"], "dropped.txt", { type: "text/plain" })]);
+
+    expect(screen.queryByText("dropped.txt")).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: /Remove attachment/ }),
+    ).toBeNull();
+  });
+
+  it("attaches pasted files, renaming clipboard screenshots deterministically", async () => {
+    const { textarea } = await renderComposer(true);
+    await flushPreferences();
+
+    const screenshot = new File(["png"], "image.png", { type: "image/png" });
+    const named = new File(["doc"], "report.pdf", { type: "application/pdf" });
+    fireEvent.paste(textarea, {
+      clipboardData: { files: [screenshot, named] },
+    });
+
+    expect(screen.getByText("report.pdf")).toBeTruthy();
+    expect(
+      screen.getByRole("button", {
+        name: new RegExp(`^${copy.removeAttachment}: screenshot-\\d+\\.png$`),
+      }),
+    ).toBeTruthy();
+    // A pasted file must not replace the typed draft with a bogus text paste.
+    expect((textarea as HTMLTextAreaElement).value).toBe("");
+  });
+
+  it("sends without sound from the send button's context menu", async () => {
+    const { onSend, textarea } = await renderComposer(true);
+    await flushPreferences();
+
+    fireEvent.change(textarea, { target: { value: "Quiet hello" } });
+    fireEvent.contextMenu(screen.getByRole("button", { name: "Send prompt" }));
+    const menu = await screen.findByRole("menu");
+    fireEvent.click(
+      within(menu).getByRole("menuitem", { name: copy.sendWithoutSound }),
+    );
+
+    await waitFor(() =>
+      expect(onSend).toHaveBeenCalledWith("Quiet hello", { silent: true }),
+    );
+    await waitFor(() =>
+      expect((textarea as HTMLTextAreaElement).value).toBe(""),
+    );
+  });
+
+  it("forwards the silent flag to the workspace send through the store", async () => {
+    const telo = installTeloApiMock();
+    telo.preferences.get.mockResolvedValue(preferences());
+    const { useChatStore } = await import("../../../entities/chat");
+    useChatStore.setState({
+      chats: [],
+      messages: [],
+      activeChatId: "a",
+      loading: true,
+      composerTarget: null,
+    });
+    const { MessageComposer } = await import("./message-composer");
+    telo.workspace.sendMessage.mockResolvedValue({
+      ...message("m9", "a"),
+      outgoing: true,
+      status: "sent" as const,
+    });
+    render(<MessageComposer onSend={useChatStore.getState().send} />);
+    const textarea = screen.getByRole("textbox", {
+      name: copy.messagePlaceholder,
+    });
+    await flushPreferences();
+
+    fireEvent.change(textarea, { target: { value: "Quiet hello" } });
+    fireEvent.contextMenu(screen.getByRole("button", { name: "Send prompt" }));
+    const menu = await screen.findByRole("menu");
+    fireEvent.click(
+      within(menu).getByRole("menuitem", { name: copy.sendWithoutSound }),
+    );
+
+    await waitFor(() =>
+      expect(telo.workspace.sendMessage).toHaveBeenCalledWith(
+        "a",
+        "Quiet hello",
+        expect.objectContaining({ silent: true }),
+      ),
+    );
+  });
+
+  it("disables the silent send item while attachments are staged", async () => {
+    await renderComposer(true);
+    await flushPreferences();
+
+    attachFiles([new File(["a"], "photo.png", { type: "image/png" })]);
+    fireEvent.contextMenu(screen.getByRole("button", { name: "Send prompt" }));
+    const menu = await screen.findByRole("menu");
+
+    expect(
+      within(menu)
+        .getByRole("menuitem", { name: copy.sendWithoutSound })
+        .getAttribute("data-disabled"),
+    ).toBe("true");
+  });
+
+  it("inserts a picked emoji at the caret and records it as recent", async () => {
+    const { telo, useChatStore, textarea } = await renderComposer(true);
+    act(() => useChatStore.setState({ activeChatId: "a", messages: [] }));
+    await flushPreferences();
+
+    fireEvent.change(textarea, { target: { value: "hi " } });
+    fireEvent.click(screen.getByRole("button", { name: copy.emojiPicker }));
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "grinning face happy smile",
+      }),
+    );
+
+    expect((textarea as HTMLTextAreaElement).value).toBe("hi 😀");
+    expect((textarea as HTMLTextAreaElement).selectionStart).toBe(5);
+    expect(useChatStore.getState().drafts.a).toBe("hi 😀");
+    expect(telo.preferences.update).toHaveBeenCalledWith({
+      recentEmojis: ["😀"],
+    });
+  });
+
+  it("shows frequently used emojis and keeps the most recent first", async () => {
+    // Recents load once when the preference store subscribes, so the mock
+    // must be in place before the composer renders.
+    const telo = installTeloApiMock();
+    telo.preferences.get.mockResolvedValue(
+      preferences({ recentEmojis: ["🚀", "😀"] }),
+    );
+    telo.preferences.update.mockResolvedValue(
+      preferences({ recentEmojis: ["🚀", "😀"] }),
+    );
+    const { useChatStore } = await import("../../../entities/chat");
+    useChatStore.setState({
+      chats: [],
+      messages: [],
+      activeChatId: null,
+      loading: true,
+      composerTarget: null,
+    });
+    const { MessageComposer } = await import("./message-composer");
+    render(<MessageComposer onSend={vi.fn().mockResolvedValue(undefined)} />);
+    const textarea = screen.getByRole("textbox", {
+      name: copy.messagePlaceholder,
+    });
+    await flushPreferences();
+
+    fireEvent.click(screen.getByRole("button", { name: copy.emojiPicker }));
+    expect(await screen.findByText(copy.emojiRecent)).toBeTruthy();
+
+    // Picking an already-recent emoji moves it to the front instead of
+    // duplicating it. The glyph shows in both the recents row and the
+    // smileys grid; click the recents one (first in the dialog).
+    fireEvent.click(
+      screen.getAllByRole("button", { name: "grinning face happy smile" })[0],
+    );
+    expect(telo.preferences.update).toHaveBeenCalledWith({
+      recentEmojis: ["😀", "🚀"],
+    });
+    expect((textarea as HTMLTextAreaElement).value).toBe("😀");
+  });
+
+  it("filters the picker through the search field", async () => {
+    await renderComposer(true);
+    await flushPreferences();
+
+    fireEvent.click(screen.getByRole("button", { name: copy.emojiPicker }));
+    fireEvent.change(
+      await screen.findByRole("textbox", { name: copy.searchEmoji }),
+      { target: { value: "rocket" } },
+    );
+
+    expect(
+      await screen.findByRole("button", {
+        name: "rocket launch space ship",
+      }),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: "grinning face happy smile" }),
+    ).toBeNull();
+
+    fireEvent.change(screen.getByRole("textbox", { name: copy.searchEmoji }), {
+      target: { value: "no such emoji exists" },
+    });
+    expect(await screen.findByText(copy.noEmojiFound)).toBeTruthy();
   });
 });

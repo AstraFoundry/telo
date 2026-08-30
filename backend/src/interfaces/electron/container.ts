@@ -3,6 +3,11 @@ import path from "node:path";
 import { app, safeStorage } from "electron";
 
 import { RunAgentService } from "../../application/agent/run-agent";
+import { AgentContextService } from "../../application/agent/agent-context";
+import { AgentAuditService } from "../../application/agent/agent-audit";
+import { RunChatExtractionService } from "../../application/agent/run-chat-extraction";
+import { RunChatSummaryService } from "../../application/agent/run-chat-summary";
+import { RunMessageActionService } from "../../application/agent/run-message-action";
 import { AgentThreadService } from "../../application/agent/agent-threads";
 import { SaveAgentConfigurationService } from "../../application/agent/save-agent-configuration";
 import { UpdateUserPreferencesService } from "../../application/preferences/update-user-preferences";
@@ -11,7 +16,9 @@ import { MessageActionsService } from "../../application/telegram/message-action
 import { TelegramLogoutService } from "../../application/telegram/telegram-logout";
 import { TelegramWorkspaceService } from "../../application/telegram/telegram-workspace";
 import { AiSdkAgentGateway } from "../../infrastructure/agent/ai-sdk-agent-gateway";
+import { DemoAgentGateway } from "../../infrastructure/agent/demo-agent-gateway";
 import { FileAgentConfigurationRepository } from "../../infrastructure/agent/file-agent-configuration-repository";
+import { FileAgentAuditRepository } from "../../infrastructure/agent/file-agent-audit-repository";
 import { FileAgentThreadRepository } from "../../infrastructure/agent/file-agent-thread-repository";
 import { FileUserPreferencesRepository } from "../../infrastructure/preferences/file-user-preferences-repository";
 import { FileTelegramSessionRepository } from "../../infrastructure/telegram/file-telegram-session-repository";
@@ -25,6 +32,11 @@ export interface ApplicationContainer {
   readonly messageActions: MessageActionsService;
   readonly agentConfiguration: SaveAgentConfigurationService;
   readonly runAgent: RunAgentService;
+  readonly agentContext: AgentContextService;
+  readonly agentAudit: AgentAuditService;
+  readonly runChatSummary: RunChatSummaryService;
+  readonly runChatExtraction: RunChatExtractionService;
+  readonly runMessageAction: RunMessageActionService;
   readonly agentThreads: AgentThreadService;
   readonly telegram: TelegramClientCoordinator;
   readonly telegramLogout: TelegramLogoutService;
@@ -74,6 +86,9 @@ export function createContainer(
   const threads = new FileAgentThreadRepository(
     path.join(dataDirectory, "agent-threads.json"),
   );
+  const audits = new FileAgentAuditRepository(
+    path.join(dataDirectory, "agent-audit.jsonl"),
+  );
   const apiId = Number(process.env.TELO_TELEGRAM_API_ID);
   const apiHash = process.env.TELO_TELEGRAM_API_HASH?.trim();
   const applicationCredentials =
@@ -83,6 +98,22 @@ export function createContainer(
     profiles,
     applicationCredentials,
     onAuthState,
+    path.join(dataDirectory, "media-cache"),
+  );
+
+  // The demo workspace pairs its deterministic Telegram repository with an
+  // equally deterministic agent gateway so e2e never touches a provider.
+  const gateway =
+    process.env.TELO_DEMO_WORKSPACE === "1"
+      ? new DemoAgentGateway()
+      : new AiSdkAgentGateway();
+  const agentContext = new AgentContextService(telegram);
+  const runAgent = new RunAgentService(
+    configurations,
+    gateway,
+    threads,
+    agentContext,
+    audits,
   );
 
   return {
@@ -90,11 +121,12 @@ export function createContainer(
     chatActions: new ChatActionsService(telegram),
     messageActions: new MessageActionsService(telegram),
     agentConfiguration: new SaveAgentConfigurationService(configurations),
-    runAgent: new RunAgentService(
-      configurations,
-      new AiSdkAgentGateway(),
-      threads,
-    ),
+    runAgent,
+    agentContext,
+    agentAudit: new AgentAuditService(audits),
+    runChatSummary: new RunChatSummaryService(runAgent),
+    runChatExtraction: new RunChatExtractionService(runAgent),
+    runMessageAction: new RunMessageActionService(configurations, gateway),
     agentThreads: new AgentThreadService(threads),
     telegram,
     telegramLogout: new TelegramLogoutService(telegram),

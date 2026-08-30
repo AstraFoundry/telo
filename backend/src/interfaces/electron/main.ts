@@ -5,15 +5,35 @@ import type { MenuItemConstructorOptions } from "electron";
 
 import { createContainer } from "./container";
 import { channels } from "./channels";
+import { isSafeExternalUrl } from "./external-url";
 import { registerIpc } from "./register-ipc";
+import {
+  handleMediaProtocol,
+  registerMediaScheme,
+  unhandleMediaProtocol,
+} from "./media-protocol";
+
+registerMediaScheme();
 
 let mainWindow: BrowserWindow | null = null;
+
+// Workspace and auth events can race window teardown (e.g. a repository
+// timer firing mid-quit). After the window is destroyed there is no
+// receiver, so drop the event instead of throwing "Object has been
+// destroyed" in the main process, which would block app quit.
+function sendToRenderer(channel: string, payload: unknown): void {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send(channel, payload);
+  }
+}
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
     width: 1440,
     height: 920,
-    minWidth: 980,
+    // Below the workspace's narrow breakpoint (768px) the layout collapses to
+    // a single column, so the window must be allowed to shrink into it.
+    minWidth: 420,
     minHeight: 680,
     backgroundColor: "#f7f8fa",
     title: "Telo",
@@ -27,7 +47,7 @@ function createWindow(): void {
   });
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (url.startsWith("https://")) void shell.openExternal(url);
+    if (isSafeExternalUrl(url)) void shell.openExternal(url);
     return { action: "deny" };
   });
   mainWindow.webContents.on("will-navigate", (event, url) => {
@@ -68,11 +88,15 @@ function createWindow(): void {
 }
 
 app.whenReady().then(async () => {
+  // The handler is safe under Playwright too: the quit-race that once hung
+  // E2E teardown is fixed by the destroyed-window guard in sendToRenderer,
+  // and before-quit still unhandles the scheme.
+  handleMediaProtocol(path.join(app.getPath("userData"), "media-cache"));
   const container = createContainer((state) => {
-    mainWindow?.webContents.send(channels.telegramAuthEvent, state);
+    sendToRenderer(channels.telegramAuthEvent, state);
   });
   container.workspace.subscribe((event) => {
-    mainWindow?.webContents.send(channels.workspaceEvent, event);
+    sendToRenderer(channels.workspaceEvent, event);
   });
   // Demo workspace is a process launch flag, not an in-app opt-in. Sync the
   // persisted preference on every start so a leftover true cannot reopen demo
@@ -91,3 +115,5 @@ app.whenReady().then(async () => {
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
 });
+
+app.on("before-quit", unhandleMediaProtocol);

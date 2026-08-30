@@ -7,6 +7,7 @@ import {
   type FormEvent,
   type KeyboardEvent,
   type ReactNode,
+  type Ref,
   type TextareaHTMLAttributes,
   useCallback,
   useEffect,
@@ -15,6 +16,11 @@ import {
   useState,
 } from "react";
 import { Button } from "@components/motion/button";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuTrigger,
+} from "@components/motion/context-menu";
 import {
   MorphPopover,
   MorphPopoverContent,
@@ -63,6 +69,20 @@ export interface PromptInputProps extends Omit<
   minRows?: number;
   maxRows?: number;
   leadingAction?: ReactNode;
+  attachmentPreview?: ReactNode;
+  /**
+   * Extra ref merged onto the textarea, for hosts that manage the caret or
+   * selection programmatically (e.g. inserting an emoji at the cursor).
+   */
+  inputRef?: Ref<HTMLTextAreaElement>;
+  /**
+   * Items for a context menu on the send button (right-click / long-press),
+   * offering alternate send modes. Rendered inside the menu's content panel.
+   */
+  sendMenuContent?: ReactNode;
+  /** Accessible label for the send button's context menu panel. */
+  sendMenuLabel?: string;
+  allowEmptySubmit?: boolean;
   className?: string;
 }
 
@@ -82,6 +102,11 @@ export function PromptInput({
   minRows = 2,
   maxRows = 8,
   leadingAction,
+  attachmentPreview,
+  inputRef,
+  sendMenuContent,
+  sendMenuLabel = "Send options",
+  allowEmptySubmit = false,
   className,
   disabled,
   placeholder = "Ask the agent to do something…",
@@ -102,7 +127,18 @@ export function PromptInput({
   const currentModel = models.find(
     (option) => option.value === currentModelValue,
   );
-  const canSubmit = Boolean(currentValue.trim()) && !disabled && !loading;
+  const canSubmit =
+    (allowEmptySubmit || Boolean(currentValue.trim())) && !disabled && !loading;
+
+  // Merge the host's ref with the internal one so both see the textarea node.
+  const setTextarea = useCallback(
+    (node: HTMLTextAreaElement | null) => {
+      textareaRef.current = node;
+      if (typeof inputRef === "function") inputRef(node);
+      else if (inputRef) inputRef.current = node;
+    },
+    [inputRef],
+  );
 
   const resizeTextarea = useCallback(() => {
     const textarea = textareaRef.current;
@@ -143,7 +179,7 @@ export function PromptInput({
   const submit = (event?: FormEvent) => {
     event?.preventDefault();
     const prompt = currentValue.trim();
-    if (!prompt || disabled || loading) return;
+    if ((!prompt && !allowEmptySubmit) || disabled || loading) return;
 
     onSubmit?.(prompt, currentModelValue);
     if (value === undefined) setInternalValue("");
@@ -164,6 +200,34 @@ export function PromptInput({
     submit();
   };
 
+  const sendButton = (
+    <Button
+      type={loading ? "button" : "submit"}
+      size="icon"
+      disabled={loading ? !onStop : !canSubmit}
+      aria-label={loading ? "Stop generating" : "Send prompt"}
+      onClick={loading ? onStop : undefined}
+      className="ml-auto size-8 rounded-full"
+    >
+      <AnimatePresence initial={false} mode="popLayout">
+        <motion.span
+          key={loading ? "stop" : "send"}
+          initial={reduce ? { opacity: 1 } : { opacity: 0, y: 3, scale: 0.8 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={reduce ? { opacity: 0 } : { opacity: 0, y: -3, scale: 0.8 }}
+          transition={reduce ? { duration: 0 } : SPRING_SWAP}
+          className="grid place-items-center"
+        >
+          {loading ? (
+            <Square className="size-3 fill-current" />
+          ) : (
+            <ArrowUp className="size-4" />
+          )}
+        </motion.span>
+      </AnimatePresence>
+    </Button>
+  );
+
   return (
     <form
       onSubmit={submit}
@@ -173,6 +237,7 @@ export function PromptInput({
         className,
       )}
     >
+      {attachmentPreview}
       <div
         ref={measurementRef}
         aria-hidden="true"
@@ -181,7 +246,7 @@ export function PromptInput({
         {`${currentValue}\u200b`}
       </div>
       <textarea
-        ref={textareaRef}
+        ref={setTextarea}
         value={currentValue}
         disabled={disabled}
         placeholder={placeholder}
@@ -297,33 +362,18 @@ export function PromptInput({
           </Select>
         ) : null}
 
-        <Button
-          type={loading ? "button" : "submit"}
-          size="icon"
-          disabled={loading ? !onStop : !canSubmit}
-          aria-label={loading ? "Stop generating" : "Send prompt"}
-          onClick={loading ? onStop : undefined}
-          className="ml-auto size-8 rounded-full"
-        >
-          <AnimatePresence initial={false} mode="popLayout">
-            <motion.span
-              key={loading ? "stop" : "send"}
-              initial={
-                reduce ? { opacity: 1 } : { opacity: 0, y: 3, scale: 0.8 }
-              }
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={reduce ? { opacity: 0 } : { opacity: 0, y: -3, scale: 0.8 }}
-              transition={reduce ? { duration: 0 } : SPRING_SWAP}
-              className="grid place-items-center"
-            >
-              {loading ? (
-                <Square className="size-3 fill-current" />
-              ) : (
-                <ArrowUp className="size-4" />
-              )}
-            </motion.span>
-          </AnimatePresence>
-        </Button>
+        {sendMenuContent ? (
+          <ContextMenu>
+            <ContextMenuTrigger disabled={loading ? !onStop : !canSubmit}>
+              {sendButton}
+            </ContextMenuTrigger>
+            <ContextMenuContent ariaLabel={sendMenuLabel}>
+              {sendMenuContent}
+            </ContextMenuContent>
+          </ContextMenu>
+        ) : (
+          sendButton
+        )}
       </div>
     </form>
   );

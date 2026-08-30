@@ -1,14 +1,29 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
-import { ClockCounterClockwise, Plus, Sparkle, X } from "@phosphor-icons/react";
+import {
+  CaretDown,
+  CaretRight,
+  ClockCounterClockwise,
+  Plus,
+  Sparkle,
+  X,
+} from "@phosphor-icons/react";
 
 import { useAgentStore } from "entities/agent";
-import { useChatStore } from "entities/chat";
+import { buildWorkspaceContext, useChatStore } from "entities/chat";
+import { useTimeFormat } from "entities/preferences";
 import { copy } from "shared/config/copy";
-import type { UiContextSnapshot } from "../../../../../contracts/src/ipc";
+import type {
+  AgentAuditRecordDto,
+  AgentContextPreviewDto,
+  AgentContextScope,
+  AgentContextScopeInput,
+  TimeFormatPreference,
+} from "../../../../../contracts/src/ipc";
 import type { AgentActivityItem } from "shared/ui";
 import {
   AgentActivity,
+  AgentDisclosure,
   AnimatedSidebar,
   AnimatedSidebarProvider,
   Button,
@@ -22,53 +37,48 @@ import {
   MorphPopoverContent,
   MorphPopoverTrigger,
   PromptInput,
-  StreamingResponse,
   Tooltip,
 } from "shared/ui";
+
+import { collectChatScope } from "../model/chat-scope";
+import { buildScopeInput, effectiveScope } from "../model/scope-input";
+import { AssistantMessageBody } from "./assistant-message-body";
 
 interface GlobalAgentPanelProps {
   onOpenSettings(): void;
 }
 
 /**
- * Single source for the panel width. The sidebar provider style and any
- * layout that depends on the panel width must reference this constant
- * (the OpenTrade `AGENT_PANEL_WIDTH` pattern).
+ * The panel width is owned by the workspace layout container, which publishes
+ * it as the --workspace-agent-panel-width custom property (persisted via the
+ * agentPanelWidth preference and driven by the column resize handle). The
+ * fallback matches AGENT_PANEL_WIDTH_DEFAULT for surfaces that render the
+ * panel outside the workspace grid.
  */
-const AGENT_PANEL_WIDTH = "380px";
+const AGENT_PANEL_WIDTH = "var(--workspace-agent-panel-width, 380px)";
 
-function buildWorkspaceContext(): UiContextSnapshot {
-  const { chats, messages, activeChatId } = useChatStore.getState();
-  const activeChat = chats.find((chat) => chat.id === activeChatId) ?? null;
-  return {
-    activeChat: activeChat
-      ? { id: activeChat.id, title: activeChat.title, kind: activeChat.kind }
-      : null,
-    visibleChats: chats.map(({ id, title, unreadCount }) => ({
-      id,
-      title,
-      unreadCount,
-    })),
-    visibleMessages: messages.map(({ senderName, body, sentAt, outgoing }) => ({
-      senderName,
-      body,
-      sentAt,
-      outgoing,
-    })),
-    components: [
-      {
-        id: "conversation-sidebar",
-        role: "chat-navigation",
-        state: { count: chats.length },
-      },
-      {
-        id: "conversation-view",
-        role: "message-transcript",
-        state: { chatId: activeChatId, messageCount: messages.length },
-      },
-      { id: "global-agent-panel", role: "assistant", state: { visible: true } },
-    ],
-  };
+const SCOPE_LABELS: Record<AgentContextScope, string> = {
+  selected: copy.agentScopeSelected,
+  unread: copy.agentScopeUnread,
+  folder: copy.agentScopeFolder,
+};
+
+function redactedTotal(counts: {
+  emails: number;
+  phones: number;
+  tokens: number;
+}): number {
+  return counts.emails + counts.phones + counts.tokens;
+}
+
+// "system" defers to the locale's hour12 default, while 12h/24h pin it
+// explicitly — the same formatter the transcript timestamps use.
+function time(value: string, format: TimeFormatPreference): string {
+  return new Intl.DateTimeFormat(undefined, {
+    hour: "2-digit",
+    minute: "2-digit",
+    ...(format === "system" ? {} : { hour12: format === "12h" }),
+  }).format(new Date(value));
 }
 
 export function GlobalAgentPanel({ onOpenSettings }: GlobalAgentPanelProps) {
@@ -79,17 +89,119 @@ export function GlobalAgentPanel({ onOpenSettings }: GlobalAgentPanelProps) {
   const running = useAgentStore((state) => state.running);
   const activity = useAgentStore((state) => state.activity);
   const run = useAgentStore((state) => state.run);
+  const runChatAction = useAgentStore((state) => state.runChatAction);
   const configuration = useAgentStore((state) => state.configuration);
   const threads = useAgentStore((state) => state.threads);
   const threadId = useAgentStore((state) => state.threadId);
   const loadThreads = useAgentStore((state) => state.loadThreads);
   const startNewThread = useAgentStore((state) => state.startNewThread);
   const selectThread = useAgentStore((state) => state.selectThread);
+  const chats = useChatStore((state) => state.chats);
+  const chatMessages = useChatStore((state) => state.messages);
+  const activeChatId = useChatStore((state) => state.activeChatId);
+  const activeFolderId = useChatStore((state) => state.activeFolderId);
+  const composerTarget = useChatStore((state) => state.composerTarget);
   const [historyOpen, setHistoryOpen] = useState(false);
 
   useEffect(() => {
     void loadThreads();
   }, [loadThreads]);
+
+  // Explicit context scope for panel runs. Unread (of the open chat) is the
+  // default: the panel already answers about the open chat, and "summarize
+  // unread" is the wave's headline flow, so it is the least surprising
+  // starting scope. "Selected" means the composer's reply target until
+  // multi-select exists (Wave 4); without one it is disabled.
+  const [scope, setScope] = useState<AgentContextScope>("unread");
+  const selectedMessageId =
+    composerTarget?.mode === "reply" ? composerTarget.messageId : null;
+  const currentScope = effectiveScope({
+    scope,
+    activeChatId,
+    activeFolderId,
+    selectedMessageId,
+  });
+  const scopeInput = useMemo(
+    () =>
+      buildScopeInput({
+        scope,
+        activeChatId,
+        activeFolderId,
+        selectedMessageId,
+      }),
+    [scope, activeChatId, activeFolderId, selectedMessageId],
+  );
+
+  // The payload preview is assembled and redacted main-side, so what the
+  // disclosure lists is exactly what a run would send. It refetches as the
+  // workspace changes to stay that way; a result is only shown while it
+  // still matches the current scope input.
+  const [previewResult, setPreviewResult] = useState<{
+    key: AgentContextScopeInput;
+    value: AgentContextPreviewDto | null;
+    error: string | null;
+  } | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    const key = scopeInput;
+    void window.telo.agent.previewContext(key).then(
+      (value) => {
+        if (!cancelled) setPreviewResult({ key, value, error: null });
+      },
+      (error: unknown) => {
+        if (!cancelled) {
+          setPreviewResult({
+            key,
+            value: null,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [scopeInput, chats, chatMessages]);
+  const preview =
+    previewResult?.key === scopeInput ? previewResult.value : null;
+  const previewError =
+    previewResult?.key === scopeInput ? previewResult.error : null;
+
+  // The audit list loads with the panel and refreshes when a run settles.
+  const [auditRecords, setAuditRecords] = useState<
+    ReadonlyArray<AgentAuditRecordDto>
+  >([]);
+  useEffect(() => {
+    if (running) return;
+    let cancelled = false;
+    void window.telo.agent.listAuditRecords().then((records) => {
+      if (!cancelled) setAuditRecords(records);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [running]);
+
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [runsOpen, setRunsOpen] = useState(false);
+  const { value: timeFormat } = useTimeFormat();
+  // Chat titles only add noise in a single-chat scope; they appear once the
+  // payload actually spans several chats (folder scope).
+  const previewSpansChats = preview
+    ? new Set(preview.messages.map((message) => message.chatId)).size > 1
+    : false;
+
+  // The chat-scoped actions read the unread tail of the open chat (or the
+  // loaded page when the read boundary is unknown); an empty scope disables
+  // them rather than sending nothing to the model.
+  const chatScope = useMemo(
+    () =>
+      collectChatScope(
+        chats.find((chat) => chat.id === activeChatId) ?? null,
+        chatMessages,
+      ),
+    [chats, chatMessages, activeChatId],
+  );
 
   const lastMessage = messages[messages.length - 1];
   // While a run is active and no response text has streamed yet, the
@@ -252,15 +364,11 @@ export function GlobalAgentPanel({ onOpenSettings }: GlobalAgentPanelProps) {
                     ) : null}
                     <MessageContent>
                       {message.from === "assistant" ? (
-                        <StreamingResponse
-                          status={streaming ? "streaming" : "complete"}
-                          copyText={message.body}
-                          // Errors are diagnostics, not answers: no copy or
-                          // feedback actions.
-                          showActions={!running && !message.error}
-                        >
-                          {message.body}
-                        </StreamingResponse>
+                        <AssistantMessageBody
+                          message={message}
+                          streaming={streaming}
+                          running={running}
+                        />
                       ) : (
                         <MessageBubble variant="tint">
                           <MessageBubbleContent>
@@ -289,13 +397,213 @@ export function GlobalAgentPanel({ onOpenSettings }: GlobalAgentPanelProps) {
               ) : null}
             </MessageScroller>
             <div className="border-t p-3">
+              {/* Chat-scoped actions: the scope (unread tail of the open chat)
+                  is collected from the chat store and sent main-side, where
+                  the use case assembles the machine prompt. */}
+              <div className="mb-2 flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex-1"
+                  disabled={running || !chatScope}
+                  onClick={() => {
+                    if (!chatScope) return;
+                    void runChatAction(
+                      "summary",
+                      chatScope,
+                      buildWorkspaceContext(),
+                    );
+                  }}
+                >
+                  {copy.agentSummarizeUnread}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex-1"
+                  disabled={running || !chatScope}
+                  onClick={() => {
+                    if (!chatScope) return;
+                    void runChatAction(
+                      "extraction",
+                      chatScope,
+                      buildWorkspaceContext(),
+                    );
+                  }}
+                >
+                  {copy.agentExtractInsights}
+                </Button>
+              </div>
+              {/* Scope controls: the user picks exactly which messages the
+                  run reads; the preview below shows the redacted payload
+                  main-side assembly produces for that scope. */}
+              <div className="mb-2 flex flex-col gap-1">
+                <div
+                  role="group"
+                  aria-label={copy.agentScopeLabel}
+                  className="flex items-center justify-between gap-2"
+                >
+                  <span className="text-xs text-muted-foreground">
+                    {copy.agentScopeLabel}
+                  </span>
+                  <div className="flex rounded-full border border-border p-0.5">
+                    {(
+                      ["selected", "unread", "folder"] as AgentContextScope[]
+                    ).map((option) => {
+                      const unavailable =
+                        option === "selected" && !selectedMessageId;
+                      const button = (
+                        <Button
+                          key={option}
+                          variant="ghost"
+                          size="sm"
+                          aria-pressed={currentScope === option}
+                          disabled={unavailable || running}
+                          className={`h-7 rounded-full px-2.5${
+                            currentScope === option
+                              ? " bg-primary/10 text-foreground"
+                              : ""
+                          }`}
+                          onClick={() => setScope(option)}
+                        >
+                          {SCOPE_LABELS[option]}
+                        </Button>
+                      );
+                      // A disabled button swallows pointer events, so the
+                      // hint tooltip hangs on the wrapper instead.
+                      return unavailable ? (
+                        <Tooltip
+                          key={option}
+                          content={copy.agentScopeSelectedHint}
+                        >
+                          <span className="inline-flex">{button}</span>
+                        </Tooltip>
+                      ) : (
+                        button
+                      );
+                    })}
+                  </div>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  aria-expanded={previewOpen}
+                  aria-label={copy.agentPayloadPreview}
+                  className="h-7 w-full justify-between px-1.5 text-xs text-muted-foreground"
+                  onClick={() => setPreviewOpen(!previewOpen)}
+                >
+                  <span className="flex items-center gap-1">
+                    {previewOpen ? <CaretDown /> : <CaretRight />}
+                    {copy.agentPayloadPreview}
+                  </span>
+                  {preview ? (
+                    <span className="tabular-nums">
+                      {preview.messages.length}
+                    </span>
+                  ) : null}
+                </Button>
+                <AgentDisclosure open={previewOpen}>
+                  <div className="px-1.5 pb-1">
+                    {previewError ? (
+                      <p className="text-xs text-muted-foreground">
+                        {previewError}
+                      </p>
+                    ) : !preview ? (
+                      <p className="text-xs text-muted-foreground">
+                        {copy.loading}
+                      </p>
+                    ) : preview.messages.length === 0 ? (
+                      <p className="text-xs text-muted-foreground">
+                        {copy.agentPayloadEmpty}
+                      </p>
+                    ) : (
+                      <>
+                        <ul className="flex max-h-40 flex-col gap-2 overflow-y-auto">
+                          {preview.messages.map((message) => (
+                            <li
+                              key={message.messageId}
+                              className="flex flex-col"
+                            >
+                              <span className="flex items-baseline justify-between gap-2 text-xs">
+                                <span className="truncate font-medium">
+                                  {message.senderName}
+                                  {previewSpansChats
+                                    ? ` · ${message.chatTitle}`
+                                    : ""}
+                                </span>
+                                <span className="shrink-0 text-muted-foreground">
+                                  {message.messageId}
+                                </span>
+                              </span>
+                              <span className="text-xs text-muted-foreground">
+                                {message.body}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                        {redactedTotal(preview.redactionCounts) > 0 ? (
+                          <p className="pt-1 text-xs tabular-nums text-muted-foreground">
+                            {redactedTotal(preview.redactionCounts)}{" "}
+                            {copy.agentRedactedFields}
+                          </p>
+                        ) : null}
+                      </>
+                    )}
+                  </div>
+                </AgentDisclosure>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  aria-expanded={runsOpen}
+                  aria-label={copy.agentRecentRuns}
+                  className="h-7 w-full justify-between px-1.5 text-xs text-muted-foreground"
+                  onClick={() => setRunsOpen(!runsOpen)}
+                >
+                  <span className="flex items-center gap-1">
+                    {runsOpen ? <CaretDown /> : <CaretRight />}
+                    {copy.agentRecentRuns}
+                  </span>
+                  <span className="tabular-nums">{auditRecords.length}</span>
+                </Button>
+                <AgentDisclosure open={runsOpen}>
+                  <div className="px-1.5 pb-1">
+                    {auditRecords.length === 0 ? (
+                      <p className="text-xs text-muted-foreground">
+                        {copy.agentNoRuns}
+                      </p>
+                    ) : (
+                      <ul className="flex max-h-40 flex-col gap-1 overflow-y-auto">
+                        {auditRecords.slice(0, 5).map((record) => (
+                          <li
+                            key={record.id}
+                            className="flex items-baseline justify-between gap-2 text-xs"
+                          >
+                            <span className="truncate">
+                              {SCOPE_LABELS[record.scope]} ·{" "}
+                              {record.messageIds.length}
+                              {redactedTotal(record.redactionCounts) > 0
+                                ? ` · ${redactedTotal(record.redactionCounts)} ${copy.agentRedactedFields}`
+                                : ""}
+                            </span>
+                            <time className="shrink-0 tabular-nums text-muted-foreground">
+                              {time(record.timestamp, timeFormat)}
+                            </time>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                </AgentDisclosure>
+              </div>
               <PromptInput
                 minRows={1}
                 maxRows={6}
                 loading={running}
                 placeholder={copy.askAgent}
                 aria-label={copy.askAgent}
-                onSubmit={(prompt) => run(prompt, buildWorkspaceContext())}
+                onSubmit={(prompt) =>
+                  run(prompt, buildWorkspaceContext(), scopeInput)
+                }
               />
             </div>
           </>

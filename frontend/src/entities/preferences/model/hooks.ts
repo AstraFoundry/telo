@@ -86,6 +86,15 @@ export const MESSAGE_TEXT_SIZE_MIN = 12;
 export const MESSAGE_TEXT_SIZE_MAX = 18;
 export const MESSAGE_TEXT_SIZE_DEFAULT = 14;
 
+// Workspace column widths mirror the bounds the backend domain enforces in
+// backend/src/domain/preferences/user-preferences.ts.
+export const SIDEBAR_WIDTH_MIN = 200;
+export const SIDEBAR_WIDTH_MAX = 480;
+export const SIDEBAR_WIDTH_DEFAULT = 280;
+export const AGENT_PANEL_WIDTH_MIN = 280;
+export const AGENT_PANEL_WIDTH_MAX = 600;
+export const AGENT_PANEL_WIDTH_DEFAULT = 380;
+
 interface AccentTokens {
   readonly primary: string;
   readonly primaryForeground: string;
@@ -217,11 +226,31 @@ const notificationsEnabledStore = createPreferenceStore(
   },
 );
 
+const sidebarWidthStore = createPreferenceStore("sidebarWidth", {
+  defaultValue: SIDEBAR_WIDTH_DEFAULT,
+});
+
+const agentPanelWidthStore = createPreferenceStore("agentPanelWidth", {
+  defaultValue: AGENT_PANEL_WIDTH_DEFAULT,
+});
+
+const recentEmojisStore = createPreferenceStore("recentEmojis", {
+  defaultValue: [],
+});
+
+const messageTemplatesStore = createPreferenceStore("messageTemplates", {
+  defaultValue: [],
+});
+
 export const useAccentColor = accentStore.usePreference;
 export const useMessageTextSize = messageTextSizeStore.usePreference;
 export const useTimeFormat = timeFormatStore.usePreference;
 export const useSendWithEnter = sendWithEnterStore.usePreference;
 export const useNotificationsEnabled = notificationsEnabledStore.usePreference;
+export const useSidebarWidth = sidebarWidthStore.usePreference;
+export const useAgentPanelWidth = agentPanelWidthStore.usePreference;
+export const useRecentEmojis = recentEmojisStore.usePreference;
+export const useMessageTemplates = messageTemplatesStore.usePreference;
 
 // Applied at module scope so the system theme takes effect immediately: the
 // app entry imports this slice eagerly (through the settings page and the

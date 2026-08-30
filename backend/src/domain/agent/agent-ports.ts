@@ -1,4 +1,5 @@
 import type { UiContextSnapshot } from "../../../../contracts/src/ipc";
+import type { AgentAuditRecord } from "./agent-audit";
 import type { AgentConfiguration } from "./agent-configuration";
 import type { AgentThread, AgentThreadRole } from "./agent-thread";
 
@@ -13,6 +14,13 @@ export interface AgentThreadRepository {
   saveThread(thread: AgentThread): Promise<void>;
   getActiveThreadId(): Promise<string | null>;
   setActiveThreadId(threadId: string): Promise<void>;
+}
+
+/** Append-only local audit trail of what agent runs sent off-device. */
+export interface AgentAuditRepository {
+  append(record: AgentAuditRecord): Promise<void>;
+  /** Newest first, capped at `limit` records. */
+  listRecent(limit: number): Promise<ReadonlyArray<AgentAuditRecord>>;
 }
 
 export interface AgentHistoryMessage {

@@ -4,6 +4,15 @@ export { Avatar } from "./avatar";
 export type { AvatarProps } from "./avatar";
 export { LoadIndicator } from "./load-indicator";
 export type { LoadIndicatorProps } from "./load-indicator";
+export { LinkPreview } from "./link-preview";
+export type { LinkPreviewProps } from "./link-preview";
+export { MediaViewer } from "./media-viewer";
+export type {
+  MediaViewerItem,
+  MediaViewerLabels,
+  MediaViewerOrigin,
+  MediaViewerProps,
+} from "./media-viewer";
 
 export { Button, StatefulButton } from "@components/motion/button";
 export type { ButtonState } from "@components/motion/button";
@@ -78,6 +87,15 @@ export {
   MessageTyping,
 } from "@components/agents/message";
 export { MessageBubbleCollapsible } from "@components/agents/message-bubble";
+export { MessageRichText } from "@components/agents/message-rich-text";
+export { MessageMedia } from "@components/agents/message-media";
+export type { MessageMediaState } from "@components/agents/message-media";
+export { MessageAttachmentTray } from "@components/agents/message-attachment-tray";
+export type { MessageAttachmentItem } from "@components/agents/message-attachment-tray";
+export type {
+  RichTextEntity,
+  RichTextEntityType,
+} from "@components/agents/message-rich-text";
 export { PromptInput } from "@components/agents/prompt-input";
 export { StreamingResponse } from "@components/agents/streaming-response";
 export { AgentActivity } from "@components/agents/agent-activity";

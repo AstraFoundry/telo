@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { subscribeToAgentEvents, useAgentStore } from "entities/agent";
 import { subscribeToWorkspaceEvents, useChatStore } from "entities/chat";
 import { useTelegramStore } from "entities/telegram";
+import { GlobalSearchPalette } from "features/chat-search";
 import { OnboardingPage } from "pages/onboarding";
 import { SettingsPage } from "pages/settings";
 import { WorkspacePage } from "pages/workspace";
@@ -91,21 +92,25 @@ export function App() {
   }
 
   return (
-    <WorkspacePage
-      onOpenSettings={openSettings}
-      onSelectChat={() => setSurface("conversation")}
-    >
-      {surface === "settings" ? (
-        <SettingsPage
-          onBack={() => setSurface("conversation")}
-          onLoggedOut={() => {
-            setDemo(false);
-            setSurface("conversation");
-          }}
-        />
-      ) : (
-        <ConversationView />
-      )}
-    </WorkspacePage>
+    <>
+      <WorkspacePage
+        onOpenSettings={openSettings}
+        onSelectChat={() => setSurface("conversation")}
+        showBackToChats={surface === "conversation"}
+      >
+        {surface === "settings" ? (
+          <SettingsPage
+            onBack={() => setSurface("conversation")}
+            onLoggedOut={() => {
+              setDemo(false);
+              setSurface("conversation");
+            }}
+          />
+        ) : (
+          <ConversationView />
+        )}
+      </WorkspacePage>
+      <GlobalSearchPalette />
+    </>
   );
 }

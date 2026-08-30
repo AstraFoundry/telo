@@ -1,17 +1,37 @@
+import { EventType, type AGUIEvent } from "@ag-ui/core";
 import { create } from "zustand";
 
 import type {
   ChatDto,
+  ChatFolderDto,
   ChatPageCursorDto,
+  DeleteMessageScope,
+  GlobalSearchResultDto,
+  MessageAgentActionKind,
+  MessageAgentActionOutput,
+  MessageAgentActionTone,
   MessageDto,
+  MessageMediaDto,
+  MessageMediaKind,
   MessageReplyToDto,
   TelegramWorkspaceEvent,
+  UiContextSnapshot,
 } from "../../../../../contracts/src/ipc";
+import {
+  ARCHIVE_FOLDER_ID,
+  MESSAGE_ACTION_EVENT_NAME,
+  MESSAGE_ACTION_THREAD_ID,
+} from "../../../../../contracts/src/ipc";
+import { copy } from "shared/config/copy";
 
 let selectionRequest = 0;
+let globalSearchRequest = 0;
+let chatSearchRequest = 0;
+let jumpRequest = 0;
 
 const DRAFT_SAVE_DEBOUNCE_MS = 500;
 const TYPING_IDLE_MS = 4000;
+const SEARCH_DEBOUNCE_MS = 300;
 
 // Debouncing state lives at module scope, not inside the store: it tracks
 // pending IPC side effects (per chat id) across the store's lifetime, which
@@ -19,6 +39,8 @@ const TYPING_IDLE_MS = 4000;
 const draftSaveTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const typingIdleTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const typingSignalSent = new Set<string>();
+let globalSearchTimer: ReturnType<typeof setTimeout> | null = null;
+let chatSearchTimer: ReturnType<typeof setTimeout> | null = null;
 
 function scheduleDraftSave(chatId: string, text: string): void {
   const existing = draftSaveTimers.get(chatId);
@@ -106,6 +128,34 @@ function replySnapshot(
     id: messageId,
     senderName: original?.senderName ?? "",
     body: original?.body ?? fallbackPreview,
+    entities: original?.entities ?? [],
+  };
+}
+
+function mediaKindFor(file: File): MessageMediaKind {
+  if (file.type.startsWith("image/")) return "photo";
+  if (file.type.startsWith("video/")) return "video";
+  return "file";
+}
+
+// Builds the media preview for an optimistic outgoing bubble straight from
+// the picked File; the id is placeholder-only and is replaced by the real
+// media id when the ack reconciles the bubble.
+function optimisticMedia(
+  clientId: string,
+  index: number,
+  file: File,
+): MessageMediaDto {
+  return {
+    id: `${clientId}:${index}`,
+    kind: mediaKindFor(file),
+    fileName: file.name || null,
+    mimeType: file.type || null,
+    size: file.size,
+    width: null,
+    height: null,
+    duration: null,
+    spoiler: false,
   };
 }
 
@@ -115,8 +165,78 @@ export interface ComposerTarget {
   readonly preview: string;
 }
 
+export interface SendOptions {
+  /** Telegram "send without sound": no notification sound for the recipient. */
+  readonly silent?: boolean;
+  /**
+   * Formatting spans authored in the composer (UTF-16 ranges over `body`);
+   * forwarded to the adapter so the delivered message carries real entities.
+   */
+  readonly entities?: ReadonlyArray<MessageEntityDto>;
+}
+
+export interface MediaDownloadState {
+  readonly state: "downloading" | "ready" | "cancelled" | "failed";
+  readonly downloadedBytes: number;
+  readonly totalBytes: number | null;
+  readonly url: string | null;
+  readonly error: string | null;
+}
+
+export interface MediaUploadState {
+  readonly state: "uploading" | "ready" | "cancelled" | "failed";
+  readonly progress: number;
+  readonly error: string | null;
+}
+
+/** A message-level agent action currently streaming into a composer draft. */
+export interface MessageActionState {
+  readonly messageId: string;
+  readonly kind: MessageAgentActionKind;
+  readonly tone: MessageAgentActionTone | null;
+}
+
+/**
+ * A pending transcript jump (global message search, in-chat search
+ * navigation). The conversation view consumes it with the page-until-found
+ * loader, highlights the message, then clears it. `requestId` re-triggers
+ * the effect when the same message is jumped to twice in a row.
+ */
+export interface JumpTarget {
+  readonly chatId: string;
+  readonly messageId: string;
+  readonly requestId: number;
+}
+
+export interface ChatSearchState {
+  readonly open: boolean;
+  readonly query: string;
+  /** Matching message ids, newest first; index 0 is the most recent match. */
+  readonly matches: ReadonlyArray<string>;
+  /** Server-reported match count for the whole chat history. */
+  readonly totalCount: number;
+  readonly index: number;
+  /** Oldest loaded match id; paging fetches matches older than it. */
+  readonly cursor: string | null;
+  readonly loading: boolean;
+}
+
+const CLOSED_CHAT_SEARCH: ChatSearchState = {
+  open: false,
+  query: "",
+  matches: [],
+  totalCount: 0,
+  index: 0,
+  cursor: null,
+  loading: false,
+};
+
 interface ChatState {
   chats: ReadonlyArray<ChatDto>;
+  /** Server folder list (custom folders + Archive), badges included. */
+  folders: ReadonlyArray<ChatFolderDto>;
+  /** Active folder tab; null is the implicit "All chats" view. */
+  activeFolderId: number | null;
   messages: ReadonlyArray<MessageDto>;
   activeChatId: string | null;
   loading: boolean;
@@ -132,26 +252,118 @@ interface ChatState {
   /** Transcript scroll offset per chat id, restored when reselecting it. */
   scrollPositions: Record<string, number>;
   notificationsEnabled: boolean;
+  mediaDownloads: Record<string, MediaDownloadState>;
+  mediaUploads: Record<string, MediaUploadState>;
+  /** Sidebar search field text; drives the debounced server global search. */
+  searchQuery: string;
+  /** Latest server global search result; null when the field is empty. */
+  globalSearchResults: GlobalSearchResultDto | null;
+  globalSearching: boolean;
+  jumpTarget: JumpTarget | null;
+  /** Message currently tinted as a search/jump target. */
+  highlightedMessageId: string | null;
+  chatSearch: ChatSearchState;
+  /** In-flight message AI action; null while no action streams. */
+  messageAction: MessageActionState | null;
+  /** Last message-action failure, surfaced inline above the composer. */
+  messageActionError: string | null;
+  /**
+   * Latest text a message action streamed into a draft. The composer follows
+   * this signal instead of `drafts` so its own send flow (which clears the
+   * draft while a failed upload must keep the caption) never clobbers typed
+   * text.
+   */
+  draftStream: { readonly chatId: string; readonly text: string } | null;
   load(): Promise<void>;
   loadMoreChats(): Promise<void>;
   loadOlderMessages(): Promise<void>;
   select(chatId: string): Promise<void>;
-  send(body: string): Promise<void>;
+  send(body: string, options?: SendOptions): Promise<void>;
+  resendMessage(messageId: string): Promise<void>;
+  downloadMedia(mediaId: string): Promise<void>;
+  cancelMediaDownload(mediaId: string): Promise<void>;
+  sendMedia(
+    files: ReadonlyArray<File>,
+    caption: string,
+    uploadId: string,
+  ): Promise<void>;
+  cancelMediaUpload(uploadId: string): Promise<void>;
   startReply(message: MessageDto): void;
   startEdit(message: MessageDto): void;
   cancelComposerTarget(): void;
-  deleteMessage(messageId: string): Promise<void>;
-  forwardMessage(messageId: string, toChatId: string): Promise<void>;
+  deleteMessage(messageId: string, scope?: DeleteMessageScope): Promise<void>;
+  /** Selection-mode message ids, in the order the user picked them. */
+  selectedMessageIds: ReadonlyArray<string>;
+  /** Enters selection mode with the given message selected. */
+  startSelection(messageId: string): void;
+  /** Flips one message's selection; emptying the set exits selection mode. */
+  toggleSelection(messageId: string): void;
+  exitSelection(): void;
+  /** Deletes every selected message with the given scope, then exits. */
+  deleteSelectedMessages(scope: DeleteMessageScope): Promise<void>;
+  /** Forwards every selected message to one chat, then exits. */
+  forwardSelectedMessages(toChatId: string): Promise<void>;
+  forwardMessage(
+    messageId: string,
+    toChatId: string,
+    options?: { hideSender?: boolean },
+  ): Promise<void>;
   togglePin(chatId: string): Promise<void>;
   toggleMute(chatId: string): Promise<void>;
   toggleRead(chatId: string): Promise<void>;
   setDraft(chatId: string, text: string): void;
+  /**
+   * Runs a message-level AI action (translate / rewrite / draft reply) and
+   * streams the result into the chat's composer draft. A second invocation
+   * while an action streams is ignored.
+   */
+  runMessageAction(
+    message: MessageDto,
+    kind: MessageAgentActionKind,
+    tone?: MessageAgentActionTone,
+  ): Promise<void>;
   setScrollPosition(chatId: string, top: number): void;
+  selectFolder(folderId: number | null): void;
+  setSearchQuery(query: string): void;
+  /** Selects the chat when needed, then asks the view to scroll to the message. */
+  requestJumpToMessage(chatId: string, messageId: string): Promise<void>;
+  clearJumpTarget(): void;
+  setHighlightedMessage(messageId: string | null): void;
+  openChatSearch(): void;
+  closeChatSearch(): void;
+  setChatSearchQuery(query: string): void;
+  /** Moves to the next older match, paging the server for more when needed. */
+  chatSearchOlder(): Promise<void>;
+  /** Moves to the next newer match. */
+  chatSearchNewer(): void;
   receive(event: TelegramWorkspaceEvent): void;
+}
+
+// The All view is every chat that is not archived, mirroring Telegram's main
+// list; a folder view is the chats whose folderId matches the tab.
+export function chatsForFolder(
+  chats: ReadonlyArray<ChatDto>,
+  folderId: number | null,
+): ReadonlyArray<ChatDto> {
+  return folderId === null
+    ? chats.filter((chat) => chat.folderId !== ARCHIVE_FOLDER_ID)
+    : chats.filter((chat) => chat.folderId === folderId);
+}
+
+// The All tab has no server folder entry; its badge sums the unread counts
+// of the chats the view contains. Folder tab badges come from the server
+// snapshot (`ChatFolderDto.unreadCount`).
+export function allChatsUnread(chats: ReadonlyArray<ChatDto>): number {
+  return chatsForFolder(chats, null).reduce(
+    (total, chat) => total + chat.unreadCount,
+    0,
+  );
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
   chats: [],
+  folders: [],
+  activeFolderId: null,
   messages: [],
   activeChatId: null,
   loading: true,
@@ -165,21 +377,37 @@ export const useChatStore = create<ChatState>((set, get) => ({
   drafts: {},
   scrollPositions: {},
   notificationsEnabled: false,
+  mediaDownloads: {},
+  mediaUploads: {},
+  searchQuery: "",
+  globalSearchResults: null,
+  globalSearching: false,
+  jumpTarget: null,
+  highlightedMessageId: null,
+  chatSearch: CLOSED_CHAT_SEARCH,
+  messageAction: null,
+  messageActionError: null,
+  draftStream: null,
+  selectedMessageIds: [],
   async load() {
     const request = ++selectionRequest;
     try {
-      const [chatPage, preferences] = await Promise.all([
+      const [chatPage, preferences, folders] = await Promise.all([
         window.telo.workspace.listChatPage(),
         window.telo.preferences.get(),
+        window.telo.workspace.listFolders(),
       ]);
       const chats = chatPage.items;
-      const activeChatId = chats[0]?.id ?? null;
+      // The All view is the default landing view, so the default active chat
+      // is its first entry — never an archived chat.
+      const activeChatId = chatsForFolder(chats, null)[0]?.id ?? null;
       const messagePage = activeChatId
         ? await window.telo.workspace.listMessagePage(activeChatId)
         : { items: [], nextCursor: null };
       if (request === selectionRequest) {
         set((state) => ({
           chats,
+          folders,
           activeChatId,
           messages: messagePage.items,
           chatCursor: chatPage.nextCursor,
@@ -220,8 +448,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
   async select(chatId) {
     if (chatId === get().activeChatId) return;
     const request = ++selectionRequest;
+    // Switching chats ends any in-chat search: its matches, highlight, and
+    // pending debounce all belong to the previous conversation.
+    resetChatSearch();
     // A pending reply/edit references a message of the previous chat; it must
-    // not leak into the newly selected conversation.
+    // not leak into the newly selected conversation. The same goes for a
+    // multi-selection, which is scoped to the transcript it was made in.
     set({
       activeChatId: chatId,
       messages: [],
@@ -229,6 +461,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
       messageCursor: null,
       loadingOlderMessages: false,
       composerTarget: null,
+      chatSearch: CLOSED_CHAT_SEARCH,
+      highlightedMessageId: null,
+      jumpTarget: null,
+      selectedMessageIds: [],
     });
     try {
       const page = await window.telo.workspace.listMessagePage(chatId);
@@ -272,7 +508,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }
     }
   },
-  async send(body) {
+  async send(body, options) {
     const chatId = get().activeChatId;
     if (!chatId) return;
     const target = get().composerTarget;
@@ -285,7 +521,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
       set((state) => ({
         messages: state.messages.map((message) =>
           message.id === target.messageId
-            ? { ...message, body, editedAt: new Date().toISOString() }
+            ? {
+                ...message,
+                body,
+                entities: [],
+                editedAt: new Date().toISOString(),
+              }
             : message,
         ),
         composerTarget: null,
@@ -299,6 +540,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
       chatId,
       senderName: "",
       body,
+      entities: [],
+      media: null,
+      groupedId: null,
       sentAt: new Date().toISOString(),
       outgoing: true,
       status: "sending",
@@ -320,9 +564,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
           ? await window.telo.workspace.sendMessage(chatId, body, {
               replyToId: target.messageId,
               clientId,
+              silent: options?.silent,
             })
           : await window.telo.workspace.sendMessage(chatId, body, {
               clientId,
+              silent: options?.silent,
             });
       set((state) => ({
         messages: upsertMessage(
@@ -330,16 +576,145 @@ export const useChatStore = create<ChatState>((set, get) => ({
           message,
         ),
       }));
-    } catch (error) {
-      // The delivery failed: drop the optimistic bubble and hand the body
-      // back to the composer draft instead of swallowing the failure.
+    } catch {
+      // Native Telegram semantics: the undelivered bubble stays in the
+      // transcript as `failed` instead of bouncing the body back into the
+      // composer; the context menu's Resend action retries the same send.
       set((state) => ({
-        messages: state.messages.filter((entry) => entry.id !== clientId),
-        syncError: errorMessage(error),
+        messages: state.messages.map((entry) =>
+          entry.id === clientId
+            ? { ...entry, status: "failed" as const }
+            : entry,
+        ),
       }));
-      get().setDraft(chatId, body);
+    }
+  },
+  async resendMessage(messageId) {
+    const chatId = get().activeChatId;
+    if (!chatId) return;
+    const failed = get().messages.find(
+      (message) => message.id === messageId && message.status === "failed",
+    );
+    if (!failed) return;
+    // The bubble keeps the optimistic id and clientId from the first attempt,
+    // so the adapter's ack reconciles this retry against the same placeholder.
+    set((state) => ({
+      messages: state.messages.map((message) =>
+        message.id === messageId
+          ? { ...message, status: "sending" as const }
+          : message,
+      ),
+    }));
+    try {
+      const message = await window.telo.workspace.sendMessage(
+        chatId,
+        failed.body,
+        {
+          replyToId: failed.replyTo?.id,
+          clientId: failed.clientId ?? failed.id,
+        },
+      );
+      set((state) => ({
+        messages: upsertMessage(
+          state.messages.filter((entry) => entry.id !== messageId),
+          message,
+        ),
+      }));
+    } catch {
+      // Still undelivered: back to failed, ready for another Resend.
+      set((state) => ({
+        messages: state.messages.map((entry) =>
+          entry.id === messageId
+            ? { ...entry, status: "failed" as const }
+            : entry,
+        ),
+      }));
+    }
+  },
+  async downloadMedia(mediaId) {
+    try {
+      await window.telo.workspace.downloadMedia(mediaId);
+    } catch (error) {
+      set((state) => ({
+        mediaDownloads: {
+          ...state.mediaDownloads,
+          [mediaId]: {
+            state: "failed",
+            downloadedBytes: 0,
+            totalBytes: null,
+            url: null,
+            error: errorMessage(error),
+          },
+        },
+      }));
+    }
+  },
+  cancelMediaDownload(mediaId) {
+    return window.telo.workspace.cancelMediaDownload(mediaId);
+  },
+  async sendMedia(files, caption, uploadId) {
+    const chatId = get().activeChatId;
+    if (!chatId) return;
+    const target = get().composerTarget;
+    if (target?.mode === "edit") throw new Error(copy.attachmentsInEdit);
+    // One optimistic bubble per file; a multi-file send shares a groupedId so
+    // it reads as a single album, matching the messages the ack returns.
+    const clientId = crypto.randomUUID();
+    const sentAt = new Date().toISOString();
+    const groupedId = files.length > 1 ? crypto.randomUUID() : null;
+    const optimistic: ReadonlyArray<MessageDto> = files.map((file, index) => ({
+      id: `${clientId}:${index}`,
+      chatId,
+      senderName: "",
+      // Telegram attaches the caption to the album's first message only.
+      body: index === 0 ? caption : "",
+      entities: [],
+      media: optimisticMedia(clientId, index, file),
+      groupedId,
+      sentAt,
+      outgoing: true,
+      status: "sending",
+      replyTo:
+        index === 0 && target?.mode === "reply"
+          ? replySnapshot(get().messages, target.messageId, target.preview)
+          : null,
+      clientId,
+    }));
+    set((state) => ({
+      messages: mergeMessages(state.messages, optimistic),
+      composerTarget: null,
+      drafts: { ...state.drafts, [chatId]: "" },
+    }));
+    clearDraftState(chatId);
+    try {
+      const messages = await window.telo.workspace.sendMedia(chatId, files, {
+        uploadId,
+        caption,
+        replyToId: target?.mode === "reply" ? target.messageId : undefined,
+        clientId,
+      });
+      set((state) => ({
+        messages: mergeMessages(
+          state.messages.filter((entry) => entry.clientId !== clientId),
+          messages,
+        ),
+      }));
+    } catch (error) {
+      // The upload failed: drop the optimistic bubbles and surface the error.
+      // The composer keeps the files and caption selected, so resubmitting
+      // retries the same send instead of losing the user's input. A
+      // user-cancelled upload also rejects, but only after the `cancelled`
+      // event — the user's own action is not a sync failure.
+      const cancelled = get().mediaUploads[uploadId]?.state === "cancelled";
+      set((state) => ({
+        messages: state.messages.filter((entry) => entry.clientId !== clientId),
+        ...(cancelled ? {} : { syncError: errorMessage(error) }),
+      }));
       throw error;
     }
+  },
+  cancelMediaUpload(uploadId) {
+    return window.telo.workspace.cancelMediaUpload(uploadId);
   },
   startReply(message) {
     set({
@@ -362,53 +737,63 @@ export const useChatStore = create<ChatState>((set, get) => ({
   cancelComposerTarget() {
     set({ composerTarget: null });
   },
-  async deleteMessage(messageId) {
+  async deleteMessage(messageId, scope) {
     const chatId = get().activeChatId;
     if (!chatId) return;
-    await window.telo.workspace.deleteMessage({ chatId, messageId });
-    set((state) => {
-      const messages = state.messages.filter(
-        (message) => message.id !== messageId,
-      );
-      // The chat list preview mirrors the last message, so deleting it
-      // requires a local preview patch to the new tail.
-      const removedLast =
-        state.messages[state.messages.length - 1]?.id === messageId;
-      return {
-        messages,
-        ...(removedLast
-          ? patchChat(state.chats, chatId, {
-              preview: messages[messages.length - 1]?.body ?? "",
-            })
-          : {}),
-        composerTarget:
-          state.composerTarget?.messageId === messageId
-            ? null
-            : state.composerTarget,
-      };
-    });
+    await window.telo.workspace.deleteMessage({ chatId, messageId, scope });
+    set((state) => removeMessagesLocally(state, chatId, new Set([messageId])));
   },
-  async forwardMessage(messageId, toChatId) {
+  startSelection(messageId) {
+    set({ selectedMessageIds: [messageId] });
+  },
+  toggleSelection(messageId) {
+    set((state) => ({
+      selectedMessageIds: state.selectedMessageIds.includes(messageId)
+        ? state.selectedMessageIds.filter((id) => id !== messageId)
+        : [...state.selectedMessageIds, messageId],
+    }));
+  },
+  exitSelection() {
+    set({ selectedMessageIds: [] });
+  },
+  async deleteSelectedMessages(scope) {
+    const chatId = get().activeChatId;
+    const ids = get().selectedMessageIds;
+    if (!chatId || ids.length === 0) return;
+    // Sequential on purpose: the contract deletes one message per call, and
+    // a parallel burst would trip Telegram's flood waits on big selections.
+    for (const messageId of ids) {
+      await window.telo.workspace.deleteMessage({ chatId, messageId, scope });
+    }
+    set((state) => ({
+      ...removeMessagesLocally(state, chatId, new Set(ids)),
+      selectedMessageIds: [],
+    }));
+  },
+  async forwardSelectedMessages(toChatId) {
+    const chatId = get().activeChatId;
+    const ids = get().selectedMessageIds;
+    if (!chatId || ids.length === 0) return;
+    for (const messageId of ids) {
+      await window.telo.workspace.forwardMessage({
+        fromChatId: chatId,
+        messageId,
+        toChatId,
+      });
+    }
+    await reloadChatsAfterForward(chatId, toChatId);
+    set({ selectedMessageIds: [] });
+  },
+  async forwardMessage(messageId, toChatId, options) {
     const chatId = get().activeChatId;
     if (!chatId) return;
     await window.telo.workspace.forwardMessage({
       fromChatId: chatId,
       messageId,
       toChatId,
+      hideSender: options?.hideSender,
     });
-    // Previews and unread counts shift in both chats; the backend owns those
-    // rules, so the list is reloaded instead of patched.
-    const chatPage = await window.telo.workspace.listChatPage();
-    const messagePage =
-      toChatId === chatId
-        ? await window.telo.workspace.listMessagePage(chatId)
-        : null;
-    set({
-      chats: chatPage.items,
-      chatCursor: chatPage.nextCursor,
-      messages: messagePage?.items ?? get().messages,
-      messageCursor: messagePage?.nextCursor ?? get().messageCursor,
-    });
+    await reloadChatsAfterForward(chatId, toChatId);
   },
   async togglePin(chatId) {
     const chat = get().chats.find((entry) => entry.id === chatId);
@@ -438,14 +823,246 @@ export const useChatStore = create<ChatState>((set, get) => ({
     scheduleDraftSave(chatId, text);
     signalTyping(chatId, text.trim().length > 0);
   },
+  async runMessageAction(message, kind, tone) {
+    const chatId = get().activeChatId;
+    // One action at a time: the menu entries are disabled while streaming,
+    // and a stale second call (e.g. keyboard re-trigger) is ignored.
+    if (!chatId || get().messageAction) return;
+    set({
+      messageAction: { messageId: message.id, kind, tone: tone ?? null },
+      messageActionError: null,
+    });
+    // Draft-reply suggests an answer below whatever the user already typed;
+    // translate/rewrite replace the draft with the transformed text.
+    const existing = kind === "draft-reply" ? (get().drafts[chatId] ?? "") : "";
+    const prefix = existing ? `${existing}\n` : "";
+    let streamed = "";
+    const finish = () => {
+      unsubscribe();
+      set({ messageAction: null, draftStream: null });
+    };
+    // Deltas arrive as CUSTOM AG-UI events on the shared agent channel; the
+    // listener lives only for the run's duration. Draft writes go through
+    // setDraft, so the server-side save stays debounced. Cleanup happens on
+    // the terminal `done` event, not on the invoke resolving: the response
+    // can overtake queued event messages and would cut the listener off
+    // mid-stream (the catch below covers a run that never streamed).
+    const unsubscribe = window.telo.agent.onEvent((event: AGUIEvent) => {
+      if (
+        event.type !== EventType.CUSTOM ||
+        event.name !== MESSAGE_ACTION_EVENT_NAME
+      ) {
+        return;
+      }
+      const output = event.value as MessageAgentActionOutput;
+      if (output.type === "text") {
+        streamed += output.delta;
+        const text = prefix + streamed;
+        get().setDraft(chatId, text);
+        set({ draftStream: { chatId, text } });
+      } else if (output.type === "error") {
+        set({ messageActionError: output.message });
+      } else if (output.type === "done") {
+        finish();
+      }
+    });
+    try {
+      await window.telo.agent.run({
+        threadId: MESSAGE_ACTION_THREAD_ID,
+        prompt: message.body,
+        context: buildWorkspaceContext(),
+        scope: {
+          scope: "selected",
+          chatId,
+          messageIds: [message.id],
+        },
+        action: tone ? { kind, tone } : { kind },
+      });
+    } catch (error) {
+      set({ messageActionError: errorMessage(error) });
+      finish();
+    }
+  },
   setScrollPosition(chatId, top) {
     set((state) => ({
       scrollPositions: { ...state.scrollPositions, [chatId]: top },
     }));
   },
+  selectFolder(folderId) {
+    if (folderId === get().activeFolderId) return;
+    set({ activeFolderId: folderId });
+  },
+  setSearchQuery(query) {
+    set({ searchQuery: query });
+    if (globalSearchTimer) {
+      clearTimeout(globalSearchTimer);
+      globalSearchTimer = null;
+    }
+    const term = query.trim();
+    if (!term) {
+      // Clearing the field restores the plain chat list immediately.
+      globalSearchRequest += 1;
+      set({ globalSearchResults: null, globalSearching: false });
+      return;
+    }
+    set({ globalSearching: true });
+    globalSearchTimer = setTimeout(() => {
+      globalSearchTimer = null;
+      void runGlobalSearch(term);
+    }, SEARCH_DEBOUNCE_MS);
+  },
+  async requestJumpToMessage(chatId, messageId) {
+    if (chatId !== get().activeChatId) {
+      await get().select(chatId);
+    }
+    if (get().activeChatId !== chatId) return;
+    set({ jumpTarget: { chatId, messageId, requestId: ++jumpRequest } });
+  },
+  clearJumpTarget() {
+    set({ jumpTarget: null });
+  },
+  setHighlightedMessage(messageId) {
+    set({ highlightedMessageId: messageId });
+  },
+  openChatSearch() {
+    resetChatSearch();
+    set({
+      chatSearch: { ...CLOSED_CHAT_SEARCH, open: true },
+      highlightedMessageId: null,
+    });
+  },
+  closeChatSearch() {
+    resetChatSearch();
+    set({ chatSearch: CLOSED_CHAT_SEARCH, highlightedMessageId: null });
+  },
+  setChatSearchQuery(query) {
+    set((state) => ({ chatSearch: { ...state.chatSearch, query } }));
+    if (chatSearchTimer) {
+      clearTimeout(chatSearchTimer);
+      chatSearchTimer = null;
+    }
+    const chatId = get().activeChatId;
+    const term = query.trim();
+    if (!term || !chatId) {
+      chatSearchRequest += 1;
+      set((state) => ({
+        chatSearch: {
+          ...state.chatSearch,
+          matches: [],
+          totalCount: 0,
+          index: 0,
+          cursor: null,
+          loading: false,
+        },
+        highlightedMessageId: null,
+      }));
+      return;
+    }
+    chatSearchTimer = setTimeout(() => {
+      chatSearchTimer = null;
+      void runChatSearch(chatId, term);
+    }, SEARCH_DEBOUNCE_MS);
+  },
+  async chatSearchOlder() {
+    const { chatSearch, activeChatId } = get();
+    if (!chatSearch.open || chatSearch.loading || !activeChatId) return;
+    if (chatSearch.index + 1 >= chatSearch.matches.length) {
+      if (!chatSearch.cursor) return;
+      // The user paged past the loaded matches: fetch the next (older)
+      // server page and append it before advancing.
+      const request = ++chatSearchRequest;
+      set((state) => ({
+        chatSearch: { ...state.chatSearch, loading: true },
+      }));
+      try {
+        const page = await window.telo.workspace.searchMessages(
+          activeChatId,
+          chatSearch.query.trim(),
+          { beforeMessageId: chatSearch.cursor },
+        );
+        if (request !== chatSearchRequest) return;
+        set((state) => ({
+          chatSearch: {
+            ...state.chatSearch,
+            matches: [...state.chatSearch.matches, ...page.messageIds],
+            cursor: page.nextCursor,
+            loading: false,
+          },
+        }));
+      } catch (error) {
+        if (request === chatSearchRequest) {
+          set((state) => ({
+            chatSearch: { ...state.chatSearch, loading: false },
+            syncError: errorMessage(error),
+          }));
+        }
+        return;
+      }
+    }
+    const current = get().chatSearch;
+    const index = current.index + 1;
+    const match = current.matches[index];
+    if (!match) return;
+    set((state) => ({ chatSearch: { ...state.chatSearch, index } }));
+    set({
+      jumpTarget: {
+        chatId: activeChatId,
+        messageId: match,
+        requestId: ++jumpRequest,
+      },
+    });
+  },
+  chatSearchNewer() {
+    const { chatSearch, activeChatId } = get();
+    if (!chatSearch.open || chatSearch.loading || !activeChatId) return;
+    if (chatSearch.index === 0) return;
+    const index = chatSearch.index - 1;
+    const match = chatSearch.matches[index];
+    if (!match) return;
+    set((state) => ({ chatSearch: { ...state.chatSearch, index } }));
+    set({
+      jumpTarget: {
+        chatId: activeChatId,
+        messageId: match,
+        requestId: ++jumpRequest,
+      },
+    });
+  },
   receive(event) {
+    if (event.type === "media-download") {
+      set((state) => ({
+        mediaDownloads: {
+          ...state.mediaDownloads,
+          [event.mediaId]: {
+            state: event.state,
+            downloadedBytes: event.downloadedBytes,
+            totalBytes: event.totalBytes,
+            url: event.url,
+            error: event.error,
+          },
+        },
+      }));
+      return;
+    }
+    if (event.type === "media-upload") {
+      set((state) => ({
+        mediaUploads: {
+          ...state.mediaUploads,
+          [event.uploadId]: {
+            state: event.state,
+            progress: event.progress,
+            error: event.error,
+          },
+        },
+      }));
+      return;
+    }
     if (event.type === "connection-state") {
       set({ connectionState: event.state });
+      return;
+    }
+    if (event.type === "folders") {
+      set({ folders: event.folders });
       return;
     }
     if (event.type === "sync-error") {
@@ -457,6 +1074,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
         chats: upsertChat(state.chats, event.chat),
         drafts: hydrateDrafts(state.drafts, [event.chat]),
       }));
+      return;
+    }
+    if (event.type === "chat-avatar") {
+      set((state) =>
+        patchChat(state.chats, event.chatId, {
+          avatarDataUrl: event.avatarDataUrl,
+        }),
+      );
       return;
     }
     if (event.type === "message-upsert") {
@@ -515,6 +1140,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
             state.composerTarget && deleted.has(state.composerTarget.messageId)
               ? null
               : state.composerTarget,
+          // A remote delete (or our own delete-for-everyone echo) also drops
+          // the message from any pending multi-selection.
+          selectedMessageIds: state.selectedMessageIds.filter(
+            (id) => !deleted.has(id),
+          ),
         };
       });
       return;
@@ -556,6 +1186,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
       );
       return;
     }
+    if (event.type === "chat-presence") {
+      set((state) =>
+        patchChat(state.chats, event.chatId, {
+          presence: event.online ? "online" : null,
+        }),
+      );
+      return;
+    }
     if (event.type === "message-read") {
       set((state) => ({
         chats:
@@ -584,6 +1222,107 @@ export function subscribeToWorkspaceEvents(): () => void {
   );
 }
 
+// The workspace snapshot handed to every agent run. Lives next to the store
+// it reads so the agent panel and the message actions share one definition.
+export function buildWorkspaceContext(): UiContextSnapshot {
+  const { chats, messages, activeChatId } = useChatStore.getState();
+  const activeChat = chats.find((chat) => chat.id === activeChatId) ?? null;
+  return {
+    activeChat: activeChat
+      ? { id: activeChat.id, title: activeChat.title, kind: activeChat.kind }
+      : null,
+    visibleChats: chats.map(({ id, title, unreadCount }) => ({
+      id,
+      title,
+      unreadCount,
+    })),
+    visibleMessages: messages.map(({ senderName, body, sentAt, outgoing }) => ({
+      senderName,
+      body,
+      sentAt,
+      outgoing,
+    })),
+    components: [
+      {
+        id: "conversation-sidebar",
+        role: "chat-navigation",
+        state: { count: chats.length },
+      },
+      {
+        id: "conversation-view",
+        role: "message-transcript",
+        state: { chatId: activeChatId, messageCount: messages.length },
+      },
+      { id: "global-agent-panel", role: "assistant", state: { visible: true } },
+    ],
+  };
+}
+
+// Cancels the in-chat search debounce and invalidates in-flight searches;
+// callers reset the visible state separately. Used when the conversation
+// changes (select) or the search bar opens/closes.
+function resetChatSearch(): void {
+  if (chatSearchTimer) {
+    clearTimeout(chatSearchTimer);
+    chatSearchTimer = null;
+  }
+  chatSearchRequest += 1;
+}
+
+async function runGlobalSearch(term: string): Promise<void> {
+  const request = ++globalSearchRequest;
+  try {
+    const results = await window.telo.workspace.searchGlobal(term);
+    if (request === globalSearchRequest) {
+      useChatStore.setState({
+        globalSearchResults: results,
+        globalSearching: false,
+      });
+    }
+  } catch (error) {
+    if (request === globalSearchRequest) {
+      useChatStore.setState({
+        globalSearching: false,
+        syncError: errorMessage(error),
+      });
+    }
+  }
+}
+
+async function runChatSearch(chatId: string, term: string): Promise<void> {
+  const request = ++chatSearchRequest;
+  useChatStore.setState((state) => ({
+    chatSearch: { ...state.chatSearch, loading: true },
+  }));
+  try {
+    const page = await window.telo.workspace.searchMessages(chatId, term);
+    if (request !== chatSearchRequest) return;
+    useChatStore.setState((state) => ({
+      chatSearch: {
+        ...state.chatSearch,
+        matches: page.messageIds,
+        totalCount: page.totalCount,
+        index: 0,
+        cursor: page.nextCursor,
+        loading: false,
+      },
+    }));
+    // Telegram jumps straight to the most recent match once results land.
+    const first = page.messageIds[0];
+    if (first) {
+      useChatStore.setState({
+        jumpTarget: { chatId, messageId: first, requestId: ++jumpRequest },
+      });
+    }
+  } catch (error) {
+    if (request !== chatSearchRequest) return;
+    useChatStore.setState((state) => ({
+      chatSearch: { ...state.chatSearch, loading: false },
+      syncError: errorMessage(error),
+    }));
+  }
+}
+
 function patchChat(
   chats: ReadonlyArray<ChatDto>,
   chatId: string,
@@ -594,6 +1333,52 @@ function patchChat(
       chat.id === chatId ? { ...chat, ...patch } : chat,
     ),
   };
+}
+
+// Local mirror of a server-side delete: drops the messages and, when the
+// transcript tail went away, patches the chat list preview to the new tail.
+// A composer reply/edit aimed at a removed message is cancelled.
+function removeMessagesLocally(
+  state: Pick<ChatState, "messages" | "chats" | "composerTarget">,
+  chatId: string,
+  removed: ReadonlySet<string>,
+): Pick<ChatState, "messages" | "composerTarget"> &
+  Partial<Pick<ChatState, "chats">> {
+  const messages = state.messages.filter((message) => !removed.has(message.id));
+  const last = state.messages[state.messages.length - 1];
+  const removedLast = last !== undefined && removed.has(last.id);
+  return {
+    messages,
+    ...(removedLast
+      ? patchChat(state.chats, chatId, {
+          preview: messages[messages.length - 1]?.body ?? "",
+        })
+      : {}),
+    composerTarget:
+      state.composerTarget && removed.has(state.composerTarget.messageId)
+        ? null
+        : state.composerTarget,
+  };
+}
+
+// Previews and unread counts shift in both chats after a forward; the
+// backend owns those rules, so the list is reloaded instead of patched.
+async function reloadChatsAfterForward(
+  chatId: string,
+  toChatId: string,
+): Promise<void> {
+  const chatPage = await window.telo.workspace.listChatPage();
+  const messagePage =
+    toChatId === chatId
+      ? await window.telo.workspace.listMessagePage(chatId)
+      : null;
+  useChatStore.setState({
+    chats: chatPage.items,
+    chatCursor: chatPage.nextCursor,
+    messages: messagePage?.items ?? useChatStore.getState().messages,
+    messageCursor:
+      messagePage?.nextCursor ?? useChatStore.getState().messageCursor,
+  });
 }
 
 function upsertChat(

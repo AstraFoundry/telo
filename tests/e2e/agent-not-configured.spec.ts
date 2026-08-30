@@ -19,11 +19,11 @@ test("blocks the composer until an API key is configured and links to Settings",
   await expect(window.getByLabel("API key")).toBeVisible();
 });
 
-test("renders a sanitized assistant error for a rejected API key", async ({
+test("streams the deterministic demo agent response into the panel", async ({
   window,
 }) => {
-  // The run round-trips to the real provider with a fake key.
-  test.setTimeout(60_000);
+  // The demo workspace answers through the deterministic demo gateway, so the
+  // run needs a stored key to unblock the composer but never hits a provider.
   await waitForDemoWorkspace(window);
 
   await window.getByRole("button", { name: "Open account menu" }).click();
@@ -55,16 +55,7 @@ test("renders a sanitized assistant error for a rejected API key", async ({
     name: "Agent conversation",
   });
   await expect(conversation).toContainText("Summarize the visible chats.");
-  // The provider error is classified and sanitized: a friendly message with
-  // no key material and no bare endpoint URL.
   await expect(conversation).toContainText(
-    "The provider rejected the API key. Check Agent settings.",
-    { timeout: 30_000 },
+    "Demo agent response: Summarize the visible chats.",
   );
-  await expect(conversation).not.toContainText("sk-telo-e2e");
-  await expect(conversation).not.toContainText("platform.openai.com");
-  // A failed run leaves no empty assistant shell and no feedback actions.
-  await expect(conversation.getByLabel("assistant message")).toHaveCount(1);
-  await expect(conversation.getByLabel("Copy response")).toHaveCount(0);
-  await expect(conversation.getByLabel("Helpful")).toHaveCount(0);
 });

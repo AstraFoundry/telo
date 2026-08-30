@@ -21,6 +21,9 @@ test("switches the conversation view when a different chat is selected", async (
   await expect(conversation).toContainText(
     "The conversation list should stay compact at desktop widths.",
   );
+  await expect(
+    conversation.locator("strong", { hasText: "compact" }),
+  ).toBeVisible();
   await expect(conversation).not.toContainText("Release checklist");
 
   await chats.getByRole("button", { name: /Product Notes/ }).click();

@@ -30,6 +30,7 @@ function createTest(demoWorkspace: boolean) {
           // safeStorage has no keychain under Playwright; fall back to plain
           // base64 so the specs can exercise the secret-storage round trip.
           TELO_PLAINTEXT_SECRETS: "1",
+          TELO_E2E: "1",
           // Demo workspace is a launch flag, not an onboarding button.
           TELO_DEMO_WORKSPACE: demoWorkspace ? "1" : "",
         },

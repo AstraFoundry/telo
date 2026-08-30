@@ -7,9 +7,23 @@ function repository(): TelegramRepository {
   return {
     subscribe: vi.fn(() => () => {}),
     listChatPage: vi.fn(async () => ({ items: [], nextCursor: null })),
+    listFolders: vi.fn(async () => []),
     listMessagePage: vi.fn(async () => ({ items: [], nextCursor: null })),
+    listSharedMedia: vi.fn(async () => ({ items: [], nextCursor: null })),
+    listPinnedMessages: vi.fn(async () => []),
+    searchGlobal: vi.fn(async () => ({ chats: [], messages: [] })),
+    searchMessages: vi.fn(async () => ({
+      messageIds: [],
+      totalCount: 0,
+      nextCursor: null,
+    })),
     getCurrentUser: vi.fn(),
     sendMessage: vi.fn(),
+    downloadMedia: vi.fn(),
+    cancelMediaDownload: vi.fn(),
+    resolveMediaFile: vi.fn(),
+    sendMedia: vi.fn(),
+    cancelMediaUpload: vi.fn(),
     editMessage: vi.fn(async () => undefined),
     deleteMessage: vi.fn(async () => undefined),
     forwardMessage: vi.fn(async () => undefined),
@@ -40,6 +54,21 @@ describe("MessageActionsService", () => {
 
     expect(port.editMessage).toHaveBeenCalledWith(edit);
     expect(port.deleteMessage).toHaveBeenCalledWith(del);
+    expect(port.forwardMessage).toHaveBeenCalledWith(forward);
+  });
+
+  it("passes the hide-sender flag through to the port", async () => {
+    const port = repository();
+    const service = new MessageActionsService(port);
+    const forward = {
+      fromChatId: "chat",
+      messageId: "message",
+      toChatId: "saved",
+      hideSender: true,
+    };
+
+    await service.forwardMessage(forward);
+
     expect(port.forwardMessage).toHaveBeenCalledWith(forward);
   });
 
@@ -80,6 +109,30 @@ describe("MessageActionsService", () => {
     const service = new MessageActionsService(port);
 
     expect(() => service.deleteMessage(input)).toThrow(error);
+    expect(port.deleteMessage).not.toHaveBeenCalled();
+  });
+
+  it("passes the delete scope through to the port", async () => {
+    const port = repository();
+    const service = new MessageActionsService(port);
+    const del = { chatId: "chat", messageId: "message", scope: "me" as const };
+
+    await service.deleteMessage(del);
+
+    expect(port.deleteMessage).toHaveBeenCalledWith(del);
+  });
+
+  it("rejects an unknown delete scope", () => {
+    const port = repository();
+    const service = new MessageActionsService(port);
+
+    expect(() =>
+      service.deleteMessage({
+        chatId: "chat",
+        messageId: "message",
+        scope: "them" as never,
+      }),
+    ).toThrow("Delete scope");
     expect(port.deleteMessage).not.toHaveBeenCalled();
   });
 

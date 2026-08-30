@@ -1,10 +1,14 @@
 import { EventType, type AGUIEvent } from "@ag-ui/core";
 import type { WebContents } from "electron";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 
 import type {
   AgentThreadDto,
   AgentThreadListDto,
+  LocalMediaFileInput,
   RunAgentInput,
   UpdateUserPreferencesInput,
   UserPreferencesDto,
@@ -16,6 +20,8 @@ import { registerIpc } from "./register-ipc";
 
 const ipc = vi.hoisted(() => ({
   handlers: new Map<string, (event: unknown, ...args: unknown[]) => unknown>(),
+  showSaveDialog: vi.fn(),
+  openPath: vi.fn(),
 }));
 
 vi.mock("electron", () => ({
@@ -27,6 +33,12 @@ vi.mock("electron", () => ({
       ipc.handlers.set(channel, listener);
     },
   },
+  dialog: {
+    showSaveDialog: ipc.showSaveDialog,
+  },
+  shell: {
+    openPath: ipc.openPath,
+  },
   Notification: class {
     static isSupported(): boolean {
       return false;
@@ -37,6 +49,7 @@ vi.mock("electron", () => ({
 const input: RunAgentInput = {
   threadId: "thread-1",
   prompt: "Summarize",
+  scope: { scope: "unread", chatId: "chat" },
   context: {
     activeChat: { id: "chat", title: "Telo Design", kind: "group" },
     visibleChats: [],
@@ -253,6 +266,56 @@ describe("registerIpc agent threads", () => {
   });
 });
 
+describe("registerIpc chat agent actions", () => {
+  function chatActionContainer(): ApplicationContainer {
+    const stream = async function* (): AsyncIterable<AgentOutput> {
+      yield { type: "text", delta: "Demo summary of 1 messages." };
+    };
+    return {
+      runChatSummary: { execute: vi.fn(stream) },
+      runChatExtraction: { execute: vi.fn(stream) },
+    } as unknown as ApplicationContainer;
+  }
+
+  it.each([
+    ["agentRunChatSummary", "runChatSummary"],
+    ["agentRunChatExtraction", "runChatExtraction"],
+  ] as const)(
+    "streams the %s use case over the agent event channel",
+    async (channel, service) => {
+      const container = chatActionContainer();
+      registerIpc(container);
+      const handler = ipc.handlers.get(channels[channel]);
+      if (!handler) throw new Error(`${channel} handler was not registered`);
+      const events: AGUIEvent[] = [];
+      const sender = {
+        send: (_channel: string, event: AGUIEvent): void => {
+          events.push(event);
+        },
+      } as unknown as WebContents;
+      const chatInput = {
+        threadId: "thread-1",
+        chatId: "design",
+        chatTitle: "Telo Design",
+        promptLabel: "Summarize unread",
+        context: input.context,
+      };
+
+      await handler({ sender }, chatInput);
+
+      expect(container[service].execute).toHaveBeenCalledWith(chatInput);
+      expect(events.map((event) => event.type)).toEqual([
+        EventType.RUN_STARTED,
+        EventType.STATE_SNAPSHOT,
+        EventType.TEXT_MESSAGE_START,
+        EventType.TEXT_MESSAGE_CONTENT,
+        EventType.TEXT_MESSAGE_END,
+        EventType.RUN_FINISHED,
+      ]);
+    },
+  );
+});
+
 describe("registerIpc chat actions", () => {
   function chatActionsContainer(): ApplicationContainer {
     return {
@@ -324,6 +387,37 @@ describe("registerIpc workspace pagination", () => {
     expect(container.workspace.listMessagePage).toHaveBeenCalledWith(
       "chat-1",
       messageInput,
+    );
+  });
+});
+
+describe("registerIpc workspace search", () => {
+  it("forwards global and in-chat search queries to the workspace service", async () => {
+    const container = {
+      workspace: {
+        searchGlobal: vi.fn().mockResolvedValue({ chats: [], messages: [] }),
+        searchMessages: vi.fn().mockResolvedValue({
+          messageIds: [],
+          totalCount: 0,
+          nextCursor: null,
+        }),
+      },
+    } as unknown as ApplicationContainer;
+    registerIpc(container);
+    const global = ipc.handlers.get(channels.searchGlobal);
+    const inChat = ipc.handlers.get(channels.searchMessages);
+    if (!global || !inChat)
+      throw new Error("search handlers were not registered");
+    const input = { limit: 30, beforeMessageId: "42" };
+
+    await global({}, "report");
+    await inChat({}, "chat-1", "report", input);
+
+    expect(container.workspace.searchGlobal).toHaveBeenCalledWith("report");
+    expect(container.workspace.searchMessages).toHaveBeenCalledWith(
+      "chat-1",
+      "report",
+      input,
     );
   });
 });
@@ -417,6 +511,9 @@ describe("registerIpc preferences", () => {
     timeFormat: "system",
     sendWithEnter: true,
     notificationsEnabled: true,
+    sidebarWidth: 280,
+    agentPanelWidth: 380,
+    recentEmojis: [],
   };
 
   function preferencesContainer(
@@ -465,5 +562,224 @@ describe("registerIpc preferences", () => {
     expect(container.preferences.execute).toHaveBeenCalledWith({
       theme: "light",
     });
+  });
+});
+
+describe("registerIpc media send validation", () => {
+  function workspaceContainer() {
+    const workspace = { sendMedia: vi.fn(async () => []) };
+    return {
+      workspace,
+      container: { workspace } as unknown as ApplicationContainer,
+    };
+  }
+
+  async function mediaSend(files: ReadonlyArray<LocalMediaFileInput>): Promise<{
+    result: unknown;
+    workspace: { sendMedia: ReturnType<typeof vi.fn> };
+  }> {
+    const { workspace, container } = workspaceContainer();
+    registerIpc(container);
+    const handler = ipc.handlers.get(channels.mediaSend);
+    if (!handler) throw new Error("media send handler was not registered");
+    const result = await handler({}, "chat", files, { uploadId: "upload-1" });
+    return { result, workspace };
+  }
+
+  async function tempUpload(contents = "photo-bytes") {
+    const directory = await mkdtemp(path.join(tmpdir(), "telo-upload-"));
+    const source = path.join(directory, "photo.jpg");
+    await writeFile(source, contents);
+    return {
+      source,
+      name: "photo.jpg",
+      mimeType: "image/jpeg",
+      size: contents.length,
+    };
+  }
+
+  it.each<{
+    files: ReadonlyArray<LocalMediaFileInput>;
+    error: string;
+  }>([
+    { files: [], error: "Select from 1 to 10 files" },
+    {
+      files: Array.from({ length: 11 }, (_, index) => ({
+        source: `/tmp/file-${index}.jpg`,
+        name: `file-${index}.jpg`,
+        mimeType: "image/jpeg",
+        size: 1,
+      })),
+      error: "Select from 1 to 10 files",
+    },
+    {
+      files: [
+        {
+          source: "/tmp/photo.jpg",
+          name: " ",
+          mimeType: "image/jpeg",
+          size: 1,
+        },
+      ],
+      error: "Upload file name is required",
+    },
+    {
+      files: [
+        {
+          source: "/tmp/photo.jpg",
+          name: "photo.jpg",
+          mimeType: "image/jpeg",
+          size: 2 * 1024 ** 3 + 1,
+        },
+      ],
+      error: "exceeds the 2 GB limit",
+    },
+    {
+      files: [
+        {
+          source: "relative/photo.jpg",
+          name: "photo.jpg",
+          mimeType: "image/jpeg",
+          size: 1,
+        },
+      ],
+      error: "Upload source must be absolute",
+    },
+  ])("rejects invalid uploads ($error)", async ({ files, error }) => {
+    await expect(mediaSend(files)).rejects.toThrow(error);
+  });
+
+  it("rejects a file whose on-disk size changed since selection", async () => {
+    const file = await tempUpload();
+    await expect(mediaSend([{ ...file, size: file.size + 1 }])).rejects.toThrow(
+      "Upload source changed for photo.jpg",
+    );
+  });
+
+  it("forwards validated files to the workspace", async () => {
+    const file = await tempUpload();
+
+    const { result, workspace } = await mediaSend([file]);
+
+    expect(result).toEqual([]);
+    expect(workspace.sendMedia).toHaveBeenCalledWith("chat", [file], {
+      uploadId: "upload-1",
+    });
+  });
+
+  it("stages pasted in-memory files to disk and cleans up after the send", async () => {
+    const bytes = new Uint8Array([1, 2, 3, 4]);
+
+    const { result, workspace } = await mediaSend([
+      {
+        source: "",
+        bytes,
+        name: "screenshot-1.png",
+        mimeType: "image/png",
+        size: bytes.byteLength,
+      },
+    ]);
+
+    expect(result).toEqual([]);
+    const staged = workspace.sendMedia.mock.calls[0]?.[1][0];
+    expect(path.isAbsolute(staged.source)).toBe(true);
+    expect(staged.name).toBe("screenshot-1.png");
+    expect(staged.bytes).toBeUndefined();
+    // The workspace saw the true bytes, and the staging directory is removed
+    // once the send settles.
+    await expect(readFile(staged.source)).rejects.toThrow();
+  });
+
+  it("rejects an in-memory file whose byte length does not match its size", async () => {
+    await expect(
+      mediaSend([
+        {
+          source: "",
+          bytes: new Uint8Array([1, 2, 3]),
+          name: "screenshot-1.png",
+          mimeType: "image/png",
+          size: 4,
+        },
+      ]),
+    ).rejects.toThrow("Upload source changed for screenshot-1.png");
+  });
+});
+
+describe("registerIpc media file actions", () => {
+  async function cachedMedia(contents = "cached-bytes") {
+    const directory = await mkdtemp(path.join(tmpdir(), "telo-cache-"));
+    const source = path.join(directory, "chat_1.png");
+    await writeFile(source, contents);
+    const workspace = { resolveMediaFile: vi.fn(async () => source) };
+    const container = { workspace } as unknown as ApplicationContainer;
+    registerIpc(container);
+    return { workspace, source, directory };
+  }
+
+  it("copies the cached file to the dialog destination on save-as", async () => {
+    const { workspace, source, directory } = await cachedMedia();
+    const target = path.join(directory, "chosen.png");
+    ipc.showSaveDialog.mockResolvedValue({ canceled: false, filePath: target });
+    const handler = ipc.handlers.get(channels.mediaSaveAs);
+    if (!handler) throw new Error("save-as handler was not registered");
+
+    const result = await handler({}, "chat/1", "hero.png");
+
+    expect(result).toBe(target);
+    expect(workspace.resolveMediaFile).toHaveBeenCalledWith("chat/1");
+    expect(ipc.showSaveDialog).toHaveBeenCalledWith({
+      defaultPath: "hero.png",
+    });
+    await expect(readFile(target, "utf8")).resolves.toBe("cached-bytes");
+    // The cache file survives the export.
+    await expect(readFile(source, "utf8")).resolves.toBe("cached-bytes");
+  });
+
+  it("returns null when the save dialog is cancelled", async () => {
+    await cachedMedia();
+    ipc.showSaveDialog.mockResolvedValue({ canceled: true });
+    const handler = ipc.handlers.get(channels.mediaSaveAs);
+    if (!handler) throw new Error("save-as handler was not registered");
+
+    await expect(handler({}, "chat/1", null)).resolves.toBeNull();
+    // Without a usable suggestion the cached file name seeds the dialog.
+    expect(ipc.showSaveDialog).toHaveBeenCalledWith({
+      defaultPath: "chat_1.png",
+    });
+  });
+
+  it("rejects a suggested name that is not a bare file name", async () => {
+    await cachedMedia();
+    ipc.showSaveDialog.mockResolvedValue({ canceled: true });
+    const handler = ipc.handlers.get(channels.mediaSaveAs);
+    if (!handler) throw new Error("save-as handler was not registered");
+
+    await handler({}, "chat/1", "../escape.png");
+
+    expect(ipc.showSaveDialog).toHaveBeenCalledWith({
+      defaultPath: "chat_1.png",
+    });
+  });
+
+  it("opens the cached file with the system handler", async () => {
+    const { workspace, source } = await cachedMedia();
+    ipc.openPath.mockResolvedValue("");
+    const handler = ipc.handlers.get(channels.mediaOpen);
+    if (!handler) throw new Error("open handler was not registered");
+
+    await expect(handler({}, "chat/1")).resolves.toBeUndefined();
+    expect(workspace.resolveMediaFile).toHaveBeenCalledWith("chat/1");
+    expect(ipc.openPath).toHaveBeenCalledWith(source);
+  });
+
+  it("rejects when the system cannot open the file", async () => {
+    await cachedMedia();
+    ipc.openPath.mockResolvedValue("No application registered");
+    const handler = ipc.handlers.get(channels.mediaOpen);
+    if (!handler) throw new Error("open handler was not registered");
+
+    await expect(handler({}, "chat/1")).rejects.toThrow(
+      "No application registered",
+    );
   });
 });

@@ -1,18 +1,28 @@
 import { describe, expect, it } from "vitest";
 
-import type { RunAgentInput } from "../../../../contracts/src/ipc";
+import type {
+  ChatDto,
+  MessageDto,
+  RunAgentInput,
+} from "../../../../contracts/src/ipc";
+import { hashAgentPrompt } from "../../domain/agent/agent-audit";
+import type { AgentAuditRecord } from "../../domain/agent/agent-audit";
 import { AgentConfiguration } from "../../domain/agent/agent-configuration";
 import type {
+  AgentAuditRepository,
   AgentConfigurationRepository,
   AgentGateway,
   AgentThreadRepository,
 } from "../../domain/agent/agent-ports";
 import { AgentThread } from "../../domain/agent/agent-thread";
+import type { TelegramRepository } from "../../domain/telegram/telegram-ports";
+import { AgentContextService } from "./agent-context";
 import { RunAgentService } from "./run-agent";
 
 const input: RunAgentInput = {
   threadId: "thread-1",
   prompt: "Summarize",
+  scope: { scope: "unread", chatId: "chat" },
   context: {
     activeChat: null,
     visibleChats: [],
@@ -20,6 +30,69 @@ const input: RunAgentInput = {
     components: [],
   },
 };
+
+function chatDto(partial: Partial<ChatDto> = {}): ChatDto {
+  return {
+    id: "chat",
+    title: "Telo Design",
+    preview: "Ship it.",
+    updatedAt: "2026-08-27T14:32:00.000Z",
+    unreadCount: 0,
+    lastReadMessageId: null,
+    muted: false,
+    pinned: false,
+    kind: "group",
+    initials: "TD",
+    avatarDataUrl: null,
+    draftPreview: null,
+    typing: false,
+    folderId: null,
+    ...partial,
+  };
+}
+
+function messageDto(partial: Partial<MessageDto> = {}): MessageDto {
+  return {
+    id: "m1",
+    chatId: "chat",
+    senderName: "Lev",
+    body: "Ship the retry flow.",
+    entities: [],
+    media: null,
+    groupedId: null,
+    sentAt: "2026-08-27T14:28:00.000Z",
+    outgoing: false,
+    status: "read",
+    ...partial,
+  };
+}
+
+// The context service only reads chat and message pages; the rest of the
+// repository surface is irrelevant here.
+function telegramStub(
+  chats: ReadonlyArray<ChatDto> = [chatDto()],
+  messages: ReadonlyArray<MessageDto> = [],
+): TelegramRepository {
+  return {
+    listChatPage: async () => ({ items: chats, nextCursor: null }),
+    listMessagePage: async () => ({ items: messages, nextCursor: null }),
+  } as unknown as TelegramRepository;
+}
+
+function inMemoryAudits(): AgentAuditRepository & {
+  records: AgentAuditRecord[];
+} {
+  const store = {
+    records: [] as AgentAuditRecord[],
+    async append(record: AgentAuditRecord) {
+      store.records.push(record);
+    },
+    async listRecent(limit: number) {
+      return store.records.slice(-limit).reverse();
+    },
+  };
+  return store;
+}
 
 function configurationRepository(): AgentConfigurationRepository {
   return {
@@ -73,6 +146,21 @@ function gatewayYielding(
   };
 }
 
+function makeService(
+  gateway: AgentGateway,
+  threads: AgentThreadRepository,
+  telegram: TelegramRepository = telegramStub(),
+  audits: AgentAuditRepository = inMemoryAudits(),
+): RunAgentService {
+  return new RunAgentService(
+    configurationRepository(),
+    gateway,
+    threads,
+    new AgentContextService(telegram),
+    audits,
+  );
+}
+
 async function collect(
   service: RunAgentService,
   runInput: RunAgentInput = input,
@@ -85,8 +173,7 @@ async function collect(
 describe("RunAgentService", () => {
   it("streams gateway output with the stored configuration", async () => {
     const threads = inMemoryThreads();
-    const service = new RunAgentService(
-      configurationRepository(),
+    const service = makeService(
       gatewayYielding([
         { type: "activity", label: "Reading workspace" },
         { type: "text", delta: "Done" },
@@ -105,8 +192,7 @@ describe("RunAgentService", () => {
   it("adopts an unknown threadId and persists the user message before streaming", async () => {
     const threads = inMemoryThreads();
     let messagesAtStreamStart: number | null = null;
-    const service = new RunAgentService(
-      configurationRepository(),
+    const service = makeService(
       gatewayYielding([{ type: "text", delta: "Done" }], () => {
         messagesAtStreamStart =
           threads.threads.get("thread-1")?.snapshot().messages.length ?? null;
@@ -159,8 +245,7 @@ describe("RunAgentService", () => {
       }),
     );
     let seen: unknown = null;
-    const service = new RunAgentService(
-      configurationRepository(),
+    const service = makeService(
       gatewayYielding([{ type: "text", delta: "Done" }], (streamInput) => {
         seen = { prompt: streamInput.prompt, history: streamInput.history };
       }),
@@ -181,8 +266,7 @@ describe("RunAgentService", () => {
 
   it("persists the error as a flagged assistant message when the run fails", async () => {
     const threads = inMemoryThreads();
-    const service = new RunAgentService(
-      configurationRepository(),
+    const service = makeService(
       gatewayYielding([
         { type: "text", delta: "partial" },
         { type: "error", message: "Model exploded" },
@@ -208,16 +292,139 @@ describe("RunAgentService", () => {
 
   it("keeps only the user message when the agent produces no output", async () => {
     const threads = inMemoryThreads();
-    const service = new RunAgentService(
-      configurationRepository(),
-      gatewayYielding([]),
-      threads,
-    );
+    const service = makeService(gatewayYielding([]), threads);
 
     await collect(service);
 
     expect(threads.threads.get("thread-1")?.snapshot().messages).toHaveLength(
       1,
     );
+  });
+
+  it("sends the bare prompt when the scope matches no messages", async () => {
+    const threads = inMemoryThreads();
+    const audits = inMemoryAudits();
+    let seenPrompt: string | null = null;
+    const service = makeService(
+      gatewayYielding([{ type: "text", delta: "Done" }], (streamInput) => {
+        seenPrompt = streamInput.prompt;
+      }),
+      threads,
+      telegramStub([chatDto({ unreadCount: 0 })]),
+      audits,
+    );
+
+    await collect(service);
+
+    expect(seenPrompt).toBe("Summarize");
+    expect(audits.records).toHaveLength(1);
+    expect(audits.records[0]).toMatchObject({
+      scope: "unread",
+      messageIds: [],
+      redactionCounts: { emails: 0, phones: 0, tokens: 0 },
+    });
+  });
+
+  it("embeds the redacted scoped payload ahead of the user prompt", async () => {
+    const threads = inMemoryThreads();
+    let seenPrompt: string | null = null;
+    const service = makeService(
+      gatewayYielding([{ type: "text", delta: "Done" }], (streamInput) => {
+        seenPrompt = streamInput.prompt;
+      }),
+      threads,
+      telegramStub(
+        [chatDto({ unreadCount: 1 })],
+        [
+          messageDto({
+            id: "design-4",
+            senderName: "Lev",
+            body: "Reach me at lev@example.com about the retry flow.",
+          }),
+        ],
+      ),
+    );
+
+    await collect(service);
+
+    expect(seenPrompt).toBe(
+      [
+        "[[telo-input]]",
+        "id: design-4 | Lev: Reach me at [redacted email] about the retry flow.",
+        "[[/telo-input]]",
+        "Cite the source message of every point with [[telo-cite:<message id>]] on its own line.",
+        "",
+        "Summarize",
+      ].join("\n"),
+    );
+    // The transcript keeps the bare user prompt, not the machine payload.
+    const stored = threads.threads.get("thread-1")?.snapshot();
+    expect(stored?.messages[0]?.body).toBe("Summarize");
+  });
+
+  it("audits the run with scope, message ids, redaction counts, model, and the prompt hash", async () => {
+    const threads = inMemoryThreads();
+    const audits = inMemoryAudits();
+    let seenPrompt: string | null = null;
+    const service = makeService(
+      gatewayYielding([{ type: "text", delta: "Done" }], (streamInput) => {
+        seenPrompt = streamInput.prompt;
+      }),
+      threads,
+      telegramStub(
+        [chatDto({ unreadCount: 1 })],
+        [
+          messageDto({
+            id: "design-4",
+            body: "Call +1 415 555 2671 or mail lev@example.com with sk-1234567890abcdefgh.",
+          }),
+        ],
+      ),
+      audits,
+    );
+
+    await collect(service);
+
+    expect(audits.records).toHaveLength(1);
+    const record = audits.records[0];
+    expect(record).toMatchObject({
+      action: "run",
+      threadId: "thread-1",
+      scope: "unread",
+      messageIds: ["design-4"],
+      redactionCounts: { emails: 1, phones: 1, tokens: 1 },
+      model: "gpt-4.1-mini",
+    });
+    // The audit stores the hash of the exact gateway prompt, never the text.
+    expect(record.promptHash).toBe(await hashAgentPrompt(seenPrompt ?? ""));
+    expect(record.promptHash).not.toContain("Summarize");
+  });
+
+  it("fails the run without auditing when the scope cannot be assembled", async () => {
+    const threads = inMemoryThreads();
+    const audits = inMemoryAudits();
+    const service = makeService(
+      gatewayYielding([{ type: "text", delta: "Done" }]),
+      threads,
+      telegramStub(),
+      audits,
+    );
+
+    const output = await collect(service, {
+      ...input,
+      scope: { scope: "unread", chatId: "unknown-chat" },
+    });
+
+    expect(output).toEqual([
+      { type: "error", message: "Unknown chat: unknown-chat" },
+    ]);
+    expect(audits.records).toHaveLength(0);
+    const stored = threads.threads.get("thread-1")?.snapshot();
+    expect(
+      stored?.messages.map((message) => [message.role, message.error ?? false]),
+    ).toEqual([
+      ["user", false],
+      ["assistant", true],
+    ]);
   });
 });

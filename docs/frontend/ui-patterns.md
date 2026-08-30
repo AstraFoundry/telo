@@ -125,6 +125,8 @@ Aligned with Telegram's own clients (verified against Nicegram-Android's `LoginA
 
 ## Message bubbles
 
+- Message bodies render through the BEUI `MessageRichText` primitive exported by `shared/ui`. Telegram UTF-16 ranges become semantic React elements (`strong`, `em`, `code`, `pre`, `blockquote`, `time`, safe links); never use `dangerouslySetInnerHTML`. Unknown, crossing, or out-of-bounds entities stay plain text. Spoilers use an accessible reveal button with a static obscured surface and no entrance animation; nested links remain inert until reveal.
+- Message attachments render through the BEUI `MessageMedia` primitive. The chat entity store owns progress keyed by opaque media id; widgets supply localized labels and commands, never filesystem paths. Progress uses tabular byte counts and a static bar, while the existing BEUI button press feedback is retained for download, cancel, and retry.
 - A reply renders as a quote block inside `MessageBubbleContent`, above the body: a 2px accent left border (`border-l-2 border-primary`), the quoted sender name in `text-primary`, and the quoted body truncated in `text-foreground/70`. The data is the `replyTo` snapshot on `MessageDto`, so the block survives edits of the original message.
 - An edited message shows the `edited` marker next to its timestamp in `MessageFooter` whenever `editedAt` is set.
 - The composer is controlled by the send-message feature and clears only after its async submit succeeds. A failed send or edit keeps both the text and reply/edit context so the user can retry without reconstructing the draft.

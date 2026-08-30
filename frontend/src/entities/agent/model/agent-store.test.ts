@@ -21,6 +21,7 @@ function resetAgentStore(): void {
     threadId: null,
     configuration: null,
     notificationsEnabled: false,
+    runChatId: null,
   });
 }
 
@@ -163,6 +164,9 @@ describe("agent-store actions", () => {
       timeFormat: "system",
       sendWithEnter: true,
       notificationsEnabled: true,
+      sidebarWidth: 280,
+      agentPanelWidth: 380,
+      recentEmojis: [],
       demoWorkspace: false,
       theme: "system",
     });
@@ -187,6 +191,9 @@ describe("agent-store actions", () => {
       timeFormat: "system",
       sendWithEnter: true,
       notificationsEnabled: true,
+      sidebarWidth: 280,
+      agentPanelWidth: 380,
+      recentEmojis: [],
       demoWorkspace: false,
       theme: "system",
     });
@@ -206,6 +213,9 @@ describe("agent-store actions", () => {
       timeFormat: "system",
       sendWithEnter: true,
       notificationsEnabled: true,
+      sidebarWidth: 280,
+      agentPanelWidth: 380,
+      recentEmojis: [],
       demoWorkspace: false,
       theme: "system",
     });
@@ -224,6 +234,9 @@ describe("agent-store actions", () => {
       timeFormat: "system",
       sendWithEnter: true,
       notificationsEnabled: true,
+      sidebarWidth: 280,
+      agentPanelWidth: 380,
+      recentEmojis: [],
       demoWorkspace: false,
       theme: "system",
     });
@@ -254,6 +267,9 @@ describe("agent-store actions", () => {
       timeFormat: "system",
       sendWithEnter: true,
       notificationsEnabled: true,
+      sidebarWidth: 280,
+      agentPanelWidth: 380,
+      recentEmojis: [],
       demoWorkspace: false,
       theme: "system",
     });
@@ -322,7 +338,10 @@ describe("agent-store actions", () => {
       components: [],
     };
 
-    await useAgentStore.getState().run("Summarize this chat", context);
+    await useAgentStore.getState().run("Summarize this chat", context, {
+      scope: "unread",
+      chatId: "design",
+    });
 
     const state = useAgentStore.getState();
     expect(state.running).toBe(true);
@@ -336,6 +355,7 @@ describe("agent-store actions", () => {
       threadId: "thread-1",
       prompt: "Summarize this chat",
       context,
+      scope: { scope: "unread", chatId: "design" },
     });
     expect(telo.agent.createThread).not.toHaveBeenCalled();
   });
@@ -362,13 +382,17 @@ describe("agent-store actions", () => {
       components: [],
     };
 
-    await useAgentStore.getState().run("Summarize this chat", context);
+    await useAgentStore.getState().run("Summarize this chat", context, {
+      scope: "unread",
+      chatId: "design",
+    });
 
     expect(telo.agent.createThread).toHaveBeenCalledTimes(1);
     expect(telo.agent.run).toHaveBeenCalledWith({
       threadId: "thread-9",
       prompt: "Summarize this chat",
       context,
+      scope: { scope: "unread", chatId: "design" },
     });
     const state = useAgentStore.getState();
     expect(state.threadId).toBe("thread-9");
@@ -634,5 +658,135 @@ describe("agent-store run completion notifications", () => {
     } as AGUIEvent);
 
     expect(telo.shell.notify).not.toHaveBeenCalled();
+  });
+});
+
+describe("agent-store runChatAction()", () => {
+  beforeEach(() => {
+    resetAgentStore();
+    useAgentStore.setState({ running: false });
+  });
+
+  const scope = {
+    chatId: "design",
+    chatTitle: "Telo Design",
+    messages: [{ id: "design-4", senderName: "Lev", body: "Ship it." }],
+  };
+  const context: UiContextSnapshot = {
+    activeChat: { id: "design", title: "Telo Design", kind: "group" },
+    visibleChats: [],
+    visibleMessages: [],
+    components: [],
+  };
+
+  it("delegates a summary run with the chat and the action label", async () => {
+    const telo = installTeloApiMock();
+    telo.agent.runChatSummary.mockResolvedValue(undefined);
+    telo.agent.listThreads.mockResolvedValue({
+      threads: [],
+      activeThreadId: "thread-1",
+    });
+    useAgentStore.setState({ threadId: "thread-1" });
+
+    await useAgentStore.getState().runChatAction("summary", scope, context);
+
+    expect(telo.agent.runChatSummary).toHaveBeenCalledWith({
+      threadId: "thread-1",
+      context,
+      chatId: "design",
+      chatTitle: "Telo Design",
+      promptLabel: "Summarize unread",
+    });
+    const state = useAgentStore.getState();
+    expect(state.running).toBe(true);
+    expect(state.runChatId).toBe("design");
+    // The transcript shows the action label, never the machine prompt.
+    expect(state.messages[0]).toMatchObject({
+      from: "user",
+      body: "Summarize unread",
+    });
+  });
+
+  it("delegates an extraction run with its own label", async () => {
+    const telo = installTeloApiMock();
+    telo.agent.runChatExtraction.mockResolvedValue(undefined);
+    telo.agent.listThreads.mockResolvedValue({
+      threads: [],
+      activeThreadId: "thread-1",
+    });
+    useAgentStore.setState({ threadId: "thread-1" });
+
+    await useAgentStore.getState().runChatAction("extraction", scope, context);
+
+    expect(telo.agent.runChatExtraction).toHaveBeenCalledWith({
+      threadId: "thread-1",
+      context,
+      chatId: "design",
+      chatTitle: "Telo Design",
+      promptLabel: "Extract decisions & todos",
+    });
+    expect(telo.agent.runChatSummary).not.toHaveBeenCalled();
+  });
+
+  it("creates a thread first when none is active", async () => {
+    const telo = installTeloApiMock();
+    telo.agent.createThread.mockResolvedValue(
+      threadDto({ threadId: "thread-9", messages: [] }),
+    );
+    telo.agent.runChatSummary.mockResolvedValue(undefined);
+    telo.agent.listThreads.mockResolvedValue({
+      threads: [],
+      activeThreadId: "thread-9",
+    });
+
+    await useAgentStore.getState().runChatAction("summary", scope, context);
+
+    expect(telo.agent.createThread).toHaveBeenCalledTimes(1);
+    expect(telo.agent.runChatSummary).toHaveBeenCalledWith(
+      expect.objectContaining({ threadId: "thread-9" }),
+    );
+  });
+
+  it("ignores an empty scope", async () => {
+    const telo = installTeloApiMock();
+
+    await useAgentStore
+      .getState()
+      .runChatAction("summary", { ...scope, messages: [] }, context);
+
+    expect(telo.agent.runChatSummary).not.toHaveBeenCalled();
+    expect(useAgentStore.getState().messages).toEqual([]);
+  });
+
+  it("tags the streamed assistant message with the chat until the run ends", async () => {
+    const telo = installTeloApiMock();
+    telo.agent.runChatSummary.mockResolvedValue(undefined);
+    telo.agent.listThreads.mockResolvedValue({
+      threads: [],
+      activeThreadId: "thread-1",
+    });
+    useAgentStore.setState({ threadId: "thread-1" });
+
+    await useAgentStore.getState().runChatAction("summary", scope, context);
+    const { accept } = useAgentStore.getState();
+    accept({
+      type: EventType.TEXT_MESSAGE_START,
+      messageId: "a-1",
+      role: "assistant",
+    } as AGUIEvent);
+
+    expect(useAgentStore.getState().messages.at(-1)).toMatchObject({
+      id: "a-1",
+      from: "assistant",
+      chatId: "design",
+    });
+
+    accept({
+      type: EventType.RUN_FINISHED,
+      threadId: "thread-1",
+      runId: "run-1",
+    } as AGUIEvent);
+
+    expect(useAgentStore.getState().runChatId).toBeNull();
   });
 });

@@ -18,6 +18,7 @@ function chat(
     preview: "",
     updatedAt: "2026-01-01T00:00:00.000Z",
     unreadCount: 0,
+    lastReadMessageId: null,
     muted: false,
     pinned: false,
     initials: "C",

@@ -56,6 +56,33 @@ test("keeps a chat's draft when switching away and back", async ({
   await expect(composer).toHaveValue(draft);
 });
 
+test("renders the unread divider before the first unread message", async ({
+  window,
+}) => {
+  await waitForDemoWorkspace(window);
+
+  const chats = window.getByRole("navigation", { name: "Chats" });
+  await chats.getByRole("button", { name: /Telo Design/ }).click();
+
+  // The demo repository pins the design chat's read boundary at "design-3",
+  // so the divider lands before the first of the three unread messages.
+  const conversation = window.getByRole("region", { name: "Conversation" });
+  const divider = conversation.getByText("Unread messages");
+  const firstUnread = conversation.getByText(
+    "The retry flow needs a failed state in the transcript.",
+  );
+  await expect(divider).toBeVisible();
+  await expect(firstUnread).toBeVisible();
+
+  const dividerBox = await divider.boundingBox();
+  const firstUnreadBox = await firstUnread.boundingBox();
+  expect(dividerBox!.y).toBeLessThan(firstUnreadBox!.y);
+
+  // A fully read chat shows no divider.
+  await chats.getByRole("button", { name: /Saved Messages/ }).click();
+  await expect(conversation.getByText("Unread messages")).toHaveCount(0);
+});
+
 test("clicking a reply quote scrolls the source message back into view", async ({
   window,
 }) => {

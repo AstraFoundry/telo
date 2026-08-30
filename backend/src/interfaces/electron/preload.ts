@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from "electron";
+import { contextBridge, ipcRenderer, webUtils } from "electron";
 import type { AGUIEvent } from "@ag-ui/core";
 
 import type {
@@ -14,10 +14,52 @@ const api: TeloDesktopApi = {
   workspace: {
     getCurrentUser: () => ipcRenderer.invoke(channels.currentUserGet),
     listChatPage: (input) => ipcRenderer.invoke(channels.chatPageList, input),
+    listFolders: () => ipcRenderer.invoke(channels.folderList),
     listMessagePage: (chatId, input) =>
       ipcRenderer.invoke(channels.messagePageList, chatId, input),
+    listSharedMedia: (chatId, input) =>
+      ipcRenderer.invoke(channels.sharedMediaList, chatId, input),
+    listPinnedMessages: (chatId) =>
+      ipcRenderer.invoke(channels.pinnedMessageList, chatId),
+    listChatMembers: (chatId) =>
+      ipcRenderer.invoke(channels.chatMemberList, chatId),
+    searchGlobal: (query) => ipcRenderer.invoke(channels.searchGlobal, query),
+    searchMessages: (chatId, query, input) =>
+      ipcRenderer.invoke(channels.searchMessages, chatId, query, input),
     sendMessage: (chatId, body, input) =>
       ipcRenderer.invoke(channels.messageSend, chatId, body, input),
+    downloadMedia: (mediaId) =>
+      ipcRenderer.invoke(channels.mediaDownload, mediaId),
+    cancelMediaDownload: (mediaId) =>
+      ipcRenderer.invoke(channels.mediaDownloadCancel, mediaId),
+    saveMediaAs: (mediaId, fileName) =>
+      ipcRenderer.invoke(channels.mediaSaveAs, mediaId, fileName),
+    openMedia: (mediaId) => ipcRenderer.invoke(channels.mediaOpen, mediaId),
+    sendMedia: async (chatId, files, input) =>
+      ipcRenderer.invoke(
+        channels.mediaSend,
+        chatId,
+        // Files picked from disk carry an absolute path; pasted clipboard
+        // files exist only in memory, so their bytes travel instead and main
+        // stages them to a temp file before the upload.
+        await Promise.all(
+          files.map(async (file) => {
+            const source = webUtils.getPathForFile(file);
+            return {
+              source,
+              bytes: source
+                ? undefined
+                : new Uint8Array(await file.arrayBuffer()),
+              name: file.name,
+              mimeType: file.type,
+              size: file.size,
+            };
+          }),
+        ),
+        input,
+      ),
+    cancelMediaUpload: (uploadId) =>
+      ipcRenderer.invoke(channels.mediaUploadCancel, uploadId),
     editMessage: (input) => ipcRenderer.invoke(channels.messageEdit, input),
     deleteMessage: (input) => ipcRenderer.invoke(channels.messageDelete, input),
     forwardMessage: (input) =>
@@ -40,6 +82,13 @@ const api: TeloDesktopApi = {
     saveConfiguration: (input: SaveAgentConfigurationInput) =>
       ipcRenderer.invoke(channels.agentConfigSave, input),
     run: (input) => ipcRenderer.invoke(channels.agentRun, input),
+    runChatSummary: (input) =>
+      ipcRenderer.invoke(channels.agentRunChatSummary, input),
+    runChatExtraction: (input) =>
+      ipcRenderer.invoke(channels.agentRunChatExtraction, input),
+    previewContext: (input) =>
+      ipcRenderer.invoke(channels.agentContextPreview, input),
+    listAuditRecords: () => ipcRenderer.invoke(channels.agentAuditList),
     onEvent: (listener) => subscribe<AGUIEvent>(channels.agentEvent, listener),
     listThreads: () => ipcRenderer.invoke(channels.agentThreadsList),
     getThread: (threadId) =>

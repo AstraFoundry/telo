@@ -9,22 +9,26 @@ import { installTeloApiMock } from "../../../shared/test/mock-telo";
 
 import type { WorkspacePage as WorkspacePageComponent } from "./workspace-page";
 
+function stubMatchMedia(matches: boolean): void {
+  // jsdom does not implement matchMedia, which the preferences slice, the
+  // narrow-workspace hook, and motion's useReducedMotion need.
+  window.matchMedia = ((query: string) => ({
+    matches,
+    media: query,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    addListener: () => {},
+    removeListener: () => {},
+    onchange: null,
+    dispatchEvent: () => false,
+  })) as unknown as typeof window.matchMedia;
+}
+
 describe("WorkspacePage", () => {
   let WorkspacePage: typeof WorkspacePageComponent;
 
   beforeAll(() => {
-    // jsdom does not implement matchMedia, which the preferences slice and
-    // motion's useReducedMotion need.
-    window.matchMedia = ((query: string) => ({
-      matches: false,
-      media: query,
-      addEventListener: () => {},
-      removeEventListener: () => {},
-      addListener: () => {},
-      removeListener: () => {},
-      onchange: null,
-      dispatchEvent: () => false,
-    })) as unknown as typeof window.matchMedia;
+    stubMatchMedia(false);
     // jsdom does not implement ResizeObserver, which the popover positioning
     // hook uses to re-measure the trigger and panel.
     window.ResizeObserver = class {
@@ -32,10 +36,16 @@ describe("WorkspacePage", () => {
       unobserve(): void {}
       disconnect(): void {}
     } as unknown as typeof ResizeObserver;
+    // jsdom does not implement pointer capture, which the column resize
+    // handle uses to keep tracking the drag outside its bounds.
+    window.HTMLElement.prototype.setPointerCapture = () => {};
+    window.HTMLElement.prototype.releasePointerCapture = () => {};
   });
 
   beforeEach(async () => {
+    stubMatchMedia(false);
     const telo = installTeloApiMock();
+    telo.preferences.update.mockResolvedValue(await telo.preferences.get());
     telo.agent.listThreads.mockResolvedValue({
       threads: [],
       activeThreadId: null,
@@ -61,13 +71,21 @@ describe("WorkspacePage", () => {
     ({ WorkspacePage } = await import("./workspace-page"));
   });
 
-  it("offers a skip-to-content link that targets the main surface", async () => {
-    const user = userEvent.setup();
-    render(
-      <WorkspacePage onOpenSettings={vi.fn()} onSelectChat={vi.fn()}>
+  function renderPage(showBackToChats = false) {
+    return render(
+      <WorkspacePage
+        onOpenSettings={vi.fn()}
+        onSelectChat={vi.fn()}
+        showBackToChats={showBackToChats}
+      >
         <main>Conversation surface</main>
       </WorkspacePage>,
     );
+  }
+
+  it("offers a skip-to-content link that targets the main surface", async () => {
+    const user = userEvent.setup();
+    renderPage();
 
     const link = screen.getByRole("link", { name: copy.skipToContent });
     // Visually hidden until focused.
@@ -81,5 +99,62 @@ describe("WorkspacePage", () => {
     const target = document.getElementById("main");
     expect(target).not.toBeNull();
     expect(target?.textContent).toContain("Conversation surface");
+  });
+
+  it("exposes a separator between the chat list and the conversation", () => {
+    renderPage();
+
+    const separator = screen.getByRole("separator", {
+      name: copy.resizeChatList,
+    });
+    expect(separator.getAttribute("aria-orientation")).toBe("vertical");
+    expect(separator.getAttribute("aria-valuenow")).toBe("280");
+  });
+
+  it("nudges the chat list width from the keyboard and persists it", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    const separator = screen.getByRole("separator", {
+      name: copy.resizeChatList,
+    });
+    separator.focus();
+    await user.keyboard("{ArrowRight}");
+
+    expect(separator.getAttribute("aria-valuenow")).toBe("296");
+    expect(window.telo.preferences.update).toHaveBeenCalledWith({
+      sidebarWidth: 296,
+    });
+  });
+
+  it("resets the chat list width to the default on double-click", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.dblClick(
+      screen.getByRole("separator", { name: copy.resizeChatList }),
+    );
+
+    expect(window.telo.preferences.update).toHaveBeenCalledWith({
+      sidebarWidth: 280,
+    });
+  });
+
+  it("collapses to a list ↔ conversation column at the narrow breakpoint", async () => {
+    const user = userEvent.setup();
+    stubMatchMedia(true);
+    useChatStore.setState({ activeChatId: "chat-1" });
+    renderPage(true);
+
+    // A chat is active, so the conversation wins and the list stays away.
+    expect(screen.queryByText("Conversation surface")).not.toBeNull();
+    expect(screen.queryByRole("navigation", { name: copy.chats })).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: copy.backToChats }));
+
+    expect(
+      screen.queryByRole("navigation", { name: copy.chats }),
+    ).not.toBeNull();
+    expect(screen.queryByText("Conversation surface")).toBeNull();
   });
 });

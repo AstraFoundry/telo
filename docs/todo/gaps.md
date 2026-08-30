@@ -22,49 +22,51 @@
 - [x] 订阅 Teleproto typing / draft / mute / pin 更新（folder 级更新留给 Wave 2 文件夹项）
 - [x] 映射真实用户、会话、发送者、头像；Saved Messages 与 mute 用服务端状态（侧栏不要只画 initials）
 - [x] 每会话记住滚动位置
-- [x] 乐观发送：稳定临时 ID、`sending/sent/read`；失败时移除乐观气泡并把 body 回填 composer（不吞错）
-- [ ] 发送失败后的一键重试（现状：body 已回填 composer，需要用户重新按发送）
+- [x] 乐观发送：稳定临时 ID、`sending/sent/read/failed`；失败时气泡以 `failed` 留在消息流（不回填 composer，不吞错）
+- [x] 发送失败后的一键重试（失败气泡右键 Resend 重发同一 body；成功归位 sent，失败保持 failed；Delete 保留）
 - [x] 本地 / 云端草稿；切聊天不丢输入
 - [x] 输入状态：顶栏 + 会话列表行（已接事件，动效用已有 `MessageTyping`）
 - [x] 未读消息桌面通知：mute / 焦点 / 点进对应会话（`shell.notify` 已接收件通知与点击选中会话）
 - [x] 日期分隔、点击回复条跳到源消息
-- [ ] 未读分界线（`MessageMarker` 目前只标日期，不标首条未读消息）
+- [x] 未读分界线（`ChatDto.lastReadMessageId` ← teleproto `readInboxMaxId`；`MessageMarker` 标在首条未读前；界标未加载时自动向上分页直至找到或耗尽）
 - [x] 同步脊柱的 application / IPC / Vitest / Playwright 覆盖
 
 ## Wave 2 — 能当主客户端的最低线
 
 `MessageDto.body: string` 必须扩成实体模型（`contracts/src/ipc.ts`）。没有媒体就没有可给 Agent 看的上下文。
 
-- [ ] 消息实体与富文本（bold / mention / url），安全渲染
-- [ ] 收发明细：照片 / 视频 / 文件 / 相册；下载进度、取消、重试、打开 / 另存
-- [ ] 链接预览
-- [ ] Telegram 原生文件夹 + Archive + 文件夹未读（关键词文件夹放 Wave 6）
-- [ ] 服务端全局搜索 + 会话内搜索（现有搜索只滤已加载对话的 `title/preview`）
-- [ ] 会话顶栏：头像、在线 / 输入中、搜索、置顶（现在只有标题 + Agent 开关）
+- [x] 消息实体与富文本：完整 Teleproto 实体映射、UTF-16 范围校验、嵌套语义渲染、安全链接与 Spoiler；发送格式化控件仍在 Wave 6
+- [x] 媒体接收：照片 / 视频 / 文件元数据、安全缓存下载、下载进度 / 取消 / 重试、BEUI 媒体卡片渲染
+- [x] 媒体发送：照片 / 视频 / 文件选择与上传、上传进度 / 取消 / 失败重试、相册批量发送（`groupedId`，≤10 个，单文件 ≤2GB）
+- [x] 媒体查看器（灯箱）、打开 / 另存、相册网格布局、缩略图预加载与缓存容量治理 — `shared/ui` 新原语 `MediaViewer`（缩略图原点缩放、Esc/点击关闭、方向键导航、reduced-motion 静态淡入）；新 IPC `saveMediaAs`（save 对话框 + 拷贝缓存文件）/`openMedia`（`shell.openPath`），经 `resolveMediaFile` 端口先下载；`groupedId` 连续视觉消息合成单相册网格（首格带说明）；IntersectionObserver 预加载照片 / 视频 / 链接预览缩略图（进度仅显式下载可见）；`media-cache.ts` LRU 512MB 上限（mtime + touch）；demo 媒体可下载（确定性 PNG + 内置 WebM，发送媒体拷原始字节），e2e 重新启用 telo-media 协议处理器
+- [x] 链接预览（`MessageMediaWebPage` → `webpage` 媒体变体，`shared/ui` `LinkPreview` 卡片走安全外链；缩略图预加载归查看器项）
+- [x] Telegram 原生文件夹 + Archive + 文件夹未读（关键词文件夹放 Wave 6）— `ChatFolderDto` + `ChatDto.folderId` + `listFolders`/`folders` 事件；teleproto 映射 `getDialogFilters`/filter 更新（`teleproto-folders.ts`），Archive = 文件夹 1；demo 有 Work 文件夹 + 一个归档会话；侧栏无动效文件夹页签（All / 文件夹 / Archive），未读角标取服务端计数，活动页签存于 chat-store（内存态）
+- [x] 服务端全局搜索 + 会话内搜索 — `GlobalSearchResultDto`/`MessageSearchPageDto` + `searchGlobal`/`searchMessages` IPC；teleproto 走 `getMessages(undefined, { search })`（messages.searchGlobal）+ 标题过滤最近 200 个 dialog，会话内 `messages.Search`（newest-first ids + `count`）；demo 在 fixture 上复刻两者；侧栏搜索防抖 300ms 查服务端、分 Chats/Messages 两节，点消息结果走 reply-jump 同款 page-until-found 跳转并高亮（`bg-primary/10` 静态染色）；会话内搜索栏显示「n of total」，Enter/Shift+Enter + 上下按钮导航（缺页时自动取下一页），Esc 关闭并清掉高亮
+- [x] 会话顶栏：头像、在线 / 输入中、搜索、置顶 — `ChatDto.presence`（teleproto `UserStatusOnline` 映射 + `UpdateUserStatus` → `chat-presence` 事件；demo 归档会话 Offsite Planning 为 online 单聊）；顶栏在输入中时显示 `MessageTyping`、否则 online 时显示状态行；搜索开关打开会话内搜索栏；置顶按钮走已有 `setChatPinned`（图标 fill/regular 表态）；按钮 ≥40px、无动效
 
 ## Wave 3 — 消息级 AI 写回 composer
 
 Telo 该赢的面。账本「Telo workspace differentiation」目前全空。Agent 现在只有只读 `inspectWorkspace`；消息菜单只有 Reply / Edit / Copy / Forward / Delete。
 
-- [ ] 消息菜单动作：翻译 / 润色 / 起草回复（语气可选）；**结果插入 composer，不停在右侧面板**
-- [ ] 摘要未读；citation 可滚到原消息
-- [ ] 显式上下文范围：选中消息 / 未读 / 当前文件夹；预览即将发给模型的内容
-- [ ] 发送前：范围、脱敏字段、本地审计（BYOK 更该把边界做清楚）
-- [ ] 决策 / 待办 / 未答问题抽取（可与摘要共用引用跳转）
+- [x] 消息菜单动作：翻译 / 润色 / 起草回复（语气可选）；**结果插入 composer，不停在右侧面板** — 气泡菜单新增 Translate / Rewrite / Draft reply（Neutral / Friendly / Formal 三项语气，BEUI 无子菜单原语，用 inset 项 + `ContextMenuLabel`），仅对 `sent/read` 且有正文的消息显示；`RunAgentInput.action` 走已有 `agent.run` 通道，后端新用例 `RunMessageActionService` 组装带 `[[telo-action:*]]` / `[[telo-tone:*]]` / `[[telo-input]]` 标记的结构化 prompt（不写 thread）；结果以 CUSTOM AG-UI 事件 `message-action` 回流，chat-store `runMessageAction` 增量写入 composer draft（translate/rewrite 替换、draft-reply 追加在已有文本换行后），`draftStream` 信号同步进 textarea（发送/上传流程不受影响），保存走既有 500ms 防抖；流式期间菜单项禁用 + 转圈图标，错误内联显示在 composer 上方；`DemoAgentGateway`（`TELO_DEMO_WORKSPACE=1` 时替换 AiSdk 网关）确定性应答，e2e `message-ai.spec.ts` 覆盖三条路径
+- [x] 摘要未读；citation 可滚到原消息 — `runChatSummary` IPC + `RunChatSummaryService`（`[[telo-action:summarize]]` + `unread` scope，载荷主进程装配 / 脱敏 / 审计；`promptLabel` 让 transcript 显示动作名而非机器 prompt）；面板动作行「Summarize unread」（无未读文本时禁用）；回复中 `[[telo-cite:id]]` 由 `parseCitations` 剥成编号 chip，点击走 `requestJumpToMessage` 翻页跳转 + 高亮，chat 未知（历史线程）时 chip 禁用 + tooltip；demo gateway 确定性摘要，e2e `agent-summary.spec.ts` 覆盖摘要 → citation 跳转
+- [x] 显式上下文范围：选中消息 / 未读 / 当前文件夹；预览即将发给模型的内容 — `RunAgentInput.scope`（`AgentContextScopeInput`：selected / unread / folder）；主进程 `AgentContextService` 经 `TelegramRepository` 装配（unread = 会话最近 `unreadCount` 条 incoming，与 demo 读界设计一致；folder = 活动文件夹各会话未读，null = All 排除 Archive；selected = 指定 id 翻页取全）；面板 composer 区分段选择器（无回复目标时 Selected 禁用 + tooltip，多选归 Wave 4 批量项），默认 Unread（面板本就面向当前会话，最不出乎意料）；「Payload preview」用 `AgentDisclosure` 展开显示脱敏后的逐条 sender / body / message id（WYSIWYG），e2e `agent-context.spec.ts` 覆盖 folder 与 selected（回复目标）两条路径
+- [x] 发送前：范围、脱敏字段、本地审计（BYOK 更该把边界做清楚）— 域层纯函数 `agent-redaction.ts`（邮箱 / 电话 / API-key 形 token 三类占位符 + 计数；电话需 ≥10 位或 `+` 前缀 ≥7 位，避免误伤日期 / id），装配即脱敏，预览所见即所发；载荷以 `[[telo-input]]` + `id: <id> | <sender>: <body>` 行嵌进 prompt（沿用 chat-action 约定，demo gateway 与 citation 标记直通）；每次 run 追加 `agent-audit.jsonl`（`FileAgentAuditRepository`，0o600）：timestamp / action / scope / message ids / 脱敏计数 / model / 完整 prompt 的 SHA-256（不存原文），装配失败不审计（无载荷出设备）；面板「Recent runs」折叠列出近 5 条（scope · 消息数 · 脱敏数 · 时间），`agentAuditList` IPC 取近 50 条
+- [x] 决策 / 待办 / 未答问题抽取（可与摘要共用引用跳转）— `runChatExtraction` IPC + `RunChatExtractionService`（`[[telo-action:extract]]`，Decisions / Open questions / Action items 分组）；面板「Extract decisions & todos」与摘要共用 scope、citation 解析与跳转；demo gateway 同摘要输出，e2e 覆盖抽取 → citation 跳转
 
 ## Wave 4 — 桌面交互密度
 
 桌面主路径应对齐 Telegram Desktop：悬停动作、键盘、文件夹条。Telo 主路径几乎只有右键 / 长按 520ms；产品快捷键基本只有 `Cmd+B`。布局是死的 `280px | 1fr | 380px`。
 
-- [ ] 消息悬停动作条：Reply / 反应位 / AI（翻译、起草）
-- [ ] 快捷键：`Cmd+K` 搜聊天、会话内搜索、回复、编辑上一条、Esc 取消回复 / 编辑；列表上下移动 + Enter 打开
-- [ ] Composer：拖放 / 粘贴附件、emoji、静音发送（现在是单行 `PromptInput` + 回复 / 编辑预览条）
-- [ ] 转发：目标搜索、多条、保留 / 隐藏发送者（现在是单条 + 对话框选聊天）
-- [ ] 删除：Delete for me / everyone（现在一句「不可撤销」）
-- [ ] 列宽可调；窄窗压成会话列表 ↔ 会话
-- [ ] 多选消息；批量转发 / 删除
-- [ ] 置顶区在会话列表可见分组（不要只靠菜单状态）
-- [ ] 资料页、共享媒体、置顶消息导航、返回栈
+- [x] 消息悬停动作条：Reply / AI（翻译、起草）— 绝对定位 overlay（不挤布局），仅 `pointer-fine` hover 与 focus-within 显示，≤100ms opacity 淡入（reduced-motion 无过渡），按钮 ≥40px；AI 为 MorphPopover（Translate / Rewrite / Draft reply 三语气，与右键菜单同一 `runMessageAction`）；右键菜单仍是完整动作列表；album 气泡无 rail（与其现无右键菜单一致）。**反应位暂缓**：contracts / teleproto / demo 均无 reactions 支持，按「不 ship 死按钮」省略该槽位，待 Teleproto reactions 接入后补
+- [x] 快捷键 — `shared/lib/use-hotkeys.ts`（无新依赖；输入框内不触发，除 Esc / Cmd+K / Cmd+F；有 overlay 打开时让位）：`Cmd/Ctrl+K` 全局搜索 palette（BEUI Combobox，挂 app 层、仅打开时挂载，即时开关无 morph；结果 = Wave 2 服务端全局搜索 chats+messages，Enter 打开会话 / 跳消息，Esc 关闭）；`Cmd/Ctrl+F` 打开并聚焦会话内搜索（顶栏 tooltip 标注）；空 composer `ArrowUp` 编辑最后一条 outgoing（Telegram Desktop 惯例）；`R` 回复 / `Delete` 批量删除均绑定多选模型（无歧义才生效）；`Esc` 依次退出 selection → reply/edit → 会话内搜索；聊天列表 `ArrowUp/Down` 夹取式导航即打开（自动滚入视野），`Enter` 聚焦 composer
+- [x] Composer：拖放 / 粘贴附件、emoji、静音发送（现在是单行 `PromptInput` + 回复 / 编辑预览条）— 拖放 / 粘贴 / 文件选择共用同一 `addFiles` 入口与 10 个上限校验，粘贴截图确定性改名 `screenshot-<timestamp>.<ext>`；拖入高亮为静态 token（`border-primary/60 bg-primary/5`，transition-colors）；`SendMessageInput.silent` 端到端（teleproto `silent:true`，demo 静音发送不触发 typing / 自动回复，e2e 可观测），发送按钮右键 / 长按 BEUI ContextMenu「Send without sound」（有附件或编辑时禁用，silent 只走文本路径）；emoji 选择器为 BEUI MorphPopover + 分类页签 + 搜索 + Frequently used（`recentEmojis` 偏好持久化，backend 域去重 cap 24），数据集为手工精选 Unicode 子集（非全量目录），光标处插入并恢复 caret；`PromptInput` 新增 `inputRef` / `sendMenuContent` / `sendMenuLabel` props
+- [x] 转发：目标搜索、多条、保留 / 隐藏发送者 — `ForwardMessageInput.hideSender`（可选、向后兼容；teleproto 映射 `forwardMessages` 的 `dropAuthor`）；`MessageDto.forwardedFrom`（teleproto 从 `fwdFrom.fromName` / `fromId` 实体解析，demo 默认记录原发送者、链式转发保留原作者，hideSender 置 null；气泡（含相册）已渲染「Forwarded from」归属行；picker 重写：标题过滤已加载会话列表、多目标选择（行内圆形选中指示，`aria-pressed`）、「Hide sender」Switch、底部 Forward 逐目标循环发送（批量助手即循环，契约保持单条）；失败内联 `role=alert` 留在对话框
+- [x] 删除：Delete for me / everyone — `DeleteMessageInput.scope`（`DeleteMessageScope`："me" | "everyone"；省略 = everyone，保持历史行为：teleproto 一直 `revoke:true`，现 `revoke: scope !== "me"`）；application 层校验 scope 取值；demo 强制语义：for-everyone 全删，for-me 仅本地隐藏（记录保留、listMessagePage / searchGlobal / searchMessages 过滤）；对话框对 outgoing 给两项（RadioGroup，默认 everyone 对齐旧行为），incoming 仅 for me（Telegram 规则），批量含 incoming 时同样仅 for me
+- [x] 列宽可调；窄窗压成会话列表 ↔ 会话 — 三列 drag handle（pointer 1:1、双击复位、方向键微调），宽度经 `sidebarWidth` / `agentPanelWidth` 偏好持久化（backend 域 200–480 / 280–600 clamp）；≤768px 窄窗单列列表 ↔ 会话（返回按钮），agent 面板隐藏；`minWidth` 降到 420 让窄布局可达；断点常量 `NARROW_WORKSPACE_BREAKPOINT_PX`（pages/workspace/model/layout.ts）
+- [x] 多选消息；批量转发 / 删除 — 右键「Select」进入选择模式，per-bubble 勾选钮（≥40px、fill/regular 表态、固定在行首侧），composer 区换成静态动作条（计数 `n selected` / Forward / Delete / X 关闭）；批量 Forward 逐条循环既有 `forwardMessage` 契约（不改契约；目标选择用独立的 `ForwardSelectedDialog` — 单条 picker 归转发工作流，暂不能共用，后续可合并）；批量 Delete 逐条串行调用（防洪限），本地移除与单条共用 `removeMessagesLocally`；Esc / X 退出，切聊天或远端删除自动清理选择；选择模式解锁 `R`（单选回复）与 `Delete` 键；album 消息暂不可选（与其无单条动作一致）
+- [x] 置顶区在会话列表可见分组 — 每个文件夹视图内 pinned 会话渲染在顶部「Pinned」标签分组，未置顶在其下（纯渲染，无 regroup 动效）；分组在 folder 过滤之后，All 视图保留自定义文件夹会话于未置顶区（与 Telegram All 列表一致）
+- [x] 资料页、共享媒体、置顶消息导航、返回栈 — 新 widget `widgets/chat-profile`（右栏复用 agent 面板列宽与 offcanvas AnimatedSidebar，宽窗与 agent 面板互斥——widget 内 zustand 订阅双向关闭；窄窗替换会话列）：头部 Avatar / 标题 / online 或会话类型副标题；`listSharedMedia` + `listPinnedMessages` 新 IPC（teleproto 双 media filter `InputMessagesFilterPhotoVideo`+`InputMessagesFilterDocument` 合并去重分页、`InputMessagesFilterPinned`；demo 确定性 fixtures：design 5 条媒体 + 2 条置顶）；主视图分节预览（Shared media 前 6、Pinned 前 3）→ 节视图全量，widget 内 back stack 记录各视图 scrollTop，Back 恢复滚动位；媒体格点击开既有 `MediaViewer`（下载走 chat-store 管线），文件节走 `MessageMedia` 卡片；置顶消息点击复用 `requestJumpToMessage` 跳转 + 高亮；顶栏「Chat info」按钮经 `features/toggle-chat-profile`（conversation-view 仅两行接入）
 
 侧栏选中保持 `pressScale={1}`：高频导航不加弹簧。
 

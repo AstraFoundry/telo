@@ -1,4 +1,9 @@
-import type { MessageDto } from "../../../../../contracts/src/ipc";
+import { useState } from "react";
+
+import type {
+  DeleteMessageScope,
+  MessageDto,
+} from "../../../../../contracts/src/ipc";
 import { useChatStore } from "entities/chat";
 import { copy } from "shared/config/copy";
 import {
@@ -6,23 +11,42 @@ import {
   CenterMorphModal,
   CenterMorphModalClose,
   CenterMorphModalContent,
+  RadioGroup,
+  RadioGroupItem,
 } from "shared/ui";
 
 interface DeleteMessageDialogProps {
-  /** The message pending deletion; null closes the dialog. */
-  message: MessageDto | null;
+  /** The messages pending deletion; null closes the dialog. */
+  messages: ReadonlyArray<MessageDto> | null;
   onClose(): void;
 }
 
 export function DeleteMessageDialog({
-  message,
+  messages,
   onClose,
 }: DeleteMessageDialogProps) {
   const deleteMessage = useChatStore((state) => state.deleteMessage);
+  const deleteSelectedMessages = useChatStore(
+    (state) => state.deleteSelectedMessages,
+  );
+  // Telegram rule: "for everyone" exists only for one's own messages, so an
+  // incoming message (or a mixed batch) deletes for this account only.
+  const canDeleteForEveryone =
+    (messages?.length ?? 0) > 0 &&
+    (messages ?? []).every((message) => message.outgoing);
+  // The default stays "everyone": that is the behavior the delete action had
+  // before scopes existed (the teleproto adapter always revoked).
+  const [scope, setScope] = useState<DeleteMessageScope>("everyone");
+  const [previousMessages, setPreviousMessages] = useState(messages);
+  if (messages !== previousMessages) {
+    setPreviousMessages(messages);
+    setScope("everyone");
+  }
+  const single = messages?.length === 1;
 
   return (
     <CenterMorphModal
-      open={message !== null}
+      open={messages !== null}
       onOpenChange={(open) => {
         if (!open) onClose();
       }}
@@ -35,8 +59,17 @@ export function DeleteMessageDialog({
           {/* deslop-ignore-next-line 12 */}
           <h2 className="text-base font-semibold">{copy.deleteMessage}</h2>
           <p className="text-sm text-muted-foreground">
-            {copy.deleteMessageConfirm}
+            {single ? copy.deleteMessageConfirm : copy.deleteMessagesConfirm}
           </p>
+          {canDeleteForEveryone ? (
+            <RadioGroup
+              value={scope}
+              onValueChange={(value) => setScope(value as DeleteMessageScope)}
+            >
+              <RadioGroupItem value="everyone" label={copy.deleteForEveryone} />
+              <RadioGroupItem value="me" label={copy.deleteForMe} />
+            </RadioGroup>
+          ) : null}
           <div className="flex justify-end gap-2">
             <CenterMorphModalClose>
               <Button variant="ghost">{copy.cancel}</Button>
@@ -44,7 +77,12 @@ export function DeleteMessageDialog({
             <Button
               variant="primary"
               onClick={() => {
-                if (message) void deleteMessage(message.id);
+                const effectiveScope = canDeleteForEveryone ? scope : "me";
+                if (single && messages) {
+                  void deleteMessage(messages[0].id, effectiveScope);
+                } else {
+                  void deleteSelectedMessages(effectiveScope);
+                }
                 onClose();
               }}
               className="bg-destructive text-primary-foreground hover:bg-destructive/90"

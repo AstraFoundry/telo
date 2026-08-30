@@ -1,6 +1,11 @@
+import type { AGUIEvent } from "@ag-ui/core";
 import { vi, type Mock } from "vitest";
 
-import type { TeloDesktopApi } from "../../../../contracts/src/ipc";
+import type {
+  SendMediaInput,
+  TelegramWorkspaceEvent,
+  TeloDesktopApi,
+} from "../../../../contracts/src/ipc";
 
 type MockedFunctions<T> = {
   [K in keyof T]: T[K] extends (...args: never[]) => unknown
@@ -8,19 +13,80 @@ type MockedFunctions<T> = {
     : MockedFunctions<T[K]>;
 };
 
-export type TeloApiMock = MockedFunctions<TeloDesktopApi>;
+export type TeloApiMock = MockedFunctions<TeloDesktopApi> & {
+  /** Broadcasts a workspace event to every listener registered via onEvent. */
+  emitWorkspaceEvent(event: TelegramWorkspaceEvent): void;
+  /** Broadcasts an AG-UI event to every listener registered via onEvent. */
+  emitAgentEvent(event: AGUIEvent): void;
+};
+
+type MediaUploadState = Extract<
+  TelegramWorkspaceEvent,
+  { type: "media-upload" }
+>["state"];
 
 /**
  * Installs a vi.fn()-backed `window.telo` preload contract mock and returns it
- * so tests can stub resolved/rejected values per case.
+ * so tests can stub resolved/rejected values per case. The default sendMedia
+ * and cancelMediaUpload implementations emit the matching media-upload events
+ * (uploading → ready, and cancelled) to listeners registered through onEvent,
+ * mirroring the main process, so store upload tracking is testable end to end.
  */
 export function installTeloApiMock(): TeloApiMock {
+  const workspaceListeners = new Set<(event: TelegramWorkspaceEvent) => void>();
+  const emitWorkspaceEvent = (event: TelegramWorkspaceEvent) => {
+    for (const listener of workspaceListeners) listener(event);
+  };
+  const agentListeners = new Set<(event: AGUIEvent) => void>();
+  const emitAgentEvent = (event: AGUIEvent) => {
+    for (const listener of agentListeners) listener(event);
+  };
+  const emitUpload = (
+    uploadId: string,
+    state: MediaUploadState,
+    progress: number,
+  ) => {
+    emitWorkspaceEvent({
+      type: "media-upload",
+      uploadId,
+      state,
+      progress,
+      error: null,
+    });
+  };
   const api: TeloApiMock = {
     workspace: {
       getCurrentUser: vi.fn(),
       listChatPage: vi.fn(async () => ({ items: [], nextCursor: null })),
+      listFolders: vi.fn(async () => []),
       listMessagePage: vi.fn(async () => ({ items: [], nextCursor: null })),
+      listSharedMedia: vi.fn(async () => ({ items: [], nextCursor: null })),
+      listPinnedMessages: vi.fn(async () => []),
+      searchGlobal: vi.fn(async () => ({ chats: [], messages: [] })),
+      searchMessages: vi.fn(async () => ({
+        messageIds: [],
+        totalCount: 0,
+        nextCursor: null,
+      })),
       sendMessage: vi.fn(),
+      downloadMedia: vi.fn(),
+      cancelMediaDownload: vi.fn(),
+      saveMediaAs: vi.fn(),
+      openMedia: vi.fn(),
+      sendMedia: vi.fn(
+        async (
+          _chatId: string,
+          _files: ReadonlyArray<File>,
+          input: SendMediaInput,
+        ) => {
+          emitUpload(input.uploadId, "uploading", 0);
+          emitUpload(input.uploadId, "ready", 1);
+          return [];
+        },
+      ),
+      cancelMediaUpload: vi.fn(async (uploadId: string) => {
+        emitUpload(uploadId, "cancelled", 0);
+      }),
       editMessage: vi.fn(),
       deleteMessage: vi.fn(),
       forwardMessage: vi.fn(),
@@ -29,17 +95,35 @@ export function installTeloApiMock(): TeloApiMock {
       setChatRead: vi.fn(),
       setTyping: vi.fn(),
       saveDraft: vi.fn(),
-      onEvent: vi.fn(() => () => {}),
+      onEvent: vi.fn((listener: (event: TelegramWorkspaceEvent) => void) => {
+        workspaceListeners.add(listener);
+        return () => {
+          workspaceListeners.delete(listener);
+        };
+      }),
     },
     agent: {
       getConfiguration: vi.fn(),
       saveConfiguration: vi.fn(),
       run: vi.fn(),
-      onEvent: vi.fn(() => () => {}),
+      runChatSummary: vi.fn(),
+      runChatExtraction: vi.fn(),
+      onEvent: vi.fn((listener: (event: AGUIEvent) => void) => {
+        agentListeners.add(listener);
+        return () => {
+          agentListeners.delete(listener);
+        };
+      }),
       listThreads: vi.fn(),
       getThread: vi.fn(),
       createThread: vi.fn(),
       selectThread: vi.fn(),
+      previewContext: vi.fn(async () => ({
+        scope: "unread" as const,
+        messages: [],
+        redactionCounts: { emails: 0, phones: 0, tokens: 0 },
+      })),
+      listAuditRecords: vi.fn(async () => []),
     },
     telegram: {
       getLoginConfiguration: vi.fn(),
@@ -63,9 +147,14 @@ export function installTeloApiMock(): TeloApiMock {
         timeFormat: "system",
         sendWithEnter: true,
         notificationsEnabled: true,
+        sidebarWidth: 280,
+        agentPanelWidth: 380,
+        recentEmojis: [],
       })),
       update: vi.fn(),
     },
+    emitWorkspaceEvent,
+    emitAgentEvent,
   };
   window.telo = api;
   return api;
