@@ -146,11 +146,16 @@ export function PromptInput({
     if (!textarea || !measurement || textarea.value !== currentValue) return;
 
     const lineHeight = 24;
-    const nextHeight = Math.min(
+    const rows = Math.min(
       Math.max(measurement.scrollHeight, minRows * lineHeight),
       maxRows * lineHeight,
     );
-    const height = `${nextHeight}px`;
+    // The field is border-box, so the rows only fit once its own vertical
+    // padding is added back; otherwise every value scrolls inside the field.
+    const { paddingTop, paddingBottom } = getComputedStyle(textarea);
+    const padding =
+      Number.parseFloat(paddingTop) + Number.parseFloat(paddingBottom);
+    const height = `${rows + padding}px`;
     if (textarea.style.height !== height) textarea.style.height = height;
   }, [currentValue, maxRows, minRows]);
 
@@ -255,7 +260,7 @@ export function PromptInput({
         {...textareaProps}
         onChange={(event) => setValue(event.target.value)}
         onKeyDown={handleKeyDown}
-        className="scrollbar-hide block w-full resize-none overflow-y-auto bg-transparent px-2 pt-1.5 text-sm leading-6 text-foreground outline-none placeholder:text-muted-foreground/55"
+        className="scrollbar-hide block w-full resize-none overflow-y-auto bg-transparent px-2 py-2 text-sm leading-6 text-foreground outline-none placeholder:text-muted-foreground/55"
       />
 
       <div className="mt-1 flex min-h-10 items-center gap-1">
