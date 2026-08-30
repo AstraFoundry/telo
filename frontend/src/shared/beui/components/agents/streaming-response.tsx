@@ -82,7 +82,7 @@ function ResponseAction({
       whileTap={reduce ? undefined : { scale: 0.96 }}
       transition={SPRING_PRESS}
       className={cn(
-        "grid size-7 place-items-center rounded-md text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring",
+        "grid size-10 place-items-center rounded-md text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring",
         active && "bg-muted text-foreground",
       )}
     >
