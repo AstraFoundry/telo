@@ -99,6 +99,10 @@ describe("WorkspacePage", () => {
     const target = document.getElementById("main");
     expect(target).not.toBeNull();
     expect(target?.textContent).toContain("Conversation surface");
+    expect(target?.parentElement?.className).toContain(
+      "grid-rows-[minmax(0,1fr)]",
+    );
+    expect(target?.className).toContain("min-h-0");
   });
 
   it("exposes a separator between the chat list and the conversation", () => {

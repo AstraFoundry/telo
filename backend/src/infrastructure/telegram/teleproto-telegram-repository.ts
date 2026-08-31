@@ -21,10 +21,7 @@ import {
   ConnectionTCPObfuscated,
   UpdateConnectionState,
 } from "teleproto/network/index.js";
-import {
-  ChannelInvalidError,
-  FloodWaitError,
-} from "teleproto/errors/index.js";
+import { ChannelInvalidError, FloodWaitError } from "teleproto/errors/index.js";
 
 import type {
   ChatDto,
@@ -88,6 +85,7 @@ type Challenge = {
 };
 
 type UploadProgress = ((progress: number) => void) & { isCanceled?: boolean };
+type AvatarEntity = Parameters<TelegramClient["downloadProfilePhoto"]>[0];
 
 const AVATAR_DOWNLOAD_CONCURRENCY = 3;
 const AVATAR_CACHE_LIMIT = 200;
@@ -520,9 +518,9 @@ class TeleprotoRepository implements TelegramRepository {
   private readonly avatarCache = new Map<string, string | null>();
   private readonly pendingAvatars: Array<{
     readonly chatId: string;
-    readonly entity: string;
+    readonly entity: AvatarEntity;
   }> = [];
-  private readonly queuedAvatarEntities = new Set<string>();
+  private readonly queuedAvatarChatIds = new Set<string>();
   private activeAvatarDownloads = 0;
   private connectionState: "offline" | "synchronizing" | "connected" =
     "connected";
@@ -702,6 +700,10 @@ class TeleprotoRepository implements TelegramRepository {
     // blocking read — otherwise flood-wait sleeps occupy the exclusive queue
     // and the renderer never paints.
     if (!input.cursor && this.cachedDialogs.length > 0) {
+      const generation = this.connectionGeneration;
+      void this.refreshMainDialogs(generation).catch((error: unknown) => {
+        if (generation === this.connectionGeneration) this.emitSyncError(error);
+      });
       return {
         items: this.cachedDialogs.slice(0, limit).map((entry) => entry.chat),
         nextCursor: this.cachedNextCursor,
@@ -723,11 +725,19 @@ class TeleprotoRepository implements TelegramRepository {
           : undefined,
         offsetPeer: input.cursor?.chatId,
         ignorePinned: Boolean(input.cursor),
-        ignoreMigrated: true,
+        // Teleproto 1.229 inverts its ignoreMigrated predicate and returns
+        // only legacy Chat entities when this is true. Fetch the unfiltered
+        // slice and apply the intended predicate below.
+        ignoreMigrated: false,
       }),
     );
-    const page = dialogs.slice(0, limit);
-    const last = page.at(-1);
+    // Advance the cursor by the raw server slice, not the filtered result.
+    // A page containing a migrated legacy group may therefore render short,
+    // and the sidebar sentinel will immediately request the following page
+    // without skipping or repeating a visible dialog.
+    const rawPage = dialogs.slice(0, limit);
+    const page = rawPage.filter((dialog) => !isMigratedDialog(dialog));
+    const last = rawPage.at(-1);
     const chats = page.map((dialog) => this.toChat(dialog));
     const facts = page.map((dialog) => this.folderFacts(dialog));
     this.ingestDialogs(chats, facts, !input.cursor);
@@ -868,7 +878,9 @@ class TeleprotoRepository implements TelegramRepository {
       this.dialogFetchQueue.run(() =>
         this.client.getDialogs({
           limit: GLOBAL_SEARCH_DIALOG_SCAN,
-          ignoreMigrated: true,
+          // See fetchDialogPage: Teleproto 1.229's built-in predicate is
+          // inverted, so migrated legacy groups are filtered locally.
+          ignoreMigrated: false,
         }),
       ),
       this.client.getMessages(undefined, {
@@ -878,6 +890,7 @@ class TeleprotoRepository implements TelegramRepository {
     ]);
     const term = query.toLocaleLowerCase();
     const chats = dialogs
+      .filter((dialog) => !isMigratedDialog(dialog))
       .filter((dialog) =>
         (dialog.title || dialog.name || "").toLocaleLowerCase().includes(term),
       )
@@ -1587,7 +1600,12 @@ class TeleprotoRepository implements TelegramRepository {
     const readInboxMaxId =
       "readInboxMaxId" in dialog.dialog ? dialog.dialog.readInboxMaxId : 0;
     const avatarDataUrl = this.cachedAvatar(chatId);
-    if (!this.avatarCache.has(chatId)) this.scheduleAvatar(chatId, chatId);
+    if (!this.avatarCache.has(chatId) && dialog.entity) {
+      // Channel and migrated-group ids are not sufficient to resolve a peer:
+      // Telegram also needs the access hash carried by the dialog entity.
+      // Nicegram likewise hands its image loader the complete peer object.
+      this.scheduleAvatar(chatId, dialog.entity);
+    }
     return {
       id: chatId,
       title,
@@ -1628,9 +1646,9 @@ class TeleprotoRepository implements TelegramRepository {
     return avatar;
   }
 
-  private scheduleAvatar(chatId: string, entity: string): void {
-    if (this.queuedAvatarEntities.has(entity)) return;
-    this.queuedAvatarEntities.add(entity);
+  private scheduleAvatar(chatId: string, entity: AvatarEntity): void {
+    if (this.queuedAvatarChatIds.has(chatId)) return;
+    this.queuedAvatarChatIds.add(chatId);
     this.pendingAvatars.push({ chatId, entity });
     this.drainAvatarQueue();
   }
@@ -1645,7 +1663,7 @@ class TeleprotoRepository implements TelegramRepository {
       this.activeAvatarDownloads += 1;
       void this.avatarDataUrl(task.entity)
         .then((avatarDataUrl) => {
-          this.cacheAvatar(task.entity, avatarDataUrl);
+          this.cacheAvatar(task.chatId, avatarDataUrl);
           if (avatarDataUrl) {
             this.emit({
               type: "chat-avatar",
@@ -1655,7 +1673,7 @@ class TeleprotoRepository implements TelegramRepository {
           }
         })
         .finally(() => {
-          this.queuedAvatarEntities.delete(task.entity);
+          this.queuedAvatarChatIds.delete(task.chatId);
           this.activeAvatarDownloads -= 1;
           this.drainAvatarQueue();
         });
@@ -1672,7 +1690,7 @@ class TeleprotoRepository implements TelegramRepository {
     }
   }
 
-  private async avatarDataUrl(entity: string): Promise<string | null> {
+  private async avatarDataUrl(entity: AvatarEntity): Promise<string | null> {
     try {
       const photo = await this.client.downloadProfilePhoto(entity, {
         isBig: false,
@@ -1723,7 +1741,10 @@ class TeleprotoRepository implements TelegramRepository {
         id: source.id.toString(),
         senderName: await senderName(source),
         body: telegramMessageBody(source),
-        entities: mapMessageEntities(telegramMessageBody(source), source.entities),
+        entities: mapMessageEntities(
+          telegramMessageBody(source),
+          source.entities,
+        ),
       });
     }
     return snapshots;
@@ -1810,6 +1831,11 @@ type TeleprotoMessage = Awaited<ReturnType<TelegramClient["sendMessage"]>>;
 type TeleprotoDialog = Awaited<
   ReturnType<TelegramClient["getDialogs"]>
 >[number];
+
+function isMigratedDialog(dialog: TeleprotoDialog): boolean {
+  const entity = dialog.entity as { readonly migratedTo?: unknown } | undefined;
+  return entity?.migratedTo != null;
+}
 
 async function senderName(message: TeleprotoMessage): Promise<string> {
   const sender = (await message.getSender()) as

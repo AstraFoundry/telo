@@ -285,7 +285,7 @@ interface ChatState {
    * text.
    */
   draftStream: { readonly chatId: string; readonly text: string } | null;
-  load(): Promise<void>;
+  load(options?: { readonly includeMessages?: boolean }): Promise<void>;
   loadMoreChats(): Promise<void>;
   loadOlderMessages(): Promise<void>;
   select(chatId: string): Promise<void>;
@@ -462,7 +462,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   messageActionError: null,
   draftStream: null,
   selectedMessageIds: [],
-  async load() {
+  async load(options) {
     const request = ++selectionRequest;
     try {
       const [chatPage, preferences] = await Promise.all([
@@ -472,10 +472,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const chats = chatPage.items;
       // The All view is the default landing view, so the default active chat
       // is its first entry — never an archived chat.
-      const activeChatId = chatsForFolder(chats, null)[0]?.id ?? null;
-      const messagePage = activeChatId
-        ? await window.telo.workspace.listMessagePage(activeChatId)
-        : { items: [], nextCursor: null };
+      const firstChatId = chatsForFolder(chats, null)[0]?.id ?? null;
+      // A restoring launch has only a dialog snapshot. Leave the transcript
+      // unselected until the live repository is ready so child surfaces do
+      // not ask the temporary repository for messages, pins, or members.
+      const activeChatId =
+        options?.includeMessages === false ? null : firstChatId;
+      const messagePage =
+        activeChatId && options?.includeMessages !== false
+          ? await window.telo.workspace.listMessagePage(activeChatId)
+          : { items: [], nextCursor: null };
       if (request !== selectionRequest) return;
       set((state) => ({
         chats,

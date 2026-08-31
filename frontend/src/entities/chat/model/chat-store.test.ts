@@ -103,6 +103,23 @@ describe("chat-store", () => {
     expect(telo.workspace.listMessagePage).toHaveBeenCalledWith("a");
   });
 
+  it("load() can paint cached chats without requesting messages during restore", async () => {
+    const telo = installTeloApiMock();
+    telo.workspace.listChatPage.mockResolvedValue({
+      items: [chat("cached")],
+      nextCursor: null,
+    });
+
+    await useChatStore.getState().load({ includeMessages: false });
+
+    expect(useChatStore.getState()).toMatchObject({
+      activeChatId: null,
+      messages: [],
+      loading: false,
+    });
+    expect(telo.workspace.listMessagePage).not.toHaveBeenCalled();
+  });
+
   it("load() hydrates drafts from the server draft preview", async () => {
     const telo = installTeloApiMock();
     telo.workspace.listChatPage.mockResolvedValue({
@@ -350,7 +367,9 @@ describe("chat-store", () => {
       chats: [chat("1")],
       nextCursor: null,
     });
-    expect(useChatStore.getState().chats.map((entry) => entry.id)).toEqual(["1"]);
+    expect(useChatStore.getState().chats.map((entry) => entry.id)).toEqual([
+      "1",
+    ]);
     expect(useChatStore.getState().chatCursor).toBeNull();
   });
 

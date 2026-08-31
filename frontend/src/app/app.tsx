@@ -26,9 +26,7 @@ export function App() {
     "conversation",
   );
   const workspaceEnabled =
-    demo === true ||
-    auth?.status === "ready" ||
-    auth?.status === "restoring";
+    demo === true || auth?.status === "ready" || auth?.status === "restoring";
   const workspaceReady = demo === true || auth?.status === "ready";
 
   const openSettings = () => {
@@ -67,14 +65,18 @@ export function App() {
     if (demo === true || auth?.status === "ready") {
       void Promise.all([load(), loadCurrentUser()]);
     } else {
-      void load();
+      // The restoring surface can paint the persisted dialog snapshot, but
+      // there is no persisted message repository. Wait for the live adapter
+      // before requesting the selected chat's transcript.
+      void load({ includeMessages: false });
     }
     const unsubscribeWorkspace = subscribeToWorkspaceEvents();
-    const unsubscribeNotificationClick =
-      window.telo.shell.onNotificationClick((chatId) => {
+    const unsubscribeNotificationClick = window.telo.shell.onNotificationClick(
+      (chatId) => {
         useChatStore.getState().select(chatId);
         setSurface("conversation");
-      });
+      },
+    );
     return () => {
       unsubscribeWorkspace();
       unsubscribeNotificationClick();

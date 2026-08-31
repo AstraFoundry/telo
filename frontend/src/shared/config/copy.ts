@@ -152,6 +152,7 @@ export const copy = {
   today: "Today",
   yesterday: "Yesterday",
   jumpToMessage: "Jump to original message",
+  jumpToLatestMessages: "Jump to latest messages",
   unreadMessages: "Unread messages",
   revealSpoiler: "Reveal hidden text",
   downloadMedia: "Download attachment",

@@ -1,6 +1,7 @@
 import {
   ArrowBendUpLeft,
   ArrowClockwise,
+  ArrowDown,
   ArrowFatLineRight,
   ArrowSquareOut,
   CheckCircle,
@@ -93,6 +94,8 @@ const MEDIA_LABELS = {
   failed: copy.mediaDownloadFailed,
   expand: copy.viewMedia,
 } as const;
+
+const LIVE_EDGE_THRESHOLD_PX = 56;
 
 const DRAFT_REPLY_TONES: ReadonlyArray<{
   tone: MessageAgentActionTone;
@@ -908,6 +911,14 @@ export function ConversationView() {
   const [selectionDeleteOpen, setSelectionDeleteOpen] = useState(false);
   const [selectionForwardOpen, setSelectionForwardOpen] = useState(false);
   const [viewer, setViewer] = useState<ViewerState | null>(null);
+  const [historyPagingReadyChatId, setHistoryPagingReadyChatId] = useState<
+    string | null
+  >(null);
+  const [historyPagingArmedChatId, setHistoryPagingArmedChatId] = useState<
+    string | null
+  >(null);
+  const [followingLiveEdge, setFollowingLiveEdge] = useState(true);
+  const reduceMotion = useReducedMotion() ?? false;
   const selectedMessageIds = useChatStore((state) => state.selectedMessageIds);
   const selecting = selectedMessageIds.length > 0;
   // The delete dialog needs the outgoing flags of the whole selection, not
@@ -940,6 +951,54 @@ export function ConversationView() {
   } | null>(null);
   const restoredChatIdRef = useRef<string | null>(null);
   const restoreFrameRef = useRef<{ outer: number; inner: number } | null>(null);
+  const scrollPersistenceArmedChatIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    setFollowingLiveEdge(true);
+  }, [activeChatId]);
+
+  const jumpToLatestMessages = useCallback(() => {
+    const viewport = transcriptRef.current;
+    if (!viewport) return;
+    setFollowingLiveEdge(true);
+    if (typeof viewport.scrollTo === "function") {
+      viewport.scrollTo({
+        top: viewport.scrollHeight,
+        behavior: reduceMotion ? "auto" : "smooth",
+      });
+    } else {
+      viewport.scrollTop = viewport.scrollHeight;
+    }
+  }, [reduceMotion]);
+
+  // MessageScroller establishes the live-edge position on its first frame.
+  // Keep the top sentinel disabled until the following frame so its initial
+  // observer notification cannot race that positioning and fetch an older
+  // page merely because scrollTop started at zero. User backward-navigation
+  // intent separately arms the sentinel after this positioning gate opens.
+  const hasMessages = messages.length > 0;
+  useLayoutEffect(() => {
+    if (!activeChatId || !hasMessages) return;
+    let inner = 0;
+    const outer = requestAnimationFrame(() => {
+      inner = requestAnimationFrame(() => {
+        const viewport = transcriptRef.current;
+        if (!viewport) return;
+        const distanceFromEnd =
+          viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight;
+        if (
+          viewport.scrollHeight <= viewport.clientHeight + 1 ||
+          distanceFromEnd <= LIVE_EDGE_THRESHOLD_PX
+        ) {
+          setHistoryPagingReadyChatId(activeChatId);
+        }
+      });
+    });
+    return () => {
+      cancelAnimationFrame(outer);
+      if (inner) cancelAnimationFrame(inner);
+    };
+  }, [activeChatId, hasMessages]);
 
   const focusComposer = useCallback(() => {
     composerRegionRef.current?.querySelector("textarea")?.focus();
@@ -1073,38 +1132,21 @@ export function ConversationView() {
     void loadOlderMessages();
   }, [loadingOlderMessages, messageCursor, messages, loadOlderMessages]);
 
-  // The unread divider sits before the first message past the read boundary
-  // (`lastReadMessageId`). While the boundary message is above the loaded
-  // page the divider stays hidden and the effect below keeps paging; with
-  // history exhausted, every loaded message is unread, so it sits on top.
+  // The unread divider sits before the unread suffix of the current page.
+  // Telegram already supplies the unread count, so locating the divider must
+  // never page backwards through an entire chat merely to find its read id.
+  // When the unread suffix begins before this page, every loaded message is
+  // unread and the divider belongs at the top.
   const lastReadMessageId = activeChat?.lastReadMessageId ?? null;
-  const hasUnread = (activeChat?.unreadCount ?? 0) > 0;
+  const unreadCount = activeChat?.unreadCount ?? 0;
   const unreadBoundaryIndex = useMemo(() => {
-    if (!hasUnread) return null;
+    if (unreadCount <= 0 || messages.length === 0) return null;
     const boundary = lastReadMessageId
       ? messages.findIndex((message) => message.id === lastReadMessageId)
       : -1;
     if (boundary !== -1) return boundary + 1;
-    if (messageCursor) return null;
-    return messages.length > 0 ? 0 : null;
-  }, [hasUnread, lastReadMessageId, messages, messageCursor]);
-
-  // Page older history until the read boundary is loaded, so the divider can
-  // be placed — the same auto-paging pattern as the reply jump loader, with
-  // the top sentinel's scroll compensation.
-  useEffect(() => {
-    if (!hasUnread || !lastReadMessageId || !messageCursor) return;
-    if (loadingOlderMessages) return;
-    if (messages.some((message) => message.id === lastReadMessageId)) return;
-    requestOlderMessages();
-  }, [
-    hasUnread,
-    lastReadMessageId,
-    messageCursor,
-    loadingOlderMessages,
-    messages,
-    requestOlderMessages,
-  ]);
+    return Math.max(0, messages.length - unreadCount);
+  }, [lastReadMessageId, messages, unreadCount]);
 
   const firstMessageId = messages[0]?.id;
   useLayoutEffect(() => {
@@ -1117,21 +1159,22 @@ export function ConversationView() {
     if (delta > 0) viewport.scrollTop = anchor.top + delta;
   }, [messages, firstMessageId]);
 
-  // Reselecting a chat with a saved read position restores it once the page
-  // has painted; MessageScroller's own "follow the live edge" auto-scroll
-  // (which runs on its own rAF) always wins otherwise, so this restore runs a
-  // frame later to have the final word. A brand-new chat (no saved offset)
-  // is left alone and simply lands at the live edge, as before.
+  // Position the selected chat once its first page has painted. A saved read
+  // position wins on reselect; a newly opened chat explicitly lands at the
+  // live edge. MessageScroller may have mounted while the transcript was
+  // still empty, so relying on its mount-only positioning would leave an
+  // asynchronously loaded page at scrollTop zero.
   useLayoutEffect(() => {
     if (!activeChatId || messages.length === 0) return;
     if (restoredChatIdRef.current === activeChatId) return;
     restoredChatIdRef.current = activeChatId;
     const saved = useChatStore.getState().scrollPositions[activeChatId];
-    if (saved === undefined) return;
     const outer = requestAnimationFrame(() => {
       const inner = requestAnimationFrame(() => {
         const viewport = transcriptRef.current;
-        if (viewport) viewport.scrollTop = saved;
+        if (viewport) {
+          viewport.scrollTop = saved ?? viewport.scrollHeight;
+        }
       });
       restoreFrameRef.current = { outer, inner };
     });
@@ -1198,7 +1241,11 @@ export function ConversationView() {
   // History paging is sentinel-driven (Telegram-style), not a button: when
   // the top marker scrolls into view, the next older page loads.
   const topSentinelRef = useEdgeSentinel({
-    enabled: Boolean(messageCursor) && !loadingOlderMessages,
+    enabled:
+      historyPagingReadyChatId === activeChatId &&
+      historyPagingArmedChatId === activeChatId &&
+      Boolean(messageCursor) &&
+      !loadingOlderMessages,
     onReach: requestOlderMessages,
   });
 
@@ -1208,7 +1255,7 @@ export function ConversationView() {
 
   return (
     <main
-      className="flex min-w-0 flex-col"
+      className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden"
       style={{ "--message-font-size": `${textSize}px` } as CSSProperties}
     >
       <header className="flex h-14 items-center gap-2 px-4 [app-region:drag]">
@@ -1288,70 +1335,158 @@ export function ConversationView() {
           </span>
         </div>
       ) : null}
-      <MessageScroller
-        label={copy.conversation}
-        className="min-h-0 flex-1"
-        contentClassName="mx-auto flex w-full max-w-3xl flex-col gap-3 px-5 py-5"
-        viewportRef={transcriptRef}
-        viewportProps={{
-          onScroll: () => {
-            if (activeChatId && transcriptRef.current) {
-              setScrollPosition(activeChatId, transcriptRef.current.scrollTop);
-            }
-          },
-        }}
-      >
-        {messageCursor ? (
-          <div ref={topSentinelRef} className="flex justify-center">
-            {/* popLayout: the exiting spinner leaves layout immediately, so the
+      <div className="relative min-h-0 flex-1">
+        <MessageScroller
+          label={copy.conversation}
+          smooth={false}
+          onFollowChange={setFollowingLiveEdge}
+          className="h-full min-h-0"
+          contentClassName="mx-auto flex w-full max-w-3xl flex-col gap-3 px-5 py-5"
+          viewportRef={transcriptRef}
+          viewportProps={{
+            onWheel: (event) => {
+              if (activeChatId) {
+                scrollPersistenceArmedChatIdRef.current = activeChatId;
+                if (event.deltaY < 0) {
+                  setHistoryPagingArmedChatId(activeChatId);
+                }
+              }
+            },
+            onTouchStart: () => {
+              if (activeChatId) {
+                scrollPersistenceArmedChatIdRef.current = activeChatId;
+                setHistoryPagingArmedChatId(activeChatId);
+              }
+            },
+            onPointerDown: () => {
+              if (activeChatId) {
+                scrollPersistenceArmedChatIdRef.current = activeChatId;
+                setHistoryPagingArmedChatId(activeChatId);
+              }
+            },
+            onKeyDown: (event) => {
+              if (activeChatId) {
+                if (
+                  [
+                    "ArrowUp",
+                    "ArrowDown",
+                    "PageUp",
+                    "PageDown",
+                    "Home",
+                    "End",
+                  ].includes(event.key)
+                ) {
+                  scrollPersistenceArmedChatIdRef.current = activeChatId;
+                }
+                if (["ArrowUp", "PageUp", "Home"].includes(event.key)) {
+                  setHistoryPagingArmedChatId(activeChatId);
+                }
+              }
+            },
+            onScroll: () => {
+              if (activeChatId && transcriptRef.current) {
+                const viewport = transcriptRef.current;
+                if (scrollPersistenceArmedChatIdRef.current === activeChatId) {
+                  setScrollPosition(activeChatId, viewport.scrollTop);
+                }
+                const distanceFromEnd =
+                  viewport.scrollHeight -
+                  viewport.scrollTop -
+                  viewport.clientHeight;
+                if (distanceFromEnd <= LIVE_EDGE_THRESHOLD_PX) {
+                  setHistoryPagingReadyChatId(activeChatId);
+                }
+              }
+            },
+          }}
+        >
+          {messageCursor ? (
+            <div ref={topSentinelRef} className="flex justify-center">
+              {/* popLayout: the exiting spinner leaves layout immediately, so the
                 prepend compensation never measures it. */}
-            <AnimatePresence initial={false} mode="popLayout">
-              {loadingOlderMessages ? (
-                <LoadIndicator bubble label={copy.loadingEarlierMessages} />
-              ) : null}
-            </AnimatePresence>
-          </div>
-        ) : null}
-        {transcriptUnits.map((unit) => {
-          const first = unit.messages[0];
-          const showDayMarker =
-            unit.startIndex === 0 ||
-            dayKey(first.sentAt) !==
-              dayKey(messages[unit.startIndex - 1].sentAt);
-          const showUnreadBoundary =
-            unreadBoundaryIndex !== null &&
-            unreadBoundaryIndex >= unit.startIndex &&
-            unreadBoundaryIndex < unit.startIndex + unit.messages.length;
-          return (
-            <Fragment key={unit.key}>
-              {showDayMarker ? (
-                <MessageMarker>{dayLabel(first.sentAt)}</MessageMarker>
-              ) : null}
-              {showUnreadBoundary ? (
-                <MessageMarker className="bg-primary/10 font-medium text-primary">
-                  {copy.unreadMessages}
-                </MessageMarker>
-              ) : null}
-              {unit.messages.length === 1 ? (
-                <ConversationMessage
-                  message={first}
-                  timeFormat={timeFormat}
-                  onForward={setForwardSource}
-                  onDelete={setDeleteSource}
-                  onJumpToMessage={(messageId) => void jumpToMessage(messageId)}
-                  onOpenViewer={openViewer}
-                />
-              ) : (
-                <AlbumMessage
-                  messages={unit.messages}
-                  timeFormat={timeFormat}
-                  onOpenViewer={openViewer}
-                />
-              )}
-            </Fragment>
-          );
-        })}
-      </MessageScroller>
+              <AnimatePresence initial={false} mode="popLayout">
+                {loadingOlderMessages ? (
+                  <LoadIndicator bubble label={copy.loadingEarlierMessages} />
+                ) : null}
+              </AnimatePresence>
+            </div>
+          ) : null}
+          {transcriptUnits.map((unit) => {
+            const first = unit.messages[0];
+            const showDayMarker =
+              unit.startIndex === 0 ||
+              dayKey(first.sentAt) !==
+                dayKey(messages[unit.startIndex - 1].sentAt);
+            const showUnreadBoundary =
+              unreadBoundaryIndex !== null &&
+              unreadBoundaryIndex >= unit.startIndex &&
+              unreadBoundaryIndex < unit.startIndex + unit.messages.length;
+            return (
+              <Fragment key={unit.key}>
+                {showDayMarker ? (
+                  <MessageMarker>{dayLabel(first.sentAt)}</MessageMarker>
+                ) : null}
+                {showUnreadBoundary ? (
+                  <MessageMarker className="bg-primary/10 font-medium text-primary">
+                    {copy.unreadMessages}
+                  </MessageMarker>
+                ) : null}
+                {unit.messages.length === 1 ? (
+                  <ConversationMessage
+                    message={first}
+                    timeFormat={timeFormat}
+                    onForward={setForwardSource}
+                    onDelete={setDeleteSource}
+                    onJumpToMessage={(messageId) =>
+                      void jumpToMessage(messageId)
+                    }
+                    onOpenViewer={openViewer}
+                  />
+                ) : (
+                  <AlbumMessage
+                    messages={unit.messages}
+                    timeFormat={timeFormat}
+                    onOpenViewer={openViewer}
+                  />
+                )}
+              </Fragment>
+            );
+          })}
+        </MessageScroller>
+        <AnimatePresence initial={false}>
+          {!followingLiveEdge ? (
+            <motion.div
+              key="jump-to-latest"
+              initial={{
+                opacity: 0,
+                ...(reduceMotion ? {} : { y: 6, scale: 0.96 }),
+              }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{
+                opacity: 0,
+                ...(reduceMotion ? {} : { y: 6, scale: 0.96 }),
+              }}
+              transition={{
+                duration: reduceMotion ? 0.12 : 0.16,
+                ease: EASE_OUT,
+              }}
+              className="absolute right-5 bottom-3 z-10"
+            >
+              <Tooltip content={copy.jumpToLatestMessages}>
+                <Button
+                  size="icon"
+                  variant="secondary"
+                  aria-label={copy.jumpToLatestMessages}
+                  className="size-12 rounded-full shadow-lg shadow-foreground/10"
+                  onClick={jumpToLatestMessages}
+                >
+                  <ArrowDown className="size-5" weight="bold" />
+                </Button>
+              </Tooltip>
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
+      </div>
       <div className="px-5 py-3">
         <div
           ref={composerRegionRef}

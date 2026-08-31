@@ -12,10 +12,19 @@ async function openDesignChat(window: import("@playwright/test").Page) {
   return window.getByRole("region", { name: "Conversation" });
 }
 
+async function revealFirstMedia(
+  window: import("@playwright/test").Page,
+  conversation: import("@playwright/test").Locator,
+) {
+  await conversation.hover();
+  await window.mouse.wheel(0, -100_000);
+}
+
 test("opens the viewer from a photo bubble and closes with Escape", async ({
   window,
 }) => {
   const conversation = await openDesignChat(window);
+  await revealFirstMedia(window, conversation);
 
   // The thumbnail auto-preloads once the bubble is visible, then renders as
   // a clickable photo.
@@ -40,6 +49,7 @@ test("navigates between the chat's media with arrow keys", async ({
   window,
 }) => {
   const conversation = await openDesignChat(window);
+  await revealFirstMedia(window, conversation);
 
   const photo = conversation.getByRole("button", { name: "telo-hero.png" });
   await expect(photo).toBeVisible();

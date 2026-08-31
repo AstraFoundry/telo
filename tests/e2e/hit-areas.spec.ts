@@ -297,6 +297,8 @@ test("keeps the overlays at a 40px pointer target", async ({ window }) => {
 
   // The media viewer puts its controls over the image rather than beside it,
   // so nothing pads them if they are undersized.
+  await conversation.hover();
+  await window.mouse.wheel(0, -100_000);
   await conversation.getByRole("button", { name: "telo-hero.png" }).click();
   const viewer = window.getByRole("dialog", { name: "Media viewer" });
   await expect(viewer).toBeVisible();

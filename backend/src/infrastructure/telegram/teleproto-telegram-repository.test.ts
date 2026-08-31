@@ -53,7 +53,7 @@ const fake = vi.hoisted(() => {
     static dialogs: unknown[] = [];
     static dialogFilters: unknown[] = [];
     static photoRequests: Array<{
-      readonly entity: string;
+      readonly entity: unknown;
       readonly resolve: (photo: Buffer | null) => void;
     }> = [];
 
@@ -200,7 +200,7 @@ const fake = vi.hoisted(() => {
       return { filters: FakeTelegramClient.dialogFilters };
     }
 
-    downloadProfilePhoto(entity: string): Promise<Buffer | null> {
+    downloadProfilePhoto(entity: unknown): Promise<Buffer | null> {
       return new Promise((resolve) => {
         FakeTelegramClient.photoRequests.push({ entity, resolve });
       });
@@ -527,6 +527,73 @@ describe("TelegramClientCoordinator", () => {
     await init;
   });
 
+  it("paints the dialog snapshot first and refreshes it in the background once ready", async () => {
+    const snapshots = new MemoryTelegramDialogSnapshotRepository();
+    await snapshots.save({
+      version: 1,
+      chats: [
+        {
+          id: "cached",
+          title: "Cached",
+          preview: "hi",
+          updatedAt: "2026-01-01T00:00:00.000Z",
+          unreadCount: 0,
+          lastReadMessageId: null,
+          muted: false,
+          pinned: false,
+          kind: "direct",
+          initials: "C",
+          avatarDataUrl: null,
+          draftPreview: null,
+          typing: false,
+        },
+      ],
+      folders: [],
+      nextCursor: null,
+    });
+    FakeTelegramClient.dialogs = [
+      {
+        id: BigInt(1),
+        title: "Live",
+        name: "Live",
+        dialog: { notifySettings: {}, topMessage: 1 },
+        isUser: true,
+        isChannel: false,
+        isGroup: false,
+        entity: {},
+        message: { message: "Preview" },
+        date: 1,
+        unreadCount: 0,
+        pinned: false,
+        archived: false,
+      },
+    ];
+    const { coordinator } = createCoordinator({
+      session: "stored-session",
+      credentials: { apiId: 7, apiHash: "hash" },
+      snapshots,
+    });
+    const events: unknown[] = [];
+    coordinator.subscribe((event) => events.push(event));
+    await coordinator.initialize();
+
+    await expect(coordinator.listChatPage()).resolves.toMatchObject({
+      items: [expect.objectContaining({ id: "cached" })],
+    });
+    await vi.waitFor(() => {
+      expect(events).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            type: "chats",
+            chats: expect.arrayContaining([
+              expect.objectContaining({ id: "1", title: "Live" }),
+            ]),
+          }),
+        ]),
+      );
+    });
+  });
+
   it("computes folder badges from the cached page instead of a full GetDialogs", async () => {
     FakeTelegramClient.dialogs = [
       {
@@ -553,7 +620,39 @@ describe("TelegramClientCoordinator", () => {
     expect(client?.getDialogsParams).toHaveLength(calls);
     expect(client?.getDialogsParams[0]).toMatchObject({
       limit: 11,
-      ignoreMigrated: true,
+      ignoreMigrated: false,
+    });
+  });
+
+  it("filters migrated legacy groups locally without losing the raw page cursor", async () => {
+    const dialog = (id: number, migratedTo?: object) => ({
+      id: BigInt(id),
+      title: `Chat ${id}`,
+      name: `Chat ${id}`,
+      dialog: { notifySettings: {}, topMessage: id },
+      isUser: false,
+      isChannel: false,
+      isGroup: true,
+      entity: { migratedTo },
+      message: { message: "Preview" },
+      date: id,
+      unreadCount: 0,
+      pinned: false,
+      archived: false,
+    });
+    FakeTelegramClient.dialogs = [
+      dialog(3),
+      dialog(2, { channelId: BigInt(20) }),
+      dialog(1),
+    ];
+    const coordinator = await connectedCoordinator();
+
+    const page = await coordinator.listChatPage({ limit: 2 });
+
+    expect(page.items.map((chat) => chat.id)).toEqual(["3"]);
+    expect(page.nextCursor).toMatchObject({
+      chatId: "2",
+      topMessageId: "2",
     });
   });
 
@@ -772,7 +871,9 @@ describe("TelegramClientCoordinator", () => {
         { type: "connection-state", state: "offline" },
         { type: "connection-state", state: "synchronizing" },
       ]);
-      await expect(coordinator.listChatPage({ limit: 10 })).resolves.toMatchObject({
+      await expect(
+        coordinator.listChatPage({ limit: 10 }),
+      ).resolves.toMatchObject({
         items: [expect.objectContaining({ id: "cached" })],
       });
       expect(await snapshots.get()).toMatchObject({
@@ -820,11 +921,15 @@ describe("TelegramClientCoordinator", () => {
     const events: unknown[] = [];
     coordinator.subscribe((event) => events.push(event));
 
-    await expect(coordinator.downloadMedia("chat-1/8")).resolves.toBeUndefined();
+    await expect(
+      coordinator.downloadMedia("chat-1/8"),
+    ).resolves.toBeUndefined();
     expect(client?.downloadMediaCalls).toEqual([]);
-    expect(events.some((event) => (event as { type?: string }).type === "media-download")).toBe(
-      false,
-    );
+    expect(
+      events.some(
+        (event) => (event as { type?: string }).type === "media-download",
+      ),
+    ).toBe(false);
   });
 
   it("skips CHANNEL_INVALID instead of publishing a workspace sync-error", async () => {
@@ -846,10 +951,14 @@ describe("TelegramClientCoordinator", () => {
       expect(resolvedPeer).toBe(true);
     });
     expect(
-      events.filter((event) => (event as { type?: string }).type === "sync-error"),
+      events.filter(
+        (event) => (event as { type?: string }).type === "sync-error",
+      ),
     ).toEqual([]);
     expect(
-      events.filter((event) => (event as { type?: string }).type === "pinned-messages"),
+      events.filter(
+        (event) => (event as { type?: string }).type === "pinned-messages",
+      ),
     ).toEqual([]);
   });
 
@@ -868,7 +977,11 @@ describe("TelegramClientCoordinator", () => {
   });
 
   it("returns dialogs before loading avatars and bounds media concurrency", async () => {
-    FakeTelegramClient.dialogs = Array.from({ length: 5 }, (_, index) => ({
+    const entities = Array.from({ length: 5 }, (_, index) => ({
+      id: BigInt(index + 1),
+      accessHash: BigInt(index + 101),
+    }));
+    FakeTelegramClient.dialogs = entities.map((entity, index) => ({
       id: BigInt(index + 1),
       title: `Chat ${index + 1}`,
       name: `Chat ${index + 1}`,
@@ -876,7 +989,7 @@ describe("TelegramClientCoordinator", () => {
       isUser: true,
       isChannel: false,
       isGroup: false,
-      entity: {},
+      entity,
       message: { message: "Preview" },
       date: 1,
       unreadCount: 0,
@@ -897,6 +1010,7 @@ describe("TelegramClientCoordinator", () => {
       true,
     );
     expect(FakeTelegramClient.photoRequests).toHaveLength(3);
+    expect(FakeTelegramClient.photoRequests[0]?.entity).toBe(entities[0]);
     expect(events).toEqual([]);
 
     FakeTelegramClient.photoRequests[0]?.resolve(Buffer.from("photo"));
@@ -1081,13 +1195,13 @@ describe("TelegramClientCoordinator", () => {
       },
       {
         id: BigInt(2),
-        title: "Product Notes",
-        name: "Product Notes",
+        title: "Telo Legacy",
+        name: "Telo Legacy",
         dialog: { notifySettings: {}, topMessage: 2 },
         isUser: false,
-        isChannel: true,
-        isGroup: false,
-        entity: {},
+        isChannel: false,
+        isGroup: true,
+        entity: { migratedTo: { channelId: BigInt(20) } },
         message: { message: "Preview" },
         date: 1,
         unreadCount: 0,
@@ -1113,6 +1227,9 @@ describe("TelegramClientCoordinator", () => {
       client?.getMessagesCalls.some((call) => call.entity === undefined),
     ).toBe(true);
     expect(result.chats.map((chat) => chat.id)).toEqual(["1"]);
+    expect(client?.getDialogsParams.at(-1)).toMatchObject({
+      ignoreMigrated: false,
+    });
     expect(result.messages).toHaveLength(1);
     expect(result.messages[0]).toMatchObject({
       id: "7",

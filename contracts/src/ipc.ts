@@ -706,6 +706,7 @@ export interface TelegramLoginConfigurationDto {
 
 export type TelegramAuthState =
   | { readonly status: "idle" }
+  | { readonly status: "restoring" }
   | { readonly status: "connecting" }
   | { readonly status: "code-required" }
   | { readonly status: "password-required"; readonly hint: string | null }

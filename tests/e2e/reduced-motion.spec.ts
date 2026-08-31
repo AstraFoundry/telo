@@ -39,6 +39,8 @@ test("drives the animated surfaces with reduced motion enabled", async ({
 
   // Media viewer: the origin morph collapses to a fade, so the dialog has to
   // appear without the shared-element transition that normally places it.
+  await conversation.hover();
+  await window.mouse.wheel(0, -100_000);
   const photo = conversation.getByRole("button", { name: "telo-hero.png" });
   await expect(photo).toBeVisible();
   await photo.click();

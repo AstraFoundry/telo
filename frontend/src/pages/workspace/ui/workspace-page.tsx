@@ -72,7 +72,7 @@ export function WorkspacePage({
   if (narrow) {
     const showChatList = chatListVisible || !activeChatId;
     return (
-      <div className="grid h-screen grid-cols-1 overflow-hidden bg-background">
+      <div className="grid h-screen grid-cols-1 grid-rows-[minmax(0,1fr)] overflow-hidden bg-background">
         <a
           className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:rounded-md focus:bg-popover focus:px-3 focus:py-2 focus:text-sm"
           href="#main"
@@ -90,7 +90,7 @@ export function WorkspacePage({
         ) : (
           <div
             id="main"
-            className="relative grid min-w-0 overflow-hidden bg-card"
+            className="relative grid min-h-0 min-w-0 overflow-hidden bg-card"
           >
             {/* The back control overlays the conversation header's leading
                 avatar spot; the layout owns it because conversation-view
@@ -118,7 +118,7 @@ export function WorkspacePage({
   return (
     <div
       ref={containerRef}
-      className="grid h-screen grid-cols-[var(--workspace-sidebar-width,280px)_minmax(360px,1fr)_auto] overflow-hidden bg-background"
+      className="grid h-screen grid-cols-[var(--workspace-sidebar-width,280px)_minmax(360px,1fr)_auto] grid-rows-[minmax(0,1fr)] overflow-hidden bg-background"
       style={
         {
           "--workspace-sidebar-width": `${sidebarWidth}px`,
@@ -145,7 +145,7 @@ export function WorkspacePage({
       <div
         id="main"
         className={cn(
-          "grid min-w-0 overflow-hidden rounded-l-2xl bg-card shadow-column",
+          "grid min-h-0 min-w-0 overflow-hidden rounded-l-2xl bg-card shadow-column",
           (agentOpen || profileOpen) && "rounded-r-2xl",
         )}
       >

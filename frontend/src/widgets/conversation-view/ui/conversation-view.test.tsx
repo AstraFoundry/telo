@@ -155,12 +155,16 @@ describe("ConversationView", () => {
   });
 
   it("shows the chat title without the raw kind subtitle", async () => {
-    await renderView();
+    const { container } = await renderView();
 
     expect(
       screen.getByRole("heading", { name: "Saved Messages" }),
     ).toBeTruthy();
     expect(screen.queryByText("saved")).toBeNull();
+    expect(container.querySelector("main")?.className).toContain("min-h-0");
+    expect(container.querySelector("main")?.className).toContain(
+      "overflow-hidden",
+    );
   });
 
   it("labels forwarded bubbles with their original sender", async () => {
@@ -287,6 +291,12 @@ describe("ConversationView", () => {
     // There is no "load earlier" button — scrolling to the top of the
     // transcript brings the sentinel into view and triggers the fetch.
     expect(screen.queryByRole("button", { name: /earlier/i })).toBeNull();
+    fireEvent.wheel(screen.getByRole("region", { name: copy.conversation }), {
+      deltaY: -100,
+    });
+    await vi.waitFor(() =>
+      expect(intersectionCallbacks.length).toBeGreaterThan(0),
+    );
     act(() => intersectAll());
 
     expect(await screen.findByText("Older")).toBeTruthy();
@@ -310,6 +320,12 @@ describe("ConversationView", () => {
         }),
     );
     act(() => useChatStore.setState({ messageCursor: "2" }));
+    fireEvent.wheel(screen.getByRole("region", { name: copy.conversation }), {
+      deltaY: -100,
+    });
+    await vi.waitFor(() =>
+      expect(intersectionCallbacks.length).toBeGreaterThan(0),
+    );
     act(() => intersectAll());
 
     const status = screen.getByRole("status");
@@ -696,6 +712,58 @@ describe("ConversationView", () => {
     });
   });
 
+  it("lands a newly opened chat at the live edge", async () => {
+    await renderView({
+      messages: [message({ id: "m1", body: "Message body" })],
+    });
+    const viewport = screen.getByRole("region", { name: copy.conversation });
+    Object.defineProperty(viewport, "scrollHeight", {
+      configurable: true,
+      value: 500,
+    });
+
+    await vi.waitFor(() => {
+      expect(viewport.scrollTop).toBe(500);
+    });
+  });
+
+  it("shows a BEUI page-down control away from the live edge", async () => {
+    await renderView({
+      messages: [message({ id: "m1", body: "Message body" })],
+    });
+    const viewport = screen.getByRole("region", { name: copy.conversation });
+    Object.defineProperties(viewport, {
+      scrollHeight: { configurable: true, value: 1_000 },
+      clientHeight: { configurable: true, value: 400 },
+    });
+    const scrollTo = vi.fn(({ top }: ScrollToOptions) => {
+      viewport.scrollTop = Number(top);
+    });
+    Object.defineProperty(viewport, "scrollTo", {
+      configurable: true,
+      value: scrollTo,
+    });
+
+    viewport.scrollTop = 200;
+    fireEvent.scroll(viewport);
+
+    const pageDown = await screen.findByRole("button", {
+      name: copy.jumpToLatestMessages,
+    });
+    fireEvent.click(pageDown);
+
+    expect(scrollTo).toHaveBeenCalledWith({
+      top: 1_000,
+      behavior: "smooth",
+    });
+    fireEvent.scroll(viewport);
+    await vi.waitFor(() => {
+      expect(
+        screen.queryByRole("button", { name: copy.jumpToLatestMessages }),
+      ).toBeNull();
+    });
+  });
+
   it("marks edited messages next to the timestamp", async () => {
     await renderView({
       messages: [
@@ -801,7 +869,7 @@ describe("ConversationView", () => {
     expect(screen.queryByText(copy.unreadMessages)).toBeNull();
   });
 
-  it("pages older messages until the read boundary is loaded", async () => {
+  it("places the unread divider from unreadCount without paging older history", async () => {
     const { telo, useChatStore } = await renderView({
       chats: [
         chat({
@@ -813,19 +881,14 @@ describe("ConversationView", () => {
       ],
       messages: [message({ id: "m1", body: "First unread" })],
     });
-    telo.workspace.listMessagePage.mockResolvedValue({
-      items: [message({ id: "m0", body: "Already read" })],
-      nextCursor: null,
-    });
     act(() => useChatStore.setState({ messageCursor: "m1" }));
 
-    // The boundary message sits above the loaded page, so the divider only
-    // appears after the page that contains it lands.
-    expect(screen.queryByText(copy.unreadMessages)).toBeNull();
-    await screen.findByText(copy.unreadMessages);
-    expect(telo.workspace.listMessagePage).toHaveBeenCalledWith("chat-1", {
-      beforeMessageId: "m1",
-    });
+    const divider = screen.getByText(copy.unreadMessages);
+    expect(
+      divider.compareDocumentPosition(screen.getByText("First unread")) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(telo.workspace.listMessagePage).not.toHaveBeenCalled();
   });
 
   it("pins the unread divider to the top when the boundary is beyond loaded history", async () => {

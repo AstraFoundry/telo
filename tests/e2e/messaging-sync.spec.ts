@@ -114,6 +114,10 @@ test("clicking a reply quote scrolls the source message back into view", async (
     await composer.press("Enter");
   }
 
+  await conversation.hover();
+  await window.mouse.wheel(0, 100_000);
+  await expect(conversation.getByText("Filler message 24")).toBeInViewport();
+
   const originalMessage = conversation.getByText(quoted).first();
   await expect(originalMessage).not.toBeInViewport();
 
