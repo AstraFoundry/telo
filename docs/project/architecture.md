@@ -9,7 +9,7 @@ Electron interfaces
   | application use cases
 DDD domain ports
   | adapters
-Teleproto · AI SDK · encrypted local files · OS notifications
+Teleproto · AI SDK (named providers + OpenAI-compatible) · encrypted local files · OS notifications
 ```
 
 The renderer is unprivileged: `sandbox` and `contextIsolation` are enabled and Node integration is disabled. The preload exposes only `TeloDesktopApi`. Navigation is denied. Message links open through the operating system only after both the renderer and main process allowlist their protocol (`https`, `http`, `mailto`, or `tel`); script, data, file, and Telegram deep-link protocols remain blocked.
@@ -24,7 +24,7 @@ The renderer's imports from `contracts/src` are an intentional exception to FSD.
 
 - `domain`: agent configuration and thread invariants, user preferences, keyword folders, and Telegram/agent ports.
 - `application`: save configuration, run agent, manage agent threads, update preferences, keyword-folder CRUD and projection, and Telegram workspace, chat-state, message-action, and logout use cases.
-- `infrastructure`: AI SDK, Teleproto, encrypted JSON, session storage, and demo adapters.
+- `infrastructure`: AI SDK provider packages, Teleproto, encrypted JSON, session storage, and demo adapters.
 - `interfaces`: Electron lifecycle, context bridge, IPC channels, and AG-UI event mapping.
 
 The app uses local files rather than a database, cache, or message broker. Electron Builder produces macOS, Windows, and Linux artifacts.
@@ -36,7 +36,7 @@ The app uses local files rather than a database, cache, or message broker. Elect
 1. The renderer builds a snapshot of active chat metadata, visible messages, visible chats, and registered components.
 2. IPC passes the prompt, snapshot, and current `threadId` to `RunAgentService`.
 3. The service persists the user message to the thread, then streams; the thread's stored history is passed to the gateway so each conversation stays isolated.
-4. AI SDK streams provider output and optionally exposes the `inspectWorkspace` tool.
+4. AI SDK streams the selected provider (named `@ai-sdk/*` packages, or `@ai-sdk/openai-compatible` as fallback) and optionally exposes the `inspectWorkspace` tool.
 5. The Electron adapter emits standard AG-UI lifecycle, state, text, custom activity, and error events.
 6. The renderer reduces those events into the right-panel transcript.
 

@@ -5,6 +5,8 @@
 - [Electron notifications](https://www.electronjs.org/docs/latest/tutorial/notifications)
 - [AI SDK core tools](https://ai-sdk.dev/docs/ai-sdk-core/tools-and-tool-calling)
 - [AI SDK text generation](https://ai-sdk.dev/docs/ai-sdk-core/generating-text)
+- [AI SDK providers and models](https://ai-sdk.dev/docs/foundations/providers-and-models)
+- [AI SDK OpenAI-compatible provider](https://ai-sdk.dev/providers/openai-compatible-providers)
 - [AG-UI protocol](https://docs.ag-ui.com/)
 - [Teleproto](https://github.com/Sanyok12345/Teleproto)
 - [Telegram update synchronization](https://core.telegram.org/api/updates)

@@ -174,6 +174,21 @@ describe("SettingsPage", () => {
     ).toBeTruthy();
   });
 
+  it("finds a provider by a product name the label does not contain", async () => {
+    const user = userEvent.setup();
+    await renderPage();
+
+    fireEvent.change(screen.getByLabelText(copy.settingsSearch), {
+      target: { value: "claude" },
+    });
+
+    await user.click(screen.getByRole("button", { name: /Provider/ }));
+
+    expect(
+      screen.getByRole("heading", { level: 2, name: copy.agentSettings }),
+    ).toBeTruthy();
+  });
+
   it("says so when nothing matches instead of showing an empty rail", async () => {
     await renderPage();
 
