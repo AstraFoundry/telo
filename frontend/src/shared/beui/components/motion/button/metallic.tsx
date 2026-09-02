@@ -1,6 +1,6 @@
 "use client";
 
-import { motion, useReducedMotion } from "motion/react";
+import { motion, useReducedMotionConfig } from "motion/react";
 import { forwardRef, useState } from "react";
 import { EASE_IN_OUT } from "@beui-lib/ease";
 import { cn } from "@/shared/lib/cn";
@@ -38,7 +38,7 @@ export const MetallicButton = forwardRef<
   },
   ref,
 ) {
-  const reduce = useReducedMotion();
+  const reduce = useReducedMotionConfig();
   const still = paused || Boolean(reduce);
   const [hovered, setHovered] = useState(false);
 

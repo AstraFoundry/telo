@@ -9,7 +9,7 @@ import {
   ThumbsDown,
   ThumbsUp,
 } from "@phosphor-icons/react";
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { AnimatePresence, motion, useReducedMotionConfig } from "motion/react";
 import {
   type ReactNode,
   useCallback,
@@ -68,7 +68,7 @@ function ResponseAction({
   onClick: () => void;
   children: ReactNode;
 }) {
-  const reduce = useReducedMotion() ?? false;
+  const reduce = useReducedMotionConfig() ?? false;
 
   return (
     <motion.button
@@ -111,7 +111,7 @@ export function StreamingResponse({
   contentClassName,
   actionsClassName,
 }: StreamingResponseProps) {
-  const reduce = useReducedMotion() ?? false;
+  const reduce = useReducedMotionConfig() ?? false;
   const baseId = useId();
   const [copied, setCopied] = useState(false);
   const [internalFeedback, setInternalFeedback] =

@@ -1,7 +1,7 @@
 "use client";
 // beui.dev/components/agents/chat-app
 
-import { useReducedMotion } from "motion/react";
+import { useReducedMotionConfig } from "motion/react";
 import {
   type ComponentPropsWithRef,
   type Ref,
@@ -126,7 +126,7 @@ export function MessageScroller({
   children,
   ...props
 }: MessageScrollerProps) {
-  const reduce = useReducedMotion() ?? false;
+  const reduce = useReducedMotionConfig() ?? false;
   const viewportRef = useRef<HTMLElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const followingRef = useRef(followOutput);

@@ -1,5 +1,5 @@
 import { SpinnerGap } from "@phosphor-icons/react";
-import { motion, useReducedMotion } from "motion/react";
+import { motion, useReducedMotionConfig } from "motion/react";
 
 import { cn } from "@/shared/lib/cn";
 
@@ -24,7 +24,7 @@ export function LoadIndicator({
   bubble = false,
   className,
 }: LoadIndicatorProps) {
-  const reduce = useReducedMotion();
+  const reduce = useReducedMotionConfig();
   return (
     <motion.div
       role="status"

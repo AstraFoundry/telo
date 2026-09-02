@@ -6,7 +6,7 @@ import {
   AnimatePresence,
   motion,
   useIsPresent,
-  useReducedMotion,
+  useReducedMotionConfig,
 } from "motion/react";
 import {
   cloneElement,
@@ -205,7 +205,7 @@ export function CenterMorphModalContent({
   backdropClassName,
 }: CenterMorphModalContentProps) {
   const context = useCenterMorphModalContext("CenterMorphModalContent");
-  const reduce = useReducedMotion() ?? false;
+  const reduce = useReducedMotionConfig() ?? false;
   const [mounted, setMounted] = useState(false);
   const overlayRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);

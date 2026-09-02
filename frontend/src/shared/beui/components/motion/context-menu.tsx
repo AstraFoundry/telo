@@ -2,7 +2,7 @@
 // beui.dev/components/motion/context-menu
 
 import { Check } from "@phosphor-icons/react";
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { AnimatePresence, motion, useReducedMotionConfig } from "motion/react";
 import {
   cloneElement,
   createContext,
@@ -122,7 +122,7 @@ export function ContextMenu({
   const triggerRef = useRef<HTMLElement | null>(null);
   const contentRef = useRef<HTMLDivElement | null>(null);
   const menuId = useId();
-  const reduce = useReducedMotion() ?? false;
+  const reduce = useReducedMotionConfig() ?? false;
 
   const setOpen = useCallback(
     (next: boolean) => {
@@ -418,6 +418,22 @@ export function ContextMenuContent({
     return () => cancelAnimationFrame(frame);
   }, [context.open, context.contentRef]);
 
+  useEffect(() => {
+    if (!context.open) return;
+    const close = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      context.setOpen(false);
+      context.triggerRef.current?.focus();
+    };
+    // The menu owns Escape from the moment it opens, not from the moment focus
+    // lands inside it. Focus moves to the first item a frame later, so a user
+    // who right-clicks and immediately presses Escape would otherwise be stuck
+    // with an open menu - every native menu closes on that keystroke.
+    document.addEventListener("keydown", close, true);
+    return () => document.removeEventListener("keydown", close, true);
+  }, [context.open, context.setOpen, context.triggerRef]);
+
   useEffect(
     () => () => {
       if (typeaheadTimer.current) clearTimeout(typeaheadTimer.current);
@@ -435,12 +451,6 @@ export function ContextMenuContent({
   };
 
   const onKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
-    if (event.key === "Escape") {
-      event.preventDefault();
-      context.setOpen(false);
-      context.triggerRef.current?.focus();
-      return;
-    }
     if (event.key === "Tab") {
       context.setOpen(false);
       return;

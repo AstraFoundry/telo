@@ -4,7 +4,7 @@ import {
   AnimatePresence,
   type HTMLMotionProps,
   motion,
-  useReducedMotion,
+  useReducedMotionConfig,
   type Variants,
 } from "motion/react";
 import {
@@ -67,7 +67,7 @@ export const SharedLayoutBg = forwardRef<HTMLElement, SharedLayoutBgProps>(
   ) {
     const [activeId, setActiveId] = useState<string | null>(null);
     const uid = useId();
-    const reduce = useReducedMotion();
+    const reduce = useReducedMotionConfig();
 
     const renderedChildren = Children.toArray(children)
       .filter(isValidElement)

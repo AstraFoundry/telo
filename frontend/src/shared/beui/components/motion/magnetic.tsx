@@ -3,7 +3,7 @@
 import {
   motion,
   useMotionValue,
-  useReducedMotion,
+  useReducedMotionConfig,
   useSpring,
 } from "motion/react";
 import { useRef, type ReactNode } from "react";
@@ -23,7 +23,7 @@ export function Magnetic({
   className,
 }: MagneticProps) {
   const ref = useRef<HTMLDivElement>(null);
-  const reduce = useReducedMotion();
+  const reduce = useReducedMotionConfig();
   const canHover = useHoverCapable();
   // Decorative cursor-follow: skip on touch (phantom hover) and reduced motion.
   const enabled = !reduce && canHover;

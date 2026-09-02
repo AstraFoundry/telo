@@ -3,7 +3,7 @@
 import {
   AnimatePresence,
   motion,
-  useReducedMotion,
+  useReducedMotionConfig,
   type HTMLMotionProps,
   type Variants,
 } from "motion/react";
@@ -171,7 +171,7 @@ export function ActionSwapText({
   animation = "blur",
   className,
 }: ActionSwapTextProps) {
-  const reduce = useReducedMotion();
+  const reduce = useReducedMotionConfig();
 
   // Cascade needs a plain string to split into letters; non-string content
   // and reduced motion fall back to the closest single-element animation.
@@ -261,7 +261,7 @@ export function ActionSwapIcon({
   animation = "blur",
   className,
 }: ActionSwapIconProps) {
-  const reduce = useReducedMotion();
+  const reduce = useReducedMotionConfig();
   // Icons are single elements — cascade maps to its closest motion, roll.
   const coreAnimation: CoreAnimation =
     animation === "cascade" ? "roll" : animation;
@@ -309,7 +309,7 @@ export function ActionSwapButton({
   onClick,
   ...rest
 }: ActionSwapButtonProps) {
-  const reduce = useReducedMotion();
+  const reduce = useReducedMotionConfig();
   const [internalValue, setInternalValue] = useState(
     defaultValue ?? items[0]?.id,
   );

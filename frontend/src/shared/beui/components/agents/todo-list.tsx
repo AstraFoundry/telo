@@ -5,7 +5,7 @@ import {
   CaretDown as ChevronDown,
   ListChecks as ListTodo,
 } from "@phosphor-icons/react";
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { AnimatePresence, motion, useReducedMotionConfig } from "motion/react";
 import {
   type ReactNode,
   useCallback,
@@ -50,7 +50,7 @@ function statusLabel(status: TodoItemStatus) {
 }
 
 function TodoHeaderIcon({ complete }: { complete: boolean }) {
-  const reduce = useReducedMotion() ?? false;
+  const reduce = useReducedMotionConfig() ?? false;
 
   return (
     <span
@@ -107,7 +107,7 @@ function TodoStatusIcon({
   status: TodoItemStatus;
   progress?: number;
 }) {
-  const reduce = useReducedMotion() ?? false;
+  const reduce = useReducedMotionConfig() ?? false;
   const normalizedProgress =
     progress === undefined ? 0.68 : Math.min(100, Math.max(0, progress)) / 100;
 
@@ -210,7 +210,7 @@ export function TodoList({
   maxHeight = 248,
   className,
 }: TodoListProps) {
-  const reduce = useReducedMotion() ?? false;
+  const reduce = useReducedMotionConfig() ?? false;
   const baseId = useId();
   const triggerId = `${baseId}-trigger`;
   const contentId = `${baseId}-content`;

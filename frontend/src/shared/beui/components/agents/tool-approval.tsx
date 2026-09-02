@@ -9,7 +9,7 @@ import {
   ShieldCheck,
   X,
 } from "@phosphor-icons/react";
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { AnimatePresence, motion, useReducedMotionConfig } from "motion/react";
 import {
   type ReactNode,
   useCallback,
@@ -118,7 +118,7 @@ export function ToolApproval({
   onDeny,
   className,
 }: ToolApprovalProps) {
-  const reduce = useReducedMotion() ?? false;
+  const reduce = useReducedMotionConfig() ?? false;
   const baseId = useId();
   const detailsId = `${baseId}-details`;
   const previousStatus = useRef(status);

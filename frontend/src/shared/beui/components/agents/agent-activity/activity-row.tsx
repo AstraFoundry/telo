@@ -11,7 +11,7 @@ import {
   TerminalWindow as SquareTerminal,
   Wrench,
 } from "@phosphor-icons/react";
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { AnimatePresence, motion, useReducedMotionConfig } from "motion/react";
 import { EASE_OUT, SPRING_LAYOUT } from "@beui-lib/ease";
 import { cn } from "@/shared/lib/cn";
 import type {
@@ -109,7 +109,7 @@ function SearchResultRow({ result }: { result: AgentSearchResult }) {
 }
 
 function SearchRow({ item }: { item: AgentActivitySearch }) {
-  const reduce = useReducedMotion() ?? false;
+  const reduce = useReducedMotionConfig() ?? false;
   const enter = reduce ? { opacity: 1 } : { opacity: 0, y: 6 };
   const visible = { opacity: 1, y: 0 };
   const exit = reduce ? { opacity: 0 } : { opacity: 0, y: -3 };

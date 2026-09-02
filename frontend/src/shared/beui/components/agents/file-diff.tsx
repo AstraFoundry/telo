@@ -8,7 +8,7 @@ import {
   FileCode as FileCode2,
   SpinnerGap as LoaderCircle,
 } from "@phosphor-icons/react";
-import { motion, useReducedMotion } from "motion/react";
+import { motion, useReducedMotionConfig } from "motion/react";
 import {
   type ReactNode,
   useCallback,
@@ -90,7 +90,7 @@ export function FileDiff({
   onCopy,
   className,
 }: FileDiffProps) {
-  const reduce = useReducedMotion() ?? false;
+  const reduce = useReducedMotionConfig() ?? false;
   const baseId = useId();
   const triggerId = `${baseId}-trigger`;
   const contentId = `${baseId}-content`;

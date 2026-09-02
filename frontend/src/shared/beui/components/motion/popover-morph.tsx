@@ -1,6 +1,6 @@
 "use client";
 
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { AnimatePresence, motion, useReducedMotionConfig } from "motion/react";
 import {
   cloneElement,
   createContext,
@@ -230,7 +230,7 @@ export function MorphPopoverContent({
   className,
 }: MorphPopoverContentProps) {
   const ctx = useMorphContext("MorphPopoverContent");
-  const reduce = useReducedMotion() ?? false;
+  const reduce = useReducedMotionConfig() ?? false;
   const [portalReady, setPortalReady] = useState(false);
   const layout = usePopoverPortalPosition(
     ctx.triggerRef,

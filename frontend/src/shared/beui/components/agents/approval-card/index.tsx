@@ -10,7 +10,7 @@ import {
   ChatText as MessageSquareText,
   X,
 } from "@phosphor-icons/react";
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { AnimatePresence, motion, useReducedMotionConfig } from "motion/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AgentDisclosure } from "@components/agents/agent-disclosure";
 import { ActionSwapRollText } from "@components/motion/action-swap-roll";
@@ -209,7 +209,7 @@ export function ApprovalCard({
   result,
   className,
 }: ApprovalCardProps) {
-  const reduce = useReducedMotion() ?? false;
+  const reduce = useReducedMotionConfig() ?? false;
   const [internalAnswers, setInternalAnswers] =
     useState<ApprovalCardAnswers>(defaultAnswers);
   const [internalStep, setInternalStep] = useState(defaultStep);

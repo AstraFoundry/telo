@@ -7,7 +7,7 @@ import {
   DownloadSimple,
   X,
 } from "@phosphor-icons/react";
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { AnimatePresence, motion, useReducedMotionConfig } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 
 import { LoadIndicator } from "./load-indicator";
@@ -75,7 +75,7 @@ export function MediaViewer({
   onSaveAs,
   onOpen,
 }: MediaViewerProps) {
-  const reduce = useReducedMotion() ?? false;
+  const reduce = useReducedMotionConfig() ?? false;
   const dialogRef = useRef<HTMLDivElement | null>(null);
   // The exit transition still needs the closing item after `item` turns null;
   // remember the last open item by adjusting state during render (the React-

@@ -5,7 +5,7 @@ import {
   AnimatePresence,
   motion,
   useIsPresent,
-  useReducedMotion,
+  useReducedMotionConfig,
 } from "motion/react";
 import { type ReactNode, useEffect } from "react";
 import { EASE_OUT, SPRING_PANEL } from "@beui-lib/ease";
@@ -80,7 +80,7 @@ export function MorphingModal({
   className,
 }: MorphingModalProps) {
   const open = viewId !== null;
-  const reduce = useReducedMotion();
+  const reduce = useReducedMotionConfig();
   const enterY = reduce ? 0 : placement === "bottom" ? 40 : 20;
   const enterScale = reduce ? 1 : 0.97;
 

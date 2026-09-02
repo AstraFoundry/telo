@@ -8,7 +8,7 @@ import {
   motion,
   useMotionTemplate,
   useMotionValue,
-  useReducedMotion,
+  useReducedMotionConfig,
   useSpring,
   useTransform,
 } from "motion/react";
@@ -227,7 +227,7 @@ export function RangeSlider({
   className,
   ...options
 }: RangeSliderProps) {
-  const reduce = useReducedMotion();
+  const reduce = useReducedMotionConfig();
   const { percent, dragging, min, max, step, trackProps, sliderProps } =
     useSlider(options);
 

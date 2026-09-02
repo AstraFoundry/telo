@@ -1,6 +1,6 @@
 "use client";
 
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { AnimatePresence, motion, useReducedMotionConfig } from "motion/react";
 import {
   type MouseEvent,
   type PointerEvent,
@@ -90,7 +90,7 @@ export function PreviewRail({
   previewClassName,
 }: PreviewRailProps) {
   const uid = useId();
-  const reduce = useReducedMotion();
+  const reduce = useReducedMotionConfig();
   const rootRef = useRef<HTMLDivElement>(null);
   const [internalActiveId, setInternalActiveId] = useState(
     defaultActiveId ?? items[0]?.id ?? "",

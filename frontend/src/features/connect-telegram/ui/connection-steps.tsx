@@ -1,5 +1,5 @@
 import { PencilSimple } from "@phosphor-icons/react";
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { AnimatePresence, motion, useReducedMotionConfig } from "motion/react";
 
 import { copy } from "shared/config/copy";
 import {
@@ -159,7 +159,7 @@ export function ConnectionStepContent({
  * button via TextViewSwitcher.
  */
 function DialCodePrefix({ dialCode }: { dialCode: string }) {
-  const reduce = useReducedMotion();
+  const reduce = useReducedMotionConfig();
   return (
     <AnimatePresence mode="popLayout" initial={false}>
       <motion.span

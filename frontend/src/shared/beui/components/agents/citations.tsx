@@ -6,7 +6,7 @@ import {
   ArrowSquareOut as ExternalLink,
   Globe as Globe2,
 } from "@phosphor-icons/react";
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { AnimatePresence, motion, useReducedMotionConfig } from "motion/react";
 import { type ReactNode, useCallback, useId, useState } from "react";
 import { AgentDisclosure } from "@components/agents/agent-disclosure";
 import { EASE_OUT, SPRING_LAYOUT, SPRING_SWAP } from "@beui-lib/ease";
@@ -185,7 +185,7 @@ export function CitationList({
   idPrefix,
   className,
 }: CitationListProps) {
-  const reduce = useReducedMotion() ?? false;
+  const reduce = useReducedMotionConfig() ?? false;
   const baseId = useId();
   const resolvedPrefix =
     idPrefix ?? `citation-list-${baseId.replace(/:/g, "")}`;
@@ -231,7 +231,7 @@ export function Citations({
   idPrefix,
   className,
 }: CitationsProps) {
-  const reduce = useReducedMotion() ?? false;
+  const reduce = useReducedMotionConfig() ?? false;
   const baseId = useId();
   const contentId = `${baseId}-content`;
   const resolvedPrefix = idPrefix ?? `citation-${baseId.replace(/:/g, "")}`;

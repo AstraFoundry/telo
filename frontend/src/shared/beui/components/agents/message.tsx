@@ -1,7 +1,7 @@
 "use client";
 // beui.dev/components/agents/chat-app
 
-import { motion, useReducedMotion } from "motion/react";
+import { motion, useReducedMotionConfig } from "motion/react";
 import {
   type ComponentPropsWithRef,
   createContext,
@@ -80,7 +80,7 @@ export function Message({
   style,
   ...props
 }: MessageProps) {
-  const reduce = useReducedMotion() ?? false;
+  const reduce = useReducedMotionConfig() ?? false;
 
   return (
     <MessageSideContext.Provider value={from === "user" ? "end" : "start"}>
@@ -243,7 +243,7 @@ export function MessageTyping({
   className,
   ...props
 }: MessageTypingProps) {
-  const reduce = useReducedMotion() ?? false;
+  const reduce = useReducedMotionConfig() ?? false;
 
   return (
     <span

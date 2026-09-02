@@ -5,7 +5,7 @@ import {
   AnimatePresence,
   type HTMLMotionProps,
   motion,
-  useReducedMotion,
+  useReducedMotionConfig,
   type Variants,
 } from "motion/react";
 import {
@@ -222,7 +222,7 @@ export function AnimatedSidebarProvider({
   const [internalOpenMobile, setInternalOpenMobile] =
     useState(defaultOpenMobile);
   const isMobile = useIsMobile();
-  const reduce = useReducedMotion() ?? false;
+  const reduce = useReducedMotionConfig() ?? false;
   const generatedId = useId();
   const triggerRef = useRef<HTMLButtonElement>(null);
   const desktopOpen = open ?? internalOpen;

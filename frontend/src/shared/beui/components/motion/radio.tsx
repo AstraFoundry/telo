@@ -1,6 +1,6 @@
 "use client";
 
-import { motion, MotionConfig, useReducedMotion } from "motion/react";
+import { motion, MotionConfig, useReducedMotionConfig } from "motion/react";
 import {
   createContext,
   useCallback,
@@ -48,7 +48,7 @@ export function RadioGroup({
 }: RadioGroupProps) {
   const [internal, setInternal] = useState(defaultValue);
   const layoutId = useId();
-  const reduce = useReducedMotion();
+  const reduce = useReducedMotionConfig();
   const controlled = value !== undefined;
   const current = controlled ? value : internal;
   const setValue = useCallback(
@@ -99,7 +99,7 @@ export function RadioGroupItem({
   const { value: groupValue, setValue, layoutId } = useRadioGroup();
   const autoId = useId();
   const id = idProp ?? autoId;
-  const reduce = useReducedMotion();
+  const reduce = useReducedMotionConfig();
   const selected = groupValue === value;
 
   return (

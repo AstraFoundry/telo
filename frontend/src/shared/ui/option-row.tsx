@@ -1,6 +1,10 @@
 "use client";
 
-import { type HTMLMotionProps, motion, useReducedMotion } from "motion/react";
+import {
+  type HTMLMotionProps,
+  motion,
+  useReducedMotionConfig,
+} from "motion/react";
 
 import { SPRING_PRESS } from "./motion";
 
@@ -19,6 +23,12 @@ export interface OptionRowProps extends Omit<
    * where a layout animation would fight the scroll.
    */
   readonly layout?: "stacked" | "inline";
+  /**
+   * Lets the primary line wrap instead of truncating, for a row whose value is
+   * prose rather than a name. Off by default: suggestion lists rely on one row
+   * staying one line so the list length is predictable.
+   */
+  readonly wrap?: boolean;
   /** Keyboard/roving highlight, independent of hover. */
   readonly active?: boolean;
 }
@@ -33,11 +43,12 @@ export function OptionRow({
   label,
   description,
   layout = "stacked",
+  wrap = false,
   active = false,
   className,
   ...rest
 }: OptionRowProps) {
-  const reduce = useReducedMotion();
+  const reduce = useReducedMotionConfig();
 
   return (
     <motion.button
@@ -59,7 +70,14 @@ export function OptionRow({
     >
       {layout === "stacked" ? (
         <>
-          <span className="block w-full truncate text-sm">{label}</span>
+          <span
+            className={cn(
+              "block w-full text-sm",
+              wrap ? "break-words text-pretty" : "truncate",
+            )}
+          >
+            {label}
+          </span>
           {description ? (
             <span className="block w-full truncate text-xs text-muted-foreground">
               {description}

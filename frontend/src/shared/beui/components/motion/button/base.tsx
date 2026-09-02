@@ -1,6 +1,10 @@
 "use client";
 
-import { type HTMLMotionProps, motion, useReducedMotion } from "motion/react";
+import {
+  type HTMLMotionProps,
+  motion,
+  useReducedMotionConfig,
+} from "motion/react";
 import { forwardRef, type ReactNode } from "react";
 import { SPRING_PRESS } from "@beui-lib/ease";
 import { cn } from "@/shared/lib/cn";
@@ -59,7 +63,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
     },
     ref,
   ) {
-    const reduce = useReducedMotion();
+    const reduce = useReducedMotionConfig();
 
     return (
       <motion.button
@@ -96,7 +100,7 @@ export const ButtonLink = forwardRef<HTMLAnchorElement, ButtonLinkProps>(
     },
     ref,
   ) {
-    const reduce = useReducedMotion();
+    const reduce = useReducedMotionConfig();
 
     return (
       <motion.a

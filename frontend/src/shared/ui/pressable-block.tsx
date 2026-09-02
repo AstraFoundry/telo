@@ -1,6 +1,10 @@
 "use client";
 
-import { type HTMLMotionProps, motion, useReducedMotion } from "motion/react";
+import {
+  type HTMLMotionProps,
+  motion,
+  useReducedMotionConfig,
+} from "motion/react";
 
 import { SPRING_PRESS } from "./motion";
 
@@ -30,7 +34,7 @@ export function PressableBlock({
   children,
   ...rest
 }: PressableBlockProps) {
-  const reduce = useReducedMotion();
+  const reduce = useReducedMotionConfig();
 
   return (
     <motion.button

@@ -1,6 +1,10 @@
 "use client";
 
-import { motion, type HTMLMotionProps, useReducedMotion } from "motion/react";
+import {
+  motion,
+  type HTMLMotionProps,
+  useReducedMotionConfig,
+} from "motion/react";
 import type { CSSProperties } from "react";
 import { EASE_OUT } from "@beui-lib/ease";
 import { cn } from "@/shared/lib/cn";
@@ -22,7 +26,7 @@ export function AgentDisclosure({
   transition,
   ...props
 }: AgentDisclosureProps) {
-  const reduce = useReducedMotion() ?? false;
+  const reduce = useReducedMotionConfig() ?? false;
 
   return (
     <motion.div

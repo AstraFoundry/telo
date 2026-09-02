@@ -14,7 +14,7 @@ import {
   PencilSimple as Pencil,
   ArrowUUpLeft as Undo2,
 } from "@phosphor-icons/react";
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { AnimatePresence, motion, useReducedMotionConfig } from "motion/react";
 import {
   type DragEvent,
   type KeyboardEvent,
@@ -262,7 +262,7 @@ function MarqueeLabel({
   active: boolean;
   children: string;
 }) {
-  const reduce = useReducedMotion() ?? false;
+  const reduce = useReducedMotionConfig() ?? false;
   const viewportRef = useRef<HTMLSpanElement>(null);
   const labelRef = useRef<HTMLSpanElement>(null);
   const [distance, setDistance] = useState(0);
@@ -382,7 +382,7 @@ function ResourceRow({
   renderMenu,
   setRef,
 }: ResourceRowProps) {
-  const reduce = useReducedMotion() ?? false;
+  const reduce = useReducedMotionConfig() ?? false;
   const canTouch = useTouchCapable();
   const [hovered, setHovered] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);

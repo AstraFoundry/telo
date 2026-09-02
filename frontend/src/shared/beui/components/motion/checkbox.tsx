@@ -1,6 +1,6 @@
 "use client";
 
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { AnimatePresence, motion, useReducedMotionConfig } from "motion/react";
 import { useId } from "react";
 import { EASE_OUT, SPRING_PRESS } from "@beui-lib/ease";
 import { cn } from "@/shared/lib/cn";
@@ -34,7 +34,7 @@ export function Checkbox({
 }: CheckboxProps) {
   const autoId = useId();
   const id = idProp ?? autoId;
-  const reduce = useReducedMotion();
+  const reduce = useReducedMotionConfig();
   const showMark = checked || indeterminate;
   const path = indeterminate ? INDETERMINATE_PATH : CHECK_PATH;
 

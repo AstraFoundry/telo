@@ -7,7 +7,7 @@ import {
   FileCode as FileCode2,
   SpinnerGap as LoaderCircle,
 } from "@phosphor-icons/react";
-import { motion, useReducedMotion } from "motion/react";
+import { motion, useReducedMotionConfig } from "motion/react";
 import {
   type ReactNode,
   useCallback,
@@ -54,7 +54,7 @@ export function CodeBlock({
   onCopy,
   className,
 }: CodeBlockProps) {
-  const reduce = useReducedMotion() ?? false;
+  const reduce = useReducedMotionConfig() ?? false;
   const viewportRef = useRef<HTMLDivElement>(null);
   const copyTimer = useRef<number | undefined>(undefined);
   const [copied, setCopied] = useState(false);

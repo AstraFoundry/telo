@@ -5,7 +5,7 @@ import {
   AnimatePresence,
   animate,
   motion,
-  useReducedMotion,
+  useReducedMotionConfig,
 } from "motion/react";
 import { useEffect, useId, useRef, useState } from "react";
 
@@ -60,7 +60,7 @@ export function OTPInput({
   className,
 }: OTPInputProps) {
   const uid = useId();
-  const reduce = useReducedMotion();
+  const reduce = useReducedMotionConfig();
   const inputRef = useRef<HTMLInputElement>(null);
   const slotsRef = useRef<HTMLDivElement>(null);
 

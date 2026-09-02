@@ -6,7 +6,7 @@ import {
   WarningCircle as CircleAlert,
   ArrowCounterClockwise as RotateCcw,
 } from "@phosphor-icons/react";
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { AnimatePresence, motion, useReducedMotionConfig } from "motion/react";
 import type { CSSProperties, ReactNode } from "react";
 import { useEffect, useRef } from "react";
 import { EASE_IN_OUT, EASE_OUT, SPRING_PRESS } from "@beui-lib/ease";
@@ -263,7 +263,7 @@ export function ImageGeneration({
   mediaClassName,
   statusClassName,
 }: ImageGenerationProps) {
-  const reduce = useReducedMotion() ?? false;
+  const reduce = useReducedMotionConfig() ?? false;
   const active =
     status === "queued" || status === "generating" || status === "refining";
   const mediaState = MEDIA_STATE[status];

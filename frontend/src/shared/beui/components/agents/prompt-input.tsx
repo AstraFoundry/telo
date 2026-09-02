@@ -2,7 +2,7 @@
 // beui.dev/components/agents/chat-app
 
 import { ArrowUp, Plus, Square } from "@phosphor-icons/react";
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { AnimatePresence, motion, useReducedMotionConfig } from "motion/react";
 import {
   type FormEvent,
   type KeyboardEvent,
@@ -114,7 +114,7 @@ export function PromptInput({
   onKeyDown,
   ...textareaProps
 }: PromptInputProps) {
-  const reduce = useReducedMotion() ?? false;
+  const reduce = useReducedMotionConfig() ?? false;
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const measurementRef = useRef<HTMLDivElement>(null);
   const [internalValue, setInternalValue] = useState(defaultValue);

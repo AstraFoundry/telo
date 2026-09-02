@@ -1,5 +1,5 @@
 import { ArrowLeft, PaperPlaneTilt } from "@phosphor-icons/react";
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { AnimatePresence, motion, useReducedMotionConfig } from "motion/react";
 import { useState } from "react";
 
 import {
@@ -7,12 +7,7 @@ import {
   useConnectionForm,
 } from "features/connect-telegram";
 import { copy } from "shared/config/copy";
-import {
-  Button,
-  EASE_OUT,
-  StatefulButton,
-  TextReveal,
-} from "shared/ui";
+import { Button, EASE_OUT, StatefulButton, TextReveal } from "shared/ui";
 
 type ShellStep = "welcome" | "auth";
 
@@ -31,7 +26,7 @@ export function OnboardingPage() {
   const viewId = shellStep === "welcome" ? "welcome" : form.viewId;
   const [prevViewId, setPrevViewId] = useState(viewId);
   const [direction, setDirection] = useState<1 | -1>(1);
-  const reduce = useReducedMotion();
+  const reduce = useReducedMotionConfig();
 
   if (viewId !== prevViewId) {
     const prevIndex = STEP_ORDER[prevViewId] ?? 0;

@@ -4,7 +4,7 @@ import {
   AnimatePresence,
   animate,
   motion,
-  useReducedMotion,
+  useReducedMotionConfig,
 } from "motion/react";
 import {
   forwardRef,
@@ -68,7 +68,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
 ) {
   const reactId = useId();
   const id = idProp ?? reactId;
-  const reduce = useReducedMotion();
+  const reduce = useReducedMotionConfig();
 
   const controlled = valueProp !== undefined;
   const [internal, setInternal] = useState(defaultValue ?? "");

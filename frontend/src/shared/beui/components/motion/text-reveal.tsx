@@ -5,7 +5,7 @@ import {
   motion,
   type Transition,
   useInView,
-  useReducedMotion,
+  useReducedMotionConfig,
 } from "motion/react";
 import { useRef, type ElementType, type ReactNode } from "react";
 import { EASE_OUT } from "@beui-lib/ease";
@@ -63,7 +63,7 @@ export function TextReveal({
 }: TextRevealProps) {
   const ref = useRef<HTMLElement>(null);
   const inView = useInView(ref, { once, amount: 0.4 });
-  const reduce = useReducedMotion();
+  const reduce = useReducedMotionConfig();
   const shouldAnimate = whileInView ? inView : true;
 
   const lines = Array.isArray(text) ? text : [text];

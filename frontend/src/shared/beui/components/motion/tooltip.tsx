@@ -4,7 +4,7 @@
 import {
   AnimatePresence,
   motion,
-  useReducedMotion,
+  useReducedMotionConfig,
   type Variants,
 } from "motion/react";
 import {
@@ -117,7 +117,7 @@ export function Tooltip({
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const anchorRef = useRef<HTMLSpanElement>(null);
   const hover = useHoverGesture();
-  const reduce = useReducedMotion();
+  const reduce = useReducedMotionConfig();
 
   // Anchor point in viewport coords, on the edge of the trigger facing `side`.
   // Position:fixed means these viewport coords place the tooltip directly, so

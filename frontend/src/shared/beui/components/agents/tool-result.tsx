@@ -14,7 +14,7 @@ import {
   TerminalWindow as SquareTerminal,
   Wrench,
 } from "@phosphor-icons/react";
-import { motion, useReducedMotion } from "motion/react";
+import { motion, useReducedMotionConfig } from "motion/react";
 import {
   type ReactNode,
   useCallback,
@@ -118,7 +118,7 @@ function ToolResultAction({
   onClick: () => void;
   children: ReactNode;
 }) {
-  const reduce = useReducedMotion() ?? false;
+  const reduce = useReducedMotionConfig() ?? false;
 
   return (
     <motion.button
@@ -171,7 +171,7 @@ export function ToolResult({
   className,
   contentClassName,
 }: ToolResultProps) {
-  const reduce = useReducedMotion() ?? false;
+  const reduce = useReducedMotionConfig() ?? false;
   const baseId = useId();
   const triggerId = `${baseId}-trigger`;
   const contentId = `${baseId}-content`;

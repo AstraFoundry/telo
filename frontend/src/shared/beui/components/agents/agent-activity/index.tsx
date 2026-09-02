@@ -2,7 +2,7 @@
 // beui.dev/components/agents/chat-app
 
 import { CaretDown as ChevronDown } from "@phosphor-icons/react";
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { AnimatePresence, motion, useReducedMotionConfig } from "motion/react";
 import {
   type ReactNode,
   useCallback,
@@ -130,7 +130,7 @@ export function AgentActivity({
   className,
   contentClassName,
 }: AgentActivityProps) {
-  const reduce = useReducedMotion() ?? false;
+  const reduce = useReducedMotionConfig() ?? false;
   const baseId = useId();
   const triggerId = `${baseId}-trigger`;
   const contentId = `${baseId}-content`;
