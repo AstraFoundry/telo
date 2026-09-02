@@ -109,3 +109,77 @@ test("deletes an outgoing message for everyone from the dialog", async ({
 
   await expect(conversation).not.toContainText(body);
 });
+
+/**
+ * Telegram names the copy action after what the user actually selected:
+ * "Copy Selected Text" over a highlighted run, "Copy Text" over the whole
+ * bubble. The menu reads the selection frozen at open time, because opening it
+ * moves focus and the live selection is already gone by the time an item runs.
+ */
+test("names the transcript copy action after the live selection", async ({
+  window,
+}) => {
+  await waitForDemoWorkspace(window);
+
+  await window
+    .getByRole("navigation", { name: "Chats" })
+    .getByRole("button", { name: /Telo Design/ })
+    .click();
+  const conversation = window.getByRole("region", { name: "Conversation" });
+  const body = "The retry flow needs a failed state in the transcript.";
+  await expect(conversation).toContainText(body);
+
+  const bubble = conversation.getByText(body);
+  await bubble.click({ button: "right" });
+  await expect(
+    window.getByRole("menu").getByRole("menuitem", { name: "Copy Text" }),
+  ).toBeVisible();
+  await window.keyboard.press("Escape");
+  // The menu portal keeps intercepting pointer events until its exit animation
+  // finishes, so reopening has to wait for the close rather than race it.
+  await expect(window.getByRole("menu")).toHaveCount(0);
+
+  // Highlight the body, then reopen over it. The press has to land inside the
+  // highlighted run: right-clicking outside a selection collapses it, in the
+  // app exactly as in any other Chromium surface.
+  await bubble.evaluate((node) => {
+    // `window` here is the Playwright page fixture, not the browser global.
+    const doc = node.ownerDocument;
+    const range = doc.createRange();
+    range.selectNodeContents(node);
+    const selection = doc.defaultView?.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+  });
+  await bubble.click({ button: "right" });
+  await expect(
+    window
+      .getByRole("menu")
+      .getByRole("menuitem", { name: "Copy Selected Text" }),
+  ).toBeVisible();
+});
+
+/**
+ * Focus moves into the menu a frame after it opens, so a menu that only
+ * listens for Escape on its own content stays stuck for anyone who right-clicks
+ * and dismisses in the same breath. Every native menu closes on that keystroke.
+ */
+test("closes a right-click menu on Escape pressed before focus lands", async ({
+  window,
+}) => {
+  await waitForDemoWorkspace(window);
+
+  await window
+    .getByRole("navigation", { name: "Chats" })
+    .getByRole("button", { name: /Telo Design/ })
+    .click();
+  const conversation = window.getByRole("region", { name: "Conversation" });
+  const body = "The retry flow needs a failed state in the transcript.";
+  await expect(conversation).toContainText(body);
+
+  await conversation.getByText(body).click({ button: "right" });
+  // No settle: the point is the keystroke that beats the focus frame.
+  await window.keyboard.press("Escape");
+
+  await expect(window.getByRole("menu")).toHaveCount(0);
+});

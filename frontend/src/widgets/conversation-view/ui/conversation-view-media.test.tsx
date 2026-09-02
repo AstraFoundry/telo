@@ -76,6 +76,8 @@ function message(partial: Partial<MessageDto> & Pick<MessageDto, "id">) {
   return {
     chatId: "chat-1",
     senderName: "Sender",
+    senderId: "peer-sender",
+    senderAvatarUrl: null,
     body: "",
     entities: [],
     media: null,
@@ -101,6 +103,21 @@ function photo(id: string, fileName: string): NonNullable<MessageDto["media"]> {
   };
 }
 
+function videoSticker(id: string): NonNullable<MessageDto["media"]> {
+  return {
+    id,
+    kind: "sticker",
+    fileName: "cat.webm",
+    mimeType: "video/webm",
+    size: null,
+    width: 512,
+    height: 512,
+    duration: null,
+    spoiler: false,
+    sticker: { emoji: "🐱", format: "video", setName: "CatPack" },
+  };
+}
+
 function readyDownload(url: string) {
   return {
     state: "ready" as const,
@@ -114,25 +131,17 @@ function readyDownload(url: string) {
 async function renderView({
   messages,
   mediaDownloads = {},
+  preferences,
 }: {
   messages: MessageDto[];
   mediaDownloads?: Record<string, ReturnType<typeof readyDownload>>;
+  preferences?: Partial<UserPreferencesDto>;
 }) {
   const telo = installTeloApiMock();
-  telo.preferences.get.mockResolvedValue({
-    agentPanelOpen: false,
-    demoWorkspace: false,
-    theme: "system",
-    accentColor: "blue",
-    messageTextSize: 14,
-    timeFormat: "system",
-    sendWithEnter: true,
-    notificationsEnabled: false,
-    sidebarWidth: 280,
-    agentPanelWidth: 380,
-    recentEmojis: [],
-    messageTemplates: [],
-  } satisfies UserPreferencesDto);
+  if (preferences) {
+    const stored = await telo.preferences.get();
+    telo.preferences.get.mockResolvedValue({ ...stored, ...preferences });
+  }
   const { useChatStore } = await import("../../../entities/chat");
   useChatStore.setState({
     chats: [chat({ id: "chat-1", title: "Media Chat" })],
@@ -141,8 +150,18 @@ async function renderView({
     loading: false,
     mediaDownloads,
   });
-  const { ConversationView } = await import("./conversation-view");
-  render(<ConversationView />);
+  // The composition root wraps the app in a MotionConfig; the view resolves
+  // its motion preference from that context, so the test supplies the same
+  // shape rather than reaching across into `app`.
+  const [{ ConversationView }, { MotionConfig }] = await Promise.all([
+    import("./conversation-view"),
+    import("motion/react"),
+  ]);
+  render(
+    <MotionConfig reducedMotion="user">
+      <ConversationView />
+    </MotionConfig>,
+  );
   return { telo, useChatStore };
 }
 
@@ -155,6 +174,19 @@ describe("ConversationView media", () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+  });
+
+  it("lets the browser anchor the transcript while media fills in", async () => {
+    await renderView({
+      messages: [message({ id: "m1", media: photo("chat-1/1", "one.png") })],
+    });
+
+    // The shared scroller turns anchoring off for streaming logs. A
+    // transcript grows above the reader instead, so it opts back in and the
+    // read position survives a page of thumbnails landing.
+    const viewport = screen.getByRole("region", { name: copy.conversation });
+    expect(viewport.className).toContain("[overflow-anchor:auto]");
+    expect(viewport.className).not.toContain("[overflow-anchor:none]");
   });
 
   it("preloads a photo thumbnail when the bubble scrolls into view", async () => {
@@ -307,5 +339,35 @@ describe("ConversationView media", () => {
     const open = await screen.findByRole("menuitem", { name: copy.openMedia });
     await userEvent.click(open);
     expect(telo.workspace.openMedia).toHaveBeenCalledWith("chat-1/1");
+  });
+
+  it("stops looping video stickers when the reader turns looping off", async () => {
+    await renderView({
+      messages: [message({ id: "m1", media: videoSticker("chat-1/s1") })],
+      mediaDownloads: {
+        "chat-1/s1": readyDownload("telo-media://cache/cat.webm"),
+      },
+      preferences: { loopStickers: false },
+    });
+
+    const video = (await screen.findByLabelText(
+      "\u{1F431}",
+    )) as HTMLVideoElement;
+    expect(video.loop).toBe(false);
+  });
+
+  it("loops video stickers while the preference is on", async () => {
+    await renderView({
+      messages: [message({ id: "m1", media: videoSticker("chat-1/s1") })],
+      mediaDownloads: {
+        "chat-1/s1": readyDownload("telo-media://cache/cat.webm"),
+      },
+      preferences: { loopStickers: true },
+    });
+
+    const video = (await screen.findByLabelText(
+      "\u{1F431}",
+    )) as HTMLVideoElement;
+    expect(video.loop).toBe(true);
   });
 });

@@ -18,6 +18,8 @@ import type {
 } from "../../../../../../contracts/src/ipc";
 import { cn } from "@/shared/lib/cn";
 import { LinkPreview } from "@/shared/ui/link-preview";
+import { PressableBlock } from "@/shared/ui/pressable-block";
+import { Sticker } from "@/shared/ui/sticker";
 import { Button } from "@components/motion/button";
 
 export interface MessageMediaState {
@@ -38,12 +40,20 @@ export interface MessageMediaProps {
     reveal: string;
     failed: string;
     expand: string;
+    sticker: string;
+    playSticker: string;
+    openStickerSet: string;
   };
   /**
    * Album-tile layout: a square cover crop instead of the full card. Only
    * affects photo/video media.
    */
   readonly tile?: boolean;
+  /**
+   * Animated and video stickers replay on their own. Off — the reader turned
+   * sticker looping off — gives them a single pass and then a held frame.
+   */
+  readonly loopStickers?: boolean;
   /**
    * Byte progress renders only for downloads the user explicitly started;
    * automatic thumbnail preloads stay quiet placeholders.
@@ -67,6 +77,35 @@ export function MessageMedia(props: MessageMediaProps) {
           props.download?.state === "ready" ? props.download.url : null
         }
       />
+    );
+  }
+  // A sticker is a document, but Telegram never draws it as an attachment
+  // card: no file name, no size, no download button — the alt emoji stands in
+  // until the document lands and then the sticker itself takes the slot.
+  if (props.media.kind === "sticker" && props.media.sticker) {
+    const sticker = (
+      <Sticker
+        sticker={props.media.sticker}
+        width={props.media.width}
+        height={props.media.height}
+        src={props.download?.state === "ready" ? props.download.url : null}
+        label={props.labels.sticker}
+        playLabel={props.labels.playSticker}
+        loop={props.loopStickers}
+      />
+    );
+    // Telegram opens the sticker's set when you tap it. Without a set there
+    // is nothing to open, so the sticker stays a plain image rather than a
+    // control that does nothing.
+    if (!props.onOpen) return sticker;
+    return (
+      <PressableBlock
+        aria-label={props.labels.openStickerSet}
+        className="w-fit rounded-lg"
+        onClick={(event) => props.onOpen?.(event.currentTarget)}
+      >
+        {sticker}
+      </PressableBlock>
     );
   }
   return <FileMedia {...props} media={props.media} />;
@@ -180,6 +219,34 @@ function FileMedia({
   );
 }
 
+// Telegram gives a photo its final box before a byte of it arrives: the
+// message already carries the dimensions, so the bubble is laid out once and
+// the pixels drop into a hole that is already the right shape. Anything less
+// reflows the transcript under the reader mid-scroll.
+const VISUAL_MEDIA_MAX_HEIGHT = 384;
+// A sliver of a photo is unreadable, so a very tall one is boxed at 1:2 and
+// fitted inside rather than rendered two fingers wide.
+const VISUAL_MEDIA_MIN_ASPECT = 0.5;
+
+/**
+ * The display box for a photo or video, or null when the message carries no
+ * dimensions. Both the placeholder and the loaded media take this exact box,
+ * which is what keeps the scroll position still while a page fills in.
+ */
+export function visualMediaBox(
+  width: number | null,
+  height: number | null,
+): { readonly aspectRatio: string; readonly width: string } | null {
+  if (!width || !height || width < 0 || height < 0) return null;
+  const aspect = Math.max(width / height, VISUAL_MEDIA_MIN_ASPECT);
+  return {
+    aspectRatio: `${aspect}`,
+    // Capping the width rather than the height is what avoids letterboxing:
+    // the box never gets taller than the cap, so it never has spare room.
+    width: `min(100%, ${Math.round(aspect * VISUAL_MEDIA_MAX_HEIGHT)}px)`,
+  };
+}
+
 function VisualMedia({
   media,
   download,
@@ -213,6 +280,15 @@ function VisualMedia({
   const frame = tile
     ? "relative aspect-square overflow-hidden bg-black/5 dark:bg-white/5"
     : "relative overflow-hidden rounded-lg bg-black/5 outline outline-1 -outline-offset-1 outline-black/10 dark:outline-white/10";
+  // A tile is already a square, so only the full card reserves a box.
+  const box = tile ? null : visualMediaBox(media.width, media.height);
+  const boxStyle = box
+    ? { aspectRatio: box.aspectRatio, width: box.width }
+    : undefined;
+  // Without dimensions there is nothing to reserve; the frame falls back to a
+  // bounded placeholder and the transcript's scroll anchoring absorbs the
+  // difference when the real size arrives.
+  const unsizedFrame = !tile && !box ? "max-h-96 min-h-40 w-full" : undefined;
 
   const revealButton =
     !spoilerRevealed && readyUrl ? (
@@ -228,14 +304,7 @@ function VisualMedia({
 
   if (!readyUrl) {
     return (
-      <div
-        className={cn(frame, !tile && "max-h-96 min-h-40 w-full")}
-        style={
-          !tile && media.width && media.height
-            ? { aspectRatio: `${media.width} / ${media.height}` }
-            : undefined
-        }
-      >
+      <div className={cn(frame, unsizedFrame)} style={boxStyle}>
         {showDownload ? (
           <Button
             size="icon"
@@ -347,7 +416,7 @@ function VisualMedia({
   }
 
   return (
-    <div className={frame}>
+    <div className={cn(frame, unsizedFrame)} style={boxStyle}>
       {video ? (
         <>
           <video
@@ -355,7 +424,10 @@ function VisualMedia({
             controls
             preload="metadata"
             aria-label={media.fileName ?? undefined}
-            className={cn("max-h-96 w-full", !spoilerRevealed && "blur-xl")}
+            className={cn(
+              box ? "size-full object-contain" : "max-h-96 w-full",
+              !spoilerRevealed && "blur-xl",
+            )}
           />
           {onOpen ? (
             <Button
@@ -373,7 +445,11 @@ function VisualMedia({
         <button
           type="button"
           aria-label={media.fileName ?? labels.expand}
-          className={cn("block w-full", onOpen && "cursor-zoom-in")}
+          className={cn(
+            "block w-full",
+            box && "h-full",
+            onOpen && "cursor-zoom-in",
+          )}
           onClick={(event) => {
             if (spoilerRevealed) onOpen?.(event.currentTarget);
           }}
@@ -382,7 +458,9 @@ function VisualMedia({
             src={readyUrl}
             alt={media.fileName ?? ""}
             className={cn(
-              "max-h-96 w-full object-contain",
+              box
+                ? "size-full object-contain"
+                : "max-h-96 w-full object-contain",
               !spoilerRevealed && "blur-xl",
             )}
           />

@@ -22,11 +22,12 @@ demoTest(
       window.getByRole("button", { name: "Saved Messages", exact: true }),
     ).toBeVisible();
     await window.getByRole("button", { name: "Settings", exact: true }).click();
+    // Settings opens on Account and offers Agent settings in the rail.
     await expect(
-      window.getByRole("heading", { name: "Agent settings" }),
+      window.getByRole("heading", { level: 2, name: "Account" }),
     ).toBeVisible();
     await expect(
-      window.getByRole("heading", { name: "Telegram account" }),
+      window.getByRole("button", { name: "Agent settings", exact: true }),
     ).toBeVisible();
     await expect(
       window.getByRole("button", { name: "Open agent" }),
@@ -52,7 +53,7 @@ demoTest(
     await window.getByRole("button", { name: "Open account menu" }).click();
     await window.getByRole("button", { name: "Settings", exact: true }).click();
     await expect(
-      window.getByRole("heading", { name: "Agent settings" }),
+      window.getByRole("heading", { level: 2, name: "Account" }),
     ).toBeVisible();
 
     await window

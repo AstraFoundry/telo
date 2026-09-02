@@ -18,7 +18,7 @@ import {
   WarningCircle,
   X,
 } from "@phosphor-icons/react";
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { AnimatePresence, motion, useReducedMotionConfig } from "motion/react";
 import {
   Fragment,
   useCallback,
@@ -29,6 +29,7 @@ import {
   useState,
   type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
 } from "react";
 
 import type {
@@ -36,8 +37,17 @@ import type {
   MessageDto,
   TimeFormatPreference,
 } from "../../../../../contracts/src/ipc";
-import { chatsForFolder, useChatStore } from "entities/chat";
-import { useMessageTextSize, useTimeFormat } from "entities/preferences";
+import {
+  chatsForFolder,
+  useChatProfileStore,
+  useChatStore,
+} from "entities/chat";
+import {
+  useLoopStickers,
+  useMessageTextSize,
+  useTimeFormat,
+} from "entities/preferences";
+import { useTelegramStore } from "entities/telegram";
 import { InChatSearchBar } from "features/chat-search";
 import { MessageComposer } from "features/send-message";
 import { AgentToggle } from "features/toggle-agent";
@@ -56,6 +66,7 @@ import {
   ContextMenuTrigger,
   MediaViewer,
   Message,
+  MessageAvatar,
   MessageBubble,
   MessageBubbleContent,
   MessageContent,
@@ -79,7 +90,9 @@ import type { MediaViewerItem, MediaViewerOrigin } from "shared/ui";
 import { DeleteMessageDialog } from "./delete-message-dialog";
 import { ForwardPickerDialog } from "./forward-picker-dialog";
 import { ForwardSelectedDialog } from "./forward-selected-dialog";
+import { CustomEmoji } from "./custom-emoji";
 import { PinnedMessageBar } from "./pinned-message-bar";
+import { StickerSetDialog } from "./sticker-set-dialog";
 import {
   groupTranscript,
   isVisualMedia,
@@ -93,9 +106,18 @@ const MEDIA_LABELS = {
   reveal: copy.revealSpoiler,
   failed: copy.mediaDownloadFailed,
   expand: copy.viewMedia,
+  sticker: copy.sticker,
+  playSticker: copy.playSticker,
+  openStickerSet: copy.openStickerSet,
 } as const;
 
 const LIVE_EDGE_THRESHOLD_PX = 56;
+
+// A custom-emoji entity names a sticker document; the transcript is the layer
+// that can fetch it, so it hands the renderer down to the registry primitive.
+function renderCustomEmoji(documentId: string, fallback: ReactNode): ReactNode {
+  return <CustomEmoji documentId={documentId} fallback={fallback} />;
+}
 
 const DRAFT_REPLY_TONES: ReadonlyArray<{
   tone: MessageAgentActionTone;
@@ -261,7 +283,7 @@ function deliveryLabel(status: MessageDto["status"]): string {
 }
 
 function DeliveryGlyph({ status }: { status: MessageDto["status"] }) {
-  const reduce = useReducedMotion() ?? false;
+  const reduce = useReducedMotionConfig() ?? false;
   const glyph =
     status === "failed" ? (
       <WarningCircle weight="fill" className="size-3.5 text-destructive" />
@@ -296,20 +318,99 @@ function DeliveryGlyph({ status }: { status: MessageDto["status"] }) {
   );
 }
 
+// A run of consecutive messages by one author is tailed by a single photo,
+// the way Telegram groups them. Outgoing rows are all authored by the
+// account, whose peer id a not-yet-acknowledged placeholder does not carry.
+function authorKey(message: MessageDto): string {
+  return message.outgoing ? "self" : `peer:${message.senderId}`;
+}
+
+// Telegram anchors the photo to the bottom of a run's last row; earlier rows
+// keep an invisible slot so every bubble in the run stays on one edge. The
+// account photo is resolved once for outgoing rows instead of being cached
+// again per message. Tapping a photo opens that peer's profile, the way
+// Telegram opens a profile from a group message.
+function MessageAuthorAvatar({
+  message,
+  visible,
+}: {
+  message: MessageDto;
+  visible: boolean;
+}) {
+  const currentUser = useTelegramStore((state) => state.currentUser);
+  const settled = useChatStore((state) => state.peerAvatars[message.senderId]);
+  const openForPeer = useChatProfileStore((state) => state.openForPeer);
+
+  if (!visible) return <MessageAvatar placeholder className="self-end" />;
+
+  const outgoing = message.outgoing;
+  // A local placeholder Telegram has not acknowledged yet carries no peer id,
+  // so there is nothing to open until the ack arrives.
+  const peerId = outgoing
+    ? (currentUser?.id ?? null)
+    : message.senderId || null;
+  const photo = (
+    <Avatar
+      src={
+        outgoing
+          ? currentUser?.avatarDataUrl
+          : settled === undefined
+            ? message.senderAvatarUrl
+            : settled
+      }
+      pending={
+        outgoing
+          ? !currentUser
+          : settled === undefined && (message.senderAvatarPending ?? false)
+      }
+      className="size-full"
+    />
+  );
+
+  return (
+    // Telegram seats the photo at the bubble's bottom edge, but the row's
+    // bottom is the timestamp footer, so the slot lifts past it: MessageFooter
+    // is min-h-5 (20px) under MessageContent's gap-1.5 (6px).
+    // overflow-visible keeps the pressable's ::before hit area from being
+    // clipped to the disc; the inner Avatar still clips the photo.
+    <MessageAvatar className="mb-[1.625rem] self-end overflow-visible">
+      {peerId ? (
+        <PressableBlock
+          aria-label={copy.openProfile}
+          // The disc stays at Telegram's 28px, so the pointer target is padded
+          // out to the desktop 40px floor with the usual ::before expansion.
+          className="relative size-full rounded-full before:absolute before:-inset-2 before:content-['']"
+          onClick={() => openForPeer(peerId)}
+        >
+          {photo}
+        </PressableBlock>
+      ) : (
+        photo
+      )}
+    </MessageAvatar>
+  );
+}
+
 function ConversationMessage({
   message,
+  showAvatar,
   timeFormat,
+  loopStickers,
   onForward,
   onDelete,
   onJumpToMessage,
   onOpenViewer,
+  onOpenStickerSet,
 }: {
   message: MessageDto;
+  showAvatar: boolean;
   timeFormat: TimeFormatPreference;
+  loopStickers: boolean;
   onForward(message: MessageDto): void;
   onDelete(message: MessageDto): void;
   onJumpToMessage(messageId: string): void;
   onOpenViewer(mediaId: string, trigger: HTMLElement): void;
+  onOpenStickerSet(shortName: string): void;
 }) {
   const startReply = useChatStore((state) => state.startReply);
   const startEdit = useChatStore((state) => state.startEdit);
@@ -398,6 +499,46 @@ function ConversationMessage({
     </Button>
   ) : null;
 
+  // A sticker opens its set, the way Telegram does; one with no set has
+  // nothing to open and stays a plain image.
+  const stickerSetName =
+    fileMedia?.kind === "sticker" ? (fileMedia.sticker?.setName ?? null) : null;
+
+  const mediaNode = message.media ? (
+    <div ref={mediaKey ? preloadRef : undefined}>
+      <MessageMedia
+        media={message.media}
+        download={mediaDownload}
+        labels={MEDIA_LABELS}
+        loopStickers={loopStickers}
+        downloadIsExplicit={explicitDownload}
+        onDownload={() => {
+          setExplicitDownload(true);
+          if (mediaKey) void downloadMedia(mediaKey);
+        }}
+        onCancel={() => {
+          if (mediaKey) void cancelMediaDownload(mediaKey);
+        }}
+        onOpen={
+          fileMedia && isVisualMedia(fileMedia)
+            ? (trigger) => onOpenViewer(fileMedia.id, trigger)
+            : stickerSetName
+              ? () => onOpenStickerSet(stickerSetName)
+              : undefined
+        }
+      />
+    </div>
+  ) : null;
+
+  // Telegram draws a sticker straight onto the background: no bubble, no
+  // padding, no tail. A sticker that also carries a caption, a reply quote or
+  // a forward header keeps the bubble, because that chrome needs a surface.
+  const bubbleless =
+    fileMedia?.kind === "sticker" &&
+    !message.body &&
+    !message.replyTo &&
+    !message.forwardedFrom;
+
   return (
     <Message
       id={`conversation-message-${message.id}`}
@@ -409,6 +550,7 @@ function ConversationMessage({
       className={highlighted ? "rounded-xl bg-primary/10" : undefined}
     >
       {message.outgoing ? null : selectionToggle}
+      <MessageAuthorAvatar message={message} visible={showAvatar} />
       <MessageContent className="relative">
         {!message.outgoing ? (
           <MessageHeader>{message.senderName}</MessageHeader>
@@ -419,71 +561,57 @@ function ConversationMessage({
           }}
         >
           <ContextMenuTrigger>
-            <MessageBubble variant={message.outgoing ? "tint" : "soft"}>
-              {/* Font size comes from the --message-font-size variable set on
-                  the conversation column; 14px matches text-sm before the
-                  preference resolves. */}
-              <MessageBubbleContent className="text-[length:var(--message-font-size,14px)]">
-                {message.forwardedFrom ? (
-                  <div className="mb-1 text-xs text-muted-foreground">
-                    {copy.forwardedFrom}{" "}
-                    <span className="font-medium text-foreground/80">
-                      {message.forwardedFrom}
-                    </span>
-                  </div>
-                ) : null}
-                {message.replyTo ? (
-                  <PressableBlock
-                    aria-label={copy.jumpToMessage}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      onJumpToMessage(message.replyTo!.id);
-                    }}
-                    className="mb-1 rounded-none border-l-2 border-primary pl-2"
-                  >
-                    <div className="truncate font-medium text-primary">
-                      {message.replyTo.senderName}
+            {bubbleless ? (
+              <div data-slot="message-sticker" className="w-fit">
+                {mediaNode}
+              </div>
+            ) : (
+              <MessageBubble variant={message.outgoing ? "tint" : "soft"}>
+                {/* Font size comes from the --message-font-size variable set
+                    on the conversation column; 14px matches text-sm before
+                    the preference resolves. */}
+                <MessageBubbleContent className="text-[length:var(--message-font-size,14px)]">
+                  {message.forwardedFrom ? (
+                    <div className="mb-1 text-xs text-muted-foreground">
+                      {copy.forwardedFrom}{" "}
+                      <span className="font-medium text-foreground/80">
+                        {message.forwardedFrom}
+                      </span>
                     </div>
+                  ) : null}
+                  {message.replyTo ? (
+                    <PressableBlock
+                      aria-label={copy.jumpToMessage}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onJumpToMessage(message.replyTo!.id);
+                      }}
+                      className="mb-1 rounded-none border-l-2 border-primary pl-2"
+                    >
+                      <div className="truncate font-medium text-primary">
+                        {message.replyTo.senderName}
+                      </div>
+                      <MessageRichText
+                        compact
+                        className="text-foreground/70"
+                        body={message.replyTo.body}
+                        entities={message.replyTo.entities}
+                        revealSpoilerLabel={copy.revealSpoiler}
+                      />
+                    </PressableBlock>
+                  ) : null}
+                  {mediaNode}
+                  {message.body ? (
                     <MessageRichText
-                      compact
-                      className="text-foreground/70"
-                      body={message.replyTo.body}
-                      entities={message.replyTo.entities}
+                      body={message.body}
+                      entities={message.entities}
                       revealSpoilerLabel={copy.revealSpoiler}
+                      renderCustomEmoji={renderCustomEmoji}
                     />
-                  </PressableBlock>
-                ) : null}
-                {message.media ? (
-                  <div ref={mediaKey ? preloadRef : undefined}>
-                    <MessageMedia
-                      media={message.media}
-                      download={mediaDownload}
-                      labels={MEDIA_LABELS}
-                      downloadIsExplicit={explicitDownload}
-                      onDownload={() => {
-                        setExplicitDownload(true);
-                        if (mediaKey) void downloadMedia(mediaKey);
-                      }}
-                      onCancel={() => {
-                        if (mediaKey) void cancelMediaDownload(mediaKey);
-                      }}
-                      onOpen={
-                        fileMedia && isVisualMedia(fileMedia)
-                          ? (trigger) => onOpenViewer(fileMedia.id, trigger)
-                          : undefined
-                      }
-                    />
-                  </div>
-                ) : null}
-                {message.body ? (
-                  <MessageRichText
-                    body={message.body}
-                    entities={message.entities}
-                    revealSpoilerLabel={copy.revealSpoiler}
-                  />
-                ) : null}
-              </MessageBubbleContent>
-            </MessageBubble>
+                  ) : null}
+                </MessageBubbleContent>
+              </MessageBubble>
+            )}
           </ContextMenuTrigger>
           <ContextMenuContent ariaLabel={copy.messageActions}>
             {/* A failed send never reached Telegram, so Reply/Edit/Forward —
@@ -642,10 +770,12 @@ function ConversationMessage({
 
 function AlbumMessage({
   messages,
+  showAvatar,
   timeFormat,
   onOpenViewer,
 }: {
   messages: ReadonlyArray<MessageDto>;
+  showAvatar: boolean;
   timeFormat: TimeFormatPreference;
   onOpenViewer(mediaId: string, trigger: HTMLElement): void;
 }) {
@@ -687,6 +817,7 @@ function AlbumMessage({
       data-animate-in={animateIn ? "true" : undefined}
       className={highlighted ? "rounded-xl bg-primary/10" : undefined}
     >
+      <MessageAuthorAvatar message={first} visible={showAvatar} />
       <MessageContent>
         {!first.outgoing ? (
           <MessageHeader>{first.senderName}</MessageHeader>
@@ -725,6 +856,7 @@ function AlbumMessage({
                 body={first.body}
                 entities={first.entities}
                 revealSpoilerLabel={copy.revealSpoiler}
+                renderCustomEmoji={renderCustomEmoji}
               />
             ) : null}
           </MessageBubbleContent>
@@ -903,14 +1035,17 @@ export function ConversationView() {
   const closeChatSearch = useChatStore((state) => state.closeChatSearch);
   const exitSelection = useChatStore((state) => state.exitSelection);
   const messageActionError = useChatStore((state) => state.messageActionError);
+  const openChatProfile = useChatProfileStore((state) => state.openPanel);
   const activeChat = chats.find((chat) => chat.id === activeChatId);
   const { value: timeFormat } = useTimeFormat();
   const { value: textSize } = useMessageTextSize();
+  const { value: loopStickers } = useLoopStickers();
   const [forwardSource, setForwardSource] = useState<MessageDto | null>(null);
   const [deleteSource, setDeleteSource] = useState<MessageDto | null>(null);
   const [selectionDeleteOpen, setSelectionDeleteOpen] = useState(false);
   const [selectionForwardOpen, setSelectionForwardOpen] = useState(false);
   const [viewer, setViewer] = useState<ViewerState | null>(null);
+  const [stickerSetName, setStickerSetName] = useState<string | null>(null);
   const [historyPagingReadyChatId, setHistoryPagingReadyChatId] = useState<
     string | null
   >(null);
@@ -918,7 +1053,12 @@ export function ConversationView() {
     string | null
   >(null);
   const [followingLiveEdge, setFollowingLiveEdge] = useState(true);
-  const reduceMotion = useReducedMotion() ?? false;
+  const [liveEdgeChatId, setLiveEdgeChatId] = useState(activeChatId);
+  if (liveEdgeChatId !== activeChatId) {
+    setLiveEdgeChatId(activeChatId);
+    setFollowingLiveEdge(true);
+  }
+  const reduceMotion = useReducedMotionConfig() ?? false;
   const selectedMessageIds = useChatStore((state) => state.selectedMessageIds);
   const selecting = selectedMessageIds.length > 0;
   // The delete dialog needs the outgoing flags of the whole selection, not
@@ -952,10 +1092,6 @@ export function ConversationView() {
   const restoredChatIdRef = useRef<string | null>(null);
   const restoreFrameRef = useRef<{ outer: number; inner: number } | null>(null);
   const scrollPersistenceArmedChatIdRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    setFollowingLiveEdge(true);
-  }, [activeChatId]);
 
   const jumpToLatestMessages = useCallback(() => {
     const viewport = transcriptRef.current;
@@ -1260,11 +1396,18 @@ export function ConversationView() {
     >
       <header className="flex h-14 items-center gap-2 px-4 [app-region:drag]">
         {activeChat ? (
-          <Avatar
-            initials={activeChat.initials}
-            src={activeChat.avatarDataUrl}
-            className="size-8"
-          />
+          <PressableBlock
+            aria-label={copy.openProfile}
+            // 32px disc, padded out to the 40px pointer floor.
+            className="relative size-8 shrink-0 rounded-full before:absolute before:-inset-1.5 before:content-[''] [app-region:no-drag]"
+            onClick={openChatProfile}
+          >
+            <Avatar
+              src={activeChat.avatarDataUrl}
+              pending={activeChat.avatarPending}
+              className="size-full"
+            />
+          </PressableBlock>
         ) : null}
         <div className="min-w-0 flex-1">
           {/* deslop-ignore-next-line 12 */}
@@ -1301,7 +1444,7 @@ export function ConversationView() {
             >
               <Button
                 size="icon"
-                variant="ghost"
+                variant={activeChat.pinned ? "secondary" : "ghost"}
                 aria-label={activeChat.pinned ? copy.unpinChat : copy.pinChat}
                 aria-pressed={activeChat.pinned}
                 className="size-10"
@@ -1341,6 +1484,13 @@ export function ConversationView() {
           smooth={false}
           onFollowChange={setFollowingLiveEdge}
           className="h-full min-h-0"
+          // The scroller disables browser scroll anchoring, which suits a
+          // streaming agent log but not a transcript: here the growth happens
+          // above the reader, as thumbnails and fonts land. Anchoring keeps
+          // whatever they are reading pinned in place. It only covers content
+          // that cannot reserve its geometry up front — a photo carrying its
+          // dimensions already lays out at final size.
+          viewportClassName="[overflow-anchor:auto]"
           contentClassName="mx-auto flex w-full max-w-3xl flex-col gap-3 px-5 py-5"
           viewportRef={transcriptRef}
           viewportProps={{
@@ -1411,7 +1561,7 @@ export function ConversationView() {
               </AnimatePresence>
             </div>
           ) : null}
-          {transcriptUnits.map((unit) => {
+          {transcriptUnits.map((unit, index) => {
             const first = unit.messages[0];
             const showDayMarker =
               unit.startIndex === 0 ||
@@ -1421,6 +1571,13 @@ export function ConversationView() {
               unreadBoundaryIndex !== null &&
               unreadBoundaryIndex >= unit.startIndex &&
               unreadBoundaryIndex < unit.startIndex + unit.messages.length;
+            // A day divider starts a fresh run, so the row above it keeps its
+            // own photo even when the same author continues below.
+            const nextFirst = transcriptUnits[index + 1]?.messages[0];
+            const showAvatar =
+              !nextFirst ||
+              dayKey(nextFirst.sentAt) !== dayKey(first.sentAt) ||
+              authorKey(nextFirst) !== authorKey(first);
             return (
               <Fragment key={unit.key}>
                 {showDayMarker ? (
@@ -1434,17 +1591,21 @@ export function ConversationView() {
                 {unit.messages.length === 1 ? (
                   <ConversationMessage
                     message={first}
+                    showAvatar={showAvatar}
                     timeFormat={timeFormat}
+                    loopStickers={loopStickers}
                     onForward={setForwardSource}
                     onDelete={setDeleteSource}
                     onJumpToMessage={(messageId) =>
                       void jumpToMessage(messageId)
                     }
                     onOpenViewer={openViewer}
+                    onOpenStickerSet={setStickerSetName}
                   />
                 ) : (
                   <AlbumMessage
                     messages={unit.messages}
+                    showAvatar={showAvatar}
                     timeFormat={timeFormat}
                     onOpenViewer={openViewer}
                   />
@@ -1547,6 +1708,10 @@ export function ConversationView() {
       <ForwardPickerDialog
         message={forwardSource}
         onClose={() => setForwardSource(null)}
+      />
+      <StickerSetDialog
+        shortName={stickerSetName}
+        onClose={() => setStickerSetName(null)}
       />
       <ForwardSelectedDialog
         open={selectionForwardOpen && selecting}

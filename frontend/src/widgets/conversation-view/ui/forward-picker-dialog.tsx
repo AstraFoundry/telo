@@ -120,9 +120,9 @@ export function ForwardPickerDialog({
                   className="h-auto w-full justify-start rounded-xl px-2.5 py-2"
                 >
                   <Avatar
-                    initials={chat.initials}
                     src={chat.avatarDataUrl}
-                    className="size-10 shrink-0 text-xs font-semibold"
+                    pending={chat.avatarPending}
+                    className="size-10 shrink-0"
                   />
                   <span className="min-w-0 flex-1 truncate text-left text-sm font-semibold">
                     {chat.title}

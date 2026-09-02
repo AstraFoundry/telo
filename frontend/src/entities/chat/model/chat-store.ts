@@ -15,6 +15,7 @@ import type {
   MessageMediaDto,
   MessageMediaKind,
   MessageReplyToDto,
+  StickerItemDto,
   TelegramWorkspaceEvent,
   UiContextSnapshot,
 } from "../../../../../contracts/src/ipc";
@@ -107,16 +108,43 @@ function hydrateDrafts(
   return next;
 }
 
+/**
+ * The preferences the store mirrors because it reads them outside React:
+ * notification shape and the muted-chat unread rule. `entities/chat` cannot
+ * subscribe to `entities/preferences`, so the composition root pushes them
+ * through `applyPreferences` whenever they change.
+ */
+export interface ChatPreferences {
+  readonly notificationsEnabled: boolean;
+  /** Desktop notifications name the sender instead of naming only the app. */
+  readonly notificationSenderName: boolean;
+  /** Desktop notifications carry the message body instead of a placeholder. */
+  readonly notificationPreview: boolean;
+  /** Muted chats contribute to the All and keyword-folder unread badges. */
+  readonly countMutedChats: boolean;
+}
+
 // The window-focus check mirrors entities/agent's notifyRunComplete: a
 // desktop notification only makes sense while the app is not the focused
 // surface the user is already looking at.
 function notifyIncomingMessage(
-  enabled: boolean,
+  preferences: ChatPreferences,
   chat: ChatDto,
   message: MessageDto,
 ): void {
-  if (!enabled || chat.muted || !document.hidden) return;
-  void window.telo.shell.notify(chat.title, message.body, chat.id);
+  if (!preferences.notificationsEnabled || chat.muted || !document.hidden) {
+    return;
+  }
+  // A reader who hides the sender or the preview still gets a notification
+  // that opens the right conversation, so the chat id tag rides along
+  // whatever the title and body ended up saying.
+  void window.telo.shell.notify(
+    preferences.notificationSenderName ? chat.title : copy.appName,
+    preferences.notificationPreview
+      ? message.body
+      : copy.notifyIncomingMessageBody,
+    chat.id,
+  );
 }
 
 function replySnapshot(
@@ -252,7 +280,29 @@ interface ChatState {
   drafts: Record<string, string>;
   /** Transcript scroll offset per chat id, restored when reselecting it. */
   scrollPositions: Record<string, number>;
+  /**
+   * Settled author photos keyed by Telegram peer id, fed by `chat-avatar`.
+   * Transcript rows overlay it on the snapshot each message carried, so a
+   * photo that lands later replaces the skeleton without repatching messages.
+   */
+  peerAvatars: Record<string, string | null>;
+  /**
+   * Documents behind `custom-emoji` entities, keyed by the bare document id
+   * the entity carries. Null once Telegram has answered without one, so a
+   * missing emoji settles on its glyph instead of retrying forever.
+   */
+  customEmoji: Record<string, StickerItemDto | null>;
+  loadCustomEmoji(documentId: string): Promise<void>;
   notificationsEnabled: boolean;
+  notificationSenderName: boolean;
+  notificationPreview: boolean;
+  countMutedChats: boolean;
+  /**
+   * Mirrors the persisted preferences the store reads outside React. Applying
+   * them recomputes the keyword badges, so a toggle lands on the badges and
+   * the next notification without waiting for a reload.
+   */
+  applyPreferences(preferences: ChatPreferences): void;
   mediaDownloads: Record<string, MediaDownloadState>;
   mediaUploads: Record<string, MediaUploadState>;
   /** Sidebar search field text; drives the debounced server global search. */
@@ -290,6 +340,8 @@ interface ChatState {
   loadOlderMessages(): Promise<void>;
   select(chatId: string): Promise<void>;
   send(body: string, options?: SendOptions): Promise<void>;
+  /** Sends one sticker from the composer picker into the active chat. */
+  sendSticker(sticker: StickerItemDto): Promise<void>;
   resendMessage(messageId: string): Promise<void>;
   downloadMedia(mediaId: string): Promise<void>;
   cancelMediaDownload(mediaId: string): Promise<void>;
@@ -381,19 +433,34 @@ function messageBodyMatchesKeyword(body: string, query: string): boolean {
   return body.toLocaleLowerCase().includes(term);
 }
 
+// The All tab has no server folder entry and a keyword folder is virtual, so
+// both badges are summed here from the chats the view collects; native folder
+// badges come from the server snapshot (`ChatFolderDto.unreadCount`).
+// A muted chat is one the reader silenced, so whether its unread messages
+// still deserve a badge is their call rather than a fixed rule.
+export function folderUnread(
+  chats: ReadonlyArray<ChatDto>,
+  folderId: number | null,
+  countMuted: boolean,
+): number {
+  return chatsForFolder(chats, folderId).reduce(
+    (total, chat) =>
+      countMuted || !chat.muted ? total + chat.unreadCount : total,
+    0,
+  );
+}
+
 /** Recompute keyword-folder unread badges from the chats they currently collect. */
 function withKeywordUnread(
   folders: ReadonlyArray<ChatFolderDto>,
   chats: ReadonlyArray<ChatDto>,
+  countMuted: boolean,
 ): ReadonlyArray<ChatFolderDto> {
   return folders.map((folder) => {
     if (!isKeywordFolder(folder)) return folder;
     return {
       ...folder,
-      unreadCount: chatsForFolder(chats, folder.id).reduce(
-        (total, chat) => total + chat.unreadCount,
-        0,
-      ),
+      unreadCount: folderUnread(chats, folder.id, countMuted),
     };
   });
 }
@@ -421,15 +488,9 @@ function assignKeywordMembership(
   return { ...chat, keywordFolderIds };
 }
 
-// The All tab has no server folder entry; its badge sums the unread counts
-// of the chats the view contains. Folder tab badges come from the server
-// snapshot (`ChatFolderDto.unreadCount`).
-export function allChatsUnread(chats: ReadonlyArray<ChatDto>): number {
-  return chatsForFolder(chats, null).reduce(
-    (total, chat) => total + chat.unreadCount,
-    0,
-  );
-}
+// Ids being resolved right now. Kept outside the store because it is request
+// bookkeeping, not state any component renders.
+const inFlightCustomEmoji = new Set<string>();
 
 export const useChatStore = create<ChatState>((set, get) => ({
   chats: [],
@@ -447,7 +508,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
   composerTarget: null,
   drafts: {},
   scrollPositions: {},
+  peerAvatars: {},
+  customEmoji: {},
   notificationsEnabled: false,
+  notificationSenderName: true,
+  notificationPreview: true,
+  countMutedChats: false,
   mediaDownloads: {},
   mediaUploads: {},
   searchQuery: "",
@@ -462,6 +528,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
   messageActionError: null,
   draftStream: null,
   selectedMessageIds: [],
+  applyPreferences(preferences) {
+    set((state) => ({
+      ...preferences,
+      // The muted-chat rule feeds the keyword badges, which live in state:
+      // recompute them here instead of leaving the old totals on screen until
+      // the next workspace event happens to arrive.
+      folders: withKeywordUnread(
+        state.folders,
+        state.chats,
+        preferences.countMutedChats,
+      ),
+    }));
+  },
   async load(options) {
     const request = ++selectionRequest;
     try {
@@ -495,6 +574,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
         syncError: null,
         drafts: hydrateDrafts(state.drafts, chats),
         notificationsEnabled: preferences.notificationsEnabled,
+        notificationSenderName: preferences.notificationSenderName,
+        notificationPreview: preferences.notificationPreview,
+        countMutedChats: preferences.countMutedChats,
         animateInMessageIds: [],
         animateChatIds: [],
       }));
@@ -504,7 +586,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
         (folders) => {
           if (request === selectionRequest) {
             set((state) => ({
-              folders: withKeywordUnread(folders, state.chats),
+              folders: withKeywordUnread(
+                folders,
+                state.chats,
+                state.countMutedChats,
+              ),
             }));
           }
         },
@@ -635,6 +721,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       id: clientId,
       chatId,
       senderName: "",
+      senderId: "",
+      senderAvatarUrl: null,
       body,
       entities: options?.entities ?? [],
       media: null,
@@ -680,6 +768,91 @@ export const useChatStore = create<ChatState>((set, get) => ({
       // Native Telegram semantics: the undelivered bubble stays in the
       // transcript as `failed` instead of bouncing the body back into the
       // composer; the context menu's Resend action retries the same send.
+      set((state) => ({
+        messages: state.messages.map((entry) =>
+          entry.id === clientId
+            ? { ...entry, status: "failed" as const }
+            : entry,
+        ),
+      }));
+    }
+  },
+  async loadCustomEmoji(documentId) {
+    // One emoji often repeats across a chat, so an id already resolved or in
+    // flight is skipped rather than refetched per occurrence.
+    if (documentId in get().customEmoji) return;
+    if (inFlightCustomEmoji.has(documentId)) return;
+    inFlightCustomEmoji.add(documentId);
+    try {
+      const [item] = await window.telo.workspace.getCustomEmoji([documentId]);
+      set((state) => ({
+        customEmoji: { ...state.customEmoji, [documentId]: item ?? null },
+      }));
+    } catch {
+      // A failed lookup settles on the glyph; the transcript keeps reading.
+      set((state) => ({
+        customEmoji: { ...state.customEmoji, [documentId]: null },
+      }));
+    } finally {
+      inFlightCustomEmoji.delete(documentId);
+    }
+  },
+  async sendSticker(sticker) {
+    const chatId = get().activeChatId;
+    if (!chatId) return;
+    const clientId = crypto.randomUUID();
+    const optimistic: MessageDto = {
+      id: clientId,
+      chatId,
+      senderName: "",
+      senderId: "",
+      senderAvatarUrl: null,
+      body: "",
+      entities: [],
+      // The optimistic bubble reuses the picker's media id, which is already
+      // in the media cache from drawing the picker, so the sticker paints on
+      // the first frame instead of flashing its emoji placeholder.
+      media: {
+        id: sticker.id,
+        kind: "sticker",
+        fileName: null,
+        mimeType: null,
+        size: null,
+        width: sticker.width,
+        height: sticker.height,
+        duration: null,
+        spoiler: false,
+        sticker: {
+          emoji: sticker.emoji,
+          format: sticker.format,
+          setName: null,
+        },
+      },
+      groupedId: null,
+      sentAt: new Date().toISOString(),
+      outgoing: true,
+      status: "sending",
+      replyTo: null,
+      clientId,
+    };
+    set((state) => ({
+      messages: upsertMessage(state.messages, optimistic),
+      animateInMessageIds: withIds(state.animateInMessageIds, [clientId]),
+    }));
+    try {
+      const message = await window.telo.workspace.sendSticker(
+        chatId,
+        sticker.id,
+      );
+      set((state) => ({
+        messages: upsertMessage(
+          state.messages.filter((entry) => entry.id !== clientId),
+          message,
+        ),
+      }));
+    } catch {
+      // Same as a failed text send: the bubble stays as `failed` in the
+      // transcript rather than vanishing.
       set((state) => ({
         messages: state.messages.map((entry) =>
           entry.id === clientId
@@ -767,6 +940,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       id: `${clientId}:${index}`,
       chatId,
       senderName: "",
+      senderId: "",
+      senderAvatarUrl: null,
       // Telegram attaches the caption to the album's first message only.
       body: index === 0 ? caption : "",
       entities: [],
@@ -1192,13 +1367,21 @@ export const useChatStore = create<ChatState>((set, get) => ({
         chats: event.chats,
         chatCursor: event.nextCursor,
         drafts: hydrateDrafts(state.drafts, event.chats),
-        folders: withKeywordUnread(state.folders, event.chats),
+        folders: withKeywordUnread(
+          state.folders,
+          event.chats,
+          state.countMutedChats,
+        ),
       }));
       return;
     }
     if (event.type === "folders") {
       set((state) => ({
-        folders: withKeywordUnread(event.folders, state.chats),
+        folders: withKeywordUnread(
+          event.folders,
+          state.chats,
+          state.countMutedChats,
+        ),
       }));
       return;
     }
@@ -1212,18 +1395,29 @@ export const useChatStore = create<ChatState>((set, get) => ({
         const chats = upsertChat(state.chats, event.chat);
         return {
           chats,
-          folders: withKeywordUnread(state.folders, chats),
+          folders: withKeywordUnread(
+            state.folders,
+            chats,
+            state.countMutedChats,
+          ),
           drafts: hydrateDrafts(state.drafts, [event.chat]),
         };
       });
       return;
     }
     if (event.type === "chat-avatar") {
-      set((state) =>
-        patchChat(state.chats, event.chatId, {
+      set((state) => ({
+        ...patchChat(state.chats, event.chatId, {
           avatarDataUrl: event.avatarDataUrl,
+          avatarPending: false,
         }),
-      );
+        // The event is keyed by a peer id, so it settles message authors that
+        // are not dialogs of their own — group members and channel posters.
+        peerAvatars: {
+          ...state.peerAvatars,
+          [event.chatId]: event.avatarDataUrl,
+        },
+      }));
       return;
     }
     if (event.type === "message-upsert") {
@@ -1236,11 +1430,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         const incomingNew =
           event.cause === "new" && !event.message.outgoing && !existing;
         if (incomingNew && !isActive && chat) {
-          notifyIncomingMessage(
-            state.notificationsEnabled,
-            chat,
-            event.message,
-          );
+          notifyIncomingMessage(state, chat, event.message);
         }
         const chats = state.chats.map((c) => {
           if (c.id !== event.message.chatId) return c;
@@ -1266,7 +1456,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
             ? upsertMessage(state.messages, event.message)
             : state.messages,
           chats: promoted.chats,
-          folders: withKeywordUnread(state.folders, promoted.chats),
+          folders: withKeywordUnread(
+            state.folders,
+            promoted.chats,
+            state.countMutedChats,
+          ),
           animateInMessageIds:
             isActive && !existing && event.cause === "new"
               ? withIds(state.animateInMessageIds, [event.message.id])
@@ -1606,7 +1800,7 @@ async function reloadKeywordFolders(): Promise<void> {
   useChatStore.setState((state) => {
     const chats = mergeChats(state.chats, chatPage.items);
     return {
-      folders: withKeywordUnread(folders, chats),
+      folders: withKeywordUnread(folders, chats, state.countMutedChats),
       chats,
     };
   });
@@ -1638,7 +1832,13 @@ function compareTelegramIds(left: string, right: string): number {
   return leftId < rightId ? -1 : leftId > rightId ? 1 : 0;
 }
 
-function errorMessage(error: unknown): string {
+// A request that fails while the transport is down is a symptom of the
+// connection, not something the reader can act on — the chat list title
+// already reads "Connecting…". Telegram reports it the same way and never
+// raises a second error surface for it, so this yields null and the banner
+// stays closed. The failure is still logged in the main process.
+function errorMessage(error: unknown): string | null {
+  if (useChatStore.getState().connectionState !== "connected") return null;
   const message = error instanceof Error ? error.message : String(error);
   return isInternalExceptionMessage(message) ? copy.syncError : message;
 }

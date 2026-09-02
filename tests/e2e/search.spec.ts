@@ -89,7 +89,10 @@ test("the header shows avatar and presence and pins the chat", async ({
   await expect(
     header.getByRole("heading", { name: "Offsite Planning" }),
   ).toBeVisible();
-  await expect(header.getByText("OP")).toBeVisible();
+  // The header photo is a profile entry point, never letter initials.
+  await expect(
+    header.getByRole("button", { name: "Open profile" }),
+  ).toBeVisible();
   await expect(header.getByText("online")).toBeVisible();
 
   // Pin toggles end-to-end: the demo backend persists the new state and the

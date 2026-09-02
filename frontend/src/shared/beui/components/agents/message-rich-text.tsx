@@ -1,4 +1,10 @@
-import { Fragment, useState, type ReactNode } from "react";
+import {
+  createContext,
+  Fragment,
+  useContext,
+  useState,
+  type ReactNode,
+} from "react";
 
 import { cn } from "@/shared/lib/cn";
 import { safeLink } from "@/shared/lib/safe-link";
@@ -157,6 +163,29 @@ function Spoiler({
   );
 }
 
+/**
+ * A custom emoji is a sticker document named from inside the text. The
+ * registry primitive cannot fetch it, so the product supplies a renderer and
+ * the fallback glyph stands in wherever none is given.
+ */
+const CustomEmojiContext = createContext<
+  ((documentId: string, fallback: ReactNode) => ReactNode) | null
+>(null);
+
+function CustomEmoji({
+  documentId,
+  children,
+}: {
+  readonly documentId: string;
+  readonly children: ReactNode;
+}) {
+  const render = useContext(CustomEmojiContext);
+  if (!render) {
+    return <span data-custom-emoji-document-id={documentId}>{children}</span>;
+  }
+  return <>{render(documentId, children)}</>;
+}
+
 function wrapEntity(
   entity: RichTextEntity,
   text: string,
@@ -220,10 +249,9 @@ function wrapEntity(
     case "text-mention":
       return <span className="font-medium text-primary">{children}</span>;
     case "custom-emoji":
+      if (!entity.documentId) return <>{children}</>;
       return (
-        <span data-custom-emoji-document-id={entity.documentId}>
-          {children}
-        </span>
+        <CustomEmoji documentId={entity.documentId}>{children}</CustomEmoji>
       );
     case "bank-card":
       return <span className="font-medium tabular-nums">{children}</span>;
@@ -290,30 +318,39 @@ export function MessageRichText({
   body,
   entities,
   revealSpoilerLabel,
+  renderCustomEmoji,
   compact = false,
   className,
 }: {
   body: string;
   entities: ReadonlyArray<RichTextEntity>;
   revealSpoilerLabel: string;
+  /**
+   * Draws the document behind a `custom-emoji` entity. Without it the glyph
+   * the entity covers is rendered as plain text, which is Telegram's own
+   * fallback when the document is unavailable.
+   */
+  renderCustomEmoji?: (documentId: string, fallback: ReactNode) => ReactNode;
   compact?: boolean;
   className?: string;
 }) {
   return (
-    <div
-      className={cn(
-        "whitespace-pre-wrap break-words",
-        compact && "line-clamp-1",
-        className,
-      )}
-    >
-      {renderRange(
-        body,
-        0,
-        body.length,
-        buildEntityTree(body, entities),
-        revealSpoilerLabel,
-      )}
-    </div>
+    <CustomEmojiContext.Provider value={renderCustomEmoji ?? null}>
+      <div
+        className={cn(
+          "whitespace-pre-wrap break-words",
+          compact && "line-clamp-1",
+          className,
+        )}
+      >
+        {renderRange(
+          body,
+          0,
+          body.length,
+          buildEntityTree(body, entities),
+          revealSpoilerLabel,
+        )}
+      </div>
+    </CustomEmojiContext.Provider>
   );
 }

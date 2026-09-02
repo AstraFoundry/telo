@@ -1,22 +1,26 @@
 import { useEffect, useRef, useState } from "react";
 
+import { copy } from "@/shared/config/copy";
 import { cn } from "@/shared/lib/cn";
 
 export interface AvatarProps {
-  /** Shown underneath the photo and whenever no photo exists. */
-  initials: string;
-  /** Photo source; cross-fades in over the initials once decoded. */
+  /** Photo source; a cache hit paints immediately via the `complete` check. */
   src?: string | null;
+  /**
+   * True while a photo is still resolving. The slot shows a skeleton, never
+   * initials. Omit (or false) after the download settles with no photo.
+   */
+  pending?: boolean;
   className?: string;
 }
 
 /**
- * Telegram-style avatar: the initials placeholder renders immediately and the
- * photo fades over it when ready — the slot never pops or changes size. This
- * mirrors `AvatarDrawable` + `ImageReceiver` cross-fade in Telegram's own
- * clients (Nicegram included).
+ * Conversation avatar: a cached photo appears immediately; otherwise the slot
+ * is a skeleton until the download settles, then an empty circle. Initials are
+ * never painted — that is a product rule, even though Telegram/Nicegram still
+ * use `AvatarDrawable` letters.
  */
-export function Avatar({ initials, src, className }: AvatarProps) {
+export function Avatar({ src, pending = false, className }: AvatarProps) {
   const [loaded, setLoaded] = useState(false);
   const imgRef = useRef<HTMLImageElement>(null);
 
@@ -33,15 +37,24 @@ export function Avatar({ initials, src, className }: AvatarProps) {
     if (src && imgRef.current?.complete) setLoaded(true);
   }, [src]);
 
+  const showSkeleton = src ? !loaded : pending;
+
   return (
     <span
       /* deslop-ignore-next-line 19 — circular avatars are a messaging convention */
+      role={showSkeleton ? "status" : undefined}
+      aria-label={showSkeleton ? copy.loadingAvatar : undefined}
       className={cn(
-        "relative grid shrink-0 place-items-center overflow-hidden rounded-full bg-secondary text-xs font-semibold",
+        "relative grid shrink-0 place-items-center overflow-hidden rounded-full bg-muted",
         className,
       )}
     >
-      {initials}
+      {showSkeleton ? (
+        <span
+          aria-hidden="true"
+          className="absolute inset-0 animate-pulse rounded-full bg-muted motion-reduce:animate-none"
+        />
+      ) : null}
       {src ? (
         <img
           ref={imgRef}

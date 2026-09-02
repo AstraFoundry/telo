@@ -41,3 +41,44 @@ test("opens the chat profile with shared media, pinned messages, and a back stac
     "Ship both with the next build.",
   );
 });
+
+test("gives the info panel the same column width as the agent panel", async ({
+  window,
+}) => {
+  await waitForDemoWorkspace(window);
+
+  const chats = window.getByRole("navigation", { name: "Chats" });
+  await chats.getByRole("button", { name: /Telo Design/ }).click();
+
+  // The agent panel is inert while closed, so it has to be opened before its
+  // column can be measured.
+  await window.getByRole("button", { name: "Open agent" }).click();
+  const agent = window.getByRole("complementary", { name: "Agent" });
+  await expect(agent).toBeVisible();
+  // Its open animation slides the column in, so the width is only meaningful
+  // once it has settled.
+  const measure = (locator: typeof agent) =>
+    locator.evaluate((node) => node.getBoundingClientRect().width);
+  let agentWidth = 0;
+  await expect
+    .poll(async () => {
+      const previous = agentWidth;
+      agentWidth = await measure(agent);
+      return previous === agentWidth && agentWidth > 0;
+    })
+    .toBe(true);
+
+  await window.getByRole("button", { name: "Chat info" }).click();
+  const profile = window.getByRole("complementary", { name: "Chat info" });
+  await expect(profile.getByText("Telo Design")).toBeVisible();
+
+  // The two panels are one column. Before this, the info panel sized itself
+  // from a percentage with nothing to resolve against, so the column either
+  // ballooned into empty space or collapsed to a strip.
+  await expect.poll(() => measure(profile)).toBeCloseTo(agentWidth, 0);
+
+  // And it stays that column: the resize handle still drives it.
+  await expect(
+    window.getByRole("separator", { name: "Resize agent panel" }),
+  ).toBeVisible();
+});

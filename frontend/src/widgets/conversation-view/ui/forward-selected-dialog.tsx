@@ -1,6 +1,11 @@
 import { useChatStore } from "entities/chat";
 import { copy } from "shared/config/copy";
-import { Button, CenterMorphModal, CenterMorphModalContent } from "shared/ui";
+import {
+  Avatar,
+  Button,
+  CenterMorphModal,
+  CenterMorphModalContent,
+} from "shared/ui";
 
 interface ForwardSelectedDialogProps {
   /** Whether the picker is open; the selection itself lives in the store. */
@@ -49,10 +54,11 @@ export function ForwardSelectedDialog({
                 /* deslop-ignore-next-line 21 — compact chat-row radius is a messaging convention */
                 className="h-auto w-full justify-start rounded-xl px-2.5 py-2"
               >
-                {/* deslop-ignore-next-line 19 */}
-                <span className="grid size-10 shrink-0 place-items-center rounded-full bg-secondary text-xs font-semibold">
-                  {chat.initials}
-                </span>
+                <Avatar
+                  src={chat.avatarDataUrl}
+                  pending={chat.avatarPending}
+                  className="size-10"
+                />
                 <span className="min-w-0 flex-1 truncate text-left text-sm font-semibold">
                   {chat.title}
                 </span>

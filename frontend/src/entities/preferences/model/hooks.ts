@@ -140,6 +140,17 @@ export const AGENT_PANEL_WIDTH_MIN = 280;
 export const AGENT_PANEL_WIDTH_MAX = 600;
 export const AGENT_PANEL_WIDTH_DEFAULT = 380;
 
+// The workspace right column hosts one panel at a time, so both of them read
+// the same width. It has to stay a definite length: the panels sit in an
+// `auto` grid track, where a percentage width has no base to resolve against
+// and the column ends up sized by whatever happens to be inside it.
+export const RIGHT_PANEL_WIDTH_CSS = `var(--workspace-agent-panel-width, ${AGENT_PANEL_WIDTH_DEFAULT}px)`;
+
+// The media cache ceiling mirrors the same domain bounds.
+export const MEDIA_CACHE_LIMIT_MB_MIN = 64;
+export const MEDIA_CACHE_LIMIT_MB_MAX = 4096;
+export const MEDIA_CACHE_LIMIT_MB_DEFAULT = 512;
+
 interface AccentTokens {
   readonly primary: string;
   readonly primaryForeground: string;
@@ -287,6 +298,33 @@ const messageTemplatesStore = createPreferenceStore("messageTemplates", {
   defaultValue: [],
 });
 
+const reduceMotionStore = createPreferenceStore("reduceMotion", {
+  defaultValue: false,
+});
+
+const loopStickersStore = createPreferenceStore("loopStickers", {
+  defaultValue: true,
+});
+
+const notificationSenderNameStore = createPreferenceStore(
+  "notificationSenderName",
+  {
+    defaultValue: true,
+  },
+);
+
+const notificationPreviewStore = createPreferenceStore("notificationPreview", {
+  defaultValue: true,
+});
+
+const countMutedChatsStore = createPreferenceStore("countMutedChats", {
+  defaultValue: false,
+});
+
+const mediaCacheLimitMbStore = createPreferenceStore("mediaCacheLimitMb", {
+  defaultValue: MEDIA_CACHE_LIMIT_MB_DEFAULT,
+});
+
 export const useAccentColor = accentStore.usePreference;
 export const useMessageTextSize = messageTextSizeStore.usePreference;
 export const useTimeFormat = timeFormatStore.usePreference;
@@ -296,6 +334,13 @@ export const useSidebarWidth = sidebarWidthStore.usePreference;
 export const useAgentPanelWidth = agentPanelWidthStore.usePreference;
 export const useRecentEmojis = recentEmojisStore.usePreference;
 export const useMessageTemplates = messageTemplatesStore.usePreference;
+export const useReduceMotion = reduceMotionStore.usePreference;
+export const useLoopStickers = loopStickersStore.usePreference;
+export const useNotificationSenderName =
+  notificationSenderNameStore.usePreference;
+export const useNotificationPreview = notificationPreviewStore.usePreference;
+export const useCountMutedChats = countMutedChatsStore.usePreference;
+export const useMediaCacheLimitMb = mediaCacheLimitMbStore.usePreference;
 
 // Applied at module scope from the local cache (or system if none) so IPC
 // cannot flash the wrong theme. The boot script in index.html does the same

@@ -14,6 +14,8 @@ function message(partial: Partial<MessageDto> & Pick<MessageDto, "id">) {
   return {
     chatId: "chat-1",
     senderName: "Sender",
+    senderId: "peer-sender",
+    senderAvatarUrl: null,
     body: "",
     entities: [],
     media: null,

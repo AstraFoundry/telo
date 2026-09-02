@@ -11,6 +11,7 @@ import type {
 } from "../../../../../contracts/src/ipc";
 import { useAgentStore } from "../../../entities/agent";
 import { useChatProfileStore, useChatStore } from "../../../entities/chat";
+import { RIGHT_PANEL_WIDTH_CSS } from "../../../entities/preferences";
 import { copy } from "../../../shared/config/copy";
 import { installTeloApiMock } from "../../../shared/test/mock-telo";
 
@@ -38,6 +39,8 @@ function message(partial: Partial<MessageDto> & Pick<MessageDto, "id">) {
   return {
     chatId: "chat-1",
     senderName: "Mina",
+    senderId: "peer-mina",
+    senderAvatarUrl: null,
     body: "",
     entities: [],
     media: null,
@@ -68,7 +71,12 @@ function photo(id: string, fileName: string) {
 
 const SHARED = [photo("m1", "telo-hero.png"), photo("m2", "telo-album.png")];
 const PINNED = [
-  message({ id: "m9", senderName: "Lev", body: "Ship both with the build." }),
+  message({
+    id: "m9",
+    senderName: "Lev",
+    senderId: "peer-lev",
+    body: "Ship both with the build.",
+  }),
   message({
     id: "m8",
     senderName: "Mina",
@@ -90,6 +98,12 @@ function preferences() {
     agentPanelWidth: 380,
     recentEmojis: [],
     messageTemplates: [],
+    reduceMotion: false,
+    loopStickers: true,
+    notificationSenderName: true,
+    notificationPreview: true,
+    countMutedChats: false,
+    mediaCacheLimitMb: 512,
   } satisfies UserPreferencesDto;
 }
 
@@ -111,7 +125,7 @@ describe("ChatProfilePanel", () => {
       mediaDownloads: {},
       loading: false,
     });
-    useChatProfileStore.setState({ open: true });
+    useChatProfileStore.setState({ open: true, peerId: null });
   });
 
   it("loads the chat header, shared media preview, and pinned preview", async () => {
@@ -138,6 +152,99 @@ describe("ChatProfilePanel", () => {
     expect(
       within(pinnedSection).getByText("Ship both with the build."),
     ).toBeTruthy();
+  });
+
+  it("shows the identity card for a message author with no dialog", async () => {
+    telo.workspace.getPeerProfile.mockResolvedValue({
+      id: "peer-mina",
+      title: "Mina",
+      username: "mina",
+      kind: "direct",
+      avatarDataUrl: null,
+      bio: "Design systems and spacing rules.",
+      phone: "+1 555 0142",
+    });
+    useChatProfileStore.setState({ open: true, peerId: "peer-mina" });
+
+    render(<ChatProfilePanel />);
+
+    expect(await screen.findByText("Mina")).toBeTruthy();
+    expect(screen.getByText("@mina")).toBeTruthy();
+    expect(screen.getByText("Design systems and spacing rules.")).toBeTruthy();
+    expect(screen.getByText("+1 555 0142")).toBeTruthy();
+    // A peer with no history has no shared media or pinned messages to fetch.
+    expect(telo.workspace.listSharedMedia).not.toHaveBeenCalled();
+  });
+
+  it("copies a profile field when its row is tapped and confirms in place", async () => {
+    const user = userEvent.setup();
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(window.navigator, "clipboard", {
+      value: { writeText },
+      configurable: true,
+    });
+    telo.workspace.getPeerProfile.mockResolvedValue({
+      id: "peer-mina",
+      title: "Mina",
+      username: "mina",
+      kind: "direct",
+      avatarDataUrl: null,
+      bio: null,
+      phone: null,
+    });
+    useChatProfileStore.setState({ open: true, peerId: "peer-mina" });
+
+    render(<ChatProfilePanel />);
+
+    const row = await screen.findByRole("button", {
+      name: `${copy.peerUsername}, @mina`,
+    });
+    expect(within(row).getByText(copy.peerUsername)).toBeTruthy();
+
+    await user.click(row);
+
+    expect(writeText).toHaveBeenCalledWith("@mina");
+    // The field name is replaced by the confirmation, so the feedback survives
+    // without motion and without a toast surface.
+    expect(within(row).getByText(copy.copied)).toBeTruthy();
+  });
+
+  it("takes the width of the right column it shares with the agent panel", () => {
+    const { container } = render(<ChatProfilePanel />);
+
+    const styled = container.querySelector<HTMLElement>(
+      '[style*="--sidebar-width"]',
+    );
+    const width = styled?.style.getPropertyValue("--sidebar-width") ?? "";
+
+    // Both panels occupy the same grid track, so the column keeps its size
+    // when the info button swaps what is inside it.
+    expect(width).toBe(RIGHT_PANEL_WIDTH_CSS);
+    // A percentage has no base to resolve against in an `auto` track, which
+    // is what let the column collapse or balloon with its content.
+    expect(width).not.toContain("%");
+  });
+
+  it("opens the full chat profile when the tapped peer owns a dialog", async () => {
+    useChatStore.setState({
+      chats: [
+        chat({ id: "chat-1", title: "Telo Design" }),
+        chat({ id: "peer-mina", title: "Mina", kind: "direct" }),
+      ],
+    });
+    useChatProfileStore.setState({ open: true, peerId: "peer-mina" });
+
+    render(<ChatProfilePanel />);
+
+    // The pinned preview also carries the sender name "Mina", so the header
+    // is matched through the section that only the chat profile renders.
+    expect(
+      await screen.findByRole("region", { name: copy.sharedMedia }),
+    ).toBeTruthy();
+    expect(telo.workspace.listSharedMedia).toHaveBeenCalledWith("peer-mina", {
+      limit: 30,
+    });
+    expect(telo.workspace.getPeerProfile).not.toHaveBeenCalled();
   });
 
   it("navigates into a section view and back, restoring the scroll offset", async () => {

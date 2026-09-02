@@ -13,7 +13,7 @@ import type {
   TimeFormatPreference,
 } from "../../../../../contracts/src/ipc";
 import { ARCHIVE_FOLDER_ID } from "../../../../../contracts/src/ipc";
-import { allChatsUnread, chatsForFolder, useChatStore } from "entities/chat";
+import { chatsForFolder, folderUnread, useChatStore } from "entities/chat";
 import { useTimeFormat } from "entities/preferences";
 import { AccountMenu } from "features/account-menu";
 import { ChatSearch } from "features/chat-search";
@@ -41,17 +41,6 @@ function shortTime(value: string, format: TimeFormatPreference): string {
     minute: "2-digit",
     ...(format === "system" ? {} : { hour12: format === "12h" }),
   }).format(new Date(value));
-}
-
-// Message search results carry no chat initials; derive them like the
-// backend does for chats.
-function initialsOf(name: string): string {
-  return name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase())
-    .join("");
 }
 
 interface ConversationSidebarProps {
@@ -141,9 +130,9 @@ function ChatListRow({
           }`}
         >
           <Avatar
-            initials={chat.initials}
             src={chat.avatarDataUrl}
-            className="size-10 text-xs font-semibold"
+            pending={chat.avatarPending}
+            className="size-10"
           />
           <span className="min-w-0 flex-1">
             <span className="flex items-center gap-2">
@@ -230,9 +219,9 @@ function MessageSearchResultRow({
       className="mb-0.5 h-auto w-full justify-start rounded-xl px-2.5 py-2 text-left"
     >
       <Avatar
-        initials={chat?.initials ?? initialsOf(message.senderName)}
         src={chat?.avatarDataUrl ?? null}
-        className="size-10 text-xs font-semibold"
+        pending={chat?.avatarPending}
+        className="size-10"
       />
       <span className="min-w-0 flex-1">
         <span className="flex items-center gap-2">
@@ -303,7 +292,13 @@ export function ConversationSidebar({
     [visible],
   );
 
-  const allUnread = useMemo(() => allChatsUnread(chats), [chats]);
+  // Muted chats are excluded unless the reader asked for them; the store
+  // mirrors that preference from the persisted set.
+  const countMutedChats = useChatStore((state) => state.countMutedChats);
+  const allUnread = useMemo(
+    () => folderUnread(chats, null, countMutedChats),
+    [chats, countMutedChats],
+  );
 
   // Message results enrich their rows with chat data from whichever list
   // knows the chat: the loaded sidebar chats or the search's chat section.

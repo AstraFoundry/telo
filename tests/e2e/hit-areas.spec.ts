@@ -14,8 +14,10 @@ import type { Page } from "@playwright/test";
  * actually gets, by probing outward from each control until the point stops
  * resolving to it.
  *
- * Icons and avatars never appear here because they are not controls; the sweep
- * only collects enabled, visible, pointer-reachable ones.
+ * Avatars are controls now that tapping one opens a profile, so they are swept
+ * like any other: each keeps its Telegram-sized disc and reaches the floor
+ * through `::before` expansion. Plain icons still never appear here, because
+ * the sweep only collects enabled, visible, pointer-reachable controls.
  */
 const MIN_TARGET = 40;
 
@@ -286,7 +288,7 @@ test("keeps the overlays at a 40px pointer target", async ({ window }) => {
 
   // A popover, whose grid of emoji cells is the densest run of controls in the
   // app and so the likeliest place for a container to squeeze them.
-  await window.getByRole("button", { name: "Emoji" }).click();
+  await window.getByRole("button", { name: "Emoji and stickers" }).click();
   await expect(
     window.getByRole("textbox", { name: "Search emoji…" }),
   ).toBeVisible();
@@ -386,10 +388,25 @@ test("keeps settings at a 40px pointer target", async ({ window }) => {
   // buttons: switches, radios, a slider and several selects.
   await window.getByRole("button", { name: "Open account menu" }).click();
   await window.getByRole("button", { name: "Settings", exact: true }).click();
-  await expect(
-    window.getByRole("heading", { name: "Agent settings" }),
-  ).toBeVisible();
-  expect(await sweep(window)).toEqual({ undersized: [], collisions: [] });
+
+  // Every pane, not just the one Settings opens on: the rail splits this
+  // surface into seven screens, and a control that misses the floor on one of
+  // them is invisible to a sweep of another.
+  for (const pane of [
+    "Account",
+    "Appearance",
+    "Chat settings",
+    "Notifications",
+    "Folders",
+    "Agent settings",
+    "Data and storage",
+  ]) {
+    await window.getByRole("button", { name: pane, exact: true }).click();
+    await expect(
+      window.getByRole("heading", { name: pane, exact: true }),
+    ).toBeVisible();
+    expect(await sweep(window)).toEqual({ undersized: [], collisions: [] });
+  }
 });
 
 // Onboarding never renders in the demo workspace, so it needs the plain

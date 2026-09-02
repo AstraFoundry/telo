@@ -1,7 +1,7 @@
 export {
-  allChatsUnread,
   buildWorkspaceContext,
   chatsForFolder,
+  folderUnread,
   subscribeToWorkspaceEvents,
   useChatStore,
 } from "./model/chat-store";

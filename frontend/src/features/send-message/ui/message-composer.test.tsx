@@ -45,6 +45,12 @@ function preferences(partial: Partial<UserPreferencesDto> = {}) {
     agentPanelWidth: 380,
     recentEmojis: [],
     messageTemplates: [],
+    reduceMotion: false,
+    loopStickers: true,
+    notificationSenderName: true,
+    notificationPreview: true,
+    countMutedChats: false,
+    mediaCacheLimitMb: 512,
     ...partial,
   } satisfies UserPreferencesDto;
 }
@@ -54,6 +60,8 @@ function message(id: string, chatId: string): MessageDto {
     id,
     chatId,
     senderName: "Sender",
+    senderId: "peer-sender",
+    senderAvatarUrl: null,
     body: `Message ${id}`,
     entities: [],
     media: null,
@@ -330,6 +338,7 @@ describe("MessageComposer", () => {
     const sent = {
       ...message("m9", "a"),
       outgoing: true,
+      senderId: "",
       status: "sent" as const,
     };
     telo.workspace.sendMedia.mockResolvedValue([sent]);
@@ -382,7 +391,12 @@ describe("MessageComposer", () => {
     ).toBeTruthy();
 
     telo.workspace.sendMedia.mockResolvedValue([
-      { ...message("m9", "a"), outgoing: true, status: "sent" as const },
+      {
+        ...message("m9", "a"),
+        outgoing: true,
+        senderId: "",
+        status: "sent" as const,
+      },
     ]);
     fireEvent.keyDown(textarea, { key: "Enter" });
 
@@ -595,6 +609,7 @@ describe("MessageComposer", () => {
     telo.workspace.sendMessage.mockResolvedValue({
       ...message("m9", "a"),
       outgoing: true,
+      senderId: "",
       status: "sent" as const,
     });
     render(<MessageComposer onSend={useChatStore.getState().send} />);
@@ -640,7 +655,7 @@ describe("MessageComposer", () => {
     await flushPreferences();
 
     fireEvent.change(textarea, { target: { value: "hi " } });
-    fireEvent.click(screen.getByRole("button", { name: copy.emojiPicker }));
+    fireEvent.click(screen.getByRole("button", { name: copy.mediaPicker }));
     fireEvent.click(
       await screen.findByRole("button", {
         name: "grinning face happy smile",
@@ -680,7 +695,7 @@ describe("MessageComposer", () => {
     });
     await flushPreferences();
 
-    fireEvent.click(screen.getByRole("button", { name: copy.emojiPicker }));
+    fireEvent.click(screen.getByRole("button", { name: copy.mediaPicker }));
     expect(await screen.findByText(copy.emojiRecent)).toBeTruthy();
 
     // Picking an already-recent emoji moves it to the front instead of
@@ -699,7 +714,7 @@ describe("MessageComposer", () => {
     await renderComposer(true);
     await flushPreferences();
 
-    fireEvent.click(screen.getByRole("button", { name: copy.emojiPicker }));
+    fireEvent.click(screen.getByRole("button", { name: copy.mediaPicker }));
     fireEvent.change(
       await screen.findByRole("textbox", { name: copy.searchEmoji }),
       { target: { value: "rocket" } },
@@ -719,7 +734,17 @@ describe("MessageComposer", () => {
     });
     expect(await screen.findByText(copy.noEmojiFound)).toBeTruthy();
   });
-  it("sends the draft with the formatting entities the toolbar authored", async () => {
+  it("keeps no formatting toolbar above the field", async () => {
+    await renderComposer(true);
+    await flushPreferences();
+
+    // Telegram's own composer has no persistent formatting strip; formatting
+    // lives on the shortcuts and the right-click menu instead.
+    expect(screen.queryByRole("toolbar")).toBeNull();
+    expect(screen.queryByRole("button", { name: copy.formatBold })).toBeNull();
+  });
+
+  it("sends the draft with the formatting entities a shortcut authored", async () => {
     const { onSend, textarea } = await renderComposer(true);
     await flushPreferences();
 
@@ -728,12 +753,57 @@ describe("MessageComposer", () => {
     field.setSelectionRange(0, 5);
     fireEvent.select(field);
 
-    fireEvent.click(screen.getByRole("button", { name: copy.formatBold }));
+    fireEvent.keyDown(field, { key: "b", ctrlKey: true });
     fireEvent.keyDown(field, { key: "Enter" });
 
     expect(onSend).toHaveBeenCalledWith("Hello team", {
       entities: [{ type: "bold", offset: 0, length: 5 }],
     });
+  });
+
+  it("formats the selection from the right-click menu", async () => {
+    const { onSend, textarea } = await renderComposer(true);
+    await flushPreferences();
+
+    const field = textarea as HTMLTextAreaElement;
+    fireEvent.change(field, { target: { value: "Hello team" } });
+    field.setSelectionRange(0, 5);
+    fireEvent.select(field);
+    fireEvent.contextMenu(field);
+
+    const item = await screen.findByRole("menuitemcheckbox", {
+      name: new RegExp(copy.formatBold),
+    });
+    // The menu reports what already covers the selection, so the same item
+    // toggles the format back off.
+    expect(item.getAttribute("aria-checked")).toBe("false");
+    fireEvent.click(item);
+
+    fireEvent.keyDown(field, { key: "Enter" });
+    expect(onSend).toHaveBeenCalledWith("Hello team", {
+      entities: [{ type: "bold", offset: 0, length: 5 }],
+    });
+  });
+
+  it("disables the selection actions in the menu with nothing selected", async () => {
+    const { textarea } = await renderComposer(true);
+    await flushPreferences();
+
+    const field = textarea as HTMLTextAreaElement;
+    fireEvent.change(field, { target: { value: "Hello team" } });
+    field.setSelectionRange(3, 3);
+    fireEvent.select(field);
+    fireEvent.contextMenu(field);
+
+    const copyItem = await screen.findByRole("menuitem", {
+      name: copy.composerCopy,
+    });
+    expect((copyItem as HTMLButtonElement).disabled).toBe(true);
+    // Paste needs no selection, so it stays available.
+    const pasteItem = screen.getByRole("menuitem", {
+      name: copy.composerPaste,
+    });
+    expect((pasteItem as HTMLButtonElement).disabled).toBe(false);
   });
 
   it("replaces the @ query with the picked mention and closes the listbox", async () => {

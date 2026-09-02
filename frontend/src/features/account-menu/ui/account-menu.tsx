@@ -43,11 +43,7 @@ export function AccountMenu({ onOpenSettings }: AccountMenuProps) {
           aria-label={copy.openAccountMenu}
           className="h-14 w-full justify-start rounded-none px-3"
         >
-          <Avatar
-            initials={currentUser.initials}
-            src={currentUser.avatarDataUrl}
-            className="size-9"
-          />
+          <Avatar src={currentUser.avatarDataUrl} className="size-9" />
           <span className="min-w-0 text-left">
             <strong className="block truncate text-sm font-semibold">
               {currentUser.displayName}

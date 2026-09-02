@@ -37,6 +37,12 @@ function preferences(
     messageTemplates: [],
     demoWorkspace: false,
     theme: "system",
+    reduceMotion: false,
+    loopStickers: true,
+    notificationSenderName: true,
+    notificationPreview: true,
+    countMutedChats: false,
+    mediaCacheLimitMb: 512,
     ...partial,
   };
 }

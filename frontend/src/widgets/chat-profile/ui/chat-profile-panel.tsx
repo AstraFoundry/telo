@@ -5,10 +5,11 @@ import type {
   ChatDto,
   MessageDto,
   MessageFileMediaDto,
+  PeerProfileDto,
   TimeFormatPreference,
 } from "../../../../../contracts/src/ipc";
 import { useChatProfileStore, useChatStore } from "entities/chat";
-import { useTimeFormat } from "entities/preferences";
+import { RIGHT_PANEL_WIDTH_CSS, useTimeFormat } from "entities/preferences";
 import { copy } from "shared/config/copy";
 import {
   AnimatedSidebar,
@@ -18,6 +19,7 @@ import {
   LoadIndicator,
   MediaViewer,
   MessageMedia,
+  OptionRow,
   Tooltip,
 } from "shared/ui";
 import type { MediaViewerOrigin } from "shared/ui";
@@ -29,6 +31,9 @@ const MEDIA_LABELS = {
   reveal: copy.revealSpoiler,
   failed: copy.mediaDownloadFailed,
   expand: copy.viewMedia,
+  sticker: copy.sticker,
+  playSticker: copy.playSticker,
+  openStickerSet: copy.openStickerSet,
 } as const;
 
 // The profile grid shows a page of shared media; deeper history pages in
@@ -37,10 +42,10 @@ const SHARED_MEDIA_LIMIT = 30;
 const SHARED_MEDIA_PREVIEW = 6;
 const PINNED_PREVIEW = 3;
 
-// The panel reuses the right-column width the workspace layout publishes for
-// the agent panel, capped to the viewport for the narrow single-column shell.
-const PROFILE_PANEL_WIDTH =
-  "min(100%, var(--workspace-agent-panel-width, 380px))";
+// The info column and the agent panel are the same slot in the workspace
+// grid, so they share one width — the reader sees a right column that keeps
+// its size when the info button swaps what is inside it, the way Telegram
+// Desktop's info column does.
 
 type ProfileView = "main" | "shared-media" | "pinned";
 
@@ -115,6 +120,111 @@ function SectionHeader({
   );
 }
 
+// The identity block is the same for a dialog and for a peer with no history,
+// so both render it from here rather than keeping two copies in sync.
+function ProfileIdentity({
+  avatarDataUrl,
+  avatarPending,
+  title,
+  status,
+}: {
+  readonly avatarDataUrl: string | null;
+  readonly avatarPending?: boolean;
+  readonly title: string;
+  readonly status: string | null;
+}) {
+  return (
+    <div className="flex flex-col items-center gap-2 px-2 pb-3 text-center">
+      <Avatar src={avatarDataUrl} pending={avatarPending} className="size-20" />
+      {/* deslop-ignore-next-line 12 — the name outranks body text here, and
+          larger type wants its tracking pulled back in. */}
+      <div className="text-lg leading-tight font-semibold tracking-[-0.01em] text-balance">
+        {title}
+      </div>
+      {status ? (
+        <div className="text-sm text-muted-foreground">{status}</div>
+      ) : null}
+    </div>
+  );
+}
+
+// Telegram's profile rows read value first with the field name under it: you
+// came for the handle, not for the word "Username". Tapping one copies it,
+// which is also why this is a real control and not a paragraph.
+function PeerInfoRow({
+  value,
+  label,
+  wrap = false,
+  tabular = false,
+}: {
+  readonly value: string;
+  readonly label: string;
+  readonly wrap?: boolean;
+  readonly tabular?: boolean;
+}) {
+  const [copied, setCopied] = useState(false);
+  const revert = useRef<number | undefined>(undefined);
+
+  useEffect(() => () => window.clearTimeout(revert.current), []);
+
+  return (
+    <OptionRow
+      label={value}
+      // The confirmation replaces the field name in place: a static cue, so
+      // the feedback does not depend on motion alone.
+      description={copied ? copy.copied : label}
+      wrap={wrap}
+      aria-label={`${label}, ${value}`}
+      className={tabular ? "tabular-nums" : undefined}
+      onClick={() => {
+        void navigator.clipboard?.writeText(value);
+        setCopied(true);
+        window.clearTimeout(revert.current);
+        revert.current = window.setTimeout(() => setCopied(false), 1600);
+      }}
+    />
+  );
+}
+
+// A peer with no dialog has no presence or read state to report, so the line
+// under the name carries what Telegram does have: the kind of peer it is.
+function peerStatus(profile: PeerProfileDto): string | null {
+  if (profile.kind === "group") return copy.chatKindGroup;
+  if (profile.kind === "channel") return copy.chatKindChannel;
+  return null;
+}
+
+function PeerCard({ profile }: { profile: PeerProfileDto }) {
+  const hasDetails = Boolean(profile.username || profile.phone || profile.bio);
+
+  return (
+    <div className="flex flex-col px-2 py-4">
+      <ProfileIdentity
+        avatarDataUrl={profile.avatarDataUrl}
+        avatarPending={profile.avatarPending}
+        title={profile.title}
+        status={peerStatus(profile)}
+      />
+      {hasDetails ? (
+        <div className="flex flex-col border-t pt-2">
+          {profile.username ? (
+            <PeerInfoRow
+              value={`@${profile.username}`}
+              label={copy.peerUsername}
+            />
+          ) : null}
+          {profile.phone ? (
+            <PeerInfoRow value={profile.phone} label={copy.peerPhone} tabular />
+          ) : null}
+          {profile.bio ? (
+            <PeerInfoRow value={profile.bio} label={copy.peerBio} wrap />
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function PinnedRow({
   message,
   timeFormat,
@@ -158,6 +268,7 @@ export function ChatProfilePanel() {
   const open = useChatProfileStore((state) => state.open);
   const openPanel = useChatProfileStore((state) => state.openPanel);
   const closePanel = useChatProfileStore((state) => state.closePanel);
+  const peerId = useChatProfileStore((state) => state.peerId);
   const chats = useChatStore((state) => state.chats);
   const activeChatId = useChatStore((state) => state.activeChatId);
   const mediaDownloads = useChatStore((state) => state.mediaDownloads);
@@ -169,7 +280,12 @@ export function ChatProfilePanel() {
     (state) => state.requestJumpToMessage,
   );
   const { value: timeFormat } = useTimeFormat();
-  const chat = chats.find((entry) => entry.id === activeChatId) ?? null;
+  // An avatar tap targets a peer; the header toggle follows the active chat.
+  // A peer that owns a dialog resolves to that chat and gets the full
+  // profile, so only peers with no history fall through to the identity card.
+  const targetId = peerId ?? activeChatId;
+  const chat = chats.find((entry) => entry.id === targetId) ?? null;
+  const profileChatId = chat?.id ?? null;
 
   // In-widget back stack: main → section views, each entry remembering the
   // scroll offset it was left at. The stack resets when the panel closes or
@@ -178,7 +294,7 @@ export function ChatProfilePanel() {
     key: string;
     stack: ReadonlyArray<StackEntry>;
   }>({ key: "", stack: MAIN_STACK });
-  const navKey = `${open}:${activeChatId ?? ""}`;
+  const navKey = `${open}:${targetId ?? ""}`;
   if (navigation.key !== navKey) {
     setNavigation({ key: navKey, stack: MAIN_STACK });
   }
@@ -233,13 +349,13 @@ export function ChatProfilePanel() {
   }
   const { sharedMedia, pinned, loadError } = loaded;
   useEffect(() => {
-    if (!open || !activeChatId) return;
+    if (!open || !profileChatId) return;
     let cancelled = false;
     void Promise.all([
-      window.telo.workspace.listSharedMedia(activeChatId, {
+      window.telo.workspace.listSharedMedia(profileChatId, {
         limit: SHARED_MEDIA_LIMIT,
       }),
-      window.telo.workspace.listPinnedMessages(activeChatId),
+      window.telo.workspace.listPinnedMessages(profileChatId),
     ])
       .then(([mediaPage, pinnedMessages]) => {
         if (cancelled) return;
@@ -260,7 +376,39 @@ export function ChatProfilePanel() {
     return () => {
       cancelled = true;
     };
-  }, [open, activeChatId, navKey]);
+  }, [open, profileChatId, navKey]);
+
+  const [peerCard, setPeerCard] = useState<{
+    key: string;
+    profile: PeerProfileDto | null;
+    error: string | null;
+  }>({ key: "", profile: null, error: null });
+  if (peerCard.key !== navKey) {
+    setPeerCard({ key: navKey, profile: null, error: null });
+  }
+  // Only a peer without a dialog needs the lookup; everyone else already has
+  // a ChatDto with the same identity fields.
+  const cardPeerId = open && !chat ? peerId : null;
+  useEffect(() => {
+    if (!cardPeerId) return;
+    let cancelled = false;
+    void window.telo.workspace
+      .getPeerProfile(cardPeerId)
+      .then((profile) => {
+        if (!cancelled) setPeerCard({ key: navKey, profile, error: null });
+      })
+      .catch((error: unknown) => {
+        if (cancelled) return;
+        setPeerCard({
+          key: navKey,
+          profile: null,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [cardPeerId, navKey]);
 
   // The grid reads newest first; the page arrives in transcript order.
   const visualMedia = useMemo<ReadonlyArray<MediaTile>>(
@@ -392,7 +540,9 @@ export function ChatProfilePanel() {
       ? copy.sharedMedia
       : current.view === "pinned"
         ? copy.pinnedMessages
-        : copy.chatProfile;
+        : !chat && peerId
+          ? copy.userProfile
+          : copy.chatProfile;
 
   return (
     <AnimatedSidebarProvider
@@ -408,7 +558,7 @@ export function ChatProfilePanel() {
         if (nextOpen) openPanel();
         else closePanel();
       }}
-      style={{ "--sidebar-width": PROFILE_PANEL_WIDTH }}
+      style={{ "--sidebar-width": RIGHT_PANEL_WIDTH_CSS }}
     >
       <AnimatedSidebar
         side="right"
@@ -455,7 +605,19 @@ export function ChatProfilePanel() {
               {copy.failed}: {loadError}
             </p>
           ) : null}
-          {!chat ? null : sharedMedia === null || pinned === null ? (
+          {!chat ? (
+            !peerId ? null : peerCard.error ? (
+              <p role="alert" className="px-4 py-3 text-sm text-destructive">
+                {copy.failed}: {peerCard.error}
+              </p>
+            ) : peerCard.profile === null ? (
+              <div className="grid place-items-center py-10">
+                <LoadIndicator label={copy.loading} />
+              </div>
+            ) : (
+              <PeerCard profile={peerCard.profile} />
+            )
+          ) : sharedMedia === null || pinned === null ? (
             loadError ? null : (
               <div className="grid place-items-center py-10">
                 <LoadIndicator label={copy.loading} />
@@ -472,22 +634,12 @@ export function ChatProfilePanel() {
             </div>
           ) : (
             <div className="flex flex-col gap-2 px-2 py-4">
-              <div className="flex flex-col items-center gap-2 px-2 pb-3 text-center">
-                <Avatar
-                  initials={chat.initials}
-                  src={chat.avatarDataUrl}
-                  className="size-20 text-2xl font-semibold"
-                />
-                {/* deslop-ignore-next-line 12 */}
-                <div className="text-base font-semibold text-balance">
-                  {chat.title}
-                </div>
-                {subtitle(chat) ? (
-                  <div className="text-sm text-muted-foreground">
-                    {subtitle(chat)}
-                  </div>
-                ) : null}
-              </div>
+              <ProfileIdentity
+                avatarDataUrl={chat.avatarDataUrl}
+                avatarPending={chat.avatarPending}
+                title={chat.title}
+                status={subtitle(chat)}
+              />
               {visualNewestFirst.length || fileMedia.length ? (
                 <section aria-label={copy.sharedMedia}>
                   <SectionHeader

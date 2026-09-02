@@ -2,7 +2,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
-import { MessageMedia } from "shared/ui";
+import { MessageMedia, visualMediaBox } from "shared/ui";
 
 const media = {
   id: "chat/42",
@@ -22,6 +22,9 @@ const labels = {
   reveal: "Reveal hidden text",
   failed: "Attachment download failed",
   expand: "View media",
+  sticker: "Sticker",
+  playSticker: "Play sticker",
+  openStickerSet: "Open sticker set",
 };
 
 describe("MessageMedia", () => {
@@ -187,6 +190,61 @@ describe("MessageMedia", () => {
     );
     await userEvent.click(tileButton);
     expect(onOpen).toHaveBeenCalledOnce();
+  });
+
+  it("reserves the same box before and after the photo lands", () => {
+    const frame = (container: HTMLElement) =>
+      container.querySelector<HTMLElement>('[style*="aspect-ratio"]');
+
+    const { container, rerender } = render(
+      <MessageMedia
+        media={media}
+        download={null}
+        labels={labels}
+        onDownload={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+    );
+    const placeholder = frame(container)?.getAttribute("style");
+
+    rerender(
+      <MessageMedia
+        media={media}
+        download={{
+          state: "ready",
+          downloadedBytes: 2048,
+          totalBytes: 2048,
+          url: "telo-media://chat/42",
+          error: null,
+        }}
+        labels={labels}
+        onDownload={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+    );
+
+    // Identical geometry in both states is the whole point: the pixels drop
+    // into a hole that was already the right shape, so nothing below the
+    // photo moves and the reader's scroll position holds.
+    expect(placeholder).toBeTruthy();
+    expect(frame(container)?.getAttribute("style")).toBe(placeholder);
+  });
+
+  it("derives the photo box from the dimensions the message carries", () => {
+    // 4:3 at the 384px height cap.
+    expect(visualMediaBox(800, 600)).toEqual({
+      aspectRatio: `${4 / 3}`,
+      width: "min(100%, 512px)",
+    });
+    // A very tall photo is boxed at 1:2 rather than rendered as a sliver.
+    expect(visualMediaBox(200, 1000)).toEqual({
+      aspectRatio: "0.5",
+      width: "min(100%, 192px)",
+    });
+    // Nothing to reserve without dimensions; the caller falls back to a
+    // bounded placeholder and lets scroll anchoring absorb the difference.
+    expect(visualMediaBox(null, null)).toBeNull();
+    expect(visualMediaBox(800, 0)).toBeNull();
   });
 
   it("renders a webpage preview as a safe external link card", () => {

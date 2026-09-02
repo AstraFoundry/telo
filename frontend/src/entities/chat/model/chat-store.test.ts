@@ -15,8 +15,8 @@ import { copy } from "../../../shared/config/copy";
 import { installTeloApiMock } from "../../../shared/test/mock-telo";
 
 import {
-  allChatsUnread,
   chatsForFolder,
+  folderUnread,
   subscribeToWorkspaceEvents,
   useChatStore,
 } from "./chat-store";
@@ -44,6 +44,8 @@ function message(id: string, chatId: string): MessageDto {
     id,
     chatId,
     senderName: "Sender",
+    senderId: "peer-sender",
+    senderAvatarUrl: null,
     body: `Message ${id}`,
     entities: [],
     media: null,
@@ -72,7 +74,12 @@ describe("chat-store", () => {
       composerTarget: null,
       drafts: {},
       scrollPositions: {},
+      peerAvatars: {},
+      customEmoji: {},
       notificationsEnabled: false,
+      notificationSenderName: true,
+      notificationPreview: true,
+      countMutedChats: false,
       mediaDownloads: {},
       mediaUploads: {},
       animateInMessageIds: [],
@@ -118,6 +125,35 @@ describe("chat-store", () => {
       loading: false,
     });
     expect(telo.workspace.listMessagePage).not.toHaveBeenCalled();
+  });
+
+  it("load() mirrors the notification and unread preferences it persisted", async () => {
+    const telo = installTeloApiMock();
+    telo.workspace.listChatPage.mockResolvedValue({
+      items: [chat("a")],
+      nextCursor: null,
+    });
+    telo.workspace.listMessagePage.mockResolvedValue({
+      items: [],
+      nextCursor: null,
+    });
+    const stored = await telo.preferences.get();
+    telo.preferences.get.mockResolvedValue({
+      ...stored,
+      notificationsEnabled: true,
+      notificationSenderName: false,
+      notificationPreview: false,
+      countMutedChats: true,
+    });
+
+    await useChatStore.getState().load();
+
+    expect(useChatStore.getState()).toMatchObject({
+      notificationsEnabled: true,
+      notificationSenderName: false,
+      notificationPreview: false,
+      countMutedChats: true,
+    });
   });
 
   it("load() hydrates drafts from the server draft preview", async () => {
@@ -350,6 +386,30 @@ describe("chat-store", () => {
       type: "sync-error",
       message: "FLOOD_WAIT_30",
     });
+    expect(useChatStore.getState().syncError).toBe("FLOOD_WAIT_30");
+  });
+
+  it("does not raise the error banner for a request that failed while offline", async () => {
+    const telo = installTeloApiMock();
+    telo.workspace.listChatPage.mockRejectedValue(
+      new Error("Cannot send requests while disconnected. Please reconnect."),
+    );
+    useChatStore.setState({ connectionState: "offline" });
+
+    await useChatStore.getState().load();
+
+    // The chat list title already reads "Connecting…"; a second surface
+    // repeating the transport state is what Telegram never does.
+    expect(useChatStore.getState().syncError).toBeNull();
+  });
+
+  it("still reports a request failure once the transport is up", async () => {
+    const telo = installTeloApiMock();
+    telo.workspace.listChatPage.mockRejectedValue(new Error("FLOOD_WAIT_30"));
+    useChatStore.setState({ connectionState: "connected" });
+
+    await useChatStore.getState().load();
+
     expect(useChatStore.getState().syncError).toBe("FLOOD_WAIT_30");
   });
 
@@ -697,6 +757,44 @@ describe("chat-store", () => {
       preview: "newest",
       unreadCount: 4,
       avatarDataUrl: "data:image/jpeg;base64,cGhvdG8=",
+      avatarPending: false,
+    });
+  });
+
+  it("receive() clears avatar pending when Telegram has no photo", () => {
+    useChatStore.setState({
+      chats: [{ ...chat("a"), avatarPending: true }],
+    });
+
+    useChatStore.getState().receive({
+      type: "chat-avatar",
+      chatId: "a",
+      avatarDataUrl: null,
+    });
+
+    expect(useChatStore.getState().chats[0]).toMatchObject({
+      avatarDataUrl: null,
+      avatarPending: false,
+    });
+  });
+
+  it("receive() records a settled photo for a message author with no dialog", () => {
+    useChatStore.getState().receive({
+      type: "chat-avatar",
+      chatId: "group-member",
+      avatarDataUrl: "data:image/jpeg;base64,cGhvdG8=",
+    });
+    useChatStore.getState().receive({
+      type: "chat-avatar",
+      chatId: "photoless-member",
+      avatarDataUrl: null,
+    });
+
+    // A group member is an avatar peer without being a chat of its own; the
+    // settled null must be recorded too, or the row keeps a live skeleton.
+    expect(useChatStore.getState().peerAvatars).toEqual({
+      "group-member": "data:image/jpeg;base64,cGhvdG8=",
+      "photoless-member": null,
     });
   });
 
@@ -789,6 +887,168 @@ describe("chat-store", () => {
       configurable: true,
       value: false,
     });
+  });
+
+  it("receive() names the app instead of the sender when sender names are off", () => {
+    const telo = installTeloApiMock();
+    Object.defineProperty(document, "hidden", {
+      configurable: true,
+      value: true,
+    });
+    useChatStore.setState({
+      chats: [chat("a"), chat("b")],
+      activeChatId: "a",
+      notificationsEnabled: true,
+      notificationSenderName: false,
+    });
+
+    useChatStore.getState().receive({
+      type: "message-upsert",
+      cause: "new",
+      message: message("m2", "b"),
+    });
+
+    // The chat id tag rides along either way, so opening the notification
+    // still lands in the conversation the message came from.
+    expect(telo.shell.notify).toHaveBeenCalledWith(
+      copy.appName,
+      "Message m2",
+      "b",
+    );
+    Object.defineProperty(document, "hidden", {
+      configurable: true,
+      value: false,
+    });
+  });
+
+  it("receive() holds the message body back when previews are off", () => {
+    const telo = installTeloApiMock();
+    Object.defineProperty(document, "hidden", {
+      configurable: true,
+      value: true,
+    });
+    useChatStore.setState({
+      chats: [chat("a"), chat("b")],
+      activeChatId: "a",
+      notificationsEnabled: true,
+      notificationPreview: false,
+    });
+
+    useChatStore.getState().receive({
+      type: "message-upsert",
+      cause: "new",
+      message: message("m2", "b"),
+    });
+
+    expect(telo.shell.notify).toHaveBeenCalledWith(
+      "Chat b",
+      copy.notifyIncomingMessageBody,
+      "b",
+    );
+    Object.defineProperty(document, "hidden", {
+      configurable: true,
+      value: false,
+    });
+  });
+
+  it("applyPreferences() reshapes the next notification without a reload", () => {
+    const telo = installTeloApiMock();
+    Object.defineProperty(document, "hidden", {
+      configurable: true,
+      value: true,
+    });
+    useChatStore.setState({
+      chats: [chat("a"), chat("b")],
+      activeChatId: "a",
+    });
+
+    useChatStore.getState().applyPreferences({
+      notificationsEnabled: true,
+      notificationSenderName: true,
+      notificationPreview: true,
+      countMutedChats: false,
+    });
+    useChatStore.getState().receive({
+      type: "message-upsert",
+      cause: "new",
+      message: message("m2", "b"),
+    });
+
+    expect(telo.shell.notify).toHaveBeenLastCalledWith(
+      "Chat b",
+      "Message m2",
+      "b",
+    );
+
+    // The reader flips both toggles in Settings; nothing reloads.
+    useChatStore.getState().applyPreferences({
+      notificationsEnabled: true,
+      notificationSenderName: false,
+      notificationPreview: false,
+      countMutedChats: false,
+    });
+    useChatStore.getState().receive({
+      type: "message-upsert",
+      cause: "new",
+      message: message("m3", "b"),
+    });
+
+    expect(telo.shell.notify).toHaveBeenLastCalledWith(
+      copy.appName,
+      copy.notifyIncomingMessageBody,
+      "b",
+    );
+    Object.defineProperty(document, "hidden", {
+      configurable: true,
+      value: false,
+    });
+  });
+
+  it("applyPreferences() moves muted chats in and out of the unread totals without a reload", () => {
+    const silenced = [
+      { ...chat("loud"), unreadCount: 4, keywordFolderIds: [-1] },
+      {
+        ...chat("silenced"),
+        unreadCount: 6,
+        muted: true,
+        keywordFolderIds: [-1],
+      },
+    ];
+    useChatStore.setState({
+      chats: silenced,
+      folders: [
+        {
+          id: -1,
+          title: "Spacing",
+          unreadCount: 0,
+          kind: "keyword",
+          query: "spacing",
+        },
+      ],
+    });
+
+    useChatStore.getState().applyPreferences({
+      notificationsEnabled: false,
+      notificationSenderName: true,
+      notificationPreview: true,
+      countMutedChats: true,
+    });
+
+    const counted = useChatStore.getState();
+    // The All badge the sidebar draws, and the keyword badge held in state.
+    expect(folderUnread(counted.chats, null, counted.countMutedChats)).toBe(10);
+    expect(counted.folders[0]?.unreadCount).toBe(10);
+
+    useChatStore.getState().applyPreferences({
+      notificationsEnabled: false,
+      notificationSenderName: true,
+      notificationPreview: true,
+      countMutedChats: false,
+    });
+
+    const ignored = useChatStore.getState();
+    expect(folderUnread(ignored.chats, null, ignored.countMutedChats)).toBe(4);
+    expect(ignored.folders[0]?.unreadCount).toBe(4);
   });
 
   it("receive() applies deletion and outbox read events", () => {
@@ -1297,6 +1557,86 @@ describe("chat-store", () => {
     expect(useChatStore.getState().syncError).toBe("Upload failed");
   });
 
+  it("loadCustomEmoji() caches the document and asks only once per id", async () => {
+    const telo = installTeloApiMock();
+    const item = {
+      id: "sticker/2",
+      emoji: "🎉",
+      format: "static" as const,
+      width: 512,
+      height: 512,
+    };
+    telo.workspace.getCustomEmoji.mockResolvedValue([item]);
+
+    await useChatStore.getState().loadCustomEmoji("2");
+    await useChatStore.getState().loadCustomEmoji("2");
+
+    expect(useChatStore.getState().customEmoji).toEqual({ "2": item });
+    // One emoji repeats across a chat; a resolved id is never refetched.
+    expect(telo.workspace.getCustomEmoji).toHaveBeenCalledTimes(1);
+  });
+
+  it("loadCustomEmoji() settles an id Telegram no longer serves on null", async () => {
+    const telo = installTeloApiMock();
+    telo.workspace.getCustomEmoji.mockResolvedValue([]);
+
+    await useChatStore.getState().loadCustomEmoji("404");
+
+    // Null, not undefined: the entity settles on its glyph instead of
+    // retrying on every render.
+    expect(useChatStore.getState().customEmoji).toEqual({ "404": null });
+  });
+
+  it("sendSticker() paints the sticker at once and reconciles it with the ack", async () => {
+    const telo = installTeloApiMock();
+    const acked: MessageDto = {
+      ...message("s9", "a"),
+      body: "",
+      outgoing: true,
+      status: "sent",
+    };
+    telo.workspace.sendSticker.mockResolvedValue(acked);
+    useChatStore.setState({ activeChatId: "a", messages: [] });
+
+    await useChatStore.getState().sendSticker({
+      id: "sticker/12345",
+      emoji: "🐱",
+      format: "static",
+      width: 512,
+      height: 512,
+    });
+
+    expect(telo.workspace.sendSticker).toHaveBeenCalledWith(
+      "a",
+      "sticker/12345",
+    );
+    expect(useChatStore.getState().messages).toEqual([acked]);
+  });
+
+  it("sendSticker() keeps the failed bubble in the transcript", async () => {
+    const telo = installTeloApiMock();
+    telo.workspace.sendSticker.mockRejectedValue(new Error("STICKER_INVALID"));
+    useChatStore.setState({ activeChatId: "a", messages: [] });
+
+    await useChatStore.getState().sendSticker({
+      id: "sticker/12345",
+      emoji: "🐱",
+      format: "animated",
+      width: 512,
+      height: 512,
+    });
+
+    // Same rule as a failed text send: the bubble stays, marked failed, so
+    // the context menu's Resend is the retry.
+    const [pending] = useChatStore.getState().messages;
+    expect(pending?.status).toBe("failed");
+    expect(pending?.media).toMatchObject({
+      id: "sticker/12345",
+      kind: "sticker",
+      sticker: { emoji: "🐱", format: "animated" },
+    });
+  });
+
   it("sendMedia() does not raise syncError for a user-cancelled upload", async () => {
     const telo = installTeloApiMock();
     telo.workspace.sendMedia.mockRejectedValue(
@@ -1471,7 +1811,52 @@ describe("folder views", () => {
   });
 
   it("sums the All badge over its visible chats only", () => {
-    expect(allChatsUnread(chats)).toBe(3);
+    expect(folderUnread(chats, null, false)).toBe(3);
+  });
+
+  it("counts a muted chat toward the All badge only when the reader asks", () => {
+    const silenced = [
+      { ...chat("main"), folderId: null, unreadCount: 4 },
+      { ...chat("silenced"), folderId: null, unreadCount: 6, muted: true },
+    ];
+
+    expect(folderUnread(silenced, null, false)).toBe(4);
+    expect(folderUnread(silenced, null, true)).toBe(10);
+  });
+
+  it("counts a muted chat toward a keyword badge only when the reader asks", () => {
+    const silenced = [
+      {
+        ...chat("design"),
+        folderId: 2,
+        unreadCount: 1,
+        keywordFolderIds: [-1],
+      },
+      {
+        ...chat("silenced"),
+        folderId: 2,
+        unreadCount: 5,
+        muted: true,
+        keywordFolderIds: [-1],
+      },
+    ];
+    const folders = [
+      {
+        id: -1,
+        title: "Spacing",
+        unreadCount: 0,
+        kind: "keyword" as const,
+        query: "spacing",
+      },
+    ];
+
+    useChatStore.setState({ chats: silenced, countMutedChats: false });
+    useChatStore.getState().receive({ type: "folders", folders });
+    expect(useChatStore.getState().folders[0]?.unreadCount).toBe(1);
+
+    useChatStore.setState({ chats: silenced, countMutedChats: true });
+    useChatStore.getState().receive({ type: "folders", folders });
+    expect(useChatStore.getState().folders[0]?.unreadCount).toBe(6);
   });
 });
 

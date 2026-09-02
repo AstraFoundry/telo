@@ -10,6 +10,8 @@ export { OptionRow } from "./option-row";
 export type { OptionRowProps } from "./option-row";
 export { PressableBlock } from "./pressable-block";
 export type { PressableBlockProps } from "./pressable-block";
+export { Sticker } from "./sticker";
+export type { StickerProps } from "./sticker";
 export { MediaViewer } from "./media-viewer";
 export type {
   MediaViewerItem,
@@ -92,7 +94,7 @@ export {
 } from "@components/agents/message";
 export { MessageBubbleCollapsible } from "@components/agents/message-bubble";
 export { MessageRichText } from "@components/agents/message-rich-text";
-export { MessageMedia } from "@components/agents/message-media";
+export { MessageMedia, visualMediaBox } from "@components/agents/message-media";
 export type { MessageMediaState } from "@components/agents/message-media";
 export { MessageAttachmentTray } from "@components/agents/message-attachment-tray";
 export type { MessageAttachmentItem } from "@components/agents/message-attachment-tray";

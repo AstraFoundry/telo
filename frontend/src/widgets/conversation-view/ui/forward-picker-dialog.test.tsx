@@ -32,6 +32,8 @@ const forwarded: MessageDto = {
   id: "m1",
   chatId: "chat-1",
   senderName: "Mina",
+  senderId: "peer-mina",
+  senderAvatarUrl: null,
   body: "Forward me",
   entities: [],
   media: null,

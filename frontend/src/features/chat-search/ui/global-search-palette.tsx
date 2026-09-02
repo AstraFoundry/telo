@@ -133,9 +133,9 @@ function PaletteSurface({ onClose }: { onClose(): void }) {
               >
                 <span className="flex min-w-0 items-center gap-2">
                   <Avatar
-                    initials={chat.initials}
                     src={chat.avatarDataUrl}
-                    className="size-6 text-[10px]"
+                    pending={chat.avatarPending}
+                    className="size-6"
                   />
                   <span className="min-w-0 flex-1 truncate">{chat.title}</span>
                 </span>

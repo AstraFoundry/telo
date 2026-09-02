@@ -102,6 +102,8 @@ describe("GlobalSearchPalette", () => {
           id: "m1",
           chatId: "c1",
           senderName: "Mina",
+          senderId: "peer-mina",
+          senderAvatarUrl: null,
           body: "compact spacing notes",
           entities: [],
           media: null,

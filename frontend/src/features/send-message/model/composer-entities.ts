@@ -182,6 +182,24 @@ function mergeAdjacent(
   return [...others, ...merged];
 }
 
+/**
+ * Strips every composer format from a UTF-16 selection, which is Telegram's
+ * "Clear formatting". Spans that only partly overlap keep the parts outside
+ * the selection, so clearing one word never disturbs its neighbours.
+ */
+export function clearFormats(
+  entities: ReadonlyArray<MessageEntityDto>,
+  offset: number,
+  length: number,
+): MessageEntityDto[] {
+  if (length <= 0) return [...entities];
+  return entities.flatMap((entity) => {
+    const formatted = COMPOSER_FORMATS.some((type) => isFormat(entity, type));
+    if (!formatted || !overlaps(entity, offset, length)) return [entity];
+    return punchHole(entity, offset, length);
+  });
+}
+
 export function selectionHasFormat(
   entities: ReadonlyArray<MessageEntityDto>,
   type: ComposerFormatType,

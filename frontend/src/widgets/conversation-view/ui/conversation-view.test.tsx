@@ -1,10 +1,19 @@
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { EventType, type AGUIEvent } from "@ag-ui/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type {
   ChatDto,
+  CurrentUserDto,
   MessageDto,
+  StickerItemDto,
   UserPreferencesDto,
 } from "../../../../../contracts/src/ipc";
 import { MESSAGE_ACTION_EVENT_NAME } from "../../../../../contracts/src/ipc";
@@ -76,6 +85,12 @@ function preferences(partial: Partial<UserPreferencesDto> = {}) {
     agentPanelWidth: 380,
     recentEmojis: [],
     messageTemplates: [],
+    reduceMotion: false,
+    loopStickers: true,
+    notificationSenderName: true,
+    notificationPreview: true,
+    countMutedChats: false,
+    mediaCacheLimitMb: 512,
     ...partial,
   } satisfies UserPreferencesDto;
 }
@@ -101,6 +116,8 @@ function message(partial: Partial<MessageDto> & Pick<MessageDto, "id">) {
   return {
     chatId: "chat-1",
     senderName: "Sender",
+    senderId: "peer-sender",
+    senderAvatarUrl: null,
     body: "Message body",
     entities: [],
     media: null,
@@ -121,12 +138,18 @@ async function renderView({
   messages = [],
   activeChatId = "chat-1",
   scrollPositions = {},
+  peerAvatars = {},
+  customEmoji = {},
+  currentUser = null,
 }: {
   prefs?: Partial<UserPreferencesDto>;
   chats?: ChatDto[];
   messages?: MessageDto[];
   activeChatId?: string | null;
   scrollPositions?: Record<string, number>;
+  peerAvatars?: Record<string, string | null>;
+  customEmoji?: Record<string, StickerItemDto | null>;
+  currentUser?: CurrentUserDto | null;
 } = {}) {
   const telo = installTeloApiMock();
   telo.preferences.get.mockResolvedValue(preferences(prefs));
@@ -137,10 +160,22 @@ async function renderView({
     activeChatId,
     loading: false,
     scrollPositions,
+    peerAvatars,
+    customEmoji,
   });
+  const { useTelegramStore } = await import("../../../entities/telegram");
+  useTelegramStore.setState({ currentUser });
   const { ConversationView } = await import("./conversation-view");
   const result = render(<ConversationView />);
   return { telo, useChatStore, ...result };
+}
+
+function avatarSlot(messageId: string): HTMLElement {
+  const row = document.getElementById(`conversation-message-${messageId}`);
+  if (!row) throw new Error(`no transcript row for ${messageId}`);
+  const slot = row.querySelector<HTMLElement>('[data-slot="message-avatar"]');
+  if (!slot) throw new Error(`no avatar slot for ${messageId}`);
+  return slot;
 }
 
 describe("ConversationView", () => {
@@ -179,6 +214,208 @@ describe("ConversationView", () => {
     expect(screen.getByText("Ada Byron")).toBeTruthy();
     // A non-forwarded bubble carries no attribution.
     expect(screen.getAllByText(copy.forwardedFrom)).toHaveLength(1);
+  });
+
+  it("paints the author photo on an incoming row and the account photo on an outgoing row", async () => {
+    await renderView({
+      messages: [
+        message({
+          id: "m1",
+          senderId: "peer-mina",
+          senderAvatarUrl: "data:image/gif;base64,bWluYQ==",
+        }),
+        message({ id: "m2", outgoing: true }),
+      ],
+      currentUser: {
+        id: "peer-self",
+        displayName: "Ada Lovelace",
+        username: "ada",
+        initials: "AL",
+        avatarDataUrl: "data:image/gif;base64,YWRh",
+      },
+    });
+
+    expect(avatarSlot("m1").querySelector("img")?.getAttribute("src")).toBe(
+      "data:image/gif;base64,bWluYQ==",
+    );
+    // Outgoing rows are all authored by the account, so they never consult the
+    // per-peer cache.
+    expect(avatarSlot("m2").querySelector("img")?.getAttribute("src")).toBe(
+      "data:image/gif;base64,YWRh",
+    );
+  });
+
+  it("tails a run of one author with a single photo and keeps the earlier slots aligned", async () => {
+    const photo = "data:image/gif;base64,bWluYQ==";
+    await renderView({
+      messages: [
+        message({ id: "m1", senderId: "peer-mina", senderAvatarUrl: photo }),
+        message({ id: "m2", senderId: "peer-mina", senderAvatarUrl: photo }),
+        message({ id: "m3", senderId: "peer-lev", senderAvatarUrl: photo }),
+      ],
+    });
+
+    expect(avatarSlot("m1").className).toContain("invisible");
+    expect(avatarSlot("m1").querySelector("img")).toBeNull();
+    expect(avatarSlot("m2").className).not.toContain("invisible");
+    expect(avatarSlot("m3").className).not.toContain("invisible");
+  });
+
+  it("swaps an author skeleton for the photo that lands after the row rendered", async () => {
+    const { useChatStore } = await renderView({
+      messages: [
+        message({
+          id: "m1",
+          senderId: "peer-mina",
+          senderAvatarUrl: null,
+          senderAvatarPending: true,
+        }),
+      ],
+    });
+
+    expect(
+      within(avatarSlot("m1")).getByRole("status", {
+        name: copy.loadingAvatar,
+      }),
+    ).toBeTruthy();
+
+    act(() => {
+      useChatStore.getState().receive({
+        type: "chat-avatar",
+        chatId: "peer-mina",
+        avatarDataUrl: "data:image/gif;base64,bWluYQ==",
+      });
+    });
+
+    expect(avatarSlot("m1").querySelector("img")?.getAttribute("src")).toBe(
+      "data:image/gif;base64,bWluYQ==",
+    );
+  });
+
+  it("opens the author profile when the transcript avatar is pressed", async () => {
+    await renderView({
+      messages: [message({ id: "m1", senderId: "peer-mina" })],
+    });
+    const { useChatProfileStore } = await import("../../../entities/chat");
+
+    act(() => {
+      within(avatarSlot("m1"))
+        .getByRole("button", { name: copy.openProfile })
+        .click();
+    });
+
+    expect(useChatProfileStore.getState().open).toBe(true);
+    expect(useChatProfileStore.getState().peerId).toBe("peer-mina");
+  });
+
+  it("draws a sticker straight on the background, with no bubble", async () => {
+    await renderView({
+      messages: [
+        message({
+          id: "m1",
+          body: "",
+          media: {
+            id: "chat-1/m1",
+            kind: "sticker",
+            fileName: "wave.webp",
+            mimeType: "image/webp",
+            size: 4096,
+            width: 512,
+            height: 512,
+            duration: null,
+            spoiler: false,
+            sticker: { emoji: "👋", format: "static", setName: "TeloPack" },
+          },
+        }),
+      ],
+    });
+
+    const row = document.getElementById("conversation-message-m1");
+    expect(row?.querySelector('[data-slot="sticker"]')).toBeTruthy();
+    // Telegram gives a sticker no surface: no bubble, no padding, no tail.
+    expect(row?.querySelector('[data-slot="message-bubble"]')).toBeNull();
+    // It is never the attachment card either — no file name, no download.
+    expect(row?.textContent).not.toContain("wave.webp");
+  });
+
+  it("carries the sentence with the glyph until a custom emoji resolves", async () => {
+    const { telo } = await renderView({
+      messages: [
+        message({
+          id: "m1",
+          body: "Shipping 🎉",
+          entities: [
+            { type: "custom-emoji", offset: 9, length: 2, documentId: "2" },
+          ],
+        }),
+      ],
+    });
+
+    const row = document.getElementById("conversation-message-m1");
+    // Telegram's own fallback: the glyph the entity covers reads as text.
+    expect(row?.textContent).toContain("Shipping 🎉");
+    expect(row?.querySelector('[data-slot="sticker"]')).toBeNull();
+    // The transcript is the layer that can fetch the document, so it asks.
+    await waitFor(() => {
+      expect(telo.workspace.getCustomEmoji).toHaveBeenCalledWith(["2"]);
+    });
+  });
+
+  it("draws a resolved custom emoji inline in the sentence", async () => {
+    await renderView({
+      messages: [
+        message({
+          id: "m1",
+          body: "Shipping 🎉",
+          entities: [
+            { type: "custom-emoji", offset: 9, length: 2, documentId: "2" },
+          ],
+        }),
+      ],
+      customEmoji: {
+        "2": {
+          id: "sticker/2",
+          emoji: "🎉",
+          format: "static",
+          width: 512,
+          height: 512,
+        },
+      },
+    });
+
+    const row = document.getElementById("conversation-message-m1");
+    const slot = row?.querySelector<HTMLElement>('[data-slot="sticker"]');
+    expect(slot).toBeTruthy();
+    // It reads as a character, not as an attachment wedged into the sentence.
+    expect(slot?.style.width).toBe("20px");
+  });
+
+  it("keeps the bubble when a sticker carries a caption", async () => {
+    await renderView({
+      messages: [
+        message({
+          id: "m1",
+          body: "look at this",
+          media: {
+            id: "chat-1/m1",
+            kind: "sticker",
+            fileName: "wave.webp",
+            mimeType: "image/webp",
+            size: 4096,
+            width: 512,
+            height: 512,
+            duration: null,
+            spoiler: false,
+            sticker: { emoji: "👋", format: "static", setName: "TeloPack" },
+          },
+        }),
+      ],
+    });
+
+    const row = document.getElementById("conversation-message-m1");
+    // The caption needs a surface, so the bubble comes back with it.
+    expect(row?.querySelector('[data-slot="message-bubble"]')).toBeTruthy();
+    expect(row?.querySelector('[data-slot="sticker"]')).toBeTruthy();
   });
 
   it("shows the online status line only for an online direct chat", async () => {

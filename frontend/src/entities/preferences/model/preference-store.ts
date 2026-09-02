@@ -30,6 +30,10 @@ export function createPreferenceStore<K extends PreferenceKey>(
   type Value = UserPreferencesDto[K];
 
   let current: Value = options.defaultValue;
+  // Until the persisted value lands, `current` is only this module's default.
+  // Consumers that would otherwise act on a guess — pushing the value into
+  // another store, say — wait for this.
+  let loaded = false;
   const listeners = new Set<() => void>();
   let loadPromise: Promise<void> | null = null;
 
@@ -40,9 +44,10 @@ export function createPreferenceStore<K extends PreferenceKey>(
   }
 
   function load(): Promise<void> {
-    loadPromise ??= window.telo.preferences
-      .get()
-      .then((preferences) => publish(preferences[key]));
+    loadPromise ??= window.telo.preferences.get().then((preferences) => {
+      loaded = true;
+      publish(preferences[key]);
+    });
     return loadPromise;
   }
 
@@ -68,7 +73,8 @@ export function createPreferenceStore<K extends PreferenceKey>(
 
   function usePreference() {
     const value = useSyncExternalStore(subscribe, () => current);
-    return { value, select } as const;
+    const hydrated = useSyncExternalStore(subscribe, () => loaded);
+    return { value, loaded: hydrated, select } as const;
   }
 
   return { usePreference, load };
