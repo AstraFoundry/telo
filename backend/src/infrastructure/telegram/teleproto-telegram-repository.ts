@@ -1,7 +1,7 @@
 import path from "node:path";
-import { mkdir, stat } from "node:fs/promises";
+import { mkdir, readdir, stat, writeFile } from "node:fs/promises";
 
-import { Api, TelegramClient } from "teleproto";
+import { Api, helpers, TelegramClient } from "teleproto";
 import { CustomFile } from "teleproto/client/uploads.js";
 import {
   DeletedMessage,
@@ -42,6 +42,10 @@ import type {
   MessageReplyToDto,
   MessageSearchPageDto,
   MessageSearchPageInput,
+  PeerProfileDto,
+  StickerFormat,
+  StickerItemDto,
+  StickerSetDto,
   TelegramAuthState,
   TelegramLoginConfigurationDto,
   TelegramLoginInput,
@@ -61,7 +65,15 @@ import {
   MemoryTelegramDialogSnapshotRepository,
   dialogSnapshotPage,
 } from "./file-telegram-dialog-snapshot-repository";
-import { enforceMediaCacheLimit, touchMediaCacheFile } from "./media-cache";
+import {
+  MEDIA_CACHE_MAX_BYTES,
+  avatarCacheFileName,
+  avatarMediaUrl,
+  chatIdFromAvatarFileName,
+  enforceMediaCacheLimit,
+  listCachedAvatarUrls,
+  touchMediaCacheFile,
+} from "./media-cache";
 import {
   mapMessageEntities,
   mapMessageEntitiesForSend,
@@ -70,6 +82,7 @@ import {
   isServiceMessage,
   mapMessageMedia,
   messageGroupedId,
+  stickerFormat,
 } from "./teleproto-message-media";
 import {
   buildChatFolders,
@@ -86,6 +99,27 @@ type Challenge = {
 
 type UploadProgress = ((progress: number) => void) & { isCanceled?: boolean };
 type AvatarEntity = Parameters<TelegramClient["downloadProfilePhoto"]>[0];
+// What `client.downloadMedia` accepts: a whole message, whose input chat also
+// refreshes an expired file reference, or a bare media object — the only
+// handle a sticker resolved outside any message has.
+type DownloadableMedia = Parameters<TelegramClient["downloadMedia"]>[0];
+
+// Telegram peers name themselves differently by kind: users carry a first and
+// last name, channels and groups a title, and either may only have a username.
+type NamedPeer = {
+  readonly firstName?: string;
+  readonly lastName?: string;
+  readonly title?: string;
+  readonly username?: string;
+};
+
+type ResolvedSender = {
+  /** Peer id keying the avatar cache; empty when the peer did not resolve. */
+  readonly id: string;
+  readonly name: string;
+  /** The peer to download the photo from, undefined when none resolved. */
+  readonly entity: AvatarEntity | undefined;
+};
 
 const AVATAR_DOWNLOAD_CONCURRENCY = 3;
 const AVATAR_CACHE_LIMIT = 200;
@@ -96,6 +130,25 @@ const GLOBAL_SEARCH_MESSAGE_LIMIT = 50;
 // Shared media is the photo/video/file slice of a chat's history; link
 // previews and non-visual documents (audio, stickers, …) stay out.
 const SHARED_MEDIA_KINDS = new Set(["photo", "video", "file"]);
+// A set sticker has no carrying message, so its media id cannot name one.
+// This prefix marks the ids the download path resolves from the documents the
+// sticker set requests kept instead of from `messages.GetMessages`.
+const STICKER_MEDIA_PREFIX = "sticker/";
+// Those documents live in memory so the download and send paths can reach the
+// sticker the picker listed, or the one the set sheet opened, without a second
+// GetStickerSet. Telegram caps an account at 200 installed sets, but a
+// realistic install is a few dozen sets of some 30 stickers each; this holds
+// such an install many times over, and evicting the least recently used ids
+// past it only costs another listing.
+const STICKER_DOCUMENT_CACHE_LIMIT = 4000;
+// The cache file name carries the extension the renderer sniffs a sticker's
+// encoding from. Set documents rarely publish a filename attribute, so the
+// name comes from the format their mime type already decides.
+const STICKER_FILE_NAMES: Record<StickerFormat, string> = {
+  animated: "sticker.tgs",
+  video: "sticker.webm",
+  static: "sticker.webp",
+};
 
 class SerialTaskQueue {
   private readonly tasks: Array<() => Promise<void>> = [];
@@ -165,6 +218,9 @@ export class TelegramClientCoordinator implements TelegramRepository {
     private readonly onState: (state: TelegramAuthState) => void,
     private readonly mediaCacheDirectory = "",
     private readonly snapshots: TelegramDialogSnapshotRepository = new MemoryTelegramDialogSnapshotRepository(),
+    /** Reads the user's media-cache ceiling in bytes at eviction time. */
+    private readonly mediaCacheLimitBytes: () => Promise<number> = async () =>
+      MEDIA_CACHE_MAX_BYTES,
   ) {
     this.repository = this.createDemoRepository();
     this.unsubscribeRepository = this.repository.subscribe((event) =>
@@ -177,6 +233,7 @@ export class TelegramClientCoordinator implements TelegramRepository {
   private createDemoRepository(): DemoTelegramRepository {
     return new DemoTelegramRepository({
       mediaCacheDirectory: this.mediaCacheDirectory || undefined,
+      mediaCacheLimitBytes: this.mediaCacheLimitBytes,
     });
   }
 
@@ -225,6 +282,7 @@ export class TelegramClientCoordinator implements TelegramRepository {
         new TeleprotoRepository(
           client,
           this.mediaCacheDirectory,
+          this.mediaCacheLimitBytes,
           this.snapshots,
           this.snapshot,
         ),
@@ -279,6 +337,7 @@ export class TelegramClientCoordinator implements TelegramRepository {
           new TeleprotoRepository(
             client,
             this.mediaCacheDirectory,
+            this.mediaCacheLimitBytes,
             this.snapshots,
             null,
           ),
@@ -306,15 +365,37 @@ export class TelegramClientCoordinator implements TelegramRepository {
     return this.repository.getCurrentUser();
   }
 
-  listChatPage(input: ChatPageInput = {}): Promise<ChatPageDto> {
+  async listChatPage(input: ChatPageInput = {}): Promise<ChatPageDto> {
     if (
       !(this.repository instanceof TeleprotoRepository) &&
       this.snapshot &&
       this.state.status === "restoring"
     ) {
-      return Promise.resolve(dialogSnapshotPage(this.snapshot, input));
+      return dialogSnapshotPage(
+        await this.snapshotWithCachedAvatars(this.snapshot),
+        input,
+      );
     }
     return this.repository.listChatPage(input);
+  }
+
+  private async snapshotWithCachedAvatars(
+    snapshot: TelegramDialogSnapshot,
+  ): Promise<TelegramDialogSnapshot> {
+    const urls = this.mediaCacheDirectory
+      ? await listCachedAvatarUrls(this.mediaCacheDirectory)
+      : new Map<string, string>();
+    return {
+      ...snapshot,
+      chats: snapshot.chats.map((chat) => {
+        const avatarDataUrl = urls.get(chat.id) ?? chat.avatarDataUrl;
+        return {
+          ...chat,
+          avatarDataUrl,
+          avatarPending: !avatarDataUrl,
+        };
+      }),
+    };
   }
 
   listFolders(): Promise<ReadonlyArray<ChatFolderDto>> {
@@ -350,6 +431,32 @@ export class TelegramClientCoordinator implements TelegramRepository {
     return this.repository.listChatMembers(chatId);
   }
 
+  getPeerProfile(peerId: string): Promise<PeerProfileDto> {
+    return this.repository.getPeerProfile(peerId);
+  }
+
+  listStickerSets(): Promise<ReadonlyArray<StickerSetDto>> {
+    return this.repository.listStickerSets();
+  }
+
+  sendSticker(chatId: string, stickerId: string): Promise<MessageDto> {
+    return this.repository.sendSticker(chatId, stickerId);
+  }
+
+  getStickerSet(shortName: string): Promise<StickerSetDto> {
+    return this.repository.getStickerSet(shortName);
+  }
+
+  getCustomEmoji(
+    documentIds: ReadonlyArray<string>,
+  ): Promise<ReadonlyArray<StickerItemDto>> {
+    return this.repository.getCustomEmoji(documentIds);
+  }
+
+  setStickerSetInstalled(shortName: string, installed: boolean): Promise<void> {
+    return this.repository.setStickerSetInstalled(shortName, installed);
+  }
+
   searchGlobal(query: string): Promise<GlobalSearchResultDto> {
     return this.repository.searchGlobal(query);
   }
@@ -368,6 +475,7 @@ export class TelegramClientCoordinator implements TelegramRepository {
     replyToId?: string,
     clientId?: string,
     silent?: boolean,
+    entities?: ReadonlyArray<MessageEntityDto>,
   ): Promise<MessageDto> {
     return this.repository.sendMessage(
       chatId,
@@ -375,6 +483,7 @@ export class TelegramClientCoordinator implements TelegramRepository {
       replyToId,
       clientId,
       silent,
+      entities,
     );
   }
 
@@ -541,6 +650,10 @@ class TeleprotoRepository implements TelegramRepository {
     string,
     Promise<string | null>
   >();
+  // Sticker documents resolved by listStickerSets and getStickerSet, keyed by
+  // the media id the picker or the set sheet hands back. Least-recently-used
+  // order, bounded like the avatars.
+  private readonly stickerDocuments = new Map<string, Api.Document>();
   private readonly mediaUploads = new Map<string, UploadProgress>();
   // Cached dialog filters (custom folders); loaded with the first chat page
   // and refreshed when Telegram reports filter/folder changes.
@@ -619,15 +732,25 @@ class TeleprotoRepository implements TelegramRepository {
     facts: FolderDialogFacts;
   }> = [];
   private cachedNextCursor: ChatPageCursorDto | null = null;
+  private avatarsHydrated = false;
   constructor(
     private readonly client: TelegramClient,
     private readonly mediaCacheDirectory: string,
+    /**
+     * Reads the user's cache ceiling. Consulted at each eviction rather than
+     * captured once, so changing the preference governs the next download
+     * without reconnecting the client.
+     */
+    private readonly mediaCacheLimitBytes: () => Promise<number>,
     private readonly snapshots: TelegramDialogSnapshotRepository | null = null,
     initialSnapshot: TelegramDialogSnapshot | null = null,
   ) {
     if (initialSnapshot) {
       this.cachedDialogs = initialSnapshot.chats.map((chat) => ({
-        chat,
+        chat: {
+          ...chat,
+          avatarPending: !chat.avatarDataUrl,
+        },
         facts: factsFromChat(chat),
       }));
       this.cachedNextCursor = initialSnapshot.nextCursor;
@@ -682,7 +805,7 @@ class TeleprotoRepository implements TelegramRepository {
       user.username ||
       user.phone;
     if (!displayName) throw new Error("Telegram account has no display name");
-    const avatarDataUrl = await this.avatarDataUrl("me");
+    const avatarDataUrl = await this.avatarDataUrl(user.id.toString(), user);
 
     return {
       id: user.id.toString(),
@@ -695,6 +818,7 @@ class TeleprotoRepository implements TelegramRepository {
 
   async listChatPage(input: ChatPageInput): Promise<ChatPageDto> {
     await this.ensureDialogFilters();
+    await this.hydrateAvatarsFromDisk();
     const limit = input.limit ?? 50;
     // The snapshot is the chat list. A live GetDialogs is a refresh, not a
     // blocking read — otherwise flood-wait sleeps occupy the exclusive queue
@@ -1013,6 +1137,271 @@ class TeleprotoRepository implements TelegramRepository {
     }));
   }
 
+  // The identity card of a peer the user may have no dialog with: a group
+  // member, a channel poster. Nicegram opens the same card from an avatar tap.
+  async getPeerProfile(peerId: string): Promise<PeerProfileDto> {
+    const entity = await this.peerEntity(peerId);
+    // Teleproto's entity union splits the name across constructors; NamedPeer
+    // is the one shape every one of them answers (see its declaration).
+    const named = entity as NamedPeer;
+    const title = namedPeerTitle(named);
+    if (!title) throw new Error(`Telegram peer ${peerId} has no title`);
+    const user = entity instanceof Api.User ? entity : null;
+    const channel = entity instanceof Api.Channel ? entity : null;
+    // The photo rides the shared per-peer avatar queue: the same cache,
+    // the same disk file, and the same "chat-avatar" event the chat list
+    // already listens to, so a profile never opens a second download path.
+    const avatarPending = !this.avatarCache.has(peerId);
+    const avatarDataUrl = this.cachedAvatar(peerId);
+    if (avatarPending) this.scheduleAvatar(peerId, entity);
+    const { bio, phone } = await this.peerFullInfo(entity);
+    return {
+      id: peerId,
+      title,
+      username: named.username ?? null,
+      kind: user?.self
+        ? "saved"
+        : channel?.broadcast
+          ? "channel"
+          : channel || entity instanceof Api.Chat
+            ? "group"
+            : "direct",
+      avatarDataUrl,
+      avatarPending,
+      bio,
+      phone,
+    };
+  }
+
+  private async peerEntity(peerId: string): Promise<AvatarEntity> {
+    try {
+      return await this.client.getEntity(peerId);
+    } catch (error) {
+      // A peer Telegram cannot resolve has no profile to show. Reporting the
+      // failure is the honest answer; a placeholder card would claim the
+      // account exists.
+      throw new Error(`Telegram peer ${peerId} was not found`, {
+        cause: error,
+      });
+    }
+  }
+
+  // Telegram keeps the about text and the phone number out of the peer entity,
+  // behind a separate full-peer request and behind the peer's privacy
+  // settings. That request failing — privacy, a flood wait, a peer whose full
+  // info Telegram refuses — must not cost the caller the identity fields it
+  // already resolved, so these two degrade to null instead of rejecting.
+  private async peerFullInfo(
+    entity: AvatarEntity,
+  ): Promise<{ bio: string | null; phone: string | null }> {
+    try {
+      if (entity instanceof Api.User) {
+        const full = await this.client.invoke(
+          new Api.users.GetFullUser({ id: entity }),
+        );
+        const resolved = full.users.find(
+          (candidate): candidate is Api.User => candidate instanceof Api.User,
+        );
+        return {
+          bio: full.fullUser.about?.trim() || null,
+          // Telegram only fills `phone` when the peer shares its number.
+          phone: resolved?.phone?.trim() || null,
+        };
+      }
+      // Broadcast channels and supergroups both answer channels.GetFullChannel;
+      // a basic group carries no about text worth a round trip.
+      if (entity instanceof Api.Channel) {
+        const full = await this.client.invoke(
+          new Api.channels.GetFullChannel({ channel: entity }),
+        );
+        const about =
+          "about" in full.fullChat ? full.fullChat.about : undefined;
+        return { bio: about?.trim() || null, phone: null };
+      }
+    } catch (error) {
+      console.error("Telegram peer details failed", error);
+    }
+    return { bio: null, phone: null };
+  }
+
+  // The picker draws the account's installed sets, which Telegram answers in
+  // two steps: the set headers, then the documents of each set. The per-set
+  // requests run one after another on purpose — Telegram rate-limits a burst
+  // of them, and the picker loads this list once.
+  async listStickerSets(): Promise<ReadonlyArray<StickerSetDto>> {
+    const installed = await this.client.invoke(
+      new Api.messages.GetAllStickers({}),
+    );
+    // messages.allStickersNotModified answers a hash this adapter never sends.
+    if (!("sets" in installed)) return [];
+    const sets: StickerSetDto[] = [];
+    for (const set of installed.sets) {
+      const resolved = await this.stickerSet(set);
+      if (resolved) sets.push(resolved);
+    }
+    return sets;
+  }
+
+  // One set failing — a pack Telegram pulled, a flood wait on that id — must
+  // not cost the picker every other installed set, so it drops out of the
+  // list instead of rejecting it.
+  private async stickerSet(
+    set: Api.TypeStickerSet,
+  ): Promise<StickerSetDto | null> {
+    try {
+      const resolved = await this.client.invoke(
+        new Api.messages.GetStickerSet({
+          stickerset: new Api.InputStickerSetID({
+            id: set.id,
+            accessHash: set.accessHash,
+          }),
+          hash: 0,
+        }),
+      );
+      if (!("documents" in resolved)) {
+        throw new Error("Telegram returned no documents for the set");
+      }
+      // GetAllStickers answers with the account's own sets, so every set this
+      // path maps is installed by definition.
+      return this.stickerSetOf(set, resolved.documents, true);
+    } catch (error) {
+      console.error(`Telegram sticker set ${set.shortName} failed`, error);
+      return null;
+    }
+  }
+
+  // The sheet opens the set behind a received sticker, which the account may
+  // not have installed, so this path reads the installed marker off the set
+  // Telegram answers with instead of assuming it.
+  async getStickerSet(shortName: string): Promise<StickerSetDto> {
+    let resolved: Api.messages.TypeStickerSet;
+    try {
+      resolved = await this.client.invoke(
+        new Api.messages.GetStickerSet({
+          stickerset: new Api.InputStickerSetShortName({ shortName }),
+          hash: 0,
+        }),
+      );
+    } catch (error) {
+      throw new Error(`Telegram sticker set ${shortName} was not found`, {
+        cause: error,
+      });
+    }
+    // messages.stickerSetNotModified answers a hash this adapter never sends,
+    // so a set without documents is one Telegram did not resolve.
+    if (!("documents" in resolved)) {
+      throw new Error(`Telegram sticker set ${shortName} was not found`);
+    }
+    return this.stickerSetOf(
+      resolved.set,
+      resolved.documents,
+      resolved.set.installedDate !== undefined,
+    );
+  }
+
+  async setStickerSetInstalled(
+    shortName: string,
+    installed: boolean,
+  ): Promise<void> {
+    const stickerset = new Api.InputStickerSetShortName({ shortName });
+    if (installed) {
+      // archived: false adds the set to the account's active stickers rather
+      // than straight into its archive.
+      await this.client.invoke(
+        new Api.messages.InstallStickerSet({ stickerset, archived: false }),
+      );
+      return;
+    }
+    await this.client.invoke(
+      new Api.messages.UninstallStickerSet({ stickerset }),
+    );
+  }
+
+  // A custom-emoji entity names a bare document id. Those documents are
+  // stickers, so they map through the same item mapper and land in the same
+  // cache — the inline emoji then downloads on the path set stickers use.
+  async getCustomEmoji(
+    documentIds: ReadonlyArray<string>,
+  ): Promise<ReadonlyArray<StickerItemDto>> {
+    if (documentIds.length === 0) return [];
+    const documents = await this.client.invoke(
+      new Api.messages.GetCustomEmojiDocuments({
+        // teleproto's TL layer takes big-integer values, not native bigint.
+        documentId: documentIds.map((id) => helpers.returnBigInt(id)),
+      }),
+    );
+    return (
+      documents
+        // documentEmpty is an emoji Telegram no longer serves; a missing one is
+        // simply absent from the answer, which is not a failure.
+        .filter((document): document is Api.Document => "mimeType" in document)
+        .map((document) => this.stickerItem(document))
+    );
+  }
+
+  // Both sticker paths — the picker's installed list and the sheet's lookup by
+  // short name — end at the same set and documents, so they map here.
+  private stickerSetOf(
+    set: Api.StickerSet,
+    documents: ReadonlyArray<Api.TypeDocument>,
+    installed: boolean,
+  ): StickerSetDto {
+    return {
+      id: set.id.toString(),
+      title: set.title,
+      shortName: set.shortName,
+      installed,
+      stickers: documents
+        // documentEmpty is a sticker Telegram no longer serves; it carries
+        // no mime type, so there is nothing to draw or send.
+        .filter((document): document is Api.Document => "mimeType" in document)
+        .map((document) => this.stickerItem(document)),
+    };
+  }
+
+  private stickerItem(document: Api.Document): StickerItemDto {
+    const mediaId = `${STICKER_MEDIA_PREFIX}${document.id}`;
+    this.cacheStickerDocument(mediaId, document);
+    const { width, height } = stickerDimensions(document);
+    return {
+      id: mediaId,
+      emoji: stickerEmoji(document),
+      format: stickerFormat(document.mimeType),
+      width,
+      height,
+    };
+  }
+
+  async sendSticker(chatId: string, stickerId: string): Promise<MessageDto> {
+    // Telegram already stores the document, so sending it costs no upload:
+    // teleproto turns the document into an InputMediaDocument by id.
+    const sent = await this.client.sendFile(chatId, {
+      file: this.stickerDocument(stickerId),
+    });
+    this.indexMessage(chatId, sent);
+    return this.toMessage(chatId, sent);
+  }
+
+  // A set sticker has no message to fall back on: listing a set or opening one
+  // is what resolved the document, so an id this cache no longer holds cannot
+  // be downloaded or sent at all.
+  private stickerDocument(mediaId: string): Api.Document {
+    const document = this.stickerDocuments.get(mediaId);
+    if (!document) throw new Error(`Telegram sticker ${mediaId} was not found`);
+    this.cacheStickerDocument(mediaId, document);
+    return document;
+  }
+
+  private cacheStickerDocument(mediaId: string, document: Api.Document): void {
+    this.stickerDocuments.delete(mediaId);
+    this.stickerDocuments.set(mediaId, document);
+    while (this.stickerDocuments.size > STICKER_DOCUMENT_CACHE_LIMIT) {
+      const oldest = this.stickerDocuments.keys().next().value;
+      if (oldest === undefined) break;
+      this.stickerDocuments.delete(oldest);
+    }
+  }
+
   async sendMessage(
     chatId: string,
     body: string,
@@ -1067,6 +1456,18 @@ class TeleprotoRepository implements TelegramRepository {
 
   // Resolves to the cached file path, or null when the user cancelled.
   private async performMediaDownload(mediaId: string): Promise<string | null> {
+    if (mediaId.startsWith(STICKER_MEDIA_PREFIX)) {
+      const document = this.stickerDocument(mediaId);
+      return this.downloadToCache(
+        mediaId,
+        new Api.MessageMediaDocument({ document }),
+        cacheFileName(
+          mediaId,
+          STICKER_FILE_NAMES[stickerFormat(document.mimeType)],
+        ),
+        numericSize(document.size),
+      );
+    }
     const { chatId, messageId } = parseMediaId(mediaId);
     const [message] = await this.client.getMessages(chatId, {
       ids: [telegramMessageId(messageId)],
@@ -1078,10 +1479,28 @@ class TeleprotoRepository implements TelegramRepository {
     if (isServiceMessage(message) || !mapMessageMedia(message)) {
       return null;
     }
+    // The whole message, not its media: teleproto reads the input chat off it
+    // to refresh a file reference Telegram has expired.
+    return this.downloadToCache(
+      mediaId,
+      message,
+      cacheFileName(mediaId, message.file?.name),
+      numericSize(message.file?.size),
+    );
+  }
+
+  // Everything a download shares whatever resolved it: one cache file per
+  // media id, the abort token cancelMediaDownload reaches for, and the
+  // progress and ready events the renderer paints from.
+  private async downloadToCache(
+    mediaId: string,
+    media: DownloadableMedia,
+    fileName: string,
+    totalBytes: number | null,
+  ): Promise<string | null> {
     if (!this.mediaCacheDirectory)
       throw new Error("Media cache is unavailable");
     await mkdir(this.mediaCacheDirectory, { recursive: true });
-    const fileName = cacheFileName(mediaId, message.file?.name);
     const outputFile = path.join(this.mediaCacheDirectory, fileName);
     try {
       const existing = await stat(outputFile);
@@ -1098,12 +1517,12 @@ class TeleprotoRepository implements TelegramRepository {
       mediaId,
       state: "downloading",
       downloadedBytes: 0,
-      totalBytes: numericSize(message.file?.size),
+      totalBytes,
       url: null,
       error: null,
     });
     try {
-      await this.client.downloadMedia(message, {
+      await this.client.downloadMedia(media, {
         outputFile,
         signal: controller.signal,
         progressCallback: (downloaded, total) =>
@@ -1119,7 +1538,10 @@ class TeleprotoRepository implements TelegramRepository {
       });
       const downloaded = await stat(outputFile);
       this.publishMediaReady(mediaId, fileName, downloaded.size);
-      await enforceMediaCacheLimit(this.mediaCacheDirectory);
+      await enforceMediaCacheLimit(
+        this.mediaCacheDirectory,
+        await this.mediaCacheLimitBytes(),
+      );
       return outputFile;
     } catch (error) {
       this.emit({
@@ -1127,7 +1549,7 @@ class TeleprotoRepository implements TelegramRepository {
         mediaId,
         state: controller.signal.aborted ? "cancelled" : "failed",
         downloadedBytes: 0,
-        totalBytes: numericSize(message.file?.size),
+        totalBytes,
         url: null,
         error: controller.signal.aborted ? null : safeError(error),
       });
@@ -1575,6 +1997,16 @@ class TeleprotoRepository implements TelegramRepository {
     // banner, which is not a user-actionable sync state.
     console.error("Telegram sync failed", error);
     if (isLanguageError(error) || isSkippableEntityError(error)) return;
+    // A request that failed because the transport is down is a connection
+    // state, not a failure the reader can act on. Telegram reports exactly
+    // this through ConnectionsManager — the chat list title reads
+    // "Connecting…" — and never as an error surface. teleproto rejects with a
+    // bare Error carrying prose, so the client's own connection flag is the
+    // signal here rather than the message text.
+    if (!this.client.connected) {
+      this.emitConnectionState("offline");
+      return;
+    }
     this.emit({ type: "sync-error", message: safeError(error) });
   }
 
@@ -1599,8 +2031,9 @@ class TeleprotoRepository implements TelegramRepository {
     const draft = "draft" in dialog.dialog ? dialog.dialog.draft : undefined;
     const readInboxMaxId =
       "readInboxMaxId" in dialog.dialog ? dialog.dialog.readInboxMaxId : 0;
+    const avatarPending = !this.avatarCache.has(chatId);
     const avatarDataUrl = this.cachedAvatar(chatId);
-    if (!this.avatarCache.has(chatId) && dialog.entity) {
+    if (avatarPending && dialog.entity) {
       // Channel and migrated-group ids are not sufficient to resolve a peer:
       // Telegram also needs the access hash carried by the dialog entity.
       // Nicegram likewise hands its image loader the complete peer object.
@@ -1625,6 +2058,7 @@ class TeleprotoRepository implements TelegramRepository {
             : "direct",
       initials: initials(title),
       avatarDataUrl,
+      avatarPending,
       draftPreview: draft instanceof Api.DraftMessage ? draft.message : null,
       // A fresh list snapshot has no live typing state; subsequent "typing"
       // events (see handleUserUpdate) patch it in the renderer's store.
@@ -1661,16 +2095,16 @@ class TeleprotoRepository implements TelegramRepository {
       const task = this.pendingAvatars.shift();
       if (!task) return;
       this.activeAvatarDownloads += 1;
-      void this.avatarDataUrl(task.entity)
+      void this.avatarDataUrl(task.chatId, task.entity)
         .then((avatarDataUrl) => {
           this.cacheAvatar(task.chatId, avatarDataUrl);
-          if (avatarDataUrl) {
-            this.emit({
-              type: "chat-avatar",
-              chatId: task.chatId,
-              avatarDataUrl,
-            });
-          }
+          this.patchCachedAvatar(task.chatId, avatarDataUrl);
+          this.emit({
+            type: "chat-avatar",
+            chatId: task.chatId,
+            avatarDataUrl,
+          });
+          void this.persistSnapshot();
         })
         .finally(() => {
           this.queuedAvatarChatIds.delete(task.chatId);
@@ -1690,13 +2124,74 @@ class TeleprotoRepository implements TelegramRepository {
     }
   }
 
-  private async avatarDataUrl(entity: AvatarEntity): Promise<string | null> {
+  private async hydrateAvatarsFromDisk(): Promise<void> {
+    if (this.avatarsHydrated) return;
+    this.avatarsHydrated = true;
+    if (!this.mediaCacheDirectory) return;
+    try {
+      const entries = await readdir(this.mediaCacheDirectory);
+      for (const entry of entries) {
+        const chatId = chatIdFromAvatarFileName(entry);
+        if (!chatId) continue;
+        const url = avatarMediaUrl(entry);
+        this.cacheAvatar(chatId, url);
+        this.patchCachedAvatar(chatId, url);
+      }
+    } catch (error) {
+      if (!isMissingPath(error)) {
+        console.error("Telegram avatar cache failed", error);
+      }
+    }
+  }
+
+  private patchCachedAvatar(
+    chatId: string,
+    avatarDataUrl: string | null,
+  ): void {
+    const index = this.cachedDialogs.findIndex(
+      (entry) => entry.chat.id === chatId,
+    );
+    if (index < 0) return;
+    const entry = this.cachedDialogs[index]!;
+    this.cachedDialogs[index] = {
+      ...entry,
+      chat: { ...entry.chat, avatarDataUrl, avatarPending: false },
+    };
+  }
+
+  private async avatarDataUrl(
+    chatId: string,
+    entity: AvatarEntity,
+  ): Promise<string | null> {
+    const fileName = avatarCacheFileName(chatId);
+    if (this.mediaCacheDirectory) {
+      const filePath = path.join(this.mediaCacheDirectory, fileName);
+      try {
+        await stat(filePath);
+        await touchMediaCacheFile(filePath);
+        return avatarMediaUrl(fileName);
+      } catch (error) {
+        if (!isMissingPath(error)) {
+          console.error("Telegram avatar cache failed", error);
+        }
+      }
+    }
     try {
       const photo = await this.client.downloadProfilePhoto(entity, {
         isBig: false,
       });
       if (photo && typeof photo !== "string" && photo.byteLength > 0) {
-        return `data:image/jpeg;base64,${Buffer.from(photo).toString("base64")}`;
+        const bytes = Buffer.from(photo);
+        if (this.mediaCacheDirectory) {
+          await mkdir(this.mediaCacheDirectory, { recursive: true });
+          await writeFile(path.join(this.mediaCacheDirectory, fileName), bytes);
+          await enforceMediaCacheLimit(
+            this.mediaCacheDirectory,
+            await this.mediaCacheLimitBytes(),
+          );
+          return avatarMediaUrl(fileName);
+        }
+        return `data:image/jpeg;base64,${bytes.toString("base64")}`;
       }
     } catch {
       // A missing or inaccessible profile photo should not block the workspace.
@@ -1739,7 +2234,7 @@ class TeleprotoRepository implements TelegramRepository {
       if (!source) continue;
       snapshots.set(message.id.toString(), {
         id: source.id.toString(),
-        senderName: await senderName(source),
+        senderName: (await resolveSender(source)).name,
         body: telegramMessageBody(source),
         entities: mapMessageEntities(
           telegramMessageBody(source),
@@ -1755,10 +2250,26 @@ class TeleprotoRepository implements TelegramRepository {
     message: TeleprotoMessage,
     replyTo: MessageReplyToDto | null = null,
   ): Promise<MessageDto> {
+    const sender = await resolveSender(message);
+    // Pending must mean "a download is on its way", or the row keeps a
+    // skeleton nothing will ever clear. Outgoing rows paint the account's own
+    // photo, so fetching the self photo once per sent message would be pure
+    // waste, and a peer that did not resolve has nothing to fetch at all —
+    // both settle immediately as "no photo".
+    const photoEntity =
+      this.avatarCache.has(sender.id) || message.out || !sender.id
+        ? undefined
+        : sender.entity;
+    if (photoEntity) this.scheduleAvatar(sender.id, photoEntity);
+    const senderAvatarPending = Boolean(photoEntity);
+    const senderAvatarUrl = this.cachedAvatar(sender.id);
     return {
       id: message.id.toString(),
       chatId,
-      senderName: await senderName(message),
+      senderId: sender.id,
+      senderName: sender.name,
+      senderAvatarUrl,
+      senderAvatarPending,
       body: telegramMessageBody(message),
       entities: mapMessageEntities(
         telegramMessageBody(message),
@@ -1792,19 +2303,8 @@ class TeleprotoRepository implements TelegramRepository {
     if (!header.fromId) return null;
     try {
       const entity = (await this.client.getEntity(header.fromId)) as
-        | {
-            firstName?: string;
-            lastName?: string;
-            title?: string;
-            username?: string;
-          }
-        | undefined;
-      return (
-        [entity?.firstName, entity?.lastName].filter(Boolean).join(" ") ||
-        entity?.title ||
-        entity?.username ||
-        null
-      );
+        NamedPeer | undefined;
+      return namedPeerTitle(entity);
     } catch {
       return null;
     }
@@ -1837,32 +2337,65 @@ function isMigratedDialog(dialog: TeleprotoDialog): boolean {
   return entity?.migratedTo != null;
 }
 
-async function senderName(message: TeleprotoMessage): Promise<string> {
-  const sender = (await message.getSender()) as
-    | {
-        firstName?: string;
-        lastName?: string;
-        title?: string;
-        username?: string;
-      }
-    | undefined;
-  const senderDisplayName = sender
-    ? [sender.firstName, sender.lastName].filter(Boolean).join(" ") ||
-      sender.title ||
-      sender.username
-    : undefined;
-  const chat = senderDisplayName
-    ? undefined
-    : ((await message.getChat()) as
-        { title?: string; firstName?: string; username?: string } | undefined);
+// The name a peer paints itself with, in Telegram's own order of preference:
+// the first and last name of a user, the title of a channel or group, and a
+// bare username when the peer publishes nothing else. Null when the peer
+// carries no name at all — a deleted account, or a peer resolved as `min`.
+function namedPeerTitle(peer: NamedPeer | undefined): string | null {
+  return (
+    [peer?.firstName, peer?.lastName].filter(Boolean).join(" ") ||
+    peer?.title ||
+    peer?.username ||
+    null
+  );
+}
+
+// The author of a message: peer id, display name, and the peer entity, all
+// from a single `getSender()` round trip. `toMessage` needs the entity as well
+// as the name — the avatar download takes a peer, not a bare id, because
+// channels and migrated groups are only addressable with their access hash.
+async function resolveSender(
+  message: TeleprotoMessage,
+): Promise<ResolvedSender> {
+  const sender = await message.getSender();
+  const senderDisplayName = namedPeerTitle(sender as NamedPeer | undefined);
+  // A channel post has no sender: the channel authors it, so its own peer
+  // carries both the signature fallback and the photo to paint.
+  const chat = senderDisplayName ? undefined : await message.getChat();
+  const chatNamed = chat as NamedPeer | undefined;
   const name =
     senderDisplayName ||
     message.postAuthor ||
-    chat?.title ||
-    chat?.firstName ||
-    chat?.username;
+    chatNamed?.title ||
+    chatNamed?.firstName ||
+    chatNamed?.username;
   if (!name) throw new Error(`Telegram message ${message.id} has no sender`);
-  return name;
+  const peer = sender ?? chat;
+  return { id: peer?.id?.toString() ?? "", name, entity: peer };
+}
+
+// Telegram keeps the emoji a sticker stands for on DocumentAttributeSticker,
+// and DocumentAttributeCustomEmoji publishes the same field for the documents
+// an emoji pack is made of. A set sticker missing it still belongs in the
+// picker, drawn without its emoji label.
+function stickerEmoji(document: Api.Document): string | null {
+  for (const attribute of document.attributes) {
+    if ("alt" in attribute) return attribute.alt.trim() || null;
+  }
+  return null;
+}
+
+// The pixel size the picker reserves before the bytes arrive. Static stickers
+// declare it on the image attribute, WebM ones on the video attribute, and a
+// `.tgs` declares nothing — Lottie carries its own canvas size.
+function stickerDimensions(document: Api.Document): {
+  readonly width: number | null;
+  readonly height: number | null;
+} {
+  for (const attribute of document.attributes) {
+    if ("w" in attribute) return { width: attribute.w, height: attribute.h };
+  }
+  return { width: null, height: null };
 }
 
 function parseMediaId(mediaId: string): { chatId: string; messageId: string } {
@@ -1946,6 +2479,10 @@ function factsFromChat(chat: ChatDto): FolderDialogFacts {
 
 function telegramMessageBody(message: { readonly message?: unknown }): string {
   return typeof message.message === "string" ? message.message : "";
+}
+
+function isMissingPath(error: unknown): boolean {
+  return error instanceof Error && "code" in error && error.code === "ENOENT";
 }
 
 function floodWaitSeconds(error: unknown): number | null {

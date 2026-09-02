@@ -1,4 +1,8 @@
-import type { MessageMediaDto } from "../../../../contracts/src/ipc";
+import type {
+  MessageMediaDto,
+  MessageStickerDto,
+  StickerFormat,
+} from "../../../../contracts/src/ipc";
 
 interface TeleprotoFileView {
   readonly name?: unknown;
@@ -37,9 +41,7 @@ interface TeleprotoMediaMessage {
 }
 
 export function isServiceMessage(message: TeleprotoMediaMessage): boolean {
-  return (
-    message.className === "MessageService" || message.action != null
-  );
+  return message.className === "MessageService" || message.action != null;
 }
 
 export function mapMessageMedia(
@@ -85,16 +87,18 @@ export function mapMessageMedia(
                   : null;
   if (!kind) return null;
   const file = message.file;
+  const mimeType = stringValue(file?.mimeType);
   return {
     id: mediaId,
     kind,
     fileName: stringValue(file?.name),
-    mimeType: stringValue(file?.mimeType),
+    mimeType,
     size: finiteNumber(file?.size),
-    // Teleproto File.width/height/duration call `_fromAttr([Cls, Cls])`,
+    // Teleproto's File.width/height/duration call `_fromAttr([Cls, Cls])`,
     // which does `attr instanceof [Cls, Cls]` and throws TypeError.
     width: fileMetric(file, "width") ?? attributeMetric(message.document, "w"),
-    height: fileMetric(file, "height") ?? attributeMetric(message.document, "h"),
+    height:
+      fileMetric(file, "height") ?? attributeMetric(message.document, "h"),
     duration:
       fileMetric(file, "duration") ??
       attributeMetric(message.document, "duration"),
@@ -104,6 +108,7 @@ export function mapMessageMedia(
       "spoiler" in message.media &&
       message.media.spoiler,
     ),
+    sticker: kind === "sticker" ? stickerOf(message.document, mimeType) : null,
   };
 }
 
@@ -158,15 +163,52 @@ function fileMetric(
 }
 
 function attributeMetric(document: unknown, key: string): number | null {
-  if (typeof document !== "object" || document === null) return null;
-  const attributes = (document as { attributes?: unknown }).attributes;
-  if (!Array.isArray(attributes)) return null;
-  for (const attribute of attributes) {
-    if (typeof attribute !== "object" || attribute === null) continue;
-    if (key in attribute) {
-      const value = finiteNumber((attribute as Record<string, unknown>)[key]);
-      if (value !== null) return value;
-    }
+  for (const attribute of documentAttributes(document)) {
+    if (!(key in attribute)) continue;
+    const value = finiteNumber(attribute[key as keyof typeof attribute]);
+    if (value !== null) return value;
   }
   return null;
+}
+
+// Telegram keeps the emoji a sticker stands for and the set it came from on
+// DocumentAttributeSticker, and leaves the encoding to the mime type.
+// DocumentAttributeCustomEmoji carries the same two fields and also means
+// "draw this document as a sticker", so both are read the same way.
+function stickerOf(
+  document: unknown,
+  mimeType: string | null,
+): MessageStickerDto {
+  for (const attribute of documentAttributes(document)) {
+    if (!("alt" in attribute) || !("stickerset" in attribute)) continue;
+    return {
+      emoji: stringValue(attribute.alt),
+      format: stickerFormat(mimeType),
+      setName: stickerSetName(attribute.stickerset),
+    };
+  }
+  return { emoji: null, format: stickerFormat(mimeType), setName: null };
+}
+
+function stickerSetName(stickerset: unknown): string | null {
+  if (typeof stickerset !== "object" || stickerset === null) return null;
+  if (!("shortName" in stickerset)) return null;
+  return stringValue(stickerset.shortName);
+}
+
+export function stickerFormat(mimeType: string | null): StickerFormat {
+  if (mimeType === "application/x-tgsticker") return "animated";
+  if (mimeType === "video/webm") return "video";
+  return "static";
+}
+
+function documentAttributes(document: unknown): ReadonlyArray<object> {
+  if (typeof document !== "object" || document === null) return [];
+  if (!("attributes" in document)) return [];
+  const attributes = document.attributes;
+  if (!Array.isArray(attributes)) return [];
+  return attributes.filter(
+    (attribute): attribute is object =>
+      typeof attribute === "object" && attribute !== null,
+  );
 }

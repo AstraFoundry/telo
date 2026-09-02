@@ -1,4 +1,11 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  mkdtemp,
+  readFile,
+  readdir,
+  rm,
+  utimes,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -564,6 +571,48 @@ describe("DemoTelegramRepository", () => {
     );
   });
 
+  it("resolves a group member peer to an identity card with a bio", async () => {
+    const repository = new DemoTelegramRepository();
+
+    await expect(repository.getPeerProfile("demo-mina")).resolves.toEqual({
+      id: "demo-mina",
+      title: "Mina",
+      username: "mina",
+      kind: "direct",
+      avatarDataUrl: null,
+      bio: "Design systems, spacing rules, and long changelogs.",
+      phone: "+1 555 0142",
+    });
+    // Only one demo peer shares a number, so the card's phone row has both a
+    // present and an absent case to render.
+    await expect(repository.getPeerProfile("demo-lev")).resolves.toMatchObject({
+      title: "Lev",
+      phone: null,
+    });
+  });
+
+  it("resolves a peer that has a dialog to that chat's identity", async () => {
+    const repository = new DemoTelegramRepository();
+
+    await expect(repository.getPeerProfile("product")).resolves.toEqual({
+      id: "product",
+      title: "Product Notes",
+      username: null,
+      kind: "channel",
+      avatarDataUrl: null,
+      bio: null,
+      phone: null,
+    });
+  });
+
+  it("rejects a peer profile lookup for an unknown peer", async () => {
+    const repository = new DemoTelegramRepository();
+
+    await expect(repository.getPeerProfile("missing")).rejects.toThrow(
+      "Unknown peer missing",
+    );
+  });
+
   it("stores composer-authored entities on a sent message", async () => {
     const repository = new DemoTelegramRepository();
     const entities = [{ type: "bold" as const, offset: 0, length: 5 }];
@@ -965,6 +1014,138 @@ describe("DemoTelegramRepository", () => {
       ),
     ).rejects.toThrow("Unknown chat missing");
   });
+
+  it("lists one installed sticker set covering every sticker encoding", async () => {
+    const repository = new DemoTelegramRepository();
+
+    const sets = await repository.listStickerSets();
+
+    expect(sets).toHaveLength(1);
+    expect(sets[0]).toMatchObject({
+      shortName: "TeloPack",
+      title: "Telo Pack",
+      installed: true,
+    });
+    expect(sets[0].stickers).toEqual([
+      {
+        id: "sticker/1",
+        emoji: "👋",
+        format: "static",
+        width: 512,
+        height: 512,
+      },
+      {
+        id: "sticker/2",
+        emoji: "🎉",
+        format: "animated",
+        width: 512,
+        height: 512,
+      },
+      {
+        id: "sticker/3",
+        emoji: "🔥",
+        format: "video",
+        width: 512,
+        height: 512,
+      },
+    ]);
+  });
+
+  it("appends an outgoing sticker message carrying the set entry's media", async () => {
+    const repository = new DemoTelegramRepository();
+    const events: unknown[] = [];
+    repository.subscribe((event) => events.push(event));
+
+    const sent = await repository.sendSticker("design", "sticker/2");
+
+    expect(sent).toMatchObject({
+      chatId: "design",
+      body: "",
+      outgoing: true,
+      status: "sent",
+      media: {
+        id: "sticker/2",
+        kind: "sticker",
+        mimeType: "application/x-tgsticker",
+        sticker: { emoji: "🎉", format: "animated", setName: "TeloPack" },
+      },
+    });
+    expect((await listMessages(repository, "design")).at(-1)).toEqual(sent);
+    expect(events).toContainEqual({
+      type: "message-upsert",
+      cause: "new",
+      message: sent,
+    });
+    // A sticker has no body, so the dialog preview falls back to its emoji.
+    const chat = (await listChats(repository)).find(
+      (entry) => entry.id === "design",
+    );
+    expect(chat?.preview).toBe("🎉");
+  });
+
+  it("rejects a sticker send to an unknown chat or for an unknown sticker", async () => {
+    const repository = new DemoTelegramRepository();
+
+    await expect(
+      repository.sendSticker("missing", "sticker/1"),
+    ).rejects.toThrow("Unknown chat missing");
+    await expect(
+      repository.sendSticker("design", "sticker/404"),
+    ).rejects.toThrow("Unknown sticker sticker/404");
+  });
+
+  it("reads the set a received sticker opens by short name", async () => {
+    const repository = new DemoTelegramRepository();
+
+    const set = await repository.getStickerSet("TeloPack");
+
+    expect(set).toMatchObject({
+      id: "demo-telopack",
+      shortName: "TeloPack",
+      title: "Telo Pack",
+      installed: true,
+    });
+    expect(set.stickers.map((sticker) => sticker.id)).toEqual([
+      "sticker/1",
+      "sticker/2",
+      "sticker/3",
+    ]);
+  });
+
+  it("rejects reading or installing an unknown sticker set", async () => {
+    const repository = new DemoTelegramRepository();
+
+    await expect(repository.getStickerSet("NoPack")).rejects.toThrow(
+      "Unknown sticker set NoPack",
+    );
+    await expect(
+      repository.setStickerSetInstalled("NoPack", true),
+    ).rejects.toThrow("Unknown sticker set NoPack");
+  });
+
+  // The set sheet's add/remove button reads the state back, so the install
+  // flag has to survive the call the way an account-level install does.
+  it("keeps the set's installed state across calls, and out of the picker while removed", async () => {
+    const repository = new DemoTelegramRepository();
+
+    await repository.setStickerSetInstalled("TeloPack", false);
+
+    expect(await repository.getStickerSet("TeloPack")).toMatchObject({
+      shortName: "TeloPack",
+      installed: false,
+    });
+    // The picker lists installed sets only.
+    expect(await repository.listStickerSets()).toEqual([]);
+
+    await repository.setStickerSetInstalled("TeloPack", true);
+
+    expect(await repository.getStickerSet("TeloPack")).toMatchObject({
+      installed: true,
+    });
+    const sets = await repository.listStickerSets();
+    expect(sets).toHaveLength(1);
+    expect(sets[0]).toMatchObject({ shortName: "TeloPack", installed: true });
+  });
 });
 
 describe("DemoTelegramRepository media downloads", () => {
@@ -982,6 +1163,39 @@ describe("DemoTelegramRepository media downloads", () => {
 
   afterEach(async () => {
     await rm(cacheDirectory, { recursive: true, force: true });
+  });
+
+  it("evicts against the configured cache limit after a download", async () => {
+    cacheDirectory = await mkdtemp(path.join(tmpdir(), "telo-demo-media-"));
+    let limitBytes = 64 * 1024 ** 2;
+    const repository = new DemoTelegramRepository({
+      mediaCacheDirectory: cacheDirectory,
+      mediaCacheLimitBytes: async () => limitBytes,
+    });
+
+    await repository.downloadMedia("design/media-1");
+    await repository.downloadMedia("design/media-2");
+    // Age both cached files so LRU ordering is deterministic; eviction always
+    // spares the newest file.
+    for (const [index, name] of [
+      "design_media-1.png",
+      "design_media-2.webm",
+    ].entries()) {
+      const stale = new Date(Date.UTC(2026, 7, index + 1));
+      await utimes(path.join(cacheDirectory, name), stale, stale);
+    }
+
+    // Generous limit: both downloads stay cached.
+    expect((await readdir(cacheDirectory)).sort()).toEqual([
+      "design_media-1.png",
+      "design_media-2.webm",
+    ]);
+
+    limitBytes = 1;
+    await repository.downloadMedia("design/media-3");
+
+    // The lowered preference governs this download, not the 512 MiB const.
+    expect(await readdir(cacheDirectory)).toEqual(["design_media-3.png"]);
   });
 
   it("writes deterministic bytes into the cache and publishes a ready media URL", async () => {
@@ -1090,6 +1304,38 @@ describe("DemoTelegramRepository media downloads", () => {
     const { repository } = await makeRepository();
     await expect(repository.downloadMedia("design/missing")).rejects.toThrow(
       "Unknown demo media design/missing",
+    );
+  });
+
+  it("downloads a set sticker that hangs off no message", async () => {
+    const { repository } = await makeRepository();
+
+    // The Lottie entry: gzip magic bytes, cached under the sticker media id.
+    const animated = await repository.resolveMediaFile("sticker/2");
+    expect(animated).toBe(path.join(cacheDirectory, "sticker_2.tgs"));
+    expect((await readFile(animated)).subarray(0, 2)).toEqual(
+      Buffer.from([0x1f, 0x8b]),
+    );
+
+    // The video entry: EBML magic bytes.
+    const video = await repository.resolveMediaFile("sticker/3");
+    expect(video).toBe(path.join(cacheDirectory, "sticker_3.webm"));
+    expect((await readFile(video)).subarray(0, 4)).toEqual(
+      Buffer.from([0x1a, 0x45, 0xdf, 0xa3]),
+    );
+
+    // The still entry is synthesized as a PNG, like every other demo still.
+    const still = await repository.resolveMediaFile("sticker/1");
+    expect(still).toBe(path.join(cacheDirectory, "sticker_1.png"));
+    expect((await readFile(still)).subarray(0, 4)).toEqual(
+      Buffer.from([0x89, 0x50, 0x4e, 0x47]),
+    );
+  });
+
+  it("rejects downloads for a sticker outside the installed set", async () => {
+    const { repository } = await makeRepository();
+    await expect(repository.downloadMedia("sticker/404")).rejects.toThrow(
+      "Unknown demo media sticker/404",
     );
   });
 });

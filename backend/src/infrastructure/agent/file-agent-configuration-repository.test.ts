@@ -41,6 +41,9 @@ describe("FileAgentConfigurationRepository", () => {
       instructions: "Be brief.",
       apiKey: "sk-secret",
       canInspectWorkspace: true,
+      temperature: 1.2,
+      maxSteps: 6,
+      historyLimit: 5,
     });
 
     await repository.save(configuration);
@@ -63,6 +66,29 @@ describe("FileAgentConfigurationRepository", () => {
       '"encryptedApiKey": null',
     );
     expect((await repository.get()).snapshot().apiKey).toBeNull();
+  });
+
+  it("backfills tuning defaults for a file written before they existed", async () => {
+    const filePath = await temporaryFile();
+    await writeFile(
+      filePath,
+      JSON.stringify({
+        provider: "openai",
+        model: "gpt-4.1-mini",
+        baseUrl: null,
+        instructions: "Be brief.",
+        encryptedApiKey: null,
+        canInspectWorkspace: true,
+      }),
+    );
+    const repository = repositoryAt(filePath);
+
+    const defaults = AgentConfiguration.default().snapshot();
+    expect((await repository.get()).snapshot()).toMatchObject({
+      temperature: defaults.temperature,
+      maxSteps: defaults.maxSteps,
+      historyLimit: defaults.historyLimit,
+    });
   });
 
   it("rejects corrupted JSON instead of falling back", async () => {

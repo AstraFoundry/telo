@@ -39,18 +39,25 @@ export class AiSdkAgentGateway implements AgentGateway {
 
     yield { type: "activity", label: "Reading workspace" };
     try {
+      // Only the newest `historyLimit` turns are replayed; a limit of 0 sends
+      // the prompt alone.
+      const history =
+        configuration.historyLimit > 0
+          ? input.history.slice(-configuration.historyLimit)
+          : [];
       const result = streamText({
         model: provider(configuration.model),
         instructions: configuration.instructions,
+        temperature: configuration.temperature,
         messages: [
-          ...input.history.map((message) => ({
+          ...history.map((message) => ({
             role: message.role,
             content: message.body,
           })),
           { role: "user" as const, content: input.prompt },
         ],
         ...(configuration.canInspectWorkspace ? { tools } : {}),
-        stopWhen: isStepCount(4),
+        stopWhen: isStepCount(configuration.maxSteps),
       });
       // AI SDK v7's textStream swallows provider errors; the full stream
       // surfaces them as error parts.

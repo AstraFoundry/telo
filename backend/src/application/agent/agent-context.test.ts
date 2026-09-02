@@ -34,6 +34,8 @@ function messageDto(partial: Partial<MessageDto> = {}): MessageDto {
     id: "m1",
     chatId: "design",
     senderName: "Lev",
+    senderId: "demo-lev",
+    senderAvatarUrl: null,
     body: "Ship the retry flow.",
     entities: [],
     media: null,
@@ -69,10 +71,16 @@ function telegramStub(
 }
 
 const DESIGN_MESSAGES = [
-  messageDto({ id: "design-1", senderName: "Mina", body: "Compact list." }),
+  messageDto({
+    id: "design-1",
+    senderName: "Mina",
+    senderId: "demo-mina",
+    body: "Compact list.",
+  }),
   messageDto({
     id: "design-2",
     senderName: "You",
+    senderId: "demo-you",
     body: "Agreed.",
     outgoing: true,
   }),

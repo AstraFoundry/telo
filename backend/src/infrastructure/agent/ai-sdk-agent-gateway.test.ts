@@ -11,12 +11,13 @@ import { AiSdkAgentGateway } from "./ai-sdk-agent-gateway";
 const ai = vi.hoisted(() => ({
   streamText: vi.fn(),
   createOpenAI: vi.fn(() => (model: string) => ({ provider: "openai", model })),
+  isStepCount: vi.fn(() => () => true),
 }));
 
 vi.mock("ai", () => ({
   streamText: ai.streamText,
   tool: (config: unknown): unknown => config,
-  isStepCount: () => () => true,
+  isStepCount: ai.isStepCount,
 }));
 
 vi.mock("@ai-sdk/openai", () => ({ createOpenAI: ai.createOpenAI }));
@@ -28,6 +29,7 @@ interface InspectWorkspaceTool {
 interface StreamTextArgs {
   messages: Array<{ role: string; content: string }>;
   instructions: string;
+  temperature: number;
   tools?: Record<string, InspectWorkspaceTool>;
 }
 
@@ -55,6 +57,9 @@ function configuration(
     instructions: "Be brief.",
     apiKey: "sk-test",
     canInspectWorkspace: true,
+    temperature: 0.7,
+    maxSteps: 4,
+    historyLimit: 20,
     ...overrides,
   });
 }
@@ -95,6 +100,7 @@ describe("AiSdkAgentGateway", () => {
   beforeEach(() => {
     ai.streamText.mockReset();
     ai.createOpenAI.mockClear();
+    ai.isStepCount.mockClear();
   });
 
   it("requires an API key before contacting the provider", async () => {
@@ -146,6 +152,45 @@ describe("AiSdkAgentGateway", () => {
       { role: "assistant", content: "Earlier answer" },
       { role: "user", content: "Summarize" },
     ]);
+  });
+
+  it("passes the configured temperature and step count to the provider", async () => {
+    ai.streamText.mockReturnValue(emptyStream());
+
+    await collect(configuration({ temperature: 1.4, maxSteps: 7 }));
+
+    const args = ai.streamText.mock.calls[0]?.[0] as StreamTextArgs;
+    expect(args.temperature).toBe(1.4);
+    expect(ai.isStepCount).toHaveBeenCalledWith(7);
+  });
+
+  it("replays only the newest history entries within the limit", async () => {
+    ai.streamText.mockReturnValue(emptyStream());
+
+    await collect(configuration({ historyLimit: 2 }), [
+      { role: "user", body: "Oldest" },
+      { role: "assistant", body: "Middle" },
+      { role: "user", body: "Newest" },
+    ]);
+
+    const args = ai.streamText.mock.calls[0]?.[0] as StreamTextArgs;
+    expect(args.messages).toEqual([
+      { role: "assistant", content: "Middle" },
+      { role: "user", content: "Newest" },
+      { role: "user", content: "Summarize" },
+    ]);
+  });
+
+  it("replays no prior turns when the history limit is zero", async () => {
+    ai.streamText.mockReturnValue(emptyStream());
+
+    await collect(configuration({ historyLimit: 0 }), [
+      { role: "user", body: "Earlier question" },
+      { role: "assistant", body: "Earlier answer" },
+    ]);
+
+    const args = ai.streamText.mock.calls[0]?.[0] as StreamTextArgs;
+    expect(args.messages).toEqual([{ role: "user", content: "Summarize" }]);
   });
 
   it("omits tools when workspace inspection is disabled", async () => {

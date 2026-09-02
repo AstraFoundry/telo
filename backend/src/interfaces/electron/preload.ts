@@ -29,6 +29,17 @@ const api: TeloDesktopApi = {
       ipcRenderer.invoke(channels.pinnedMessageList, chatId),
     listChatMembers: (chatId) =>
       ipcRenderer.invoke(channels.chatMemberList, chatId),
+    getPeerProfile: (peerId) =>
+      ipcRenderer.invoke(channels.peerProfileGet, peerId),
+    listStickerSets: () => ipcRenderer.invoke(channels.stickerSetList),
+    sendSticker: (chatId, stickerId) =>
+      ipcRenderer.invoke(channels.stickerSend, chatId, stickerId),
+    getStickerSet: (shortName) =>
+      ipcRenderer.invoke(channels.stickerSetGet, shortName),
+    setStickerSetInstalled: (shortName, installed) =>
+      ipcRenderer.invoke(channels.stickerSetInstalledSet, shortName, installed),
+    getCustomEmoji: (documentIds) =>
+      ipcRenderer.invoke(channels.customEmojiGet, documentIds),
     searchGlobal: (query) => ipcRenderer.invoke(channels.searchGlobal, query),
     searchMessages: (chatId, query, input) =>
       ipcRenderer.invoke(channels.searchMessages, chatId, query, input),
@@ -125,6 +136,10 @@ const api: TeloDesktopApi = {
     get: () => ipcRenderer.invoke(channels.preferencesGet),
     update: (input: UpdateUserPreferencesInput) =>
       ipcRenderer.invoke(channels.preferencesUpdate, input),
+  },
+  storage: {
+    mediaCacheUsage: () => ipcRenderer.invoke(channels.storageMediaCacheUsage),
+    clearMediaCache: () => ipcRenderer.invoke(channels.storageMediaCacheClear),
   },
 };
 

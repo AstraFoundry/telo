@@ -16,6 +16,9 @@ import type {
   MessagePageInput,
   MessageSearchPageDto,
   MessageSearchPageInput,
+  PeerProfileDto,
+  StickerItemDto,
+  StickerSetDto,
   TelegramWorkspaceEvent,
 } from "../../../../contracts/src/ipc";
 
@@ -47,6 +50,33 @@ export interface TelegramRepository {
    * without a member list (direct, channel, Saved Messages).
    */
   listChatMembers(chatId: string): Promise<ReadonlyArray<ChatMemberDto>>;
+  /**
+   * Identity card for one peer, for message authors that have no dialog to
+   * open (group members, channel posters).
+   */
+  getPeerProfile(peerId: string): Promise<PeerProfileDto>;
+  /**
+   * The account's installed sticker sets, each with its stickers. Sticker ids
+   * are media keys the download pipeline understands, so the picker draws
+   * them through the same path as the transcript.
+   */
+  listStickerSets(): Promise<ReadonlyArray<StickerSetDto>>;
+  /** Sends one sticker from an installed set into a chat. */
+  sendSticker(chatId: string, stickerId: string): Promise<MessageDto>;
+  /**
+   * One set by short name, for the sheet a received sticker opens. Unlike
+   * the picker's list this can return a set the account has not installed.
+   */
+  getStickerSet(shortName: string): Promise<StickerSetDto>;
+  /** Adds the set to the account's stickers, or removes it. */
+  setStickerSetInstalled(shortName: string, installed: boolean): Promise<void>;
+  /**
+   * Resolves the documents behind `custom-emoji` entities. They are sticker
+   * documents, so the results carry the same media ids as set stickers.
+   */
+  getCustomEmoji(
+    documentIds: ReadonlyArray<string>,
+  ): Promise<ReadonlyArray<StickerItemDto>>;
   /** Server-side global search across chat titles and message bodies. */
   searchGlobal(query: string): Promise<GlobalSearchResultDto>;
   /** Server-side search within one chat; ids come back newest first. */

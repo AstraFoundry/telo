@@ -1,9 +1,14 @@
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type {
   ChatDto,
   TelegramAuthState,
   TelegramLoginInput,
+  TelegramWorkspaceEvent,
 } from "../../../../contracts/src/ipc";
 import { ARCHIVE_FOLDER_ID } from "../../../../contracts/src/ipc";
 import type {
@@ -59,6 +64,9 @@ const fake = vi.hoisted(() => {
 
     connectCalls = 0;
     disconnectCalls = 0;
+    // teleproto exposes the live transport state; the repository reads it to
+    // tell a dropped connection apart from a real failure.
+    connected = true;
     readonly session = { save: (): string => "restored-session" };
     connectionHandler:
       | ((
@@ -133,17 +141,27 @@ const fake = vi.hoisted(() => {
       this.errorHandler = handler;
     }
 
+    static downloadMediaBehavior:
+      | ((media: unknown, params: { outputFile: string }) => Promise<void>)
+      | null = null;
+
     readonly downloadMediaCalls: unknown[] = [];
-    async downloadMedia(message: unknown): Promise<Buffer> {
+    async downloadMedia(
+      message: unknown,
+      params: { outputFile: string },
+    ): Promise<Buffer> {
       this.downloadMediaCalls.push(message);
       if (
         message &&
         typeof message === "object" &&
         "className" in message &&
-        (message as { className?: string }).className === "MessageService"
+        message.className === "MessageService"
       ) {
         throw new Error("Cannot download media of type MessageService");
       }
+      // Teleproto writes the bytes to outputFile; the repository stats that
+      // file afterwards, so a stub that downloads nothing must still create it.
+      await FakeTelegramClient.downloadMediaBehavior?.(message, params);
       return Buffer.from("");
     }
 
@@ -241,11 +259,25 @@ const fake = vi.hoisted(() => {
       if (!behavior) throw new Error("getEntity is not stubbed");
       return behavior(entity);
     }
+
+    static invokeBehavior: ((request: unknown) => Promise<unknown>) | null =
+      null;
+
+    readonly invokeCalls: unknown[] = [];
+
+    async invoke(request: unknown): Promise<unknown> {
+      this.invokeCalls.push(request);
+      const behavior = FakeTelegramClient.invokeBehavior;
+      if (!behavior) throw new Error("invoke is not stubbed");
+      return behavior(request);
+    }
   }
 
   class FakeUpdateDraftMessage {}
   class FakeDraftMessage {}
   class FakeUser {}
+  class FakeChannel {}
+  class FakeChat {}
   class FakeUserStatusOnline {}
   class FakeUpdateUserStatus {}
   class FakeInputMessagesFilterPhotoVideo {}
@@ -259,12 +291,69 @@ const fake = vi.hoisted(() => {
       this.channelId = params.channelId;
     }
   }
+  class FakeGetFullUser {
+    id: unknown;
+    constructor(params: { id: unknown }) {
+      this.id = params.id;
+    }
+  }
+  class FakeGetFullChannel {
+    channel: unknown;
+    constructor(params: { channel: unknown }) {
+      this.channel = params.channel;
+    }
+  }
+  class FakeMessageMediaDocument {
+    document: unknown;
+    constructor(params: { document: unknown }) {
+      this.document = params.document;
+    }
+  }
+  class FakeInputStickerSetID {
+    id: unknown;
+    accessHash: unknown;
+    constructor(params: { id: unknown; accessHash: unknown }) {
+      this.id = params.id;
+      this.accessHash = params.accessHash;
+    }
+  }
+  class FakeInputStickerSetShortName {
+    shortName: unknown;
+    constructor(params: { shortName: unknown }) {
+      this.shortName = params.shortName;
+    }
+  }
+  class FakeGetAllStickers {}
+  class FakeGetStickerSet {
+    stickerset: unknown;
+    hash: unknown;
+    constructor(params: { stickerset: unknown; hash: unknown }) {
+      this.stickerset = params.stickerset;
+      this.hash = params.hash;
+    }
+  }
+  class FakeInstallStickerSet {
+    stickerset: unknown;
+    archived: unknown;
+    constructor(params: { stickerset: unknown; archived: unknown }) {
+      this.stickerset = params.stickerset;
+      this.archived = params.archived;
+    }
+  }
+  class FakeUninstallStickerSet {
+    stickerset: unknown;
+    constructor(params: { stickerset: unknown }) {
+      this.stickerset = params.stickerset;
+    }
+  }
 
   return {
     FakeTelegramClient,
     FakeUpdateDraftMessage,
     FakeDraftMessage,
     FakeUser,
+    FakeChannel,
+    FakeChat,
     FakeUserStatusOnline,
     FakeUpdateUserStatus,
     FakeInputMessagesFilterPhotoVideo,
@@ -273,6 +362,15 @@ const fake = vi.hoisted(() => {
     FakeUpdatePinnedMessages,
     FakeUpdatePinnedChannelMessages,
     FakePeerChannel,
+    FakeGetFullUser,
+    FakeGetFullChannel,
+    FakeMessageMediaDocument,
+    FakeInputStickerSetID,
+    FakeGetAllStickers,
+    FakeGetStickerSet,
+    FakeInputStickerSetShortName,
+    FakeInstallStickerSet,
+    FakeUninstallStickerSet,
   };
 });
 
@@ -282,6 +380,8 @@ vi.mock("teleproto", () => ({
     UpdateDraftMessage: fake.FakeUpdateDraftMessage,
     DraftMessage: fake.FakeDraftMessage,
     User: fake.FakeUser,
+    Channel: fake.FakeChannel,
+    Chat: fake.FakeChat,
     UserStatusOnline: fake.FakeUserStatusOnline,
     UpdateUserStatus: fake.FakeUpdateUserStatus,
     InputMessagesFilterPhotoVideo: fake.FakeInputMessagesFilterPhotoVideo,
@@ -290,6 +390,17 @@ vi.mock("teleproto", () => ({
     UpdatePinnedMessages: fake.FakeUpdatePinnedMessages,
     UpdatePinnedChannelMessages: fake.FakeUpdatePinnedChannelMessages,
     PeerChannel: fake.FakePeerChannel,
+    MessageMediaDocument: fake.FakeMessageMediaDocument,
+    InputStickerSetID: fake.FakeInputStickerSetID,
+    InputStickerSetShortName: fake.FakeInputStickerSetShortName,
+    users: { GetFullUser: fake.FakeGetFullUser },
+    channels: { GetFullChannel: fake.FakeGetFullChannel },
+    messages: {
+      GetAllStickers: fake.FakeGetAllStickers,
+      GetStickerSet: fake.FakeGetStickerSet,
+      InstallStickerSet: fake.FakeInstallStickerSet,
+      UninstallStickerSet: fake.FakeUninstallStickerSet,
+    },
   },
 }));
 vi.mock("teleproto/sessions/index.js", () => ({ StringSession: class {} }));
@@ -347,6 +458,7 @@ function createCoordinator(
     credentials?: { apiId: number; apiHash: string } | null;
     sessions?: TelegramSessionRepository;
     snapshots?: TelegramDialogSnapshotRepository;
+    mediaCacheDirectory?: string;
   } = {},
 ) {
   const states: TelegramAuthState[] = [];
@@ -357,7 +469,7 @@ function createCoordinator(
     profiles.repository,
     options.credentials ?? null,
     (state) => states.push(state),
-    "",
+    options.mediaCacheDirectory ?? "",
     options.snapshots,
   );
   return { coordinator, sessions, profiles, states };
@@ -397,6 +509,36 @@ function fakeSentMessage(
   };
 }
 
+// A document as messages.GetStickerSet answers it: the emoji lives on the
+// sticker attribute and the pixel size on the image or video one, both of
+// which a set may leave out.
+function fakeStickerDocument(
+  id: number,
+  options: {
+    mimeType: string;
+    emoji?: string;
+    dimensions?: { w: number; h: number };
+  },
+) {
+  const attributes: object[] = [];
+  if (options.emoji) attributes.push({ alt: options.emoji, stickerset: {} });
+  if (options.dimensions) attributes.push(options.dimensions);
+  return {
+    id: BigInt(id),
+    accessHash: BigInt(id + 1000),
+    mimeType: options.mimeType,
+    size: BigInt(2048),
+    attributes,
+  };
+}
+
+const stickerSetHeader = {
+  id: BigInt(9),
+  accessHash: BigInt(99),
+  title: "Telo Faces",
+  shortName: "telofaces",
+};
+
 const photoFile = {
   source: "/tmp/photo.jpg",
   name: "photo.jpg",
@@ -413,8 +555,10 @@ describe("TelegramClientCoordinator", () => {
     FakeTelegramClient.catchUpBehavior = null;
     FakeTelegramClient.getDialogsGate = null;
     FakeTelegramClient.sendFileBehavior = null;
+    FakeTelegramClient.downloadMediaBehavior = null;
     FakeTelegramClient.getMessagesBehavior = null;
     FakeTelegramClient.entityBehavior = null;
+    FakeTelegramClient.invokeBehavior = null;
     FakeTelegramClient.dialogs = [];
     FakeTelegramClient.dialogFilters = [];
     FakeTelegramClient.photoRequests = [];
@@ -429,6 +573,24 @@ describe("TelegramClientCoordinator", () => {
     expect((await coordinator.listChatPage({ limit: 100 })).items).toHaveLength(
       4,
     );
+  });
+
+  it("forwards formatting entities through the coordinator to the repository", async () => {
+    const { coordinator } = createCoordinator();
+
+    const message = await coordinator.sendMessage(
+      "saved",
+      "Hello team",
+      undefined,
+      undefined,
+      undefined,
+      [{ type: "bold", offset: 0, length: 5 }],
+    );
+
+    // The coordinator is a delegating wrapper; dropping this argument loses
+    // every composer format silently, with both ends still passing on their
+    // own.
+    expect(message.entities).toEqual([{ type: "bold", offset: 0, length: 5 }]);
   });
 
   it("stays idle when there is no session or credentials to restore", async () => {
@@ -525,6 +687,79 @@ describe("TelegramClientCoordinator", () => {
     ]);
     releaseConnect?.();
     await init;
+  });
+
+  it("paints the restoring snapshot from the avatar cache without downloading", async () => {
+    const directory = await mkdtemp(path.join(os.tmpdir(), "telo-avatars-"));
+    try {
+      // dialogs.json never carries photo bytes, so a restored chat starts with
+      // a null avatar and the disk cache is the only thing that can fill it
+      // before the session finishes connecting.
+      await writeFile(
+        path.join(directory, "avatar_cached.jpg"),
+        Buffer.from("cached"),
+      );
+      const snapshots = new MemoryTelegramDialogSnapshotRepository();
+      const base = {
+        preview: "hi",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+        unreadCount: 0,
+        lastReadMessageId: null,
+        muted: false,
+        pinned: false,
+        kind: "direct",
+        initials: "C",
+        avatarDataUrl: null,
+        draftPreview: null,
+        typing: false,
+      } satisfies Omit<ChatDto, "id" | "title">;
+      await snapshots.save({
+        version: 1,
+        chats: [
+          { ...base, id: "cached", title: "Cached" },
+          { ...base, id: "uncached", title: "Uncached" },
+        ],
+        folders: [],
+        nextCursor: null,
+      });
+      let releaseConnect: (() => void) | undefined;
+      FakeTelegramClient.connectBehavior = () =>
+        new Promise<void>((resolve) => {
+          releaseConnect = resolve;
+        });
+      const { coordinator } = createCoordinator({
+        session: "stored-session",
+        credentials: { apiId: 7, apiHash: "hash" },
+        snapshots,
+        mediaCacheDirectory: directory,
+      });
+      const init = coordinator.initialize();
+      await vi.waitFor(() => {
+        expect(coordinator.getAuthState()).toEqual({ status: "restoring" });
+      });
+
+      const page = await coordinator.listChatPage();
+
+      expect(page.items[0]).toMatchObject({
+        id: "cached",
+        avatarDataUrl: "telo-media://cache/avatar_cached.jpg",
+        avatarPending: false,
+      });
+      // No cached file means the photo is still unresolved, not absent: the
+      // row keeps its skeleton until the live session settles it.
+      expect(page.items[1]).toMatchObject({
+        id: "uncached",
+        avatarDataUrl: null,
+        avatarPending: true,
+      });
+      // Restore paints from disk only; nothing is fetched before connect.
+      expect(FakeTelegramClient.photoRequests).toEqual([]);
+
+      releaseConnect?.();
+      await init;
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
   });
 
   it("paints the dialog snapshot first and refreshes it in the background once ready", async () => {
@@ -760,6 +995,45 @@ describe("TelegramClientCoordinator", () => {
         { type: "connection-state", state: "synchronizing" },
         { type: "sync-error", message: "FLOOD_WAIT_30" },
       ]);
+    } finally {
+      logged.mockRestore();
+    }
+  });
+
+  it("reports a dropped transport as a connection state, not a sync error", async () => {
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    // What teleproto throws once its sender is gone. Telegram treats this as
+    // ConnectionStateConnecting, so it belongs in the chat list title rather
+    // than in an error surface the reader cannot act on.
+    FakeTelegramClient.catchUpBehavior = async () => {
+      throw new Error(
+        "Cannot send requests while disconnected. Please reconnect.",
+      );
+    };
+    const { coordinator } = createCoordinator({
+      session: "stored-session",
+      credentials: { apiId: 7, apiHash: "hash" },
+    });
+    const events: TelegramWorkspaceEvent[] = [];
+    coordinator.subscribe((event) => events.push(event));
+    try {
+      await coordinator.initialize();
+      const client = FakeTelegramClient.instances[0];
+      if (client) client.connected = false;
+
+      await client?.emitConnectionState(-1);
+      await client?.emitConnectionState(1);
+
+      // Still logged in the main process — the failure is not swallowed.
+      expect(logged).toHaveBeenCalledWith(
+        "Telegram sync failed",
+        expect.any(Error),
+      );
+      expect(events.filter((event) => event.type === "sync-error")).toEqual([]);
+      expect(events.at(-1)).toEqual({
+        type: "connection-state",
+        state: "offline",
+      });
     } finally {
       logged.mockRestore();
     }
@@ -1009,6 +1283,9 @@ describe("TelegramClientCoordinator", () => {
     expect(page.items.every((entry) => entry.avatarDataUrl === null)).toBe(
       true,
     );
+    expect(page.items.every((entry) => entry.avatarPending === true)).toBe(
+      true,
+    );
     expect(FakeTelegramClient.photoRequests).toHaveLength(3);
     expect(FakeTelegramClient.photoRequests[0]?.entity).toBe(entities[0]);
     expect(events).toEqual([]);
@@ -1022,6 +1299,108 @@ describe("TelegramClientCoordinator", () => {
       });
       expect(FakeTelegramClient.photoRequests).toHaveLength(4);
     });
+  });
+
+  it("emits a null chat-avatar so the slot can leave the skeleton", async () => {
+    FakeTelegramClient.dialogs = [
+      {
+        id: BigInt(1),
+        title: "Chat 1",
+        name: "Chat 1",
+        dialog: { notifySettings: {}, topMessage: 1 },
+        isUser: true,
+        isChannel: false,
+        isGroup: false,
+        entity: { id: BigInt(1), accessHash: BigInt(101) },
+        message: { message: "Preview" },
+        date: 1,
+        unreadCount: 0,
+        pinned: false,
+      },
+    ];
+    const { coordinator } = createCoordinator({
+      session: "stored-session",
+      credentials: { apiId: 7, apiHash: "hash" },
+    });
+    const events: unknown[] = [];
+    coordinator.subscribe((event) => events.push(event));
+    await coordinator.initialize();
+    const page = await coordinator.listChatPage({ limit: 1 });
+    expect(page.items[0]?.avatarPending).toBe(true);
+
+    FakeTelegramClient.photoRequests[0]?.resolve(null);
+    await vi.waitFor(() => {
+      expect(events).toContainEqual({
+        type: "chat-avatar",
+        chatId: "1",
+        avatarDataUrl: null,
+      });
+    });
+  });
+
+  it("paints a disk-cached photo without downloading it again", async () => {
+    const directory = await mkdtemp(path.join(os.tmpdir(), "telo-avatars-"));
+    try {
+      await writeFile(
+        path.join(directory, "avatar_1.jpg"),
+        Buffer.from("cached"),
+      );
+      FakeTelegramClient.dialogs = [
+        {
+          id: BigInt(1),
+          title: "Chat 1",
+          name: "Chat 1",
+          dialog: { notifySettings: {}, topMessage: 1 },
+          isUser: true,
+          isChannel: false,
+          isGroup: false,
+          entity: { id: BigInt(1), accessHash: BigInt(101) },
+          message: { message: "Preview" },
+          date: 1,
+          unreadCount: 0,
+          pinned: false,
+        },
+        {
+          id: BigInt(2),
+          title: "Chat 2",
+          name: "Chat 2",
+          dialog: { notifySettings: {}, topMessage: 2 },
+          isUser: true,
+          isChannel: false,
+          isGroup: false,
+          entity: { id: BigInt(2), accessHash: BigInt(102) },
+          message: { message: "Preview" },
+          date: 1,
+          unreadCount: 0,
+          pinned: false,
+        },
+      ];
+      const { coordinator } = createCoordinator({
+        session: "stored-session",
+        credentials: { apiId: 7, apiHash: "hash" },
+        mediaCacheDirectory: directory,
+      });
+      await coordinator.initialize();
+      const page = await coordinator.listChatPage({ limit: 2 });
+      expect(page.items[0]).toMatchObject({
+        id: "1",
+        avatarDataUrl: "telo-media://cache/avatar_1.jpg",
+        avatarPending: false,
+      });
+      expect(page.items[1]).toMatchObject({
+        id: "2",
+        avatarDataUrl: null,
+        avatarPending: true,
+      });
+      await vi.waitFor(() => {
+        expect(FakeTelegramClient.photoRequests).toHaveLength(1);
+      });
+      expect(FakeTelegramClient.photoRequests[0]?.entity).toMatchObject({
+        id: BigInt(2),
+      });
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
   });
 
   it("maps archived dialogs to the Archive folder with summed unread counts", async () => {
@@ -1438,6 +1817,621 @@ describe("TelegramClientCoordinator", () => {
       id: "8",
       body: "",
       senderName: "Lev",
+    });
+  });
+
+  it("maps the author peer id and schedules one avatar download per sender", async () => {
+    const sender = {
+      id: BigInt(42),
+      accessHash: BigInt(4242),
+      firstName: "Mina",
+    };
+    const coordinator = await connectedCoordinator();
+    FakeTelegramClient.getMessagesBehavior = async () => [
+      {
+        id: 9,
+        message: "Hello",
+        date: 1_700_000_009,
+        out: false,
+        getSender: async () => sender,
+      },
+    ];
+
+    const page = await coordinator.listMessagePage("chat-1", { limit: 50 });
+
+    expect(page.items[0]).toMatchObject({
+      senderId: "42",
+      senderName: "Mina",
+      senderAvatarUrl: null,
+      senderAvatarPending: true,
+    });
+    await vi.waitFor(() => {
+      expect(FakeTelegramClient.photoRequests).toHaveLength(1);
+    });
+    // The download takes the peer, not the bare id: channels and migrated
+    // groups are only addressable with the access hash it carries.
+    expect(FakeTelegramClient.photoRequests[0]?.entity).toBe(sender);
+  });
+
+  it("reuses the cached author photo for the next message from the same sender", async () => {
+    const sender = {
+      id: BigInt(42),
+      accessHash: BigInt(4242),
+      firstName: "Mina",
+    };
+    const message = (id: number) => ({
+      id,
+      message: `Message ${id}`,
+      date: 1_700_000_000 + id,
+      out: false,
+      getSender: async () => sender,
+    });
+    const coordinator = await connectedCoordinator();
+    const events: unknown[] = [];
+    coordinator.subscribe((event) => events.push(event));
+    FakeTelegramClient.getMessagesBehavior = async () => [message(9)];
+    await coordinator.listMessagePage("chat-1", { limit: 50 });
+    await vi.waitFor(() => {
+      expect(FakeTelegramClient.photoRequests).toHaveLength(1);
+    });
+
+    FakeTelegramClient.photoRequests[0]?.resolve(Buffer.from("photo"));
+    await vi.waitFor(() => {
+      expect(events).toContainEqual({
+        type: "chat-avatar",
+        chatId: "42",
+        avatarDataUrl: "data:image/jpeg;base64,cGhvdG8=",
+      });
+    });
+    FakeTelegramClient.getMessagesBehavior = async () => [message(10)];
+    const second = await coordinator.listMessagePage("chat-1", { limit: 50 });
+
+    expect(second.items[0]).toMatchObject({
+      senderId: "42",
+      senderAvatarUrl: "data:image/jpeg;base64,cGhvdG8=",
+      senderAvatarPending: false,
+    });
+    expect(FakeTelegramClient.photoRequests).toHaveLength(1);
+  });
+
+  it("paints a disk-cached author photo without downloading it again", async () => {
+    const directory = await mkdtemp(path.join(os.tmpdir(), "telo-avatars-"));
+    try {
+      await writeFile(
+        path.join(directory, "avatar_42.jpg"),
+        Buffer.from("cached"),
+      );
+      const { coordinator } = createCoordinator({
+        session: "stored-session",
+        credentials: { apiId: 7, apiHash: "hash" },
+        mediaCacheDirectory: directory,
+      });
+      await coordinator.initialize();
+      // The chat list is what hydrates the avatar cache from disk.
+      await coordinator.listChatPage({ limit: 1 });
+      FakeTelegramClient.getMessagesBehavior = async () => [
+        {
+          id: 9,
+          message: "Hello",
+          date: 1_700_000_009,
+          out: false,
+          getSender: async () => ({
+            id: BigInt(42),
+            accessHash: BigInt(4242),
+            firstName: "Mina",
+          }),
+        },
+      ];
+
+      const page = await coordinator.listMessagePage("chat-1", { limit: 50 });
+
+      expect(page.items[0]).toMatchObject({
+        senderId: "42",
+        senderAvatarUrl: "telo-media://cache/avatar_42.jpg",
+        senderAvatarPending: false,
+      });
+      expect(FakeTelegramClient.photoRequests).toEqual([]);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("returns the identity card of a peer with no dialog", async () => {
+    const coordinator = await connectedCoordinator();
+    const peer = Object.assign(new fake.FakeUser(), {
+      id: BigInt(42),
+      accessHash: BigInt(4242),
+      firstName: "Mina",
+      lastName: "K",
+      username: "mina",
+    });
+    FakeTelegramClient.entityBehavior = async () => peer;
+    FakeTelegramClient.invokeBehavior = async (request) => {
+      if (!(request instanceof fake.FakeGetFullUser)) {
+        throw new Error("Expected a users.GetFullUser request");
+      }
+      expect(request.id).toBe(peer);
+      return {
+        fullUser: { about: "Ships things" },
+        users: [Object.assign(new fake.FakeUser(), { phone: "12025550123" })],
+      };
+    };
+
+    await expect(coordinator.getPeerProfile("42")).resolves.toEqual({
+      id: "42",
+      title: "Mina K",
+      username: "mina",
+      kind: "direct",
+      avatarDataUrl: null,
+      avatarPending: true,
+      bio: "Ships things",
+      phone: "12025550123",
+    });
+  });
+
+  it("maps a broadcast channel peer through the full-channel request", async () => {
+    const coordinator = await connectedCoordinator();
+    const peer = Object.assign(new fake.FakeChannel(), {
+      id: BigInt(77),
+      accessHash: BigInt(7777),
+      broadcast: true,
+      title: "Telo News",
+      username: "telonews",
+    });
+    FakeTelegramClient.entityBehavior = async () => peer;
+    FakeTelegramClient.invokeBehavior = async (request) => {
+      if (!(request instanceof fake.FakeGetFullChannel)) {
+        throw new Error("Expected a channels.GetFullChannel request");
+      }
+      expect(request.channel).toBe(peer);
+      return { fullChat: { about: "Release notes" } };
+    };
+
+    await expect(coordinator.getPeerProfile("77")).resolves.toMatchObject({
+      title: "Telo News",
+      username: "telonews",
+      kind: "channel",
+      bio: "Release notes",
+      phone: null,
+    });
+  });
+
+  it("schedules one shared avatar download for an uncached profile peer", async () => {
+    const coordinator = await connectedCoordinator();
+    const peer = Object.assign(new fake.FakeUser(), {
+      id: BigInt(42),
+      accessHash: BigInt(4242),
+      firstName: "Mina",
+    });
+    FakeTelegramClient.entityBehavior = async () => peer;
+    FakeTelegramClient.invokeBehavior = async () => ({
+      fullUser: {},
+      users: [],
+    });
+    const events: unknown[] = [];
+    coordinator.subscribe((event) => events.push(event));
+
+    await coordinator.getPeerProfile("42");
+    await coordinator.getPeerProfile("42");
+
+    // The queue is shared with the chat list: the peer already queued keeps
+    // one download, and the photo settles through the chat-avatar event.
+    await vi.waitFor(() => {
+      expect(FakeTelegramClient.photoRequests).toHaveLength(1);
+    });
+    expect(FakeTelegramClient.photoRequests[0]?.entity).toBe(peer);
+
+    FakeTelegramClient.photoRequests[0]?.resolve(Buffer.from("photo"));
+    await vi.waitFor(() => {
+      expect(events).toContainEqual({
+        type: "chat-avatar",
+        chatId: "42",
+        avatarDataUrl: "data:image/jpeg;base64,cGhvdG8=",
+      });
+    });
+  });
+
+  it("keeps the profile identity when Telegram hides the peer details", async () => {
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const coordinator = await connectedCoordinator();
+      FakeTelegramClient.entityBehavior = async () =>
+        Object.assign(new fake.FakeUser(), {
+          id: BigInt(42),
+          firstName: "Mina",
+          username: "mina",
+        });
+      FakeTelegramClient.invokeBehavior = async () => {
+        throw new Error("USER_PRIVACY_RESTRICTED");
+      };
+
+      await expect(coordinator.getPeerProfile("42")).resolves.toMatchObject({
+        id: "42",
+        title: "Mina",
+        username: "mina",
+        kind: "direct",
+        bio: null,
+        phone: null,
+      });
+      expect(logged).toHaveBeenCalledWith(
+        "Telegram peer details failed",
+        expect.any(Error),
+      );
+    } finally {
+      logged.mockRestore();
+    }
+  });
+
+  it("rejects a profile lookup for a peer Telegram cannot resolve", async () => {
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const coordinator = await connectedCoordinator();
+      FakeTelegramClient.entityBehavior = async () => {
+        throw new Error("PEER_ID_INVALID");
+      };
+
+      await expect(coordinator.getPeerProfile("999")).rejects.toThrow(
+        "Telegram peer 999 was not found",
+      );
+      expect(FakeTelegramClient.photoRequests).toEqual([]);
+    } finally {
+      logged.mockRestore();
+    }
+  });
+
+  it("maps an installed sticker set into downloadable picker items", async () => {
+    const coordinator = await connectedCoordinator();
+    const documents = [
+      fakeStickerDocument(501, {
+        mimeType: "image/webp",
+        emoji: "😀",
+        dimensions: { w: 512, h: 512 },
+      }),
+      fakeStickerDocument(502, { mimeType: "application/x-tgsticker" }),
+      fakeStickerDocument(503, {
+        mimeType: "video/webm",
+        emoji: "🎉",
+        dimensions: { w: 384, h: 384 },
+      }),
+      // documentEmpty: a sticker Telegram no longer serves, so it has no mime
+      // type to draw or send and drops out of the set.
+      { id: BigInt(504) },
+    ];
+    FakeTelegramClient.invokeBehavior = async (request) => {
+      if (request instanceof fake.FakeGetAllStickers) {
+        return { sets: [stickerSetHeader] };
+      }
+      if (!(request instanceof fake.FakeGetStickerSet)) {
+        throw new Error("Expected a messages.GetStickerSet request");
+      }
+      expect(request.stickerset).toBeInstanceOf(fake.FakeInputStickerSetID);
+      expect(request.stickerset).toMatchObject({
+        id: stickerSetHeader.id,
+        accessHash: stickerSetHeader.accessHash,
+      });
+      return { documents };
+    };
+
+    await expect(coordinator.listStickerSets()).resolves.toEqual([
+      {
+        id: "9",
+        title: "Telo Faces",
+        shortName: "telofaces",
+        // The picker lists what the account already has.
+        installed: true,
+        stickers: [
+          {
+            id: "sticker/501",
+            emoji: "😀",
+            format: "static",
+            width: 512,
+            height: 512,
+          },
+          {
+            id: "sticker/502",
+            emoji: null,
+            format: "animated",
+            width: null,
+            height: null,
+          },
+          {
+            id: "sticker/503",
+            emoji: "🎉",
+            format: "video",
+            width: 384,
+            height: 384,
+          },
+        ],
+      },
+    ]);
+  });
+
+  it("skips a sticker set Telegram cannot resolve and keeps the rest", async () => {
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const coordinator = await connectedCoordinator();
+      const sets = [
+        {
+          id: BigInt(1),
+          accessHash: BigInt(11),
+          title: "Gone",
+          shortName: "gone",
+        },
+        {
+          id: BigInt(2),
+          accessHash: BigInt(22),
+          title: "Kept",
+          shortName: "kept",
+        },
+      ];
+      FakeTelegramClient.invokeBehavior = async (request) => {
+        if (request instanceof fake.FakeGetAllStickers) return { sets };
+        if (!(request instanceof fake.FakeGetStickerSet)) {
+          throw new Error("Expected a messages.GetStickerSet request");
+        }
+        const requested =
+          request.stickerset instanceof fake.FakeInputStickerSetID
+            ? String(request.stickerset.id)
+            : "";
+        if (requested === "1") throw new Error("STICKERSET_INVALID");
+        return {
+          documents: [
+            fakeStickerDocument(601, { mimeType: "image/webp", emoji: "👋" }),
+          ],
+        };
+      };
+
+      await expect(coordinator.listStickerSets()).resolves.toEqual([
+        {
+          id: "2",
+          title: "Kept",
+          shortName: "kept",
+          installed: true,
+          stickers: [
+            {
+              id: "sticker/601",
+              emoji: "👋",
+              format: "static",
+              width: null,
+              height: null,
+            },
+          ],
+        },
+      ]);
+      expect(logged).toHaveBeenCalledWith(
+        "Telegram sticker set gone failed",
+        expect.any(Error),
+      );
+    } finally {
+      logged.mockRestore();
+    }
+  });
+
+  it("downloads a set sticker from its cached document, not from a message", async () => {
+    const directory = await mkdtemp(path.join(os.tmpdir(), "telo-stickers-"));
+    try {
+      const { coordinator } = createCoordinator({
+        session: "stored-session",
+        credentials: { apiId: 7, apiHash: "hash" },
+        mediaCacheDirectory: directory,
+      });
+      await coordinator.initialize();
+      const client = FakeTelegramClient.instances.at(-1);
+      const document = fakeStickerDocument(501, {
+        mimeType: "image/webp",
+        emoji: "😀",
+      });
+      FakeTelegramClient.invokeBehavior = async (request) =>
+        request instanceof fake.FakeGetAllStickers
+          ? { sets: [stickerSetHeader] }
+          : { documents: [document] };
+      FakeTelegramClient.downloadMediaBehavior = async (_media, params) => {
+        await writeFile(params.outputFile, "sticker-bytes");
+      };
+      const events: unknown[] = [];
+      coordinator.subscribe((event) => events.push(event));
+
+      await coordinator.listStickerSets();
+      await coordinator.downloadMedia("sticker/501");
+
+      // A set sticker has no carrying message, so nothing may be fetched.
+      expect(client?.getMessagesCalls).toEqual([]);
+      expect(client?.downloadMediaCalls).toEqual([
+        expect.objectContaining({ document }),
+      ]);
+      expect(events).toContainEqual({
+        type: "media-download",
+        mediaId: "sticker/501",
+        state: "ready",
+        downloadedBytes: 13,
+        totalBytes: 13,
+        url: "telo-media://cache/sticker_501.webp",
+        error: null,
+      });
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects a sticker media id no listed set resolved", async () => {
+    const coordinator = await connectedCoordinator();
+
+    await expect(coordinator.downloadMedia("sticker/999")).rejects.toThrow(
+      "Telegram sticker sticker/999 was not found",
+    );
+    await expect(
+      coordinator.sendSticker("chat-1", "sticker/999"),
+    ).rejects.toThrow("Telegram sticker sticker/999 was not found");
+  });
+
+  it("sends a listed sticker as its cached document", async () => {
+    const coordinator = await connectedCoordinator();
+    const document = fakeStickerDocument(501, {
+      mimeType: "image/webp",
+      emoji: "😀",
+      dimensions: { w: 512, h: 512 },
+    });
+    FakeTelegramClient.invokeBehavior = async (request) =>
+      request instanceof fake.FakeGetAllStickers
+        ? { sets: [stickerSetHeader] }
+        : { documents: [document] };
+    FakeTelegramClient.sendFileBehavior = async () => ({
+      id: 77,
+      message: "",
+      date: 1_700_000_000,
+      out: true,
+      sticker: document,
+      document,
+      file: { mimeType: "image/webp", size: 2048 },
+      getSender: async () => ({ firstName: "You" }),
+    });
+
+    await coordinator.listStickerSets();
+
+    await expect(
+      coordinator.sendSticker("chat-1", "sticker/501"),
+    ).resolves.toMatchObject({
+      id: "77",
+      chatId: "chat-1",
+      body: "",
+      outgoing: true,
+      status: "sent",
+      media: {
+        id: "chat-1/77",
+        kind: "sticker",
+        sticker: { emoji: "😀", format: "static", setName: null },
+      },
+    });
+    const call = FakeTelegramClient.instances.at(-1)?.sendFileCalls[0];
+    expect(call?.entity).toBe("chat-1");
+    // Telegram already stores the document, so the send carries it by id
+    // instead of uploading the sticker bytes again.
+    expect(call?.params.file).toBe(document);
+  });
+
+  it("opens a sticker set by short name and reads its installed marker", async () => {
+    const coordinator = await connectedCoordinator();
+    // The fake reads this when the request runs, and the second call flips it
+    // to prove the installed marker is read from Telegram, not assumed.
+    let installedDate: number | undefined = undefined;
+    FakeTelegramClient.invokeBehavior = async (request) => {
+      if (!(request instanceof fake.FakeGetStickerSet)) {
+        throw new Error("Expected a messages.GetStickerSet request");
+      }
+      expect(request.stickerset).toBeInstanceOf(
+        fake.FakeInputStickerSetShortName,
+      );
+      expect(request.stickerset).toMatchObject({ shortName: "teloocto" });
+      return {
+        set: {
+          id: BigInt(12),
+          accessHash: BigInt(120),
+          title: "Telo Octo",
+          shortName: "teloocto",
+          installedDate,
+        },
+        documents: [
+          fakeStickerDocument(701, {
+            mimeType: "image/webp",
+            emoji: "🐙",
+            dimensions: { w: 512, h: 512 },
+          }),
+        ],
+      };
+    };
+
+    // A set opened from a received sticker is one the account may not have.
+    await expect(coordinator.getStickerSet("teloocto")).resolves.toEqual({
+      id: "12",
+      title: "Telo Octo",
+      shortName: "teloocto",
+      installed: false,
+      stickers: [
+        {
+          id: "sticker/701",
+          emoji: "🐙",
+          format: "static",
+          width: 512,
+          height: 512,
+        },
+      ],
+    });
+
+    installedDate = 1_700_000_000;
+    await expect(coordinator.getStickerSet("teloocto")).resolves.toMatchObject({
+      installed: true,
+    });
+  });
+
+  it("caches an opened set's stickers so they download without a message", async () => {
+    const directory = await mkdtemp(path.join(os.tmpdir(), "telo-sheet-"));
+    try {
+      const { coordinator } = createCoordinator({
+        session: "stored-session",
+        credentials: { apiId: 7, apiHash: "hash" },
+        mediaCacheDirectory: directory,
+      });
+      await coordinator.initialize();
+      const client = FakeTelegramClient.instances.at(-1);
+      const document = fakeStickerDocument(702, {
+        mimeType: "image/webp",
+        emoji: "🐙",
+      });
+      FakeTelegramClient.invokeBehavior = async () => ({
+        set: stickerSetHeader,
+        documents: [document],
+      });
+      FakeTelegramClient.downloadMediaBehavior = async (_media, params) => {
+        await writeFile(params.outputFile, "sticker-bytes");
+      };
+
+      await coordinator.getStickerSet("telofaces");
+      await coordinator.downloadMedia("sticker/702");
+
+      // The sheet's stickers ride the picker's document cache, so they need
+      // no carrying message either.
+      expect(client?.getMessagesCalls).toEqual([]);
+      expect(client?.downloadMediaCalls).toEqual([
+        expect.objectContaining({ document }),
+      ]);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects a sticker set short name Telegram cannot resolve", async () => {
+    const coordinator = await connectedCoordinator();
+    FakeTelegramClient.invokeBehavior = async () => {
+      throw new Error("STICKERSET_INVALID");
+    };
+
+    await expect(coordinator.getStickerSet("gone")).rejects.toThrow(
+      "Telegram sticker set gone was not found",
+    );
+  });
+
+  it("installs and uninstalls a sticker set by short name", async () => {
+    const coordinator = await connectedCoordinator();
+    FakeTelegramClient.invokeBehavior = async () => ({});
+    const client = FakeTelegramClient.instances.at(-1);
+
+    await coordinator.setStickerSetInstalled("telofaces", true);
+    await coordinator.setStickerSetInstalled("telofaces", false);
+
+    const requests = client?.invokeCalls ?? [];
+    const install = requests.find(
+      (request) => request instanceof fake.FakeInstallStickerSet,
+    );
+    const uninstall = requests.find(
+      (request) => request instanceof fake.FakeUninstallStickerSet,
+    );
+    expect(install).toMatchObject({
+      // archived: false adds the set to the active stickers, not the archive.
+      archived: false,
+      stickerset: { shortName: "telofaces" },
+    });
+    expect(uninstall).toMatchObject({
+      stickerset: { shortName: "telofaces" },
     });
   });
 

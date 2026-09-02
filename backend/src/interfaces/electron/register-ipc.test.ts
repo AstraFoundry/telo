@@ -515,6 +515,12 @@ describe("registerIpc preferences", () => {
     agentPanelWidth: 380,
     recentEmojis: [],
     messageTemplates: [],
+    reduceMotion: false,
+    loopStickers: true,
+    notificationSenderName: true,
+    notificationPreview: true,
+    countMutedChats: false,
+    mediaCacheLimitMb: 512,
   };
 
   function preferencesContainer(
@@ -563,6 +569,41 @@ describe("registerIpc preferences", () => {
     expect(container.preferences.execute).toHaveBeenCalledWith({
       theme: "light",
     });
+  });
+});
+
+describe("registerIpc storage", () => {
+  function storageContainer() {
+    const mediaCacheStorage = {
+      usageBytes: vi.fn().mockResolvedValue(2048),
+      clear: vi.fn().mockResolvedValue(2048),
+    };
+    return {
+      mediaCacheStorage,
+      container: { mediaCacheStorage } as unknown as ApplicationContainer,
+    };
+  }
+
+  it("reports the media cache usage on storage:media-cache-usage", async () => {
+    const { mediaCacheStorage, container } = storageContainer();
+    registerIpc(container);
+
+    const handler = ipc.handlers.get(channels.storageMediaCacheUsage);
+    if (!handler) throw new Error("cache usage handler was not registered");
+
+    await expect(handler({})).resolves.toBe(2048);
+    expect(mediaCacheStorage.usageBytes).toHaveBeenCalledTimes(1);
+  });
+
+  it("clears the media cache on storage:media-cache-clear", async () => {
+    const { mediaCacheStorage, container } = storageContainer();
+    registerIpc(container);
+
+    const handler = ipc.handlers.get(channels.storageMediaCacheClear);
+    if (!handler) throw new Error("cache clear handler was not registered");
+
+    await expect(handler({})).resolves.toBe(2048);
+    expect(mediaCacheStorage.clear).toHaveBeenCalledTimes(1);
   });
 });
 

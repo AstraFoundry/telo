@@ -11,7 +11,12 @@ function userDataDirectories() {
       path.join(home, "Library", "Application Support", name),
       path.join(home, "Library", "Caches", name),
       path.join(home, "Library", "Logs", name),
-      path.join(home, "Library", "Saved Application State", `${name}.savedState`),
+      path.join(
+        home,
+        "Library",
+        "Saved Application State",
+        `${name}.savedState`,
+      ),
     ]);
   }
   if (process.platform === "win32") {

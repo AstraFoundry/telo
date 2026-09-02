@@ -30,6 +30,7 @@ describe("teleproto message media", () => {
       height: 600,
       duration: null,
       spoiler: true,
+      sticker: null,
     });
     expect(messageGroupedId(message)).toBe("9001");
   });
@@ -46,6 +47,52 @@ describe("teleproto message media", () => {
     expect(
       mapMessageMedia({ id: 1, [field]: {}, file: { name: "asset.bin" } }),
     ).toMatchObject({ kind, fileName: "asset.bin" });
+  });
+
+  it.each([
+    ["image/webp", "static"],
+    ["application/x-tgsticker", "animated"],
+    ["video/webm", "video"],
+  ] as const)("reads a %s sticker as %s", (mimeType, format) => {
+    expect(
+      mapMessageMedia({
+        id: 5,
+        sticker: {},
+        document: {
+          attributes: [
+            { alt: "🐱", stickerset: { shortName: "CatPack" } },
+            { w: 512, h: 512 },
+          ],
+        },
+        file: { name: "sticker.webp", mimeType },
+      }),
+    ).toMatchObject({
+      kind: "sticker",
+      width: 512,
+      height: 512,
+      sticker: { emoji: "🐱", format, setName: "CatPack" },
+    });
+  });
+
+  it("keeps a sticker mappable when Telegram sends no attribute", () => {
+    // A document can reach the client without its sticker attribute; the
+    // emoji placeholder then has nothing to draw, which is not a failure.
+    expect(
+      mapMessageMedia({
+        id: 6,
+        sticker: {},
+        file: { name: "sticker.webp", mimeType: "image/webp" },
+      }),
+    ).toMatchObject({
+      kind: "sticker",
+      sticker: { emoji: null, format: "static", setName: null },
+    });
+  });
+
+  it("leaves every other document kind without sticker attributes", () => {
+    expect(
+      mapMessageMedia({ id: 7, document: {}, file: { name: "notes.pdf" } }),
+    ).toMatchObject({ kind: "file", sticker: null });
   });
 
   it("does not treat a service message as downloadable media", () => {
@@ -173,6 +220,7 @@ describe("teleproto message media", () => {
       height: 720,
       duration: 12,
       spoiler: false,
+      sticker: null,
     });
   });
 });

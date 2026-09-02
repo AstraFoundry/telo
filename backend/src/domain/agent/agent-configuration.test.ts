@@ -9,6 +9,9 @@ const valid = {
   instructions: "Use visible context.",
   apiKey: "secret",
   canInspectWorkspace: true,
+  temperature: 0.7,
+  maxSteps: 4,
+  historyLimit: 20,
 };
 
 describe("AgentConfiguration", () => {
@@ -29,8 +32,51 @@ describe("AgentConfiguration", () => {
     [{ ...valid, instructions: "" }, "instructions"],
     [{ ...valid, provider: "openai-compatible" as const }, "base URL"],
     [{ ...valid, baseUrl: "http://localhost:3000" }, "HTTPS"],
+    [
+      { ...valid, temperature: -0.1 },
+      "Agent temperature must be between 0 and 2",
+    ],
+    [
+      { ...valid, temperature: 2.1 },
+      "Agent temperature must be between 0 and 2",
+    ],
+    [{ ...valid, temperature: Number.NaN }, "Agent temperature"],
+    [{ ...valid, maxSteps: 0 }, "Agent max steps must be between 1 and 8"],
+    [{ ...valid, maxSteps: 9 }, "Agent max steps must be between 1 and 8"],
+    [{ ...valid, maxSteps: 2.5 }, "Agent max steps must be a whole number"],
+    [
+      { ...valid, historyLimit: -1 },
+      "Agent history limit must be between 0 and 50",
+    ],
+    [
+      { ...valid, historyLimit: 51 },
+      "Agent history limit must be between 0 and 50",
+    ],
+    [
+      { ...valid, historyLimit: 1.5 },
+      "Agent history limit must be a whole number",
+    ],
   ])("rejects invalid values", (input, message) => {
     expect(() => AgentConfiguration.create(input)).toThrow(message);
+  });
+
+  it("accepts the inclusive bounds", () => {
+    expect(() =>
+      AgentConfiguration.create({
+        ...valid,
+        temperature: 0,
+        maxSteps: 1,
+        historyLimit: 0,
+      }),
+    ).not.toThrow();
+    expect(() =>
+      AgentConfiguration.create({
+        ...valid,
+        temperature: 2,
+        maxSteps: 8,
+        historyLimit: 50,
+      }),
+    ).not.toThrow();
   });
 
   it("provides a safe default without an API key", () => {
@@ -38,6 +84,9 @@ describe("AgentConfiguration", () => {
       provider: "openai",
       apiKey: null,
       canInspectWorkspace: true,
+      temperature: 0.7,
+      maxSteps: 4,
+      historyLimit: 20,
     });
   });
 });

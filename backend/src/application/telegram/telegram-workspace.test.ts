@@ -16,6 +16,39 @@ function repository(): TelegramRepository {
     listSharedMedia: vi.fn(async () => ({ items: [], nextCursor: null })),
     listPinnedMessages: vi.fn(async () => []),
     listChatMembers: vi.fn(async () => []),
+    getPeerProfile: vi.fn(async (peerId: string) => ({
+      id: peerId,
+      title: "Peer",
+      username: null,
+      kind: "direct" as const,
+      avatarDataUrl: null,
+      bio: null,
+      phone: null,
+    })),
+    listStickerSets: vi.fn(async () => []),
+    sendSticker: vi.fn(async (chatId: string) => ({
+      id: "sticker-message",
+      chatId,
+      senderName: "You",
+      senderId: "demo-you",
+      senderAvatarUrl: null,
+      body: "",
+      entities: [],
+      media: null,
+      groupedId: null,
+      sentAt: new Date(0).toISOString(),
+      outgoing: true,
+      status: "sent" as const,
+    })),
+    getStickerSet: vi.fn(async (shortName: string) => ({
+      id: "sticker-set",
+      title: "Telo Pack",
+      shortName,
+      stickers: [],
+      installed: false,
+    })),
+    setStickerSetInstalled: vi.fn(async () => undefined),
+    getCustomEmoji: vi.fn(async () => []),
     searchGlobal: vi.fn(async () => ({ chats: [], messages: [] })),
     searchMessages: vi.fn(async () => ({
       messageIds: [],
@@ -33,6 +66,8 @@ function repository(): TelegramRepository {
       id: "message",
       chatId,
       senderName: "You",
+      senderId: "demo-you",
+      senderAvatarUrl: null,
       body,
       entities: [],
       media: null,
@@ -97,6 +132,8 @@ describe("TelegramWorkspaceService", () => {
       id: "design-3",
       chatId: "design",
       senderName: "Aron",
+      senderId: "demo-aron",
+      senderAvatarUrl: null,
       body: "This write-up nails the spacing rules.",
       entities: [],
       media: null,
@@ -266,6 +303,108 @@ describe("TelegramWorkspaceService", () => {
           ? service.listPinnedMessages(" ")
           : service.listChatMembers(" "),
     ).toThrow("Chat id is required");
+  });
+
+  it("reads a peer profile through the port", async () => {
+    const port = repository();
+    const service = new TelegramWorkspaceService(port);
+
+    await expect(service.getPeerProfile("peer")).resolves.toMatchObject({
+      id: "peer",
+    });
+    expect(port.getPeerProfile).toHaveBeenCalledWith("peer");
+  });
+
+  it("getPeerProfile() rejects an empty peer id", () => {
+    const service = new TelegramWorkspaceService(repository());
+    expect(() => service.getPeerProfile(" ")).toThrow("Peer id is required");
+  });
+
+  it("lists sticker sets through the port", async () => {
+    const port = repository();
+    const sets = [
+      {
+        id: "set-1",
+        title: "Telo Faces",
+        shortName: "telofaces",
+        stickers: [
+          {
+            id: "sticker/12345",
+            emoji: "🙂",
+            format: "static" as const,
+            width: 512,
+            height: 512,
+          },
+        ],
+        installed: true,
+      },
+    ];
+    port.listStickerSets = vi.fn(async () => sets);
+    const service = new TelegramWorkspaceService(port);
+
+    await expect(service.listStickerSets()).resolves.toEqual(sets);
+  });
+
+  it("sends a sticker through the port", async () => {
+    const port = repository();
+    const service = new TelegramWorkspaceService(port);
+
+    await expect(
+      service.sendSticker("chat", "sticker/12345"),
+    ).resolves.toMatchObject({ chatId: "chat", outgoing: true });
+    expect(port.sendSticker).toHaveBeenCalledWith("chat", "sticker/12345");
+  });
+
+  it.each([
+    [" ", "sticker/12345", "Chat id is required"],
+    ["chat", " ", "Sticker id is required"],
+  ])("sendSticker() rejects %s / %s", (chatId, stickerId, error) => {
+    const port = repository();
+    const service = new TelegramWorkspaceService(port);
+
+    expect(() => service.sendSticker(chatId, stickerId)).toThrow(error);
+    expect(port.sendSticker).not.toHaveBeenCalled();
+  });
+
+  it("gets one sticker set through the port", async () => {
+    const port = repository();
+    const service = new TelegramWorkspaceService(port);
+
+    await expect(service.getStickerSet("telofaces")).resolves.toMatchObject({
+      shortName: "telofaces",
+      installed: false,
+    });
+    expect(port.getStickerSet).toHaveBeenCalledWith("telofaces");
+  });
+
+  it.each([true, false])(
+    "forwards installed=%s to the port",
+    async (installed) => {
+      const port = repository();
+      const service = new TelegramWorkspaceService(port);
+
+      await expect(
+        service.setStickerSetInstalled("telofaces", installed),
+      ).resolves.toBeUndefined();
+      expect(port.setStickerSetInstalled).toHaveBeenCalledWith(
+        "telofaces",
+        installed,
+      );
+    },
+  );
+
+  it("rejects an empty sticker set name on both set methods", () => {
+    const port = repository();
+    const service = new TelegramWorkspaceService(port);
+
+    expect(() => service.getStickerSet(" ")).toThrow(
+      "Sticker set name is required",
+    );
+    expect(() => service.setStickerSetInstalled(" ", true)).toThrow(
+      "Sticker set name is required",
+    );
+    expect(port.getStickerSet).not.toHaveBeenCalled();
+    expect(port.setStickerSetInstalled).not.toHaveBeenCalled();
   });
 
   it("rejects an invalid shared media cursor", () => {

@@ -71,6 +71,30 @@ export function registerIpc(container: ApplicationContainer): void {
   ipcMain.handle(channels.chatMemberList, (_event, chatId: string) =>
     container.workspace.listChatMembers(chatId),
   );
+  ipcMain.handle(channels.peerProfileGet, (_event, peerId: string) =>
+    container.workspace.getPeerProfile(peerId),
+  );
+  ipcMain.handle(channels.stickerSetList, () =>
+    container.workspace.listStickerSets(),
+  );
+  ipcMain.handle(
+    channels.stickerSend,
+    (_event, chatId: string, stickerId: string) =>
+      container.workspace.sendSticker(chatId, stickerId),
+  );
+  ipcMain.handle(channels.stickerSetGet, (_event, shortName: string) =>
+    container.workspace.getStickerSet(shortName),
+  );
+  ipcMain.handle(
+    channels.customEmojiGet,
+    (_event, documentIds: ReadonlyArray<string>) =>
+      container.workspace.getCustomEmoji(documentIds),
+  );
+  ipcMain.handle(
+    channels.stickerSetInstalledSet,
+    (_event, shortName: string, installed: boolean) =>
+      container.workspace.setStickerSetInstalled(shortName, installed),
+  );
   ipcMain.handle(channels.searchGlobal, (_event, query: string) =>
     container.workspace.searchGlobal(query),
   );
@@ -204,6 +228,12 @@ export function registerIpc(container: ApplicationContainer): void {
     channels.preferencesUpdate,
     (_event, input: UpdateUserPreferencesInput) =>
       container.preferences.execute(input),
+  );
+  ipcMain.handle(channels.storageMediaCacheUsage, () =>
+    container.mediaCacheStorage.usageBytes(),
+  );
+  ipcMain.handle(channels.storageMediaCacheClear, () =>
+    container.mediaCacheStorage.clear(),
   );
   ipcMain.handle(
     channels.notify,

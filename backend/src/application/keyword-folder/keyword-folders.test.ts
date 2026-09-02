@@ -32,6 +32,8 @@ function message(
 ): MessageDto {
   return {
     senderName: "Mina",
+    senderId: "demo-mina",
+    senderAvatarUrl: null,
     entities: [],
     media: null,
     groupedId: null,

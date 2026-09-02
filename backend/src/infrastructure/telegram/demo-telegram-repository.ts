@@ -20,6 +20,10 @@ import type {
   MessageReplyToDto,
   MessageSearchPageDto,
   MessageSearchPageInput,
+  PeerProfileDto,
+  StickerFormat,
+  StickerItemDto,
+  StickerSetDto,
   TelegramWorkspaceEvent,
 } from "../../../../contracts/src/ipc";
 import { ARCHIVE_FOLDER_ID } from "../../../../contracts/src/ipc";
@@ -27,8 +31,16 @@ import type {
   TelegramRepository,
   TelegramUploadFile,
 } from "../../domain/telegram/telegram-ports";
-import { demoImagePng, demoVideoWebm } from "./demo-media-assets";
-import { enforceMediaCacheLimit, touchMediaCacheFile } from "./media-cache";
+import {
+  demoImagePng,
+  demoStickerTgs,
+  demoVideoWebm,
+} from "./demo-media-assets";
+import {
+  MEDIA_CACHE_MAX_BYTES,
+  enforceMediaCacheLimit,
+  touchMediaCacheFile,
+} from "./media-cache";
 
 // The demo workspace ships one custom folder so dev and E2E can exercise
 // folder tabs, per-folder unread badges, and the Archive deterministically.
@@ -117,17 +129,68 @@ const DEMO_AUTO_REPLIES: Record<string, string> = {
   product: "Noted, added to the review doc.",
 };
 
-// Group members backing the composer's mention autocomplete; names and
-// usernames match the senders used across the message fixtures. Chats
+// The peers behind the message senders, keyed by the `senderId` the message
+// fixtures carry. These accounts have no dialog of their own, so a peer
+// lookup is the only way to see them: names and usernames match the senders
+// across the fixtures, bios stand in for Telegram's "about" text, and a
+// single peer shares a phone number so both branches of the identity card
+// have deterministic demo coverage.
+interface DemoPeer {
+  readonly displayName: string;
+  readonly username: string | null;
+  readonly bio: string | null;
+  readonly phone: string | null;
+}
+
+const DEMO_PEERS: Record<string, DemoPeer> = {
+  "demo-mina": {
+    displayName: "Mina",
+    username: "mina",
+    bio: "Design systems, spacing rules, and long changelogs.",
+    phone: "+1 555 0142",
+  },
+  "demo-aron": {
+    displayName: "Aron",
+    username: "aron",
+    bio: "Collects reference shots for the media viewer.",
+    phone: null,
+  },
+  "demo-lev": {
+    displayName: "Lev",
+    username: "lev",
+    bio: "Breaks the retry flow on purpose, then files it.",
+    phone: null,
+  },
+  "demo-priya": {
+    displayName: "Priya",
+    username: "priya",
+    bio: "Offsite logistics: venues, travel, and hard deadlines.",
+    phone: null,
+  },
+};
+
+// Group members backing the composer's mention autocomplete, listed as peer
+// ids so a mention and a peer lookup always report the same identity. Chats
 // without an entry (direct, channel, Saved Messages) report no members, so
 // the autocomplete honestly stays closed there.
 const DEMO_CHAT_MEMBERS: Record<string, ReadonlyArray<ChatMemberDto>> = {
-  design: [
-    { id: "demo-mina", displayName: "Mina", username: "mina" },
-    { id: "demo-aron", displayName: "Aron", username: "aron" },
-    { id: "demo-lev", displayName: "Lev", username: "lev" },
-  ],
+  design: demoMembers("demo-mina", "demo-aron", "demo-lev"),
 };
+
+function demoMembers(
+  ...peerIds: ReadonlyArray<string>
+): ReadonlyArray<ChatMemberDto> {
+  return peerIds.map((id) => ({
+    id,
+    displayName: DEMO_PEERS[id].displayName,
+    username: DEMO_PEERS[id].username,
+  }));
+}
+
+// The demo account's own peer. Saved Messages is the chat with oneself, so its
+// id is what outgoing rows carry as their author peer, keying the account's
+// photo in the avatar cache.
+const DEMO_ACCOUNT_PEER_ID = "saved";
 
 // Pinned message ids per chat, most recently pinned first (Telegram's pinned
 // order). Kept separate from the message fixtures so the profile panel's
@@ -142,6 +205,8 @@ const INITIAL_MESSAGES: Record<string, ReadonlyArray<MessageDto>> = {
       id: "saved-1",
       chatId: "saved",
       senderName: "You",
+      senderId: DEMO_ACCOUNT_PEER_ID,
+      senderAvatarUrl: null,
       body: "Release checklist: tests, docs, signed packages.",
       entities: [],
       media: null,
@@ -156,6 +221,8 @@ const INITIAL_MESSAGES: Record<string, ReadonlyArray<MessageDto>> = {
       id: "design-1",
       chatId: "design",
       senderName: "Mina",
+      senderId: "demo-mina",
+      senderAvatarUrl: null,
       body: "The conversation list should stay compact at desktop widths.",
       entities: [{ type: "bold", offset: 34, length: 7 }],
       media: null,
@@ -168,6 +235,8 @@ const INITIAL_MESSAGES: Record<string, ReadonlyArray<MessageDto>> = {
       id: "design-2",
       chatId: "design",
       senderName: "You",
+      senderId: DEMO_ACCOUNT_PEER_ID,
+      senderAvatarUrl: null,
       body: "Agreed. Keep the composer anchored and let only the message list scroll.",
       entities: [],
       media: null,
@@ -180,6 +249,8 @@ const INITIAL_MESSAGES: Record<string, ReadonlyArray<MessageDto>> = {
       id: "design-3",
       chatId: "design",
       senderName: "Aron",
+      senderId: "demo-aron",
+      senderAvatarUrl: null,
       body: "This write-up nails the spacing rules: https://example.com/spacing-craft",
       entities: [{ type: "url", offset: 39, length: 33 }],
       media: {
@@ -208,6 +279,8 @@ const INITIAL_MESSAGES: Record<string, ReadonlyArray<MessageDto>> = {
       id: "design-media-1",
       chatId: "design",
       senderName: "Aron",
+      senderId: "demo-aron",
+      senderAvatarUrl: null,
       body: "",
       entities: [],
       media: {
@@ -230,6 +303,8 @@ const INITIAL_MESSAGES: Record<string, ReadonlyArray<MessageDto>> = {
       id: "design-media-2",
       chatId: "design",
       senderName: "Aron",
+      senderId: "demo-aron",
+      senderAvatarUrl: null,
       body: "",
       entities: [],
       media: {
@@ -252,6 +327,8 @@ const INITIAL_MESSAGES: Record<string, ReadonlyArray<MessageDto>> = {
       id: "design-media-3",
       chatId: "design",
       senderName: "Aron",
+      senderId: "demo-aron",
+      senderAvatarUrl: null,
       body: "Reference shots for the viewer work.",
       entities: [],
       media: {
@@ -274,6 +351,8 @@ const INITIAL_MESSAGES: Record<string, ReadonlyArray<MessageDto>> = {
       id: "design-media-4",
       chatId: "design",
       senderName: "Aron",
+      senderId: "demo-aron",
+      senderAvatarUrl: null,
       body: "",
       entities: [],
       media: {
@@ -296,6 +375,8 @@ const INITIAL_MESSAGES: Record<string, ReadonlyArray<MessageDto>> = {
       id: "design-media-5",
       chatId: "design",
       senderName: "Aron",
+      senderId: "demo-aron",
+      senderAvatarUrl: null,
       body: "",
       entities: [],
       media: {
@@ -318,6 +399,8 @@ const INITIAL_MESSAGES: Record<string, ReadonlyArray<MessageDto>> = {
       id: "design-4",
       chatId: "design",
       senderName: "Lev",
+      senderId: "demo-lev",
+      senderAvatarUrl: null,
       body: "The retry flow needs a failed state in the transcript.",
       entities: [],
       media: null,
@@ -330,6 +413,8 @@ const INITIAL_MESSAGES: Record<string, ReadonlyArray<MessageDto>> = {
       id: "design-5",
       chatId: "design",
       senderName: "Lev",
+      senderId: "demo-lev",
+      senderAvatarUrl: null,
       body: "And the unread divider has to survive paging.",
       entities: [],
       media: null,
@@ -342,6 +427,8 @@ const INITIAL_MESSAGES: Record<string, ReadonlyArray<MessageDto>> = {
       id: "design-6",
       chatId: "design",
       senderName: "Lev",
+      senderId: "demo-lev",
+      senderAvatarUrl: null,
       body: "Ship both with the next build.",
       entities: [],
       media: null,
@@ -356,11 +443,111 @@ const INITIAL_MESSAGES: Record<string, ReadonlyArray<MessageDto>> = {
       id: "product-1",
       chatId: "product",
       senderName: "Telo",
+      // A channel post is authored by the channel itself.
+      senderId: "product",
+      senderAvatarUrl: null,
       body: "Agent context is ready for review.",
       entities: [],
       media: null,
       groupedId: null,
       sentAt: "2026-08-26T10:24:00.000Z",
+      outgoing: false,
+      status: "read",
+    },
+    {
+      // A custom emoji is a sticker document referenced from inside the text,
+      // so the entity names the bare document id of the animated fixture.
+      id: "product-5",
+      chatId: "product",
+      senderName: "Telo",
+      senderId: "product",
+      senderAvatarUrl: null,
+      body: "Shipping 🎉",
+      entities: [
+        { type: "custom-emoji", offset: 9, length: 2, documentId: "2" },
+      ],
+      media: null,
+      groupedId: null,
+      sentAt: "2026-08-26T10:28:00.000Z",
+      outgoing: false,
+      status: "read",
+    },
+    // One sticker per Telegram encoding, so the transcript, the demo download
+    // synthesis and the e2e sweep cover the still, Lottie and video paths
+    // rather than only the still one. Telegram ships stills as WebP; the demo
+    // has no WebP encoder, so it synthesizes a PNG document instead.
+    {
+      id: "product-2",
+      chatId: "product",
+      senderName: "Telo",
+      senderId: "product",
+      senderAvatarUrl: null,
+      body: "",
+      entities: [],
+      media: {
+        id: "product/2",
+        kind: "sticker",
+        fileName: "wave.png",
+        mimeType: "image/png",
+        size: null,
+        width: 512,
+        height: 512,
+        duration: null,
+        spoiler: false,
+        sticker: { emoji: "👋", format: "static", setName: "TeloPack" },
+      },
+      groupedId: null,
+      sentAt: "2026-08-26T10:25:00.000Z",
+      outgoing: false,
+      status: "read",
+    },
+    {
+      id: "product-3",
+      chatId: "product",
+      senderName: "Telo",
+      senderId: "product",
+      senderAvatarUrl: null,
+      body: "",
+      entities: [],
+      media: {
+        id: "product/3",
+        kind: "sticker",
+        fileName: "wave.tgs",
+        mimeType: "application/x-tgsticker",
+        size: null,
+        width: 512,
+        height: 512,
+        duration: null,
+        spoiler: false,
+        sticker: { emoji: "🎉", format: "animated", setName: "TeloPack" },
+      },
+      groupedId: null,
+      sentAt: "2026-08-26T10:26:00.000Z",
+      outgoing: false,
+      status: "read",
+    },
+    {
+      id: "product-4",
+      chatId: "product",
+      senderName: "Telo",
+      senderId: "product",
+      senderAvatarUrl: null,
+      body: "",
+      entities: [],
+      media: {
+        id: "product/4",
+        kind: "sticker",
+        fileName: "wave.webm",
+        mimeType: "video/webm",
+        size: null,
+        width: 512,
+        height: 512,
+        duration: 1,
+        spoiler: false,
+        sticker: { emoji: "🔥", format: "video", setName: "TeloPack" },
+      },
+      groupedId: null,
+      sentAt: "2026-08-26T10:27:00.000Z",
       outgoing: false,
       status: "read",
     },
@@ -370,6 +557,8 @@ const INITIAL_MESSAGES: Record<string, ReadonlyArray<MessageDto>> = {
       id: "offsite-1",
       chatId: "offsite",
       senderName: "Priya",
+      senderId: "demo-priya",
+      senderAvatarUrl: null,
       body: "Book the venue before Friday.",
       entities: [],
       media: null,
@@ -380,6 +569,67 @@ const INITIAL_MESSAGES: Record<string, ReadonlyArray<MessageDto>> = {
     },
   ],
 };
+
+// The account's single installed sticker set, backing the composer picker.
+// It is the set the `product` transcript's stickers already belong to, and it
+// holds one sticker per Telegram encoding so the picker exercises the still,
+// Lottie and video render paths. Every entry carries the message media a send
+// attaches and a download synthesizes, so a set sticker travels the same
+// pipeline as one that arrived on a message.
+const DEMO_STICKER_SET_SHORT_NAME = "TeloPack";
+
+interface DemoSticker {
+  readonly item: StickerItemDto;
+  readonly media: MessageMediaDto;
+}
+
+const DEMO_STICKERS: ReadonlyArray<DemoSticker> = [
+  demoSticker("sticker/1", "👋", "static", "wave.png", "image/png"),
+  demoSticker(
+    "sticker/2",
+    "🎉",
+    "animated",
+    "party.tgs",
+    "application/x-tgsticker",
+  ),
+  demoSticker("sticker/3", "🔥", "video", "flame.webm", "video/webm"),
+];
+
+const DEMO_STICKER_SET: StickerSetDto = {
+  id: "demo-telopack",
+  title: "Telo Pack",
+  shortName: DEMO_STICKER_SET_SHORT_NAME,
+  stickers: DEMO_STICKERS.map((sticker) => sticker.item),
+  // The starting installed state; the set sheet's add/remove toggle flips it
+  // per repository instance, and the picker's list follows.
+  installed: true,
+};
+
+function demoSticker(
+  id: string,
+  emoji: string,
+  format: StickerFormat,
+  fileName: string,
+  mimeType: string,
+): DemoSticker {
+  // Telegram ships every sticker at 512×512; only a video one has a duration.
+  const side = 512;
+  return {
+    item: { id, emoji, format, width: side, height: side },
+    media: {
+      id,
+      kind: "sticker",
+      fileName,
+      mimeType,
+      size: null,
+      width: side,
+      height: side,
+      duration: format === "video" ? 1 : null,
+      spoiler: false,
+      sticker: { emoji, format, setName: DEMO_STICKER_SET_SHORT_NAME },
+    },
+  };
+}
 
 export interface DemoTelegramRepositoryOptions {
   /** Delay before the simulated contact starts typing a reply. */
@@ -393,6 +643,11 @@ export interface DemoTelegramRepositoryOptions {
    * `downloadMedia` / `resolveMediaFile` reject instead of writing to disk.
    */
   readonly mediaCacheDirectory?: string;
+  /**
+   * Reads the media-cache ceiling in bytes. Defaults to the built-in cap so
+   * standalone demo repositories evict exactly like the live adapter.
+   */
+  readonly mediaCacheLimitBytes?: () => Promise<number>;
 }
 
 // Deterministic progress checkpoints emitted while a demo upload is in
@@ -433,6 +688,7 @@ export class DemoTelegramRepository implements TelegramRepository {
   private readonly autoReplyDelayMs: number;
   private readonly uploadStepMs: number;
   private readonly mediaCacheDirectory: string | null;
+  private readonly mediaCacheLimitBytes: () => Promise<number>;
   /** Original upload paths keyed by media id, so sent media stays
    * downloadable with its true bytes after a cache eviction. */
   private readonly sentMediaSources = new Map<string, string>();
@@ -441,12 +697,20 @@ export class DemoTelegramRepository implements TelegramRepository {
    * keep them) but are filtered out of every read this client makes.
    */
   private readonly hiddenMessageIds = new Set<string>();
+  /**
+   * Whether the account still has the demo sticker set installed. The set
+   * sheet's add/remove action writes it, so the button's state survives
+   * across calls the way an account-level install does.
+   */
+  private stickerSetInstalled = DEMO_STICKER_SET.installed;
 
   constructor(options: DemoTelegramRepositoryOptions = {}) {
     this.typingDelayMs = options.typingDelayMs ?? 500;
     this.autoReplyDelayMs = options.autoReplyDelayMs ?? 1400;
     this.uploadStepMs = options.uploadStepMs ?? 150;
     this.mediaCacheDirectory = options.mediaCacheDirectory ?? null;
+    this.mediaCacheLimitBytes =
+      options.mediaCacheLimitBytes ?? (async () => MEDIA_CACHE_MAX_BYTES);
   }
 
   subscribe(listener: (event: TelegramWorkspaceEvent) => void): () => void {
@@ -583,6 +847,37 @@ export class DemoTelegramRepository implements TelegramRepository {
     return DEMO_CHAT_MEMBERS[chatId] ?? [];
   }
 
+  // Identity card for any peer a message can be authored by. A peer that has
+  // a dialog reports the dialog's own identity, so the card and the chat list
+  // agree on title, kind, and photo; a group member or channel poster with no
+  // dialog resolves from the demo peer table. Demo photos are settled by
+  // construction, so the lookup never reports a pending avatar.
+  async getPeerProfile(peerId: string): Promise<PeerProfileDto> {
+    const chat = this.chats.get(peerId);
+    if (chat) {
+      return {
+        id: chat.id,
+        title: chat.title,
+        username: null,
+        kind: chat.kind,
+        avatarDataUrl: chat.avatarDataUrl,
+        bio: null,
+        phone: null,
+      };
+    }
+    const peer = DEMO_PEERS[peerId];
+    if (!peer) throw new Error(`Unknown peer ${peerId}`);
+    return {
+      id: peerId,
+      title: peer.displayName,
+      username: peer.username,
+      kind: "direct",
+      avatarDataUrl: null,
+      bio: peer.bio,
+      phone: peer.phone,
+    };
+  }
+
   // The demo "server" search runs over the deterministic fixtures: chats
   // match on title/preview (the old sidebar filter semantics), messages on
   // body text, most recent first — the same sections the teleproto adapter
@@ -650,6 +945,8 @@ export class DemoTelegramRepository implements TelegramRepository {
       id: crypto.randomUUID(),
       chatId,
       senderName: "You",
+      senderId: DEMO_ACCOUNT_PEER_ID,
+      senderAvatarUrl: null,
       body,
       entities: entities ?? [],
       media: null,
@@ -726,15 +1023,12 @@ export class DemoTelegramRepository implements TelegramRepository {
       await copyFile(source, outputFile);
       size = (await stat(outputFile)).size;
     } else {
-      const bytes =
-        media.kind === "video" || media.kind === "video-note"
-          ? demoVideoWebm()
-          : demoImagePng(mediaId);
+      const bytes = demoMediaBytes(media, mediaId);
       await writeFile(outputFile, bytes);
       size = bytes.length;
     }
     this.publishMediaReady(mediaId, fileName, size);
-    await enforceMediaCacheLimit(directory);
+    await enforceMediaCacheLimit(directory, await this.mediaCacheLimitBytes());
   }
 
   private requireMediaCacheDirectory(): string {
@@ -745,6 +1039,10 @@ export class DemoTelegramRepository implements TelegramRepository {
   }
 
   private findMedia(mediaId: string): MessageMediaDto {
+    // A set sticker has no carrying message, so it resolves straight from the
+    // installed-set fixture; from here on it downloads like any other media.
+    const sticker = DEMO_STICKERS.find((entry) => entry.item.id === mediaId);
+    if (sticker) return sticker.media;
     for (const messages of this.messages.values()) {
       for (const message of messages) {
         const media = message.media;
@@ -828,6 +1126,8 @@ export class DemoTelegramRepository implements TelegramRepository {
         id: crypto.randomUUID(),
         chatId,
         senderName: "You",
+        senderId: DEMO_ACCOUNT_PEER_ID,
+        senderAvatarUrl: null,
         body: index === 0 ? caption : "",
         entities: [],
         media: {
@@ -903,6 +1203,84 @@ export class DemoTelegramRepository implements TelegramRepository {
     if (upload) upload.cancelled = true;
   }
 
+  // The picker lists installed sets only, so the set drops out of it once the
+  // sheet removes it and returns once it is added back.
+  async listStickerSets(): Promise<ReadonlyArray<StickerSetDto>> {
+    const set: StickerSetDto = {
+      ...DEMO_STICKER_SET,
+      installed: this.stickerSetInstalled,
+    };
+    return set.installed ? [set] : [];
+  }
+
+  // The sheet a received sticker opens reads its set by short name, whether or
+  // not the account has it installed.
+  async getStickerSet(shortName: string): Promise<StickerSetDto> {
+    this.requireStickerSet(shortName);
+    return { ...DEMO_STICKER_SET, installed: this.stickerSetInstalled };
+  }
+
+  async setStickerSetInstalled(
+    shortName: string,
+    installed: boolean,
+  ): Promise<void> {
+    this.requireStickerSet(shortName);
+    this.stickerSetInstalled = installed;
+  }
+
+  // A custom-emoji entity names a bare document id. The demo's stickers are
+  // those documents, so the fixture answers both.
+  async getCustomEmoji(
+    documentIds: ReadonlyArray<string>,
+  ): Promise<ReadonlyArray<StickerItemDto>> {
+    return documentIds.flatMap((documentId) => {
+      const sticker = DEMO_STICKERS.find(
+        (entry) => entry.item.id === `sticker/${documentId}`,
+      );
+      // An id Telegram no longer serves is simply absent from the answer.
+      return sticker ? [sticker.item] : [];
+    });
+  }
+
+  private requireStickerSet(shortName: string): void {
+    if (shortName !== DEMO_STICKER_SET_SHORT_NAME) {
+      throw new Error(`Unknown sticker set ${shortName}`);
+    }
+  }
+
+  // Sending a set sticker is an ordinary outgoing message carrying the
+  // sticker's media, so the transcript renders it exactly like a received one.
+  async sendSticker(chatId: string, stickerId: string): Promise<MessageDto> {
+    this.requireChat(chatId);
+    const sticker = DEMO_STICKERS.find((entry) => entry.item.id === stickerId);
+    if (!sticker) throw new Error(`Unknown sticker ${stickerId}`);
+    const message: MessageDto = {
+      id: crypto.randomUUID(),
+      chatId,
+      senderName: "You",
+      senderId: DEMO_ACCOUNT_PEER_ID,
+      senderAvatarUrl: null,
+      body: "",
+      entities: [],
+      media: sticker.media,
+      groupedId: null,
+      sentAt: new Date().toISOString(),
+      outgoing: true,
+      status: "sent",
+    };
+    const current = this.messages.get(chatId) ?? [];
+    this.messages.set(chatId, [...current, message]);
+    // A sticker has no body, so Telegram previews the dialog by its emoji.
+    this.updateChat(chatId, (chat) => ({
+      ...chat,
+      preview: sticker.item.emoji ?? "Sticker",
+      updatedAt: message.sentAt,
+      draftPreview: null,
+    }));
+    this.emit({ type: "message-upsert", cause: "new", message });
+    return message;
+  }
+
   async setTyping(chatId: string, typing: boolean): Promise<void> {
     // The local user's own typing signal has no counterpart to notify in the
     // demo workspace; teleproto sends it out over the wire in production.
@@ -940,6 +1318,8 @@ export class DemoTelegramRepository implements TelegramRepository {
         id: crypto.randomUUID(),
         chatId,
         senderName: chat.title,
+        senderId: chatId,
+        senderAvatarUrl: null,
         body: reply,
         entities: [],
         media: null,
@@ -1010,6 +1390,8 @@ export class DemoTelegramRepository implements TelegramRepository {
       id: crypto.randomUUID(),
       chatId: input.toChatId,
       senderName: "You",
+      senderId: DEMO_ACCOUNT_PEER_ID,
+      senderAvatarUrl: null,
       body: source.body,
       entities: source.entities,
       media: source.media,
@@ -1139,4 +1521,21 @@ function demoCacheFileName(mediaId: string, media: MessageMediaDto): string {
   const fallback =
     media.kind === "video" || media.kind === "video-note" ? ".webm" : ".png";
   return `${stem}${extension || fallback}`;
+}
+
+// The demo workspace synthesizes what a real client downloads from Telegram's
+// CDN. A sticker follows its declared format so the renderer exercises the
+// Lottie and video paths, not only the still one.
+function demoMediaBytes(media: MessageMediaDto, mediaId: string): Buffer {
+  // A link preview downloads its thumbnail, which is an image like any other.
+  if (media.kind === "webpage") return demoImagePng(mediaId);
+  if (media.kind === "sticker") {
+    if (media.sticker?.format === "animated") return demoStickerTgs();
+    if (media.sticker?.format === "video") return demoVideoWebm();
+    return demoImagePng(mediaId);
+  }
+  if (media.kind === "video" || media.kind === "video-note") {
+    return demoVideoWebm();
+  }
+  return demoImagePng(mediaId);
 }

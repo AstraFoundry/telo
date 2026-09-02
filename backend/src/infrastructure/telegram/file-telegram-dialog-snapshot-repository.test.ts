@@ -65,6 +65,32 @@ describe("FileTelegramDialogSnapshotRepository", () => {
       typing: false,
     });
     expect(stored?.folders).toEqual([{ id: 2, title: "Work", unreadCount: 3 }]);
+    expect(stored?.chats[0]).not.toHaveProperty("avatarPending");
+  });
+
+  it("keeps protocol avatar URLs so restore can paint cached photos", async () => {
+    const filePath = await temporaryFile();
+    const repository = new FileTelegramDialogSnapshotRepository(filePath);
+    await repository.save({
+      version: 1,
+      chats: [
+        {
+          ...chat("a"),
+          avatarDataUrl: "telo-media://cache/avatar_a.jpg",
+          avatarPending: true,
+        },
+      ],
+      folders: [],
+      nextCursor: null,
+    });
+
+    const stored = await repository.get();
+    expect(stored?.chats[0]).toMatchObject({
+      id: "a",
+      avatarDataUrl: "telo-media://cache/avatar_a.jpg",
+      typing: false,
+    });
+    expect(stored?.chats[0]).not.toHaveProperty("avatarPending");
   });
 
   it("returns null for a corrupt or version-mismatched file", async () => {
@@ -73,9 +99,13 @@ describe("FileTelegramDialogSnapshotRepository", () => {
     const repository = new FileTelegramDialogSnapshotRepository(filePath);
     await expect(repository.get()).resolves.toBeNull();
 
-    await writeFile(filePath, JSON.stringify({ version: 2, chats: [], folders: [] }), {
-      mode: 0o600,
-    });
+    await writeFile(
+      filePath,
+      JSON.stringify({ version: 2, chats: [], folders: [] }),
+      {
+        mode: 0o600,
+      },
+    );
     await expect(repository.get()).resolves.toBeNull();
   });
 

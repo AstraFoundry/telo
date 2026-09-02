@@ -18,6 +18,12 @@ export interface UserPreferencesSnapshot {
   readonly agentPanelWidth: number;
   readonly recentEmojis: ReadonlyArray<string>;
   readonly messageTemplates: ReadonlyArray<MessageTemplateDto>;
+  readonly reduceMotion: boolean;
+  readonly loopStickers: boolean;
+  readonly notificationSenderName: boolean;
+  readonly notificationPreview: boolean;
+  readonly countMutedChats: boolean;
+  readonly mediaCacheLimitMb: number;
 }
 
 export const MESSAGE_TEXT_SIZE_DEFAULT = 14;
@@ -37,6 +43,10 @@ export const RECENT_EMOJIS_MAX = 24;
 export const MESSAGE_TEMPLATES_MAX = 50;
 export const MESSAGE_TEMPLATE_TITLE_MAX = 80;
 export const MESSAGE_TEMPLATE_BODY_MAX = 2000;
+
+export const MEDIA_CACHE_LIMIT_MB_DEFAULT = 512;
+export const MEDIA_CACHE_LIMIT_MB_MIN = 64;
+export const MEDIA_CACHE_LIMIT_MB_MAX = 4096;
 
 /** Seeded into an empty demo workspace so the composer picker has replies to insert. */
 export const DEMO_MESSAGE_TEMPLATES: ReadonlyArray<MessageTemplateDto> = [
@@ -79,6 +89,15 @@ export class UserPreferences {
       ),
       recentEmojis: normalizeRecentEmojis(input.recentEmojis),
       messageTemplates: normalizeMessageTemplates(input.messageTemplates),
+      reduceMotion: normalizeBoolean(input.reduceMotion, false),
+      loopStickers: normalizeBoolean(input.loopStickers, true),
+      notificationSenderName: normalizeBoolean(
+        input.notificationSenderName,
+        true,
+      ),
+      notificationPreview: normalizeBoolean(input.notificationPreview, true),
+      countMutedChats: normalizeBoolean(input.countMutedChats, false),
+      mediaCacheLimitMb: normalizeMediaCacheLimitMb(input.mediaCacheLimitMb),
     });
   }
 
@@ -96,6 +115,12 @@ export class UserPreferences {
       agentPanelWidth: AGENT_PANEL_WIDTH_DEFAULT,
       recentEmojis: [],
       messageTemplates: [],
+      reduceMotion: false,
+      loopStickers: true,
+      notificationSenderName: true,
+      notificationPreview: true,
+      countMutedChats: false,
+      mediaCacheLimitMb: MEDIA_CACHE_LIMIT_MB_DEFAULT,
     });
   }
 
@@ -195,4 +220,18 @@ function normalizeWidth(
     value <= max
     ? value
     : fallback;
+}
+
+// The cache ceiling is clamped rather than discarded: a slider (or a file
+// written by a build with different bounds) asking for more than the cache
+// may hold should land on the ceiling, not silently snap back to 512 MiB.
+// Whole mebibytes only, so the byte budget stays exact.
+function normalizeMediaCacheLimitMb(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return MEDIA_CACHE_LIMIT_MB_DEFAULT;
+  }
+  return Math.min(
+    MEDIA_CACHE_LIMIT_MB_MAX,
+    Math.max(MEDIA_CACHE_LIMIT_MB_MIN, Math.round(value)),
+  );
 }

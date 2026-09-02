@@ -1,3 +1,12 @@
+import {
+  AGENT_HISTORY_LIMIT_MAX,
+  AGENT_HISTORY_LIMIT_MIN,
+  AGENT_MAX_STEPS_MAX,
+  AGENT_MAX_STEPS_MIN,
+  AGENT_TEMPERATURE_MAX,
+  AGENT_TEMPERATURE_MIN,
+} from "../../../../contracts/src/ipc";
+
 export type AgentProvider = "openai" | "openai-compatible";
 
 export interface AgentConfigurationSnapshot {
@@ -7,6 +16,9 @@ export interface AgentConfigurationSnapshot {
   readonly instructions: string;
   readonly apiKey: string | null;
   readonly canInspectWorkspace: boolean;
+  readonly temperature: number;
+  readonly maxSteps: number;
+  readonly historyLimit: number;
 }
 
 export class AgentConfiguration {
@@ -28,6 +40,27 @@ export class AgentConfiguration {
     if (baseUrl && new URL(baseUrl).protocol !== "https:") {
       throw new Error("Agent base URL must use HTTPS");
     }
+    assertInRange(
+      "temperature",
+      input.temperature,
+      AGENT_TEMPERATURE_MIN,
+      AGENT_TEMPERATURE_MAX,
+      false,
+    );
+    assertInRange(
+      "max steps",
+      input.maxSteps,
+      AGENT_MAX_STEPS_MIN,
+      AGENT_MAX_STEPS_MAX,
+      true,
+    );
+    assertInRange(
+      "history limit",
+      input.historyLimit,
+      AGENT_HISTORY_LIMIT_MIN,
+      AGENT_HISTORY_LIMIT_MAX,
+      true,
+    );
 
     return new AgentConfiguration({
       provider: input.provider,
@@ -36,6 +69,9 @@ export class AgentConfiguration {
       instructions,
       apiKey,
       canInspectWorkspace: input.canInspectWorkspace,
+      temperature: input.temperature,
+      maxSteps: input.maxSteps,
+      historyLimit: input.historyLimit,
     });
   }
 
@@ -48,10 +84,28 @@ export class AgentConfiguration {
         "Answer from the visible Telegram workspace. Ask before acting outside it.",
       apiKey: null,
       canInspectWorkspace: true,
+      temperature: 0.7,
+      maxSteps: 4,
+      historyLimit: 20,
     });
   }
 
   snapshot(): AgentConfigurationSnapshot {
     return { ...this.value };
+  }
+}
+
+function assertInRange(
+  field: string,
+  value: number,
+  min: number,
+  max: number,
+  whole: boolean,
+): void {
+  if (!Number.isFinite(value) || value < min || value > max) {
+    throw new Error(`Agent ${field} must be between ${min} and ${max}`);
+  }
+  if (whole && !Number.isInteger(value)) {
+    throw new Error(`Agent ${field} must be a whole number`);
   }
 }

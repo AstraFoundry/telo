@@ -156,6 +156,13 @@ export default tseslint.config(
     },
   },
   {
+    // Maintenance scripts run under Node directly, outside any bundler.
+    files: ["scripts/**/*.mjs"],
+    languageOptions: {
+      globals: { process: "readonly", console: "readonly" },
+    },
+  },
+  {
     // Pre-paint boot scripts are plain browser scripts served from public/,
     // outside the TS program and its DOM lib.
     files: ["frontend/public/**/*.js"],

@@ -28,6 +28,11 @@ import { FileTelegramSessionRepository } from "../../infrastructure/telegram/fil
 import { FileTelegramConnectionProfileRepository } from "../../infrastructure/telegram/file-telegram-connection-profile-repository";
 import { FileTelegramDialogSnapshotRepository } from "../../infrastructure/telegram/file-telegram-dialog-snapshot-repository";
 import { TelegramClientCoordinator } from "../../infrastructure/telegram/teleproto-telegram-repository";
+import {
+  clearMediaCache,
+  mediaCacheUsageBytes,
+} from "../../infrastructure/telegram/media-cache";
+import type { MediaCacheStore } from "../../domain/storage/storage-ports";
 import type { TelegramAuthState } from "../../../../contracts/src/ipc";
 
 export interface ApplicationContainer {
@@ -45,6 +50,7 @@ export interface ApplicationContainer {
   readonly telegram: TelegramClientCoordinator;
   readonly telegramLogout: TelegramLogoutService;
   readonly preferences: UpdateUserPreferencesService;
+  readonly mediaCacheStorage: MediaCacheStore;
 }
 
 export function createContainer(
@@ -97,15 +103,20 @@ export function createContainer(
   const apiHash = process.env.TELO_TELEGRAM_API_HASH?.trim();
   const applicationCredentials =
     Number.isInteger(apiId) && apiId > 0 && apiHash ? { apiId, apiHash } : null;
+  const mediaCacheDirectory = path.join(dataDirectory, "media-cache");
   const telegram = new TelegramClientCoordinator(
     sessions,
     profiles,
     applicationCredentials,
     onAuthState,
-    path.join(dataDirectory, "media-cache"),
+    mediaCacheDirectory,
     new FileTelegramDialogSnapshotRepository(
       path.join(dataDirectory, "dialogs.json"),
     ),
+    // Read per eviction, not captured: raising or lowering the ceiling in
+    // settings governs the very next download.
+    async () =>
+      (await preferences.get()).snapshot().mediaCacheLimitMb * 1024 ** 2,
   );
 
   // The demo workspace pairs its deterministic Telegram repository with an
@@ -146,5 +157,9 @@ export function createContainer(
     telegram,
     telegramLogout: new TelegramLogoutService(telegram),
     preferences: new UpdateUserPreferencesService(preferences),
+    mediaCacheStorage: {
+      usageBytes: () => mediaCacheUsageBytes(mediaCacheDirectory),
+      clear: () => clearMediaCache(mediaCacheDirectory),
+    },
   };
 }

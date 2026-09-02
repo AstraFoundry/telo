@@ -18,8 +18,16 @@ export interface ChatDto {
   readonly pinned: boolean;
   readonly kind: ChatKind;
   readonly initials: string;
-  /** Profile photo, when Telegram has one; null falls back to `initials`. */
+  /**
+   * Profile photo URL (`telo-media://` or a data URL). Null when Telegram has
+   * no photo, or the cache has not resolved yet — see `avatarPending`.
+   */
   readonly avatarDataUrl: string | null;
+  /**
+   * True until a disk/memory cache hit or the Telegram download settles.
+   * The avatar slot shows a skeleton while this is set, never initials.
+   */
+  readonly avatarPending?: boolean;
   /** Server-synced draft text (e.g. typed on another Telegram client). */
   readonly draftPreview: string | null;
   /** Whether the other party is currently typing in this chat. */
@@ -174,6 +182,55 @@ export type MessageMediaKind =
   | "animation"
   | "sticker";
 
+/**
+ * How a sticker document is encoded. Telegram tells these apart by mime type:
+ * `image/webp` is a still, `application/x-tgsticker` is a gzipped Lottie
+ * animation, and `video/webm` is a short silent video.
+ */
+export type StickerFormat = "static" | "animated" | "video";
+
+/**
+ * Telegram `DocumentAttributeSticker` payload. A sticker is a document, so it
+ * keeps every `MessageFileMediaDto` field and adds these on top.
+ */
+export interface MessageStickerDto {
+  /**
+   * Emoji the sticker stands for. It is the accessible name and the
+   * placeholder shown until the document is on disk, which is what Telegram
+   * draws in the same slot.
+   */
+  readonly emoji: string | null;
+  readonly format: StickerFormat;
+  /** Short name of the set the sticker belongs to; null when it has none. */
+  readonly setName: string | null;
+}
+
+/**
+ * One sticker inside an installed set, ready for the picker to draw and send.
+ * `id` is an opaque media key that flows through the same download pipeline
+ * as message media, so the picker never handles filesystem paths.
+ */
+export interface StickerItemDto {
+  readonly id: string;
+  readonly emoji: string | null;
+  readonly format: StickerFormat;
+  readonly width: number | null;
+  readonly height: number | null;
+}
+
+/** A sticker set, the unit Telegram's picker and set sheet group stickers by. */
+export interface StickerSetDto {
+  readonly id: string;
+  readonly title: string;
+  readonly shortName: string;
+  readonly stickers: ReadonlyArray<StickerItemDto>;
+  /**
+   * Whether the account has the set installed. Always true for the picker's
+   * own list; a set opened from a received sticker may not be.
+   */
+  readonly installed: boolean;
+}
+
 export interface MessageFileMediaDto {
   /** Stable opaque key used for download commands; never a local path. */
   readonly id: string;
@@ -185,6 +242,8 @@ export interface MessageFileMediaDto {
   readonly height: number | null;
   readonly duration: number | null;
   readonly spoiler: boolean;
+  /** Sticker attributes; null for every other document kind. */
+  readonly sticker?: MessageStickerDto | null;
 }
 
 /** Link preview attached to a message (Telegram MessageMediaWebPage). */
@@ -210,6 +269,28 @@ export interface MessageDto {
   readonly id: string;
   readonly chatId: string;
   readonly senderName: string;
+  /**
+   * Peer id of the author, used to key the avatar cache: the sender's user id
+   * in groups and the channel id for channel posts. Telegram resolves photos
+   * per peer, not per message. Only incoming rows read it — outgoing rows
+   * render the account's own photo — so a local optimistic placeholder that
+   * Telegram has not acknowledged yet carries the empty string, matching the
+   * existing `senderName` convention.
+   */
+  readonly senderId: string;
+  /**
+   * Author photo (`telo-media://` or a data URL) taken from the avatar cache
+   * when the message was mapped, so a cache hit paints with the first frame.
+   * Null when Telegram has no photo, or the cache has not resolved yet — see
+   * `senderAvatarPending`.
+   */
+  readonly senderAvatarUrl: string | null;
+  /**
+   * True until the author photo settles. A later `chat-avatar` event keyed by
+   * `senderId` overlays this snapshot; the avatar slot shows a skeleton
+   * meanwhile, never initials.
+   */
+  readonly senderAvatarPending?: boolean;
   readonly body: string;
   readonly entities: ReadonlyArray<MessageEntityDto>;
   readonly media: MessageMediaDto | null;
@@ -294,7 +375,7 @@ export type TelegramWorkspaceEvent =
   | {
       readonly type: "chat-avatar";
       readonly chatId: string;
-      readonly avatarDataUrl: string;
+      readonly avatarDataUrl: string | null;
     }
   | {
       readonly type: "message-upsert";
@@ -452,6 +533,36 @@ export interface ChatMemberDto {
   readonly username: string | null;
 }
 
+/**
+ * Identity card for any Telegram peer, including a group member or channel
+ * poster who has no dialog of their own. A peer that does have a dialog is
+ * shown through the richer chat profile instead, so this carries only what
+ * Telegram can tell about a peer with no shared history.
+ */
+export interface PeerProfileDto {
+  readonly id: string;
+  readonly title: string;
+  readonly username: string | null;
+  readonly kind: ChatKind;
+  readonly avatarDataUrl: string | null;
+  /** True until the photo settles, exactly like `ChatDto.avatarPending`. */
+  readonly avatarPending?: boolean;
+  /** Telegram "about" text; null when empty or hidden from the account. */
+  readonly bio: string | null;
+  /** Set only when the peer shares their number with the account. */
+  readonly phone: string | null;
+}
+
+/** Inclusive bounds the renderer clamps to and the domain re-validates. */
+export const AGENT_TEMPERATURE_MIN = 0;
+export const AGENT_TEMPERATURE_MAX = 2;
+/** Tool-call rounds one run may take before the model must answer. */
+export const AGENT_MAX_STEPS_MIN = 1;
+export const AGENT_MAX_STEPS_MAX = 8;
+/** Prior thread turns replayed to the model, newest kept. */
+export const AGENT_HISTORY_LIMIT_MIN = 0;
+export const AGENT_HISTORY_LIMIT_MAX = 50;
+
 export interface AgentConfigurationDto {
   readonly provider: "openai" | "openai-compatible";
   readonly model: string;
@@ -459,6 +570,12 @@ export interface AgentConfigurationDto {
   readonly instructions: string;
   readonly hasApiKey: boolean;
   readonly canInspectWorkspace: boolean;
+  /** Sampling temperature handed to the provider. */
+  readonly temperature: number;
+  /** Tool-call rounds allowed before the model has to produce an answer. */
+  readonly maxSteps: number;
+  /** How many prior turns of the thread are replayed as context. */
+  readonly historyLimit: number;
 }
 
 export interface SaveAgentConfigurationInput {
@@ -468,6 +585,9 @@ export interface SaveAgentConfigurationInput {
   readonly instructions: string;
   readonly apiKey?: string;
   readonly canInspectWorkspace: boolean;
+  readonly temperature: number;
+  readonly maxSteps: number;
+  readonly historyLimit: number;
 }
 
 export type ThemePreference = "light" | "dark" | "system";
@@ -504,6 +624,22 @@ export interface UserPreferencesDto {
   readonly recentEmojis: ReadonlyArray<string>;
   /** Quick replies the composer can insert into a draft. */
   readonly messageTemplates: ReadonlyArray<MessageTemplateDto>;
+  /**
+   * Forces the reduced-motion path on even when the OS does not ask for it.
+   * Telegram calls the same idea power saving; the app never animates less
+   * than the OS asks, so this only ever adds restraint.
+   */
+  readonly reduceMotion: boolean;
+  /** Animated stickers replay on their own instead of holding one frame. */
+  readonly loopStickers: boolean;
+  /** Desktop notifications carry the sender's name rather than just the app. */
+  readonly notificationSenderName: boolean;
+  /** Desktop notifications carry the message body rather than a placeholder. */
+  readonly notificationPreview: boolean;
+  /** Muted chats contribute to the chat-list and folder unread badges. */
+  readonly countMutedChats: boolean;
+  /** Ceiling for the on-disk media cache, in mebibytes. */
+  readonly mediaCacheLimitMb: number;
 }
 
 export interface UpdateUserPreferencesInput {
@@ -519,6 +655,12 @@ export interface UpdateUserPreferencesInput {
   readonly agentPanelWidth?: number;
   readonly recentEmojis?: ReadonlyArray<string>;
   readonly messageTemplates?: ReadonlyArray<MessageTemplateDto>;
+  readonly reduceMotion?: boolean;
+  readonly loopStickers?: boolean;
+  readonly notificationSenderName?: boolean;
+  readonly notificationPreview?: boolean;
+  readonly countMutedChats?: boolean;
+  readonly mediaCacheLimitMb?: number;
 }
 
 export interface UiContextSnapshot {
@@ -752,6 +894,37 @@ export interface TeloDesktopApi {
      */
     listChatMembers(chatId: string): Promise<ReadonlyArray<ChatMemberDto>>;
     /**
+     * Identity card for one peer, used when a message author has no dialog to
+     * open. Peers with a dialog are read from the chat list instead.
+     */
+    getPeerProfile(peerId: string): Promise<PeerProfileDto>;
+    /**
+     * The account's installed sticker sets, each with its stickers, for the
+     * composer picker. Sticker ids are media keys the download pipeline
+     * understands, so the picker draws them the same way the transcript does.
+     */
+    listStickerSets(): Promise<ReadonlyArray<StickerSetDto>>;
+    /** Sends one sticker from an installed set into a chat. */
+    sendSticker(chatId: string, stickerId: string): Promise<MessageDto>;
+    /**
+     * One set by short name, for the sheet a received sticker opens. Unlike
+     * the picker's list this can return a set the account has not installed.
+     */
+    getStickerSet(shortName: string): Promise<StickerSetDto>;
+    /** Adds the set to the account's stickers, or removes it. */
+    setStickerSetInstalled(
+      shortName: string,
+      installed: boolean,
+    ): Promise<void>;
+    /**
+     * Resolves the documents behind `custom-emoji` message entities. They are
+     * sticker documents, so the results carry the same media ids and download
+     * through the same pipeline as set stickers.
+     */
+    getCustomEmoji(
+      documentIds: ReadonlyArray<string>,
+    ): Promise<ReadonlyArray<StickerItemDto>>;
+    /**
      * Server-side global search: chats matching the query by title/preview
      * plus messages matching by body across every chat.
      */
@@ -847,5 +1020,11 @@ export interface TeloDesktopApi {
   readonly preferences: {
     get(): Promise<UserPreferencesDto>;
     update(input: UpdateUserPreferencesInput): Promise<UserPreferencesDto>;
+  };
+  readonly storage: {
+    /** Bytes currently held by the on-disk media cache. */
+    mediaCacheUsage(): Promise<number>;
+    /** Empties the media cache and answers the reclaimed byte count. */
+    clearMediaCache(): Promise<number>;
   };
 }

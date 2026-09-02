@@ -56,6 +56,8 @@ function messageDto(partial: Partial<MessageDto> = {}): MessageDto {
     id: "m1",
     chatId: "chat",
     senderName: "Lev",
+    senderId: "demo-lev",
+    senderAvatarUrl: null,
     body: "Ship the retry flow.",
     entities: [],
     media: null,

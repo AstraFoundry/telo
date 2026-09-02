@@ -11,8 +11,11 @@ import type {
   MessagePageInput,
   MessageSearchPageDto,
   MessageSearchPageInput,
+  PeerProfileDto,
   SendMessageInput,
   SendMediaInput,
+  StickerItemDto,
+  StickerSetDto,
   TelegramWorkspaceEvent,
   UpdateKeywordFolderInput,
 } from "../../../../contracts/src/ipc";
@@ -159,6 +162,40 @@ export class TelegramWorkspaceService {
   listChatMembers(chatId: string): Promise<ReadonlyArray<ChatMemberDto>> {
     if (!chatId.trim()) throw new Error("Chat id is required");
     return this.repository.listChatMembers(chatId);
+  }
+
+  getPeerProfile(peerId: string): Promise<PeerProfileDto> {
+    if (!peerId.trim()) throw new Error("Peer id is required");
+    return this.repository.getPeerProfile(peerId);
+  }
+
+  listStickerSets(): Promise<ReadonlyArray<StickerSetDto>> {
+    return this.repository.listStickerSets();
+  }
+
+  sendSticker(chatId: string, stickerId: string): Promise<MessageDto> {
+    if (!chatId.trim()) throw new Error("Chat id is required");
+    if (!stickerId.trim()) throw new Error("Sticker id is required");
+    return this.repository.sendSticker(chatId, stickerId);
+  }
+
+  getStickerSet(shortName: string): Promise<StickerSetDto> {
+    if (!shortName.trim()) throw new Error("Sticker set name is required");
+    return this.repository.getStickerSet(shortName);
+  }
+
+  setStickerSetInstalled(shortName: string, installed: boolean): Promise<void> {
+    if (!shortName.trim()) throw new Error("Sticker set name is required");
+    return this.repository.setStickerSetInstalled(shortName, installed);
+  }
+
+  getCustomEmoji(
+    documentIds: ReadonlyArray<string>,
+  ): Promise<ReadonlyArray<StickerItemDto>> {
+    // A message with no custom emoji batches an empty list; that is a normal
+    // renderer state, not a bad request, so it answers without a round trip.
+    if (documentIds.length === 0) return Promise.resolve([]);
+    return this.repository.getCustomEmoji(documentIds);
   }
 
   searchGlobal(query: string): Promise<GlobalSearchResultDto> {

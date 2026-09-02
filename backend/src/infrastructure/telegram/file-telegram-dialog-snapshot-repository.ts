@@ -14,9 +14,7 @@ import type {
 
 const SNAPSHOT_VERSION = 1 as const;
 
-export class FileTelegramDialogSnapshotRepository
-  implements TelegramDialogSnapshotRepository
-{
+export class FileTelegramDialogSnapshotRepository implements TelegramDialogSnapshotRepository {
   constructor(private readonly filePath: string) {}
 
   async get(): Promise<TelegramDialogSnapshot | null> {
@@ -67,9 +65,7 @@ export class FileTelegramDialogSnapshotRepository
   }
 }
 
-export class MemoryTelegramDialogSnapshotRepository
-  implements TelegramDialogSnapshotRepository
-{
+export class MemoryTelegramDialogSnapshotRepository implements TelegramDialogSnapshotRepository {
   private value: TelegramDialogSnapshot | null = null;
 
   async get(): Promise<TelegramDialogSnapshot | null> {
@@ -120,7 +116,19 @@ export function dialogSnapshotPage(
 }
 
 function persistableChat(chat: ChatDto): ChatDto {
-  return { ...chat, avatarDataUrl: null, typing: false };
+  const { avatarPending, ...rest } = chat;
+  void avatarPending;
+  return {
+    ...rest,
+    // Keep protocol URLs so restore can paint cached photos. Drop in-memory
+    // data URLs — they bloat dialogs.json and are not a disk cache.
+    avatarDataUrl: persistedAvatarUrl(chat.avatarDataUrl),
+    typing: false,
+  };
+}
+
+function persistedAvatarUrl(url: string | null): string | null {
+  return url?.startsWith("telo-media://") ? url : null;
 }
 
 function cursorOf(chat: ChatDto): ChatPageCursorDto {

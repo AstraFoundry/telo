@@ -15,6 +15,10 @@ export function registerMediaScheme(): void {
         secure: true,
         supportFetchAPI: true,
         stream: true,
+        // The renderer reads sticker bytes with fetch() so it can gunzip a
+        // `.tgs` into Lottie JSON. That is a cross-origin read from the app's
+        // own origin to this scheme, which needs CORS on both ends.
+        corsEnabled: true,
       },
     },
   ]);
@@ -22,7 +26,7 @@ export function registerMediaScheme(): void {
 
 export function handleMediaProtocol(cacheDirectory: string): void {
   handled = true;
-  protocol.handle(MEDIA_SCHEME, (request) => {
+  protocol.handle(MEDIA_SCHEME, async (request) => {
     const url = new URL(request.url);
     if (url.hostname !== "cache") return new Response(null, { status: 404 });
     const fileName = decodeURIComponent(url.pathname.slice(1));
@@ -33,7 +37,17 @@ export function handleMediaProtocol(cacheDirectory: string): void {
     if (path.dirname(filePath) !== path.resolve(cacheDirectory)) {
       return new Response(null, { status: 403 });
     }
-    return net.fetch(pathToFileURL(filePath).toString());
+    const response = await net.fetch(pathToFileURL(filePath).toString());
+    // Only this app can reach the scheme — it is not a network protocol and
+    // no remote page can name it — so the allowance costs nothing and lets
+    // the renderer read its own cache.
+    const headers = new Headers(response.headers);
+    headers.set("Access-Control-Allow-Origin", "*");
+    return new Response(response.body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers,
+    });
   });
 }
 

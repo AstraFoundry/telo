@@ -24,6 +24,9 @@ export class SaveAgentConfigurationService {
       instructions: input.instructions,
       apiKey: input.apiKey?.trim() || currentSnapshot.apiKey,
       canInspectWorkspace: input.canInspectWorkspace,
+      temperature: input.temperature,
+      maxSteps: input.maxSteps,
+      historyLimit: input.historyLimit,
     });
     await this.repository.save(configuration);
     return toDto(configuration);
@@ -39,5 +42,8 @@ function toDto(configuration: AgentConfiguration): AgentConfigurationDto {
     instructions: value.instructions,
     hasApiKey: Boolean(value.apiKey),
     canInspectWorkspace: value.canInspectWorkspace,
+    temperature: value.temperature,
+    maxSteps: value.maxSteps,
+    historyLimit: value.historyLimit,
   };
 }

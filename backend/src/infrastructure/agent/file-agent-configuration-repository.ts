@@ -11,6 +11,11 @@ interface StoredAgentConfiguration {
   readonly instructions: string;
   readonly encryptedApiKey: string | null;
   readonly canInspectWorkspace: boolean;
+  // Absent in files written before the agent tuning fields shipped; reads
+  // backfill them from the default configuration.
+  readonly temperature?: number;
+  readonly maxSteps?: number;
+  readonly historyLimit?: number;
 }
 
 export class FileAgentConfigurationRepository implements AgentConfigurationRepository {
@@ -25,6 +30,7 @@ export class FileAgentConfigurationRepository implements AgentConfigurationRepos
       const stored = JSON.parse(
         await readFile(this.filePath, "utf8"),
       ) as StoredAgentConfiguration;
+      const defaults = AgentConfiguration.default().snapshot();
       return AgentConfiguration.create({
         provider: stored.provider,
         model: stored.model,
@@ -34,6 +40,9 @@ export class FileAgentConfigurationRepository implements AgentConfigurationRepos
           ? this.decrypt(stored.encryptedApiKey)
           : null,
         canInspectWorkspace: stored.canInspectWorkspace,
+        temperature: numberOr(stored.temperature, defaults.temperature),
+        maxSteps: numberOr(stored.maxSteps, defaults.maxSteps),
+        historyLimit: numberOr(stored.historyLimit, defaults.historyLimit),
       });
     } catch (error) {
       if (isMissingFile(error)) return AgentConfiguration.default();
@@ -50,6 +59,9 @@ export class FileAgentConfigurationRepository implements AgentConfigurationRepos
       instructions: value.instructions,
       encryptedApiKey: value.apiKey ? this.encrypt(value.apiKey) : null,
       canInspectWorkspace: value.canInspectWorkspace,
+      temperature: value.temperature,
+      maxSteps: value.maxSteps,
+      historyLimit: value.historyLimit,
     };
     await mkdir(path.dirname(this.filePath), { recursive: true });
     await writeFile(this.filePath, JSON.stringify(stored, null, 2), {
@@ -60,4 +72,8 @@ export class FileAgentConfigurationRepository implements AgentConfigurationRepos
 
 function isMissingFile(error: unknown): boolean {
   return error instanceof Error && "code" in error && error.code === "ENOENT";
+}
+
+function numberOr(value: number | undefined, fallback: number): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
 }

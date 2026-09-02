@@ -15,6 +15,12 @@ const DEFAULTS = {
   agentPanelWidth: 380,
   recentEmojis: [],
   messageTemplates: [],
+  reduceMotion: false,
+  loopStickers: true,
+  notificationSenderName: true,
+  notificationPreview: true,
+  countMutedChats: false,
+  mediaCacheLimitMb: 512,
 } as const;
 
 describe("UserPreferences", () => {
@@ -233,6 +239,70 @@ describe("UserPreferences", () => {
     expect(templates[1]?.id.length).toBeGreaterThan(0);
     expect(templates[2]).toMatchObject({ title: "No id", body: "still valid" });
   });
+
+  it("accepts explicit values for the appearance and notification toggles", () => {
+    const preferences = UserPreferences.default().update({
+      reduceMotion: true,
+      loopStickers: false,
+      notificationSenderName: false,
+      notificationPreview: false,
+      countMutedChats: true,
+    });
+
+    expect(preferences.snapshot()).toEqual({
+      ...DEFAULTS,
+      reduceMotion: true,
+      loopStickers: false,
+      notificationSenderName: false,
+      notificationPreview: false,
+      countMutedChats: true,
+    });
+  });
+
+  it.each([
+    ["reduceMotion", false],
+    ["loopStickers", true],
+    ["notificationSenderName", true],
+    ["notificationPreview", true],
+    ["countMutedChats", false],
+  ] as const)(
+    "falls back to the %s default for a malformed persisted value",
+    (key, fallback) => {
+      const stored = {
+        ...DEFAULTS,
+        [key]: "yes",
+      } as unknown as Parameters<typeof UserPreferences.create>[0];
+
+      expect(UserPreferences.create(stored).snapshot()[key]).toBe(fallback);
+    },
+  );
+
+  it("clamps the media cache limit to the supported range", () => {
+    const clamped = (mediaCacheLimitMb: number): number =>
+      UserPreferences.default().update({ mediaCacheLimitMb }).snapshot()
+        .mediaCacheLimitMb;
+
+    expect(clamped(1)).toBe(64);
+    expect(clamped(64)).toBe(64);
+    expect(clamped(1024)).toBe(1024);
+    expect(clamped(4096)).toBe(4096);
+    expect(clamped(999_999)).toBe(4096);
+    expect(clamped(700.4)).toBe(700);
+  });
+
+  it.each([Number.NaN, Number.POSITIVE_INFINITY, "512", null])(
+    "falls back to the default media cache limit for %s",
+    (mediaCacheLimitMb) => {
+      const stored = {
+        ...DEFAULTS,
+        mediaCacheLimitMb,
+      } as unknown as Parameters<typeof UserPreferences.create>[0];
+
+      expect(UserPreferences.create(stored).snapshot().mediaCacheLimitMb).toBe(
+        512,
+      );
+    },
+  );
 
   it("falls back to defaults when the persisted file predates the new preferences", () => {
     const stored = {

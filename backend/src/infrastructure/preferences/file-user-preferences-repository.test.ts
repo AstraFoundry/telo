@@ -76,4 +76,57 @@ describe("FileUserPreferencesRepository", () => {
 
     expect((await repository.get()).snapshot().theme).toBe("system");
   });
+
+  it("fills the new preference defaults for a file written by an older build", async () => {
+    const filePath = await temporaryFile();
+    await writeFile(
+      filePath,
+      JSON.stringify({
+        agentPanelOpen: true,
+        demoWorkspace: false,
+        theme: "dark",
+        accentColor: "green",
+        messageTextSize: 16,
+        timeFormat: "24h",
+        sendWithEnter: false,
+        notificationsEnabled: false,
+        sidebarWidth: 320,
+        agentPanelWidth: 480,
+        recentEmojis: [],
+        messageTemplates: [],
+      }),
+    );
+    const repository = new FileUserPreferencesRepository(filePath);
+
+    const stored = (await repository.get()).snapshot();
+
+    expect(stored).toMatchObject({
+      reduceMotion: false,
+      loopStickers: true,
+      notificationSenderName: true,
+      notificationPreview: true,
+      countMutedChats: false,
+      mediaCacheLimitMb: 512,
+    });
+    // The preferences the older build did write survive untouched.
+    expect(stored.theme).toBe("dark");
+    expect(stored.sidebarWidth).toBe(320);
+  });
+
+  it("round-trips the new preferences through a save and reload", async () => {
+    const filePath = await temporaryFile();
+    const repository = new FileUserPreferencesRepository(filePath);
+    const preferences = UserPreferences.default().update({
+      reduceMotion: true,
+      loopStickers: false,
+      notificationSenderName: false,
+      notificationPreview: false,
+      countMutedChats: true,
+      mediaCacheLimitMb: 1024,
+    });
+
+    await repository.save(preferences);
+
+    expect((await repository.get()).snapshot()).toEqual(preferences.snapshot());
+  });
 });

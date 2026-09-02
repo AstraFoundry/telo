@@ -1,4 +1,4 @@
-import { deflateSync } from "node:zlib";
+import { deflateSync, gzipSync } from "node:zlib";
 
 /**
  * Deterministic demo media bytes. The demo workspace has no Telegram CDN to
@@ -17,6 +17,96 @@ const DEMO_IMAGE_HEIGHT = 480;
 
 export function demoVideoWebm(): Buffer {
   return Buffer.from(DEMO_VIDEO_WEBM_BASE64, "base64");
+}
+
+/**
+ * A `.tgs` sticker is gzipped Lottie JSON, so the demo can synthesize a real
+ * one without shipping a binary: this is a circle that breathes between 60%
+ * and 100% over two seconds, which is enough for the renderer to prove it
+ * decompressed, parsed and played the animation.
+ */
+export function demoStickerTgs(): Buffer {
+  const animation = {
+    v: "5.7.4",
+    fr: 30,
+    ip: 0,
+    op: 60,
+    w: 512,
+    h: 512,
+    nm: "demo-sticker",
+    ddd: 0,
+    assets: [],
+    layers: [
+      {
+        ddd: 0,
+        ind: 1,
+        ty: 4,
+        nm: "circle",
+        sr: 1,
+        ks: {
+          o: { a: 0, k: 100 },
+          r: { a: 0, k: 0 },
+          p: { a: 0, k: [256, 256, 0] },
+          a: { a: 0, k: [0, 0, 0] },
+          // Lottie needs the bezier handles on every keyframe but the last;
+          // without them the property never evaluates and the layer inherits
+          // the player's uninitialised-frame sentinel instead of a scale.
+          s: {
+            a: 1,
+            k: [
+              {
+                t: 0,
+                s: [60, 60, 100],
+                i: { x: [0.5, 0.5, 0.5], y: [1, 1, 1] },
+                o: { x: [0.5, 0.5, 0.5], y: [0, 0, 0] },
+              },
+              {
+                t: 30,
+                s: [100, 100, 100],
+                i: { x: [0.5, 0.5, 0.5], y: [1, 1, 1] },
+                o: { x: [0.5, 0.5, 0.5], y: [0, 0, 0] },
+              },
+              { t: 60, s: [60, 60, 100] },
+            ],
+          },
+        },
+        ao: 0,
+        shapes: [
+          {
+            ty: "gr",
+            nm: "group",
+            it: [
+              {
+                ty: "el",
+                nm: "ellipse",
+                p: { a: 0, k: [0, 0] },
+                s: { a: 0, k: [300, 300] },
+              },
+              {
+                ty: "fl",
+                nm: "fill",
+                c: { a: 0, k: [0.98, 0.62, 0.11, 1] },
+                o: { a: 0, k: 100 },
+              },
+              {
+                ty: "tr",
+                p: { a: 0, k: [0, 0] },
+                a: { a: 0, k: [0, 0] },
+                s: { a: 0, k: [100, 100] },
+                r: { a: 0, k: 0 },
+                o: { a: 0, k: 100 },
+              },
+            ],
+          },
+        ],
+        ip: 0,
+        op: 60,
+        st: 0,
+        bm: 0,
+      },
+    ],
+  };
+  return gzipSync(Buffer.from(JSON.stringify(animation), "utf8"));
 }
 
 /** Builds a valid RGB PNG; the gradient hue is a pure function of `seed`. */
