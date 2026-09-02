@@ -27,6 +27,8 @@ import { ColumnResizeHandle } from "./column-resize-handle";
 interface WorkspacePageProps {
   children: ReactNode;
   onOpenSettings(): void;
+  /** Settings opened straight onto the Agent pane, for the panel's own CTA. */
+  onOpenAgentSettings(): void;
   onSelectChat(): void;
   /**
    * Narrow layout only: whether the back-to-chats control overlays the
@@ -48,6 +50,7 @@ interface WorkspacePageProps {
 export function WorkspacePage({
   children,
   onOpenSettings,
+  onOpenAgentSettings,
   onSelectChat,
   showBackToChats,
 }: WorkspacePageProps) {
@@ -156,7 +159,7 @@ export function WorkspacePage({
       {profileOpen ? (
         <ChatProfilePanel />
       ) : (
-        <GlobalAgentPanel onOpenSettings={onOpenSettings} />
+        <GlobalAgentPanel onOpenSettings={onOpenAgentSettings} />
       )}
       <ColumnResizeHandle
         label={copy.resizeChatList}
@@ -176,6 +179,9 @@ export function WorkspacePage({
         onCommit={selectSidebarWidth}
         onReset={() => selectSidebarWidth(SIDEBAR_WIDTH_DEFAULT)}
       />
+      {/* One handle for the whole right column: both panels read the same
+          width, so dragging resizes whichever one is currently in the slot —
+          the way Telegram Desktop lets you drag its info column. */}
       {agentOpen || profileOpen ? (
         <ColumnResizeHandle
           label={copy.resizeAgentPanel}

@@ -29,7 +29,7 @@ test("drives the animated surfaces with reduced motion enabled", async ({
   // Emoji picker: the popover morph and the per-cell press spring both drop
   // out, leaving the grid to behave as a plain list of buttons.
   await composer.fill("Ship it ");
-  await window.getByRole("button", { name: "Emoji" }).click();
+  await window.getByRole("button", { name: "Emoji and stickers" }).click();
   await window.getByRole("textbox", { name: "Search emoji…" }).fill("rocket");
   await window
     .getByRole("button", { name: "rocket launch space ship" })
@@ -64,4 +64,17 @@ test("drives the animated surfaces with reduced motion enabled", async ({
   await expect(jump).toBeVisible();
   await jump.click();
   await expect(conversation.getByText(QUOTED).first()).toBeInViewport();
+
+  // A video sticker normally loops on its own. Under reduce it holds its
+  // first frame, so the only way to see it move is the play control — the
+  // gentler alternative, not a missing sticker.
+  await window
+    .getByRole("navigation", { name: "Chats" })
+    .getByRole("button", { name: /Product Notes/ })
+    .click();
+  const stickers = window.getByRole("region", { name: "Conversation" });
+  await expect(stickers.getByRole("img", { name: "👋" })).toBeVisible();
+  await expect(
+    stickers.getByRole("button", { name: "Play sticker" }).first(),
+  ).toBeVisible();
 });

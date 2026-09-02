@@ -7,8 +7,9 @@ demoTest(
 
     await window.getByRole("button", { name: "Open account menu" }).click();
     await window.getByRole("button", { name: "Settings", exact: true }).click();
+    // Account is the landing pane, so log out is reachable without navigating.
     await expect(
-      window.getByRole("heading", { name: "Telegram account" }),
+      window.getByRole("heading", { level: 2, name: "Account" }),
     ).toBeVisible();
 
     // First click only arms the confirm state; the second click executes.

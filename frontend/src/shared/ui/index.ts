@@ -10,6 +10,18 @@ export { OptionRow } from "./option-row";
 export type { OptionRowProps } from "./option-row";
 export { PressableBlock } from "./pressable-block";
 export type { PressableBlockProps } from "./pressable-block";
+export {
+  SettingsGroup,
+  SettingsLinkRow,
+  SettingsRow,
+  SettingsStackedRow,
+} from "./settings-row";
+export type {
+  SettingsGroupProps,
+  SettingsLinkRowProps,
+  SettingsRowProps,
+  SettingsStackedRowProps,
+} from "./settings-row";
 export { Sticker } from "./sticker";
 export type { StickerProps } from "./sticker";
 export { MediaViewer } from "./media-viewer";

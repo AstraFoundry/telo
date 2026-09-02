@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useAgentStore } from "../../../entities/agent";
-import { useChatStore } from "../../../entities/chat";
+import { useChatProfileStore, useChatStore } from "../../../entities/chat";
 import { copy } from "../../../shared/config/copy";
 import { installTeloApiMock } from "../../../shared/test/mock-telo";
 
@@ -65,6 +65,7 @@ describe("WorkspacePage", () => {
       activeChatId: null,
       loading: false,
     });
+    useChatProfileStore.setState({ open: false });
     // The preferences slice reads window.telo at module scope through the
     // sidebar's import chain, so the page module is imported only after the
     // mock is installed.
@@ -75,6 +76,7 @@ describe("WorkspacePage", () => {
     return render(
       <WorkspacePage
         onOpenSettings={vi.fn()}
+        onOpenAgentSettings={vi.fn()}
         onSelectChat={vi.fn()}
         showBackToChats={showBackToChats}
       >
@@ -142,6 +144,18 @@ describe("WorkspacePage", () => {
     expect(window.telo.preferences.update).toHaveBeenCalledWith({
       sidebarWidth: 280,
     });
+  });
+
+  it("keeps the right column resizable when the profile replaces the agent", () => {
+    useChatProfileStore.setState({ open: true });
+    renderPage();
+
+    // One column, one handle: both panels read the same width, so the drag
+    // target cannot depend on which of them happens to be in the slot.
+    const separator = screen.getByRole("separator", {
+      name: copy.resizeAgentPanel,
+    });
+    expect(separator.getAttribute("aria-valuenow")).toBe("380");
   });
 
   it("collapses to a list ↔ conversation column at the narrow breakpoint", async () => {

@@ -5,11 +5,23 @@ import { subscribeToWorkspaceEvents, useChatStore } from "entities/chat";
 import { useTelegramStore } from "entities/telegram";
 import { GlobalSearchPalette } from "features/chat-search";
 import { OnboardingPage } from "pages/onboarding";
-import { SettingsPage } from "pages/settings";
+import { SettingsPage, type SettingsSectionId } from "pages/settings";
 import { WorkspacePage } from "pages/workspace";
 import { ConversationView } from "widgets/conversation-view";
 
+import { useChatPreferenceSync } from "./chat-preference-sync";
+import { MotionPreferences } from "./motion-preferences";
+
 export function App() {
+  return (
+    <MotionPreferences>
+      <AppSurfaces />
+    </MotionPreferences>
+  );
+}
+
+function AppSurfaces() {
+  useChatPreferenceSync();
   const load = useChatStore((state) => state.load);
   const connectionState = useChatStore((state) => state.connectionState);
   const auth = useTelegramStore((state) => state.auth);
@@ -29,8 +41,12 @@ export function App() {
     demo === true || auth?.status === "ready" || auth?.status === "restoring";
   const workspaceReady = demo === true || auth?.status === "ready";
 
-  const openSettings = () => {
+  const [settingsSection, setSettingsSection] =
+    useState<SettingsSectionId>("account");
+
+  const openSettings = (section: SettingsSectionId = "account") => {
     closeAgent();
+    setSettingsSection(section);
     setSurface("settings");
   };
 
@@ -101,12 +117,14 @@ export function App() {
   return (
     <>
       <WorkspacePage
-        onOpenSettings={openSettings}
+        onOpenSettings={() => openSettings()}
+        onOpenAgentSettings={() => openSettings("agent")}
         onSelectChat={() => setSurface("conversation")}
         showBackToChats={surface === "conversation"}
       >
         {surface === "settings" ? (
           <SettingsPage
+            initialSection={settingsSection}
             onBack={() => setSurface("conversation")}
             onLoggedOut={() => {
               setDemo(false);

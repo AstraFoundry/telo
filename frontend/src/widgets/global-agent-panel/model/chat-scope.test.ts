@@ -26,6 +26,8 @@ function message(id: string, body = `Message ${id}`): MessageDto {
     id,
     chatId: "design",
     senderName: "Lev",
+    senderId: "peer-lev",
+    senderAvatarUrl: null,
     body,
     entities: [],
     media: null,

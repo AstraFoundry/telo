@@ -1,7 +1,12 @@
 "use client";
 // beui.dev/components/motion/switch
 
-import { animate, motion, MotionConfig, useReducedMotion } from "motion/react";
+import {
+  animate,
+  motion,
+  MotionConfig,
+  useReducedMotionConfig,
+} from "motion/react";
 import { useEffect, useId, useRef, useState } from "react";
 import { cn } from "@/shared/lib/cn";
 
@@ -19,6 +24,14 @@ export interface SwitchProps {
   disabled?: boolean;
   label?: string;
   ariaLabel?: string;
+  /**
+   * Adopts a caller-owned id so a row that renders its own `<label htmlFor>`
+   * can name the switch. `button` is a labelable element, so the association
+   * both names the control and makes the label text toggle it.
+   */
+  id?: string;
+  /** Id of the row's hint text, kept out of the accessible name. */
+  describedBy?: string;
   className?: string;
 }
 
@@ -28,11 +41,14 @@ export function Switch({
   disabled,
   label,
   ariaLabel,
+  id: idProp,
+  describedBy,
   className,
 }: SwitchProps) {
-  const id = useId();
+  const generatedId = useId();
+  const id = idProp ?? generatedId;
   const thumbRef = useRef<HTMLDivElement>(null);
-  const reduce = useReducedMotion();
+  const reduce = useReducedMotionConfig();
   const [isPressed, setIsPressed] = useState(false);
   const [isPointer, setIsPointer] = useState(false);
 
@@ -59,6 +75,7 @@ export function Switch({
           role="switch"
           aria-checked={checked}
           aria-label={ariaLabel}
+          aria-describedby={describedBy}
           disabled={disabled}
           onClick={() => !disabled && onCheckedChange(!checked)}
           onPointerDown={(e) => {

@@ -7,6 +7,8 @@ import { demoTest as test, expect, waitForDemoWorkspace } from "./fixtures";
 async function configureDemoAgentKey(window: Page) {
   await window.getByRole("button", { name: "Open account menu" }).click();
   await window.getByRole("button", { name: "Settings", exact: true }).click();
+  // Settings opens on Account; the Agent pane is one step down the rail.
+  await window.getByRole("button", { name: "Agent settings" }).click();
   await expect(
     window.getByRole("heading", { name: "Agent settings" }),
   ).toBeVisible();

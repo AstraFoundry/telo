@@ -11,7 +11,7 @@ import {
 
 import { useAgentStore } from "entities/agent";
 import { buildWorkspaceContext, useChatStore } from "entities/chat";
-import { useTimeFormat } from "entities/preferences";
+import { RIGHT_PANEL_WIDTH_CSS, useTimeFormat } from "entities/preferences";
 import { copy } from "shared/config/copy";
 import type {
   AgentAuditRecordDto,
@@ -47,15 +47,6 @@ import { AssistantMessageBody } from "./assistant-message-body";
 interface GlobalAgentPanelProps {
   onOpenSettings(): void;
 }
-
-/**
- * The panel width is owned by the workspace layout container, which publishes
- * it as the --workspace-agent-panel-width custom property (persisted via the
- * agentPanelWidth preference and driven by the column resize handle). The
- * fallback matches AGENT_PANEL_WIDTH_DEFAULT for surfaces that render the
- * panel outside the workspace grid.
- */
-const AGENT_PANEL_WIDTH = "var(--workspace-agent-panel-width, 380px)";
 
 const SCOPE_LABELS: Record<AgentContextScope, string> = {
   selected: copy.agentScopeSelected,
@@ -241,7 +232,7 @@ export function GlobalAgentPanel({ onOpenSettings }: GlobalAgentPanelProps) {
       onOpenMobileChange={(nextOpen) => {
         if (nextOpen !== open) toggle();
       }}
-      style={{ "--sidebar-width": AGENT_PANEL_WIDTH }}
+      style={{ "--sidebar-width": RIGHT_PANEL_WIDTH_CSS }}
     >
       <AnimatedSidebar
         side="right"

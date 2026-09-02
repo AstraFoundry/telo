@@ -28,6 +28,9 @@ function configuration(
     instructions: "",
     hasApiKey: true,
     canInspectWorkspace: true,
+    temperature: 0.7,
+    maxSteps: 4,
+    historyLimit: 20,
     ...partial,
   };
 }
@@ -351,6 +354,8 @@ function message(id: string, body = `Message ${id}`): MessageDto {
     id,
     chatId: "design",
     senderName: "Lev",
+    senderId: "peer-lev",
+    senderAvatarUrl: null,
     body,
     entities: [],
     media: null,
