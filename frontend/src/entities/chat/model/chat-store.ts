@@ -826,6 +826,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           emoji: sticker.emoji,
           format: sticker.format,
           setName: null,
+          outlinePath: sticker.outlinePath,
         },
       },
       groupedId: null,

@@ -56,6 +56,7 @@ function SetSticker({
           emoji: sticker.emoji,
           format: sticker.format,
           setName: null,
+          outlinePath: sticker.outlinePath,
         }}
         width={sticker.width}
         height={sticker.height}

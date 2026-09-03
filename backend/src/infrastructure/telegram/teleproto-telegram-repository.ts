@@ -84,6 +84,7 @@ import {
   messageGroupedId,
   stickerFormat,
 } from "./teleproto-message-media";
+import { stickerOutlineOf } from "./sticker-outline";
 import {
   buildChatFolders,
   dialogFolderId,
@@ -1369,6 +1370,7 @@ class TeleprotoRepository implements TelegramRepository {
       format: stickerFormat(document.mimeType),
       width,
       height,
+      outlinePath: stickerOutlineOf(document),
     };
   }
 

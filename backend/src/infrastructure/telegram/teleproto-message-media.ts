@@ -3,6 +3,7 @@ import type {
   MessageStickerDto,
   StickerFormat,
 } from "../../../../contracts/src/ipc";
+import { stickerOutlineOf } from "./sticker-outline";
 
 interface TeleprotoFileView {
   readonly name?: unknown;
@@ -179,15 +180,22 @@ function stickerOf(
   document: unknown,
   mimeType: string | null,
 ): MessageStickerDto {
+  const outlinePath = stickerOutlineOf(document);
   for (const attribute of documentAttributes(document)) {
     if (!("alt" in attribute) || !("stickerset" in attribute)) continue;
     return {
       emoji: stringValue(attribute.alt),
       format: stickerFormat(mimeType),
       setName: stickerSetName(attribute.stickerset),
+      outlinePath,
     };
   }
-  return { emoji: null, format: stickerFormat(mimeType), setName: null };
+  return {
+    emoji: null,
+    format: stickerFormat(mimeType),
+    setName: null,
+    outlinePath,
+  };
 }
 
 function stickerSetName(stickerset: unknown): string | null {

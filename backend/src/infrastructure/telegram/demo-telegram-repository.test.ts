@@ -1026,6 +1026,9 @@ describe("DemoTelegramRepository", () => {
       title: "Telo Pack",
       installed: true,
     });
+    // The demo serves a stand-in silhouette so the placeholder path renders
+    // in the demo workspace exactly as it does behind a real document.
+    const outlinePath = "M64,64L448,64L448,448L64,448z";
     expect(sets[0].stickers).toEqual([
       {
         id: "sticker/1",
@@ -1033,6 +1036,7 @@ describe("DemoTelegramRepository", () => {
         format: "static",
         width: 512,
         height: 512,
+        outlinePath,
       },
       {
         id: "sticker/2",
@@ -1040,6 +1044,7 @@ describe("DemoTelegramRepository", () => {
         format: "animated",
         width: 512,
         height: 512,
+        outlinePath,
       },
       {
         id: "sticker/3",
@@ -1047,6 +1052,7 @@ describe("DemoTelegramRepository", () => {
         format: "video",
         width: 512,
         height: 512,
+        outlinePath,
       },
     ]);
   });

@@ -114,7 +114,12 @@ function videoSticker(id: string): NonNullable<MessageDto["media"]> {
     height: 512,
     duration: null,
     spoiler: false,
-    sticker: { emoji: "🐱", format: "video", setName: "CatPack" },
+    sticker: {
+      emoji: "🐱",
+      format: "video",
+      setName: "CatPack",
+      outlinePath: null,
+    },
   };
 }
 
