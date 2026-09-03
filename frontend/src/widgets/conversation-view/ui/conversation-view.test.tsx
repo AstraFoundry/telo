@@ -584,19 +584,21 @@ describe("ConversationView", () => {
     expect(screen.queryByText(copy.connectionSynchronizing)).toBeNull();
   });
 
-  it("does not paint the generic Telegram sync copy under the conversation header", async () => {
+  it("does not paint a sync failure under the conversation header", async () => {
     const { useChatStore } = await renderView();
 
-    act(() => useChatStore.setState({ syncError: copy.syncError }));
+    act(() => {
+      useChatStore.getState().receive({
+        type: "sync-error",
+        message: copy.syncError,
+      });
+      useChatStore.getState().receive({
+        type: "sync-error",
+        message: "FLOOD_WAIT_30",
+      });
+    });
     expect(screen.queryByText(copy.syncError)).toBeNull();
-  });
-
-  it("shows a connected-state failure without the generic sync prefix", async () => {
-    const { useChatStore } = await renderView();
-
-    act(() => useChatStore.setState({ syncError: "FLOOD_WAIT_30" }));
-    expect(screen.getByText("FLOOD_WAIT_30")).toBeTruthy();
-    expect(screen.queryByText(copy.syncError)).toBeNull();
+    expect(screen.queryByText("FLOOD_WAIT_30")).toBeNull();
   });
 
   it("renders outgoing bubbles with the accent tint variant", async () => {

@@ -1021,7 +1021,6 @@ export function ConversationView() {
   const activeChatId = useChatStore((state) => state.activeChatId);
   const messages = useChatStore((state) => state.messages);
   const loading = useChatStore((state) => state.loading);
-  const syncError = useChatStore((state) => state.syncError);
   const messageCursor = useChatStore((state) => state.messageCursor);
   const loadingOlderMessages = useChatStore(
     (state) => state.loadingOlderMessages,
@@ -1460,19 +1459,6 @@ export function ConversationView() {
       </header>
       <InChatSearchBar />
       {activeChatId ? <PinnedMessageBar chatId={activeChatId} /> : null}
-      {syncError && syncError !== copy.syncError ? (
-        <div
-          role="status"
-          aria-live="polite"
-          className="mx-5 flex items-start gap-2 rounded-xl bg-destructive/10 px-3 py-2 text-sm text-destructive"
-        >
-          <WarningCircle
-            aria-hidden="true"
-            className="mt-0.5 size-4 shrink-0"
-          />
-          <span className="min-w-0 font-medium">{syncError}</span>
-        </div>
-      ) : null}
       <div className="relative min-h-0 flex-1">
         <MessageScroller
           label={copy.conversation}

@@ -968,7 +968,7 @@ describe("TelegramClientCoordinator", () => {
     }
   });
 
-  it("publishes user-facing catch-up failures as sync-error events", async () => {
+  it("logs user-facing catch-up failures without publishing a sync-error", async () => {
     const logged = vi.spyOn(console, "error").mockImplementation(() => {});
     FakeTelegramClient.catchUpBehavior = async () => {
       throw new Error("FLOOD_WAIT_30");
@@ -993,8 +993,12 @@ describe("TelegramClientCoordinator", () => {
       expect(events).toEqual([
         { type: "connection-state", state: "offline" },
         { type: "connection-state", state: "synchronizing" },
-        { type: "sync-error", message: "FLOOD_WAIT_30" },
       ]);
+      expect(
+        events.filter(
+          (event) => (event as { type?: string }).type === "sync-error",
+        ),
+      ).toEqual([]);
     } finally {
       logged.mockRestore();
     }

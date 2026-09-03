@@ -273,7 +273,6 @@ interface ChatState {
   loadingOlderMessages: boolean;
   chatCursor: ChatPageCursorDto | null;
   messageCursor: string | null;
-  syncError: string | null;
   connectionState: "offline" | "synchronizing" | "connected";
   composerTarget: ComposerTarget | null;
   /** Composer text per chat id, restored when switching back to a chat. */
@@ -503,7 +502,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
   loadingOlderMessages: false,
   chatCursor: null,
   messageCursor: null,
-  syncError: null,
   connectionState: "connected",
   composerTarget: null,
   drafts: {},
@@ -571,7 +569,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
         loading: false,
         loadingMoreChats: false,
         loadingOlderMessages: false,
-        syncError: null,
         drafts: hydrateDrafts(state.drafts, chats),
         notificationsEnabled: preferences.notificationsEnabled,
         notificationSenderName: preferences.notificationSenderName,
@@ -596,14 +593,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
         },
         () => {
           // Folder unread is off the first-paint path. A GetDialogFilters
-          // failure must not raise the conversation banner: the chat list
-          // already painted, and Telegram never surfaces this as a header
-          // error.
+          // failure stays in the main-process log: the chat list already
+          // painted, and the conversation header has no error strip.
         },
       );
-    } catch (error) {
+    } catch {
       if (request === selectionRequest) {
-        set({ loading: false, syncError: errorMessage(error) });
+        set({ loading: false });
       }
     }
   },
@@ -619,11 +615,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
         chats: mergeChats(state.chats, page.items),
         chatCursor: page.nextCursor,
         loadingMoreChats: false,
-        syncError: null,
         drafts: hydrateDrafts(state.drafts, page.items),
       }));
-    } catch (error) {
-      set({ syncError: errorMessage(error), loadingMoreChats: false });
+    } catch {
+      set({ loadingMoreChats: false });
     }
   },
   async select(chatId) {
@@ -655,13 +650,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
           messages: page.items,
           messageCursor: page.nextCursor,
           loading: false,
-          syncError: null,
           animateInMessageIds: [],
         });
       }
-    } catch (error) {
+    } catch {
       if (request === selectionRequest && get().activeChatId === chatId) {
-        set({ loading: false, syncError: errorMessage(error) });
+        set({ loading: false });
       }
     }
   },
@@ -683,11 +677,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
         messages: mergeMessages(page.items, state.messages),
         messageCursor: page.nextCursor,
         loadingOlderMessages: false,
-        syncError: null,
       }));
-    } catch (error) {
+    } catch {
       if (get().activeChatId === chatId) {
-        set({ syncError: errorMessage(error), loadingOlderMessages: false });
+        set({ loadingOlderMessages: false });
       }
     }
   },
@@ -1357,10 +1350,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       return;
     }
     if (event.type === "connection-state") {
-      set({
-        connectionState: event.state,
-        ...(event.state === "connected" ? {} : { syncError: null }),
-      });
+      set({ connectionState: event.state });
       return;
     }
     if (event.type === "chats") {
@@ -1387,8 +1377,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       return;
     }
     if (event.type === "sync-error") {
-      const message = userFacingSyncMessage(event.message);
-      if (message) set({ syncError: message });
+      // Catch-up and update-queue failures stay in the main-process log.
+      // The conversation header has no error strip.
       return;
     }
     if (event.type === "chat-upsert") {
@@ -1467,7 +1457,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
               ? withIds(state.animateInMessageIds, [event.message.id])
               : state.animateInMessageIds,
           animateChatIds: promoted.moved ? [event.message.chatId] : [],
-          syncError: null,
         };
       });
       return;
@@ -1834,20 +1823,10 @@ function compareTelegramIds(left: string, right: string): number {
   return leftId < rightId ? -1 : leftId > rightId ? 1 : 0;
 }
 
-// A request that fails while the transport is down is a symptom of the
-// connection, not something the reader can act on — the chat list title
-// already reads "Connecting…". Telegram reports it the same way and never
-// raises a second error surface for it, so this yields null and the banner
-// stays closed. Language-level failures and teleproto's disconnected
-// prose are the same class: they belong in the main-process log, never as
-// the generic "Telegram sync issue" copy under the conversation header.
+// Media-card and composer-action details. Language-level and disconnected
+// transport prose belong in the main-process log, not on those surfaces.
 function errorMessage(error: unknown): string | null {
   const message = error instanceof Error ? error.message : String(error);
-  return userFacingSyncMessage(message);
-}
-
-function userFacingSyncMessage(message: string): string | null {
-  if (useChatStore.getState().connectionState !== "connected") return null;
   if (isInternalExceptionMessage(message) || isTransportFailureMessage(message))
     return null;
   return message;

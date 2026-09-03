@@ -1992,22 +1992,20 @@ class TeleprotoRepository implements TelegramRepository {
   }
 
   private emitSyncError(error: unknown): void {
-    // Language-level failures belong in the main-process log. Crossing IPC
-    // with `error.message` would paint TypeError text into the conversation
-    // banner, which is not a user-actionable sync state.
+    // Sync failures stay in the main-process log. They are never published
+    // as workspace events: the conversation header has no error strip, and
+    // Telegram's own chrome never raises a second surface for reconnect or
+    // catch-up work the reader cannot act on.
     console.error("Telegram sync failed", error);
     if (isLanguageError(error) || isSkippableEntityError(error)) return;
     // A request that failed because the transport is down is a connection
-    // state, not a failure the reader can act on. Telegram reports exactly
-    // this through ConnectionsManager — the chat list title reads
-    // "Connecting…" — and never as an error surface. teleproto rejects with a
-    // bare Error carrying prose, so the client's own connection flag is the
-    // signal here rather than the message text.
+    // state. Telegram reports exactly this through ConnectionsManager —
+    // the chat list title reads "Connecting…" — and never as an error
+    // surface. teleproto rejects with a bare Error carrying prose, so the
+    // client's own connection flag is the signal rather than the message.
     if (!this.client.connected) {
       this.emitConnectionState("offline");
-      return;
     }
-    this.emit({ type: "sync-error", message: safeError(error) });
   }
 
   private dialogMuted(dialog: TeleprotoDialog): boolean {
