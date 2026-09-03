@@ -184,6 +184,8 @@ export function installTeloApiMock(): TeloApiMock {
       beginLogin: vi.fn(),
       submitChallenge: vi.fn(),
       getAuthState: vi.fn(),
+      listAccounts: vi.fn(async () => []),
+      setActiveAccount: vi.fn(),
       logout: vi.fn(),
       onAuthState: vi.fn(() => () => {}),
     },

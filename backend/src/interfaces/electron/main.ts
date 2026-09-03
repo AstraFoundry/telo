@@ -89,13 +89,14 @@ function createWindow(): void {
 }
 
 app.whenReady().then(async () => {
-  // The handler is safe under Playwright too: the quit-race that once hung
-  // E2E teardown is fixed by the destroyed-window guard in sendToRenderer,
-  // and before-quit still unhandles the scheme.
-  handleMediaProtocol(path.join(app.getPath("userData"), "media-cache"));
   const container = createContainer((state) => {
     sendToRenderer(channels.telegramAuthEvent, state);
   });
+  // The handler is safe under Playwright too: the quit-race that once hung
+  // E2E teardown is fixed by the destroyed-window guard in sendToRenderer,
+  // and before-quit still unhandles the scheme. The root resolves per
+  // request because the active account owns the served cache directory.
+  handleMediaProtocol(() => container.telegram.activeMediaCacheDirectory());
   container.workspace.subscribe((event) => {
     sendToRenderer(channels.workspaceEvent, event);
   });

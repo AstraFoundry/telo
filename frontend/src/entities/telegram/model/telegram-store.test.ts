@@ -10,6 +10,8 @@ describe("telegram-store", () => {
       auth: null,
       configuration: null,
       currentUser: null,
+      accounts: [],
+      addingAccount: false,
     });
   });
 
@@ -192,5 +194,87 @@ describe("telegram-store", () => {
       message: "disconnect failed",
     });
     expect(useTelegramStore.getState().currentUser).toEqual(currentUser);
+  });
+
+  it("loadAccounts() stores the account list from the preload API", async () => {
+    const telo = installTeloApiMock();
+    const accounts = [
+      {
+        id: "acc-1",
+        displayName: "Ada Lovelace",
+        username: "ada",
+        avatarDataUrl: null,
+        active: true,
+        unreadCount: 3,
+      },
+      {
+        id: "acc-2",
+        displayName: "Grace Hopper",
+        username: null,
+        avatarDataUrl: null,
+        active: false,
+        unreadCount: 0,
+      },
+    ];
+    telo.telegram.listAccounts.mockResolvedValue(accounts);
+
+    await useTelegramStore.getState().loadAccounts();
+
+    expect(useTelegramStore.getState().accounts).toEqual(accounts);
+  });
+
+  it("loadAccounts() logs and keeps the list empty when the preload API rejects", async () => {
+    const telo = installTeloApiMock();
+    telo.telegram.listAccounts.mockRejectedValue(new Error("registry locked"));
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => {});
+
+    await expect(
+      useTelegramStore.getState().loadAccounts(),
+    ).resolves.toBeUndefined();
+
+    expect(useTelegramStore.getState().accounts).toEqual([]);
+    expect(consoleError).toHaveBeenCalledWith(
+      "Failed to load the Telegram accounts",
+      expect.any(Error),
+    );
+    consoleError.mockRestore();
+  });
+
+  it("switchAccount() delegates to the preload API without touching auth", async () => {
+    const telo = installTeloApiMock();
+    telo.telegram.setActiveAccount.mockResolvedValue(undefined);
+    useTelegramStore.setState({ auth: { status: "ready" } });
+
+    await useTelegramStore.getState().switchAccount("acc-2");
+
+    expect(telo.telegram.setActiveAccount).toHaveBeenCalledWith("acc-2");
+    // The auth-state flow (restoring → ready) drives the workspace reload;
+    // the store does not pre-empt it.
+    expect(useTelegramStore.getState().auth).toEqual({ status: "ready" });
+  });
+
+  it("switchAccount() maps a rejection to the error auth state", async () => {
+    const telo = installTeloApiMock();
+    telo.telegram.setActiveAccount.mockRejectedValue(
+      new Error("unknown account"),
+    );
+    useTelegramStore.setState({ auth: { status: "ready" } });
+
+    await useTelegramStore.getState().switchAccount("acc-missing");
+
+    expect(useTelegramStore.getState().auth).toEqual({
+      status: "error",
+      message: "unknown account",
+    });
+  });
+
+  it("startAddingAccount()/cancelAddingAccount() toggle the add-account flow", () => {
+    useTelegramStore.getState().startAddingAccount();
+    expect(useTelegramStore.getState().addingAccount).toBe(true);
+
+    useTelegramStore.getState().cancelAddingAccount();
+    expect(useTelegramStore.getState().addingAccount).toBe(false);
   });
 });

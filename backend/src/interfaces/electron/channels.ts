@@ -55,6 +55,8 @@ export const channels = {
   telegramChallengeSubmit: "telegram:challenge-submit",
   telegramAuthGet: "telegram:auth-get",
   telegramAuthEvent: "telegram:auth-event",
+  telegramAccountsList: "telegram:list-accounts",
+  telegramAccountActivate: "telegram:set-active-account",
   telegramLogout: "telegram:logout",
   preferencesGet: "preferences:get",
   preferencesUpdate: "preferences:update",

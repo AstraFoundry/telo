@@ -247,6 +247,14 @@ export function registerIpc(container: ApplicationContainer): void {
   ipcMain.handle(channels.telegramAuthGet, () =>
     container.telegram.getAuthState(),
   );
+  ipcMain.handle(channels.telegramAccountsList, () =>
+    container.telegram.listAccounts(),
+  );
+  ipcMain.handle(
+    channels.telegramAccountActivate,
+    (_event, accountId: string) =>
+      container.telegram.setActiveAccount(accountId),
+  );
   ipcMain.handle(channels.telegramLogout, () =>
     container.telegramLogout.execute(),
   );

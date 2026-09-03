@@ -24,17 +24,21 @@ export function registerMediaScheme(): void {
   ]);
 }
 
-export function handleMediaProtocol(cacheDirectory: string): void {
+// The root is a resolver, not a fixed path: each account owns a media-cache
+// subdirectory, and the active account — and with it the served root —
+// changes when the switcher swaps accounts, so it is read per request.
+export function handleMediaProtocol(cacheDirectory: () => string): void {
   handled = true;
   protocol.handle(MEDIA_SCHEME, async (request) => {
+    const root = cacheDirectory();
     const url = new URL(request.url);
     if (url.hostname !== "cache") return new Response(null, { status: 404 });
     const fileName = decodeURIComponent(url.pathname.slice(1));
     if (!fileName || path.basename(fileName) !== fileName) {
       return new Response(null, { status: 400 });
     }
-    const filePath = path.join(cacheDirectory, fileName);
-    if (path.dirname(filePath) !== path.resolve(cacheDirectory)) {
+    const filePath = path.join(root, fileName);
+    if (path.dirname(filePath) !== path.resolve(root)) {
       return new Response(null, { status: 403 });
     }
     const response = await net.fetch(pathToFileURL(filePath).toString());

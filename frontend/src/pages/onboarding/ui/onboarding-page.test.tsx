@@ -50,6 +50,8 @@ describe("OnboardingPage", () => {
       auth: null,
       configuration: null,
       currentUser: null,
+      accounts: [],
+      addingAccount: false,
     });
   });
 
@@ -127,5 +129,33 @@ describe("OnboardingPage", () => {
     expect(target).not.toBeNull();
     expect(target?.tagName).toBe("MAIN");
     expect(target?.textContent).toContain(copy.signInToTelegram);
+  });
+
+  it("offers a way back to the signed-in workspace when adding an account", async () => {
+    const user = userEvent.setup();
+    // Entered via the account switcher's "add account", not a fresh install:
+    // an account is already signed in and stays signed in throughout.
+    useTelegramStore.setState({
+      auth: { status: "ready" },
+      addingAccount: true,
+    });
+    render(<OnboardingPage />);
+
+    expect(screen.getByRole("heading").textContent).toBe(copy.addAccount);
+    const cancel = screen.getByRole("button", { name: copy.cancelAddAccount });
+
+    await user.click(cancel);
+
+    expect(useTelegramStore.getState().addingAccount).toBe(false);
+    // Cancelling must not touch the active account's auth state.
+    expect(useTelegramStore.getState().auth).toEqual({ status: "ready" });
+  });
+
+  it("hides the cancel affordance on a fresh install", () => {
+    render(<OnboardingPage />);
+
+    expect(
+      screen.queryByRole("button", { name: copy.cancelAddAccount }),
+    ).toBeNull();
   });
 });

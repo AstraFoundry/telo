@@ -2,6 +2,7 @@ import { create } from "zustand";
 
 import type {
   CurrentUserDto,
+  TelegramAccountDto,
   TelegramAuthState,
   TelegramLoginConfigurationDto,
   TelegramLoginInput,
@@ -11,8 +12,19 @@ interface TelegramState {
   auth: TelegramAuthState | null;
   configuration: TelegramLoginConfigurationDto | null;
   currentUser: CurrentUserDto | null;
+  accounts: ReadonlyArray<TelegramAccountDto>;
+  /**
+   * Routes a signed-in user through onboarding again to register another
+   * account. Only meaningful while `auth` is `ready`; the completed login is
+   * what registers the new account main-side.
+   */
+  addingAccount: boolean;
   start(): () => void;
   loadCurrentUser(): Promise<void>;
+  loadAccounts(): Promise<void>;
+  switchAccount(accountId: string): Promise<void>;
+  startAddingAccount(): void;
+  cancelAddingAccount(): void;
   beginLogin(input: TelegramLoginInput): Promise<void>;
   submitChallenge(value: string): Promise<void>;
   logout(): Promise<void>;
@@ -21,6 +33,8 @@ interface TelegramState {
 export const useTelegramStore = create<TelegramState>((set) => ({
   auth: null,
   configuration: null,
+  accounts: [],
+  addingAccount: false,
   currentUser: null,
   start() {
     const unsubscribe = window.telo.telegram.onAuthState((auth) =>
@@ -44,6 +58,33 @@ export const useTelegramStore = create<TelegramState>((set) => ({
     } catch (error) {
       console.error("Failed to load the current Telegram user", error);
     }
+  },
+  async loadAccounts() {
+    // The account registry read is local to the main process, but it can
+    // still fail while a switch is mid-flight; the caller re-reads on every
+    // transition to `ready`, so a failure here means "not yet", not "never".
+    try {
+      const accounts = await window.telo.telegram.listAccounts();
+      set({ accounts });
+    } catch (error) {
+      console.error("Failed to load the Telegram accounts", error);
+    }
+  },
+  async switchAccount(accountId) {
+    // The auth-state flow does the rest: the main process emits restoring →
+    // ready for the target account, and `App` reloads the workspace on that
+    // transition. Nothing to await or reload here.
+    try {
+      await window.telo.telegram.setActiveAccount(accountId);
+    } catch (error) {
+      set({ auth: { status: "error", message: safeMessage(error) } });
+    }
+  },
+  startAddingAccount() {
+    set({ addingAccount: true });
+  },
+  cancelAddingAccount() {
+    set({ addingAccount: false });
   },
   async beginLogin(input) {
     try {

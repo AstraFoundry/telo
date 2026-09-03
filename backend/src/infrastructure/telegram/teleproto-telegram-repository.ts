@@ -605,6 +605,21 @@ export class TelegramClientCoordinator implements TelegramRepository {
     this.setState({ status: "idle" });
   }
 
+  /**
+   * Parks the connection without ending the session: the client
+   * disconnects and the workspace falls back to the demo adapter, but the
+   * stored session and dialog snapshot stay on disk so `initialize()` can
+   * restore them. The account switcher calls this when another account
+   * becomes active; `logout()` is the variant that ends the session.
+   */
+  async disconnect(): Promise<void> {
+    await this.disconnectCurrentClient();
+    this.client = null;
+    this.challenge = null;
+    this.replaceRepository(this.createDemoRepository());
+    this.setState({ status: "idle" });
+  }
+
   private waitForChallenge(
     kind: Challenge["kind"],
     announce = true,

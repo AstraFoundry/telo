@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { subscribeToAgentEvents, useAgentStore } from "entities/agent";
 import { subscribeToWorkspaceEvents, useChatStore } from "entities/chat";
@@ -27,6 +27,11 @@ function AppSurfaces() {
   const auth = useTelegramStore((state) => state.auth);
   const currentUser = useTelegramStore((state) => state.currentUser);
   const loadCurrentUser = useTelegramStore((state) => state.loadCurrentUser);
+  const loadAccounts = useTelegramStore((state) => state.loadAccounts);
+  const addingAccount = useTelegramStore((state) => state.addingAccount);
+  const cancelAddingAccount = useTelegramStore(
+    (state) => state.cancelAddingAccount,
+  );
   const startTelegram = useTelegramStore((state) => state.start);
   const closeAgent = useAgentStore((state) => state.close);
   const loadAgentPanel = useAgentStore((state) => state.loadPanelState);
@@ -79,7 +84,10 @@ function AppSurfaces() {
   useEffect(() => {
     if (!workspaceEnabled) return undefined;
     if (demo === true || auth?.status === "ready") {
-      void Promise.all([load(), loadCurrentUser()]);
+      // A fresh "ready" can mean the active account just changed — a switch
+      // or a completed add-account login — so the account list reloads
+      // together with the workspace rather than waiting for a remount.
+      void Promise.all([load(), loadCurrentUser(), loadAccounts()]);
     } else {
       // The restoring surface can paint the persisted dialog snapshot, but
       // there is no persisted message repository. Wait for the live adapter
@@ -97,7 +105,27 @@ function AppSurfaces() {
       unsubscribeWorkspace();
       unsubscribeNotificationClick();
     };
-  }, [load, loadCurrentUser, workspaceEnabled, demo, auth?.status]);
+  }, [
+    load,
+    loadCurrentUser,
+    loadAccounts,
+    workspaceEnabled,
+    demo,
+    auth?.status,
+  ]);
+
+  // `addingAccount` is set while auth is already "ready", so keying the
+  // clear on the status value would cancel the flow the moment it opens.
+  // Only a *transition* into "ready" — the new account's login completing —
+  // ends it and hands the workspace back.
+  const previousAuthStatus = useRef(auth?.status);
+  useEffect(() => {
+    const previous = previousAuthStatus.current;
+    previousAuthStatus.current = auth?.status;
+    if (addingAccount && previous !== "ready" && auth?.status === "ready") {
+      cancelAddingAccount();
+    }
+  }, [addingAccount, auth?.status, cancelAddingAccount]);
 
   // The initial loadCurrentUser() call can lose a transient race against
   // Telegram's own connection setup (a real getMe() RPC, unlike the local
@@ -110,7 +138,7 @@ function AppSurfaces() {
     }
   }, [workspaceReady, connectionState, currentUser, loadCurrentUser]);
 
-  if (!workspaceEnabled) {
+  if (!workspaceEnabled || addingAccount) {
     return <OnboardingPage />;
   }
 
