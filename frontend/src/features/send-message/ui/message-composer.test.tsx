@@ -44,6 +44,7 @@ function preferences(partial: Partial<UserPreferencesDto> = {}) {
     sidebarWidth: 280,
     agentPanelWidth: 380,
     recentEmojis: [],
+    recentSearches: [],
     messageTemplates: [],
     reduceMotion: false,
     loopStickers: true,

@@ -93,6 +93,7 @@ describe("FileUserPreferencesRepository", () => {
         sidebarWidth: 320,
         agentPanelWidth: 480,
         recentEmojis: [],
+        recentSearches: [],
         messageTemplates: [],
       }),
     );

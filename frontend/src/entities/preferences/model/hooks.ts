@@ -294,6 +294,10 @@ const recentEmojisStore = createPreferenceStore("recentEmojis", {
   defaultValue: [],
 });
 
+const recentSearchesStore = createPreferenceStore("recentSearches", {
+  defaultValue: [],
+});
+
 const messageTemplatesStore = createPreferenceStore("messageTemplates", {
   defaultValue: [],
 });
@@ -336,6 +340,7 @@ export const useRecentEmojis = recentEmojisStore.usePreference;
 export const useMessageTemplates = messageTemplatesStore.usePreference;
 export const useReduceMotion = reduceMotionStore.usePreference;
 export const useLoopStickers = loopStickersStore.usePreference;
+export const useRecentSearches = recentSearchesStore.usePreference;
 export const useNotificationSenderName =
   notificationSenderNameStore.usePreference;
 export const useNotificationPreview = notificationPreviewStore.usePreference;

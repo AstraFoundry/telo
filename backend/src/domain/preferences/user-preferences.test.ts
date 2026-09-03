@@ -14,6 +14,7 @@ const DEFAULTS = {
   sidebarWidth: 280,
   agentPanelWidth: 380,
   recentEmojis: [],
+  recentSearches: [],
   messageTemplates: [],
   reduceMotion: false,
   loopStickers: true,
@@ -213,6 +214,28 @@ describe("UserPreferences", () => {
       } as unknown as Parameters<typeof UserPreferences.create>[0];
 
       expect(UserPreferences.create(stored).snapshot().recentEmojis).toEqual(
+        [],
+      );
+    },
+  );
+
+  it("keeps unique non-empty recent search chat ids, capped and in order", () => {
+    const preferences = UserPreferences.default().update({
+      recentSearches: ["a", "a", "", "b"],
+    });
+
+    expect(preferences.snapshot().recentSearches).toEqual(["a", "b"]);
+  });
+
+  it.each([null, "a", [1, null]])(
+    "falls back to no recent searches for malformed persisted values: %s",
+    (recentSearches) => {
+      const stored = {
+        ...DEFAULTS,
+        recentSearches,
+      } as unknown as Parameters<typeof UserPreferences.create>[0];
+
+      expect(UserPreferences.create(stored).snapshot().recentSearches).toEqual(
         [],
       );
     },

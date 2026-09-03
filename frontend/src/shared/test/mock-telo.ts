@@ -206,6 +206,7 @@ export function installTeloApiMock(): TeloApiMock {
         sidebarWidth: 280,
         agentPanelWidth: 380,
         recentEmojis: [],
+        recentSearches: [],
         messageTemplates: [],
         reduceMotion: false,
         loopStickers: true,

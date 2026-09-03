@@ -7,6 +7,13 @@ export const copy = {
   accounts: "Telegram accounts",
   addAccount: "Add account",
   savedMessages: "Saved Messages",
+  recentSearches: "Recent",
+  clearSearchHistory: "Clear",
+  clearSearchHistoryConfirm:
+    "Are you sure you want to clear your search history?",
+  clearSearchHistoryAction: "Clear history",
+  removeFromHistory: "Remove from history",
+  noRecentSearches: "Your recent searches will appear here",
   settings: "Settings",
   backToConversation: "Back to conversation",
   back: "Back",
