@@ -1,34 +1,40 @@
-import type { ChatMemberDto } from "../../../../../contracts/src/ipc";
-import { copy } from "shared/config/copy";
-import { OptionRow } from "shared/ui";
+import { copy } from "@/shared/config/copy";
+import type { MentionItem } from "@/shared/lib/mention-query";
 
-export interface MentionAutocompleteProps {
+import { Avatar } from "./avatar";
+import { OptionRow } from "./option-row";
+
+export interface MentionAutocompleteProps<T extends MentionItem> {
   /** Ties the listbox to the composer's `aria-controls`. */
   readonly id: string;
-  readonly members: ReadonlyArray<ChatMemberDto>;
+  readonly items: ReadonlyArray<T>;
   readonly activeIndex: number;
   onHover(index: number): void;
-  onPick(member: ChatMemberDto): void;
+  onPick(item: T): void;
 }
 
 /**
  * Identifies one suggestion so the composer can point `aria-activedescendant`
- * at it. Keyed by position rather than member id: the active option is tracked
+ * at it. Keyed by position rather than item id: the active option is tracked
  * by index, and the list is rebuilt per query anyway.
  */
 export function mentionOptionId(listboxId: string, index: number): string {
   return `${listboxId}-option-${index}`;
 }
 
-/** Listbox of group members for the in-progress `@` query in the composer. */
-export function MentionAutocomplete({
+/**
+ * Listbox for an in-progress `@` query, anchored above the composer that
+ * owns it. Every row carries the peer's photo so a name is recognisable at a
+ * glance; a missing photo leaves an empty circle rather than initials.
+ */
+export function MentionAutocomplete<T extends MentionItem>({
   id,
-  members,
+  items,
   activeIndex,
   onHover,
   onPick,
-}: MentionAutocompleteProps) {
-  if (members.length === 0) return null;
+}: MentionAutocompleteProps<T>) {
+  if (items.length === 0) return null;
   return (
     <ul
       id={id}
@@ -36,10 +42,10 @@ export function MentionAutocomplete({
       aria-label={copy.mentionSuggestions}
       className="absolute inset-x-0 bottom-full z-10 mb-1 max-h-56 overflow-y-auto rounded-xl border border-border bg-card p-1 shadow-column"
     >
-      {members.map((member, index) => {
+      {items.map((item, index) => {
         const active = index === activeIndex;
         return (
-          <li key={member.id} role="presentation">
+          <li key={item.id} role="presentation">
             <OptionRow
               id={mentionOptionId(id, index)}
               role="option"
@@ -49,10 +55,17 @@ export function MentionAutocomplete({
               tabIndex={-1}
               layout="inline"
               active={active}
-              label={member.displayName}
-              description={`@${member.username}`}
+              leading={
+                <Avatar
+                  src={item.avatarUrl}
+                  pending={item.avatarPending}
+                  className="size-6"
+                />
+              }
+              label={item.label}
+              description={item.description ?? undefined}
               onMouseEnter={() => onHover(index)}
-              onClick={() => onPick(member)}
+              onClick={() => onPick(item)}
             />
           </li>
         );

@@ -617,9 +617,24 @@ describe("DemoTelegramRepository", () => {
     const repository = new DemoTelegramRepository();
 
     await expect(repository.listChatMembers("design")).resolves.toEqual([
-      { id: "demo-mina", displayName: "Mina", username: "mina" },
-      { id: "demo-aron", displayName: "Aron", username: "aron" },
-      { id: "demo-lev", displayName: "Lev", username: "lev" },
+      {
+        id: "demo-mina",
+        displayName: "Mina",
+        username: "mina",
+        avatarDataUrl: null,
+      },
+      {
+        id: "demo-aron",
+        displayName: "Aron",
+        username: "aron",
+        avatarDataUrl: null,
+      },
+      {
+        id: "demo-lev",
+        displayName: "Lev",
+        username: "lev",
+        avatarDataUrl: null,
+      },
     ]);
     await expect(repository.listChatMembers("saved")).resolves.toEqual([]);
     await expect(repository.listChatMembers("missing")).rejects.toThrow(

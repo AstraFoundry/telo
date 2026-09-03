@@ -1981,6 +1981,50 @@ describe("TelegramClientCoordinator", () => {
     expect(page.items[0]?.body).toBe("Peer forward");
   });
 
+  it("sits through a short flood wait on history paging and returns the page", async () => {
+    const coordinator = await connectedCoordinator();
+    let attempts = 0;
+    FakeTelegramClient.getMessagesBehavior = async () => {
+      attempts += 1;
+      if (attempts === 1) {
+        throw new FloodWaitError({ request: {}, capture: 11 });
+      }
+      return [
+        {
+          id: 8,
+          message: "After the wait",
+          date: 1_700_000_008,
+          out: false,
+          getSender: async () => ({ firstName: "Lev" }),
+        },
+      ];
+    };
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const page = coordinator.listMessagePage("chat-1", { limit: 50 });
+      await vi.advanceTimersByTimeAsync(11_000);
+
+      expect((await page).items[0]).toMatchObject({
+        id: "8",
+        body: "After the wait",
+      });
+      expect(attempts).toBe(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("fails history paging on a flood wait longer than the retry cap", async () => {
+    const coordinator = await connectedCoordinator();
+    FakeTelegramClient.getMessagesBehavior = async () => {
+      throw new FloodWaitError({ request: {}, capture: 120 });
+    };
+
+    await expect(
+      coordinator.listMessagePage("chat-1", { limit: 50 }),
+    ).rejects.toBeInstanceOf(FloodWaitError);
+  });
+
   it("maps media-only messages to an empty body string", async () => {
     const coordinator = await connectedCoordinator();
     FakeTelegramClient.getMessagesBehavior = async () => [

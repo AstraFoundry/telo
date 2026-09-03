@@ -6,9 +6,10 @@ import {
 } from "./fixtures";
 
 // The demo gateway (TELO_DEMO_WORKSPACE=1) answers chat actions
-// deterministically: "Demo summary of N messages." plus one citation marker
-// per message id in the assembled unread scope. The Telo Design demo chat
-// has three unread text messages past its read boundary.
+// deterministically: "Demo summary of N messages." plus one cited point per
+// message in the assembled unread scope, each naming its author with @ and
+// ending in the message's in-app link. The Telo Design demo chat has three
+// unread text messages past its read boundary.
 
 test("summarizes the unread messages and jumps to a citation", async ({
   window,
@@ -29,19 +30,22 @@ test("summarizes the unread messages and jumps to a citation", async ({
 
   await window.getByRole("button", { name: "Summarize unread" }).click();
 
-  // The demo gateway streams the deterministic summary: the transcript shows
-  // the action label as the user message and the streamed reply with the
-  // citation markers stripped into numbered chips.
+  // The transcript shows the action label as the user message and the
+  // streamed reply with the links rendered as numbered marks and the authors
+  // as mention chips.
   await expect(conversation).toContainText("Summarize unread");
   await expect(conversation).toContainText("Demo summary of 3 messages.");
-  await expect(conversation).not.toContainText("[[telo-cite:");
-  await expect(
-    conversation.getByRole("button", { name: "Scroll to message 1" }),
-  ).toBeVisible();
+  await expect(conversation).not.toContainText("telo://");
+  const first = conversation.getByRole("link", { name: "Scroll to message 1" });
+  await expect(first).toBeVisible();
+  await expect(first).toHaveAttribute("href", /^telo:\/\/message\//);
 
-  await conversation
-    .getByRole("button", { name: "Scroll to message 1" })
-    .click();
+  // The demo reply follows up with pills once the run has settled.
+  await expect(
+    window.getByRole("list", { name: "Suggested prompts" }),
+  ).toContainText("What should I reply?");
+
+  await first.click();
 
   // The first citation of the demo summary is design-4, the first unread
   // message past the read boundary; the jump scrolls it into view.
@@ -68,8 +72,6 @@ test("extracts decisions and todos with the same citation jump", async ({
   await expect(conversation).toContainText("Extract decisions & todos");
   await expect(conversation).toContainText("Demo summary of 3 messages.");
 
-  await conversation
-    .getByRole("button", { name: "Scroll to message 2" })
-    .click();
+  await conversation.getByRole("link", { name: "Scroll to message 2" }).click();
   await expect(window.locator("#conversation-message-design-5")).toBeVisible();
 });

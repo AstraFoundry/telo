@@ -5,6 +5,7 @@ import {
   motion,
   useReducedMotionConfig,
 } from "motion/react";
+import type { ReactNode } from "react";
 
 import { SPRING_PRESS } from "./motion";
 
@@ -31,6 +32,11 @@ export interface OptionRowProps extends Omit<
   readonly wrap?: boolean;
   /** Keyboard/roving highlight, independent of hover. */
   readonly active?: boolean;
+  /**
+   * Decoration ahead of the text, such as an avatar. Decorative only: it is
+   * hidden from the accessible name, which stays label + description.
+   */
+  readonly leading?: ReactNode;
 }
 
 /**
@@ -45,10 +51,38 @@ export function OptionRow({
   layout = "stacked",
   wrap = false,
   active = false,
+  leading,
   className,
   ...rest
 }: OptionRowProps) {
   const reduce = useReducedMotionConfig();
+  const text =
+    layout === "stacked" ? (
+      <span className="flex min-w-0 flex-1 flex-col">
+        <span
+          className={cn(
+            "block w-full text-sm",
+            wrap ? "break-words text-pretty" : "truncate",
+          )}
+        >
+          {label}
+        </span>
+        {description ? (
+          <span className="block w-full truncate text-xs text-muted-foreground">
+            {description}
+          </span>
+        ) : null}
+      </span>
+    ) : (
+      <>
+        <span className="min-w-0 flex-1 truncate text-sm">{label}</span>
+        {description ? (
+          <span className="shrink-0 truncate text-xs text-muted-foreground">
+            {description}
+          </span>
+        ) : null}
+      </>
+    );
 
   return (
     <motion.button
@@ -63,37 +97,19 @@ export function OptionRow({
         "rounded-lg px-2.5 py-2 text-left text-foreground transition-colors",
         "disabled:pointer-events-none disabled:opacity-50",
         active ? "bg-muted" : "hover:bg-muted",
-        layout === "stacked" ? "flex-col items-start gap-0" : "gap-2",
+        // A stacked row without a leading slot keeps its text edge-to-edge;
+        // with one, the two lines sit beside the decoration instead.
+        layout === "stacked" && !leading ? "gap-0" : "gap-2",
         className,
       )}
       {...rest}
     >
-      {layout === "stacked" ? (
-        <>
-          <span
-            className={cn(
-              "block w-full text-sm",
-              wrap ? "break-words text-pretty" : "truncate",
-            )}
-          >
-            {label}
-          </span>
-          {description ? (
-            <span className="block w-full truncate text-xs text-muted-foreground">
-              {description}
-            </span>
-          ) : null}
-        </>
-      ) : (
-        <>
-          <span className="min-w-0 flex-1 truncate text-sm">{label}</span>
-          {description ? (
-            <span className="shrink-0 truncate text-xs text-muted-foreground">
-              {description}
-            </span>
-          ) : null}
-        </>
-      )}
+      {leading ? (
+        <span aria-hidden="true" className="flex shrink-0 items-center">
+          {leading}
+        </span>
+      ) : null}
+      {text}
     </motion.button>
   );
 }

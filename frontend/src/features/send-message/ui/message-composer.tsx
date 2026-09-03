@@ -36,6 +36,8 @@ import {
   ContextMenuSeparator,
   ContextMenuShortcut,
   ContextMenuTrigger,
+  MentionAutocomplete,
+  mentionOptionId,
   MessageAttachmentTray,
   PromptInput,
 } from "shared/ui";
@@ -54,11 +56,11 @@ import {
 import { RECENT_EMOJIS_MAX } from "../model/emoji-data";
 import {
   filterMentionMembers,
+  type MemberMentionItem,
   mentionInsert,
   mentionQueryAtCaret,
 } from "../model/mention-query";
 import { namePastedFile } from "../model/pasted-file-name";
-import { MentionAutocomplete, mentionOptionId } from "./mention-autocomplete";
 import { MediaPicker } from "./media-picker";
 import { TemplatePicker } from "./template-picker";
 
@@ -395,7 +397,7 @@ export function MessageComposer({ disabled, onSend }: MessageComposerProps) {
     restoreRange(range);
   };
 
-  const pickMention = (member: ChatMemberDto) => {
+  const pickMention = ({ member }: MemberMentionItem) => {
     if (!mentionQuery || !member.username) return;
     const insert = mentionInsert(member.username);
     const next = insertAt(
@@ -690,7 +692,7 @@ export function MessageComposer({ disabled, onSend }: MessageComposerProps) {
       {mentionOpen ? (
         <MentionAutocomplete
           id={mentionListboxId}
-          members={mentionMatches}
+          items={mentionMatches}
           activeIndex={mentionActiveIndex}
           onHover={setMentionIndex}
           onPick={pickMention}

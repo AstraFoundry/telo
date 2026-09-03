@@ -1,6 +1,7 @@
-import { isStepCount, streamText, tool } from "ai";
+import { generateText, isStepCount, streamText, tool } from "ai";
 import { z } from "zod";
 
+import { agentRequestOmitsTemperature } from "../../../../contracts/src/ipc";
 import type { AgentGateway, AgentOutput } from "../../domain/agent/agent-ports";
 
 import { agentConfigurationHasCredential } from "../../domain/agent/agent-configuration";
@@ -48,7 +49,15 @@ export class AiSdkAgentGateway implements AgentGateway {
       const result = streamText({
         model,
         instructions: configuration.instructions,
-        temperature: configuration.temperature,
+        // Kimi K2.5+ rejects any temperature other than the mode-fixed
+        // value. Omit the field (AI SDK temperature is optional) so the
+        // server applies 1.0 for thinking / 0.6 for instant.
+        ...(agentRequestOmitsTemperature(
+          configuration.provider,
+          configuration.model,
+        )
+          ? {}
+          : { temperature: configuration.temperature }),
         messages: [
           ...history.map((message) => ({
             role: message.role,
@@ -73,6 +82,71 @@ export class AiSdkAgentGateway implements AgentGateway {
       yield { type: "error", message: safeErrorMessage(error) };
     }
   }
+
+  async suggest(
+    input: Parameters<AgentGateway["suggest"]>[0],
+  ): Promise<ReadonlyArray<string>> {
+    const configuration = input.configuration.snapshot();
+    if (!agentConfigurationHasCredential(configuration)) return [];
+    try {
+      const result = await generateText({
+        model: createAgentLanguageModel(configuration),
+        instructions: SUGGESTION_INSTRUCTIONS,
+        messages: [
+          { role: "user", content: input.prompt },
+          { role: "assistant", content: input.reply },
+          {
+            role: "user",
+            content: `Propose up to ${input.limit} follow-up questions I might ask next.`,
+          },
+        ],
+      });
+      return parseSuggestions(result.text, input.limit);
+    } catch (error) {
+      // Suggestions decorate a reply that already landed; the failure is
+      // logged for the operator and the composer simply shows no pills.
+      console.error("Agent suggestions failed", safeErrorMessage(error));
+      return [];
+    }
+  }
+}
+
+const SUGGESTION_INSTRUCTIONS = [
+  "You write follow-up prompts for a chat assistant inside a Telegram client.",
+  "Answer with a JSON array of short strings only: each a question or request the user could send next, under 40 characters, in the language of the conversation, no numbering, no explanations.",
+].join(" ");
+
+const SUGGESTION_MAX_LENGTH = 60;
+
+/**
+ * Reads the model's JSON array leniently: a fenced block or stray prose
+ * around the array is tolerated, anything that is not a list of strings
+ * yields no suggestions rather than half-parsed pills.
+ */
+export function parseSuggestions(
+  text: string,
+  limit: number,
+): ReadonlyArray<string> {
+  const start = text.indexOf("[");
+  const end = text.lastIndexOf("]");
+  if (start === -1 || end <= start) return [];
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text.slice(start, end + 1));
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(parsed)) return [];
+  const items: string[] = [];
+  for (const entry of parsed) {
+    if (typeof entry !== "string") continue;
+    const trimmed = entry.replace(/\s+/g, " ").trim();
+    if (!trimmed || trimmed.length > SUGGESTION_MAX_LENGTH) continue;
+    if (items.includes(trimmed)) continue;
+    items.push(trimmed);
+    if (items.length === limit) break;
+  }
+  return items;
 }
 
 function selectWorkspaceSection(

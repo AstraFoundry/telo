@@ -810,8 +810,18 @@ describe("MessageComposer", () => {
     const { textarea } = await renderComposer(true, {
       activeChatId: "design",
       members: [
-        { id: "m1", displayName: "Mina", username: "mina" },
-        { id: "m2", displayName: "Aron", username: "aron" },
+        {
+          id: "m1",
+          displayName: "Mina",
+          username: "mina",
+          avatarDataUrl: null,
+        },
+        {
+          id: "m2",
+          displayName: "Aron",
+          username: "aron",
+          avatarDataUrl: null,
+        },
       ],
     });
     await flushPreferences();
@@ -832,8 +842,18 @@ describe("MessageComposer", () => {
     const { textarea } = await renderComposer(true, {
       activeChatId: "design",
       members: [
-        { id: "m1", displayName: "Mina", username: "mina" },
-        { id: "m2", displayName: "Aron", username: "aron" },
+        {
+          id: "m1",
+          displayName: "Mina",
+          username: "mina",
+          avatarDataUrl: null,
+        },
+        {
+          id: "m2",
+          displayName: "Aron",
+          username: "aron",
+          avatarDataUrl: null,
+        },
       ],
     });
     await flushPreferences();
@@ -862,8 +882,18 @@ describe("MessageComposer", () => {
     const { textarea, onSend } = await renderComposer(true, {
       activeChatId: "design",
       members: [
-        { id: "m1", displayName: "Mina", username: "mina" },
-        { id: "m2", displayName: "Aron", username: "aron" },
+        {
+          id: "m1",
+          displayName: "Mina",
+          username: "mina",
+          avatarDataUrl: null,
+        },
+        {
+          id: "m2",
+          displayName: "Aron",
+          username: "aron",
+          avatarDataUrl: null,
+        },
       ],
     });
     await flushPreferences();

@@ -5,6 +5,7 @@ import type {
   MessageDto,
   RunAgentInput,
 } from "../../../../contracts/src/ipc";
+import { AGENT_REFERENCE_INSTRUCTION } from "../../domain/agent/agent-actions";
 import { hashAgentPrompt } from "../../domain/agent/agent-audit";
 import type { AgentAuditRecord } from "../../domain/agent/agent-audit";
 import { AgentConfiguration } from "../../domain/agent/agent-configuration";
@@ -141,6 +142,7 @@ function gatewayYielding(
   }) => void,
 ): AgentGateway {
   return {
+    suggest: async () => [],
     async *stream(streamInput) {
       inspect?.(streamInput);
       for (const output of outputs) yield output as never;
@@ -352,9 +354,9 @@ describe("RunAgentService", () => {
     expect(seenPrompt).toBe(
       [
         "[[telo-input]]",
-        "id: design-4 | Lev: Reach me at [redacted email] about the retry flow.",
+        "ref: telo://message/chat/design-4 | Lev: Reach me at [redacted email] about the retry flow.",
         "[[/telo-input]]",
-        "Cite the source message of every point with [[telo-cite:<message id>]] on its own line.",
+        AGENT_REFERENCE_INSTRUCTION,
         "",
         "Summarize",
       ].join("\n"),
@@ -428,5 +430,44 @@ describe("RunAgentService", () => {
       ["user", false],
       ["assistant", true],
     ]);
+  });
+
+  describe("suggestFollowUps", () => {
+    it("asks the gateway with the thread's latest exchange", async () => {
+      const threads = inMemoryThreads();
+      let seen: { prompt: string; reply: string; limit: number } | null = null;
+      const gateway: AgentGateway = {
+        ...gatewayYielding([{ type: "text", delta: "Ship it." }]),
+        suggest: async (suggestInput) => {
+          seen = {
+            prompt: suggestInput.prompt,
+            reply: suggestInput.reply,
+            limit: suggestInput.limit,
+          };
+          return ["And then?"];
+        },
+      };
+      const service = makeService(gateway, threads);
+      await collect(service);
+
+      expect(await service.suggestFollowUps("thread-1")).toEqual(["And then?"]);
+      expect(seen).toEqual({
+        prompt: "Summarize",
+        reply: "Ship it.",
+        limit: 3,
+      });
+    });
+
+    it("has nothing to follow up on after a failed or unknown run", async () => {
+      const threads = inMemoryThreads();
+      const service = makeService(
+        gatewayYielding([{ type: "error", message: "boom" }]),
+        threads,
+      );
+      await collect(service);
+
+      expect(await service.suggestFollowUps("thread-1")).toEqual([]);
+      expect(await service.suggestFollowUps("missing")).toEqual([]);
+    });
   });
 });

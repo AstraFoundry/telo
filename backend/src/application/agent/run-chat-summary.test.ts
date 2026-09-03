@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import type { RunChatAgentInput } from "../../../../contracts/src/ipc";
+import { AGENT_REFERENCE_INSTRUCTION } from "../../domain/agent/agent-actions";
 import { AgentConfiguration } from "../../domain/agent/agent-configuration";
 import type {
   AgentAuditRepository,
@@ -103,6 +104,7 @@ describe("RunChatSummaryService", () => {
   it("runs the unread scope with the summarize marker and citation convention", async () => {
     let seenPrompt: string | null = null;
     const gateway: AgentGateway = {
+      suggest: async () => [],
       async *stream(streamInput) {
         seenPrompt = streamInput.prompt;
         yield { type: "text", delta: "Done" } as const;
@@ -119,9 +121,9 @@ describe("RunChatSummaryService", () => {
     expect(seenPrompt).toBe(
       [
         "[[telo-input]]",
-        "id: design-4 | Lev: Ship the retry flow.",
+        "ref: telo://message/design/design-4 | Lev: Ship the retry flow.",
         "[[/telo-input]]",
-        "Cite the source message of every point with [[telo-cite:<message id>]] on its own line.",
+        AGENT_REFERENCE_INSTRUCTION,
         "",
         "[[telo-action:summarize]]",
         'Summarize the unread messages of the chat "Telo Design".',
@@ -132,6 +134,7 @@ describe("RunChatSummaryService", () => {
   it("persists the user-facing label, not the machine prompt", async () => {
     const threads = inMemoryThreads();
     const gateway: AgentGateway = {
+      suggest: async () => [],
       async *stream() {
         yield { type: "text", delta: "Summary" } as const;
       },
@@ -154,6 +157,7 @@ describe("RunChatSummaryService", () => {
   it("audits the run with the scope and cited message ids", async () => {
     const audits = auditRepository();
     const gateway: AgentGateway = {
+      suggest: async () => [],
       async *stream() {
         yield { type: "text", delta: "Summary" } as const;
       },

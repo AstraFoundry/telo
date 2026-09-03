@@ -5,13 +5,14 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 
-import type {
-  AgentThreadDto,
-  AgentThreadListDto,
-  LocalMediaFileInput,
-  RunAgentInput,
-  UpdateUserPreferencesInput,
-  UserPreferencesDto,
+import {
+  AGENT_SUGGESTIONS_EVENT_NAME,
+  type AgentThreadDto,
+  type AgentThreadListDto,
+  type LocalMediaFileInput,
+  type RunAgentInput,
+  type UpdateUserPreferencesInput,
+  type UserPreferencesDto,
 } from "../../../../contracts/src/ipc";
 import type { AgentOutput } from "../../domain/agent/agent-ports";
 import { channels } from "./channels";
@@ -60,21 +61,26 @@ const input: RunAgentInput = {
 
 function agentContainer(
   outputs: ReadonlyArray<AgentOutput>,
+  followUps: ReadonlyArray<string> = [],
 ): ApplicationContainer {
   return {
     runAgent: {
       async *execute() {
         for (const output of outputs) yield output;
       },
+      suggestFollowUps: async () => followUps,
     },
   } as unknown as ApplicationContainer;
 }
 
-async function runAgent(outputs: ReadonlyArray<AgentOutput>): Promise<{
+async function runAgent(
+  outputs: ReadonlyArray<AgentOutput>,
+  followUps: ReadonlyArray<string> = [],
+): Promise<{
   events: AGUIEvent[];
   channelsSeen: string[];
 }> {
-  registerIpc(agentContainer(outputs));
+  registerIpc(agentContainer(outputs, followUps));
   const handler = ipc.handlers.get(channels.agentRun);
   if (!handler) throw new Error("agent run handler was not registered");
   const events: AGUIEvent[] = [];
@@ -134,6 +140,41 @@ describe("registerIpc agent event streaming", () => {
         start.messageId,
       );
     }
+  });
+
+  it("trails a finished run with the follow-up suggestions", async () => {
+    const { events } = await runAgent(
+      [{ type: "text", delta: "Hello" }],
+      ["And then?"],
+    );
+
+    expect(events.map((event) => event.type)).toEqual([
+      EventType.RUN_STARTED,
+      EventType.STATE_SNAPSHOT,
+      EventType.TEXT_MESSAGE_START,
+      EventType.TEXT_MESSAGE_CONTENT,
+      EventType.TEXT_MESSAGE_END,
+      EventType.RUN_FINISHED,
+      EventType.CUSTOM,
+    ]);
+    expect(events[6]).toMatchObject({
+      name: AGENT_SUGGESTIONS_EVENT_NAME,
+      value: { items: ["And then?"] },
+    });
+  });
+
+  it("asks for no follow-ups after a failed or empty run", async () => {
+    const failed = await runAgent(
+      [
+        { type: "text", delta: "partial" },
+        { type: "error", message: "Model exploded" },
+      ],
+      ["And then?"],
+    );
+    expect(failed.events.at(-1)?.type).toBe(EventType.TEXT_MESSAGE_END);
+
+    const empty = await runAgent([], ["And then?"]);
+    expect(empty.events.at(-1)?.type).toBe(EventType.RUN_FINISHED);
   });
 
   it("closes the started message with TEXT_MESSAGE_END when an error follows partial text", async () => {
@@ -291,6 +332,7 @@ describe("registerIpc chat agent actions", () => {
       yield { type: "text", delta: "Demo summary of 1 messages." };
     };
     return {
+      runAgent: { suggestFollowUps: async () => [] },
       runChatSummary: { execute: vi.fn(stream) },
       runChatExtraction: { execute: vi.fn(stream) },
     } as unknown as ApplicationContainer;

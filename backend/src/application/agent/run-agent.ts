@@ -115,4 +115,35 @@ export class RunAgentService {
     }
     if (text || error) await this.threads.saveThread(thread);
   }
+
+  /**
+   * Follow-up prompts for the thread's latest exchange, proposed after the
+   * run has been streamed and persisted so a slow suggestion call never
+   * holds the reply back. A thread whose last turn is not a successful
+   * assistant reply has nothing to follow up on.
+   */
+  async suggestFollowUps(threadId: string): Promise<ReadonlyArray<string>> {
+    const thread = await this.threads.getThread(threadId);
+    if (!thread) return [];
+    const messages = thread.snapshot().messages;
+    const reply = messages[messages.length - 1];
+    const prompt = messages[messages.length - 2];
+    if (
+      !reply ||
+      reply.role !== "assistant" ||
+      reply.error ||
+      prompt?.role !== "user"
+    ) {
+      return [];
+    }
+    return this.gateway.suggest({
+      prompt: prompt.body,
+      reply: reply.body,
+      configuration: await this.configurations.get(),
+      limit: SUGGESTION_LIMIT,
+    });
+  }
 }
+
+/** Pills fit one row above the composer; three keeps them readable. */
+export const SUGGESTION_LIMIT = 3;
