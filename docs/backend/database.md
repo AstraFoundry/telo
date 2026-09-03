@@ -2,7 +2,7 @@
 
 Telo does not use a database or ORM. Infrastructure adapters persist small records under Electron's per-user data directory:
 
-- `agent.json`: agent configuration with an encrypted API key and restrictive file mode.
+- `agent.json`: agent configuration with an encrypted API key and encrypted OAuth tokens, restrictive file mode.
 - `agent-threads.json`: agent conversation transcripts and the active-thread pointer. They hold no secrets, so the file is plain JSON with a restrictive file mode.
 - `telegram.profile`: the Telegram connection profile (application credentials and phone number), encrypted with Electron `safeStorage`.
 - `telegram.session`: the Teleproto string session. Logging out disconnects the client and deletes this file (`clear()`); a missing file on the next launch simply skips session restoration.

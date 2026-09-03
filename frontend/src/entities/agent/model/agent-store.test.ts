@@ -7,6 +7,7 @@ import type {
   UiContextSnapshot,
   UserPreferencesDto,
 } from "../../../../../contracts/src/ipc";
+import { AGENT_OAUTH_PROVIDERS } from "../../../../../contracts/src/ipc";
 import { copy } from "../../../shared/config/copy";
 import { installTeloApiMock } from "../../../shared/test/mock-telo";
 
@@ -265,7 +266,10 @@ describe("agent-store actions", () => {
       model: "gpt-5",
       baseUrl: null,
       instructions: "Be concise",
-      hasApiKey: true,
+      hasCredential: true,
+      authKind: "api-key",
+      accountLabel: null,
+      configuredOAuthProviders: [...AGENT_OAUTH_PROVIDERS],
       canInspectWorkspace: false,
       temperature: 0.7,
       maxSteps: 4,
@@ -285,7 +289,10 @@ describe("agent-store actions", () => {
       model: "local-model",
       baseUrl: "http://localhost:11434/v1",
       instructions: "",
-      hasApiKey: false,
+      hasCredential: false,
+      authKind: null,
+      accountLabel: null,
+      configuredOAuthProviders: [...AGENT_OAUTH_PROVIDERS],
       canInspectWorkspace: true,
       temperature: 1.2,
       maxSteps: 6,

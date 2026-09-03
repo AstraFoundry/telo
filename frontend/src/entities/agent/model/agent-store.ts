@@ -8,6 +8,7 @@ import type {
   AgentThreadSummaryDto,
   MessageDto,
   SaveAgentConfigurationInput,
+  ConnectAgentAccountInput,
   UiContextSnapshot,
 } from "../../../../../contracts/src/ipc";
 import { copy } from "shared/config/copy";
@@ -57,6 +58,8 @@ interface AgentState {
   close(): void;
   loadConfiguration(): Promise<void>;
   saveConfiguration(input: SaveAgentConfigurationInput): Promise<void>;
+  connectAccount(input: ConnectAgentAccountInput): Promise<void>;
+  disconnectAccount(input: ConnectAgentAccountInput): Promise<void>;
   loadThreads(): Promise<void>;
   startNewThread(): Promise<void>;
   selectThread(threadId: string): Promise<void>;
@@ -151,6 +154,12 @@ export const useAgentStore = create<AgentState>((set, get) => {
     },
     async saveConfiguration(input) {
       set({ configuration: await window.telo.agent.saveConfiguration(input) });
+    },
+    async connectAccount(input) {
+      set({ configuration: await window.telo.agent.connectAccount(input) });
+    },
+    async disconnectAccount(input) {
+      set({ configuration: await window.telo.agent.disconnectAccount(input) });
     },
     async loadThreads() {
       const list = await window.telo.agent.listThreads();

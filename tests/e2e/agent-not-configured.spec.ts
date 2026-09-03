@@ -1,6 +1,11 @@
-import { demoTest as test, expect, waitForDemoWorkspace } from "./fixtures";
+import {
+  demoTest as test,
+  expect,
+  waitForDemoWorkspace,
+  connectDemoAgentAccount,
+} from "./fixtures";
 
-test("blocks the composer until an API key is configured and links to Settings", async ({
+test("blocks the composer until an account is connected and links to Settings", async ({
   window,
 }) => {
   await waitForDemoWorkspace(window);
@@ -16,36 +21,17 @@ test("blocks the composer until an API key is configured and links to Settings",
   await expect(
     window.getByRole("heading", { name: "Agent settings" }),
   ).toBeVisible();
-  await expect(window.getByLabel("API key")).toBeVisible();
+  await expect(
+    window.getByRole("button", { name: "Connect account" }),
+  ).toBeVisible();
 });
 
 test("streams the deterministic demo agent response into the panel", async ({
   window,
 }) => {
-  // The demo workspace answers through the deterministic demo gateway, so the
-  // run needs a stored key to unblock the composer but never hits a provider.
   await waitForDemoWorkspace(window);
+  await connectDemoAgentAccount(window);
 
-  await window.getByRole("button", { name: "Open account menu" }).click();
-  await window.getByRole("button", { name: "Settings", exact: true }).click();
-  // Settings opens on Account; the Agent pane is one step down the rail.
-  await window.getByRole("button", { name: "Agent settings" }).click();
-  await expect(
-    window.getByRole("heading", { name: "Agent settings" }),
-  ).toBeVisible();
-
-  // The form backfills asynchronously once the stored configuration loads;
-  // wait for the default instructions before typing into the fields.
-  await expect(window.getByLabel("Instructions")).toHaveValue(
-    "Answer from the visible Telegram workspace. Ask before acting outside it.",
-  );
-  await window.getByLabel("API key").fill("sk-telo-e2e-not-a-real-key");
-  await window.getByRole("button", { name: "Save", exact: true }).click();
-  await expect(
-    window.getByRole("button", { name: "Saved", exact: true }),
-  ).toBeVisible();
-
-  await window.getByRole("button", { name: "Back to conversation" }).click();
   await window.getByRole("button", { name: "Open agent" }).click();
 
   const composer = window.getByLabel("Ask about this workspace…");

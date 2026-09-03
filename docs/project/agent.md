@@ -10,11 +10,13 @@ While a run is active and the assistant has not streamed any text yet, the trans
 
 ## Configuration
 
-Agent settings live on the dedicated Settings surface. Bring-your-own-account is the preferred path: the user picks a named provider (OpenAI, Anthropic, Google, Groq, xAI, DeepSeek, or Mistral) and stores that account's API key. OpenAI-compatible HTTPS endpoints are the fallback and are the only case that asks for a base URL. An empty API-key field preserves the stored key. The backend never returns the key; it returns only `hasApiKey`.
+Agent settings live on the dedicated Settings surface. Bring-your-own-account is the preferred path: the user picks a named provider (OpenAI, Anthropic, Google, Groq, xAI, Kimi, DeepSeek, or Mistral). OpenAI, Anthropic, Google, xAI, and Kimi connect through desktop OAuth in the main process when this build has a client for that vendor; the renderer shows Connect account and the account label, never a key. Groq, DeepSeek, and Mistral still store an API key in the main process. OpenAI-compatible HTTPS endpoints are the fallback and are the only case that asks for a base URL. An empty API-key field preserves the stored key. The backend never returns secrets; it returns `hasCredential`, `authKind`, `accountLabel`, and `configuredOAuthProviders`.
 
-The panel resolves one of three states from the configuration loaded at startup: loading (configuration not yet read), not configured (no API key — the composer is replaced by a recovery action that opens the Settings surface), and ready (the conversation UI).
+The panel resolves one of three states from the configuration loaded at startup: loading (configuration not yet read), not configured (no stored credential — the composer is replaced by a recovery action that opens the Settings surface), and ready (the conversation UI).
 
 The default system instruction limits answers to the visible Telegram workspace. Turning off workspace inspection omits the inspection tool entirely.
+
+The model field is a searchable combobox. Once a credential exists for the selected vendor (Connect, a stored key, or a key typed in the form), the main process GETs that vendor's model list and the renderer shows the ids. The current id stays selected even when the vendor omitted it, and a typed id that is not in the list can still be saved. A failed fetch shows a user-safe error and does not invent a catalog. The renderer never receives the key or OAuth token used to list.
 
 Three tuning fields ride the same configuration: `temperature` (0–2, default 0.7) is handed to the provider, `maxSteps` (1–8, default 4) caps the tool-call rounds one run may take, and `historyLimit` (0–50, default 20) bounds how many prior thread turns are replayed — the newest are kept, and 0 replays none. The domain re-validates every bound and rejects out-of-range values by name; a configuration file written before these fields existed reads back with the defaults.
 
@@ -34,7 +36,7 @@ Adding a context-aware widget requires a stable ID, semantic role, JSON-safe sta
 
 Each run emits `RUN_STARTED`, `STATE_SNAPSHOT`, then — only once response text actually streams — `TEXT_MESSAGE_START`, zero or more `TEXT_MESSAGE_CONTENT` events, and `TEXT_MESSAGE_END`, followed by `RUN_FINISHED`. Activity uses a `CUSTOM` event named `activity` and may precede the message sequence. Provider failures use `RUN_ERROR` instead of `RUN_FINISHED`; a run that fails (or ends) without text never emits a `TEXT_MESSAGE_*` sequence, so no empty assistant shell is minted.
 
-Provider failures never surface raw provider payloads: the gateway classifies them into authentication (rejected API key), network (provider unreachable), or a generic failure, and emits a fixed friendly message with no key material or endpoint URLs. Error rows render as assistant messages without copy or feedback actions; the `error` flag is persisted on the transcript message (domain, `agent-threads.json`, and the IPC DTO), so reloaded threads keep the diagnostic rendering instead of regaining message actions. The renderer still skips an empty assistant shell defensively if one ever arrives.
+Provider failures never surface raw provider payloads: the gateway classifies them into authentication (rejected credentials), network (provider unreachable), or a generic failure, and emits a fixed friendly message with no key material or endpoint URLs. Error rows render as assistant messages without copy or feedback actions; the `error` flag is persisted on the transcript message (domain, `agent-threads.json`, and the IPC DTO), so reloaded threads keep the diagnostic rendering instead of regaining message actions. The renderer still skips an empty assistant shell defensively if one ever arrives.
 
 ## Message actions
 

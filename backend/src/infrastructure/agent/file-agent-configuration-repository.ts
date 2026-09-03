@@ -2,7 +2,10 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import type { AgentProvider } from "../../../../contracts/src/ipc";
-import { AgentConfiguration } from "../../domain/agent/agent-configuration";
+import {
+  AgentConfiguration,
+  type AgentOAuthTokens,
+} from "../../domain/agent/agent-configuration";
 import type { AgentConfigurationRepository } from "../../domain/agent/agent-ports";
 
 interface StoredAgentConfiguration {
@@ -11,6 +14,8 @@ interface StoredAgentConfiguration {
   readonly baseUrl: string | null;
   readonly instructions: string;
   readonly encryptedApiKey: string | null;
+  /** Absent in files written before OAuth shipped. */
+  readonly encryptedOAuth?: string | null;
   readonly canInspectWorkspace: boolean;
   // Absent in files written before the agent tuning fields shipped; reads
   // backfill them from the default configuration.
@@ -40,6 +45,11 @@ export class FileAgentConfigurationRepository implements AgentConfigurationRepos
         apiKey: stored.encryptedApiKey
           ? this.decrypt(stored.encryptedApiKey)
           : null,
+        oauth: stored.encryptedOAuth
+          ? (JSON.parse(
+              this.decrypt(stored.encryptedOAuth),
+            ) as AgentOAuthTokens)
+          : null,
         canInspectWorkspace: stored.canInspectWorkspace,
         temperature: numberOr(stored.temperature, defaults.temperature),
         maxSteps: numberOr(stored.maxSteps, defaults.maxSteps),
@@ -59,6 +69,9 @@ export class FileAgentConfigurationRepository implements AgentConfigurationRepos
       baseUrl: value.baseUrl,
       instructions: value.instructions,
       encryptedApiKey: value.apiKey ? this.encrypt(value.apiKey) : null,
+      encryptedOAuth: value.oauth
+        ? this.encrypt(JSON.stringify(value.oauth))
+        : null,
       canInspectWorkspace: value.canInspectWorkspace,
       temperature: value.temperature,
       maxSteps: value.maxSteps,

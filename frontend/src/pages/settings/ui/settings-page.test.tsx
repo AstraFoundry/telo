@@ -8,6 +8,7 @@ import type {
   CurrentUserDto,
   UserPreferencesDto,
 } from "../../../../../contracts/src/ipc";
+import { AGENT_OAUTH_PROVIDERS } from "../../../../../contracts/src/ipc";
 import { copy } from "../../../shared/config/copy";
 import { installTeloApiMock } from "../../../shared/test/mock-telo";
 
@@ -26,7 +27,10 @@ const AGENT_CONFIGURATION: AgentConfigurationDto = {
   // Non-empty: the form marks instructions required, so an empty fixture would
   // block submit and no test could reach saveConfiguration.
   instructions: "Answer from the visible workspace.",
-  hasApiKey: false,
+  hasCredential: false,
+  authKind: null,
+  accountLabel: null,
+  configuredOAuthProviders: [...AGENT_OAUTH_PROVIDERS],
   canInspectWorkspace: true,
   temperature: 0.7,
   maxSteps: 4,

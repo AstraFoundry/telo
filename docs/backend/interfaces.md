@@ -28,7 +28,7 @@ The interfaces layer adapts the application layer to the outside world. In Telo 
 - Collection reads expose cursor pages through `workspace:list-chat-page` and `workspace:list-message-page`; do not add fixed-limit list channels beside them.
 - Event subscriptions return an unsubscribe function.
 - Adding a channel requires a contract entry, a preload method, a handler, and a test (see `register-ipc.test.ts`).
-- The renderer must never receive an API key, Telegram session, filesystem path, or Electron object.
+- The renderer must never receive an API key, OAuth token, Telegram session, filesystem path, or Electron object.
 
 ## Example
 

@@ -1,34 +1,18 @@
-import type { Page } from "@playwright/test";
-
-import { demoTest as test, expect, waitForDemoWorkspace } from "./fixtures";
+import {
+  demoTest as test,
+  expect,
+  waitForDemoWorkspace,
+  connectDemoAgentAccount,
+} from "./fixtures";
 
 // Same deterministic path as agent-summary.spec.ts: the demo gateway
-// (TELO_DEMO_WORKSPACE=1) answers without a provider once any key is saved.
-async function configureDemoAgentKey(window: Page) {
-  await window.getByRole("button", { name: "Open account menu" }).click();
-  await window.getByRole("button", { name: "Settings", exact: true }).click();
-  // Settings opens on Account; the Agent pane is one step down the rail.
-  await window.getByRole("button", { name: "Agent settings" }).click();
-  await expect(
-    window.getByRole("heading", { name: "Agent settings" }),
-  ).toBeVisible();
-  // The form backfills asynchronously once the stored configuration loads.
-  await expect(window.getByLabel("Instructions")).toHaveValue(
-    "Answer from the visible Telegram workspace. Ask before acting outside it.",
-  );
-  await window.getByLabel("API key").fill("sk-telo-e2e-demo-key");
-  await window.getByRole("button", { name: "Save", exact: true }).click();
-  await expect(
-    window.getByRole("button", { name: "Saved", exact: true }),
-  ).toBeVisible();
-  await window.getByRole("button", { name: "Back to conversation" }).click();
-}
+// (TELO_DEMO_WORKSPACE=1) answers without a provider once an account is connected.
 
 test("previews the folder scope payload, runs with it, and logs an audit record", async ({
   window,
 }) => {
   await waitForDemoWorkspace(window);
-  await configureDemoAgentKey(window);
+  await connectDemoAgentAccount(window);
 
   await window.getByRole("button", { name: "Open agent" }).click();
   const panel = window.getByRole("complementary", { name: "Agent" });
@@ -78,7 +62,7 @@ test("scopes the payload to the message being replied to", async ({
   window,
 }) => {
   await waitForDemoWorkspace(window);
-  await configureDemoAgentKey(window);
+  await connectDemoAgentAccount(window);
 
   const chats = window.getByRole("navigation", { name: "Chats" });
   await chats.getByRole("button", { name: /Telo Design/ }).click();

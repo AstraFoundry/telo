@@ -619,9 +619,11 @@ export const AGENT_HISTORY_LIMIT_MIN = 0;
 export const AGENT_HISTORY_LIMIT_MAX = 50;
 
 /**
- * First-class BYOA providers. Each maps to an official AI SDK package and
- * authenticates with the user's own account key. OpenAI-compatible is the
- * fallback for any other HTTPS endpoint and is listed last.
+ * First-class BYOA providers. OpenAI, Anthropic, Google, xAI, and Kimi
+ * authenticate with desktop OAuth when a client is configured; Groq,
+ * DeepSeek, and Mistral still use the account key the vendor issues.
+ * OpenAI-compatible is the fallback for any other HTTPS endpoint and is
+ * listed last.
  */
 export const FIRST_CLASS_AGENT_PROVIDERS = [
   "openai",
@@ -629,6 +631,7 @@ export const FIRST_CLASS_AGENT_PROVIDERS = [
   "google",
   "groq",
   "xai",
+  "kimi",
   "deepseek",
   "mistral",
 ] as const;
@@ -642,6 +645,37 @@ export const AGENT_PROVIDERS = [
 
 export type AgentProvider = (typeof AGENT_PROVIDERS)[number];
 
+/**
+ * Vendors whose Connect-account path is desktop OAuth. Groq, DeepSeek, and
+ * Mistral stay on API keys; they do not publish a native OAuth program Telo
+ * can run.
+ */
+export const AGENT_OAUTH_PROVIDERS = [
+  "openai",
+  "anthropic",
+  "google",
+  "xai",
+  "kimi",
+] as const;
+
+export type AgentOAuthProvider = (typeof AGENT_OAUTH_PROVIDERS)[number];
+
+export type AgentAuthKind = "oauth" | "api-key";
+
+export function agentProviderSupportsOAuth(
+  provider: AgentProvider,
+): provider is AgentOAuthProvider {
+  return (AGENT_OAUTH_PROVIDERS as readonly string[]).includes(provider);
+}
+
+/** True when this build can run Connect for `provider`. */
+export function agentOAuthIsConfigured(
+  configured: ReadonlyArray<AgentOAuthProvider>,
+  provider: AgentProvider,
+): boolean {
+  return agentProviderSupportsOAuth(provider) && configured.includes(provider);
+}
+
 /** Model id filled in when the user picks this provider. */
 export const AGENT_PROVIDER_DEFAULT_MODEL: Record<AgentProvider, string> = {
   openai: "gpt-4.1-mini",
@@ -649,6 +683,7 @@ export const AGENT_PROVIDER_DEFAULT_MODEL: Record<AgentProvider, string> = {
   google: "gemini-2.5-flash",
   groq: "llama-3.3-70b-versatile",
   xai: "grok-3",
+  kimi: "kimi-k2.5",
   deepseek: "deepseek-chat",
   mistral: "mistral-small-latest",
   "openai-compatible": "gpt-4.1-mini",
@@ -663,7 +698,17 @@ export interface AgentConfigurationDto {
   readonly model: string;
   readonly baseUrl: string | null;
   readonly instructions: string;
-  readonly hasApiKey: boolean;
+  /** True when an API key or OAuth tokens are stored in the main process. */
+  readonly hasCredential: boolean;
+  /** Which stored secret will authenticate the next run; null when none. */
+  readonly authKind: AgentAuthKind | null;
+  /** Connected account email (or similar); never a token. */
+  readonly accountLabel: string | null;
+  /**
+   * OAuth vendors this build can Connect. Combined with the selected
+   * provider in the renderer to decide Connect vs key.
+   */
+  readonly configuredOAuthProviders: ReadonlyArray<AgentOAuthProvider>;
   readonly canInspectWorkspace: boolean;
   /** Sampling temperature handed to the provider. */
   readonly temperature: number;
@@ -683,6 +728,34 @@ export interface SaveAgentConfigurationInput {
   readonly temperature: number;
   readonly maxSteps: number;
   readonly historyLimit: number;
+}
+
+/** Persist provider fields and start (or finish) the vendor OAuth loop. */
+export type ConnectAgentAccountInput = Omit<
+  SaveAgentConfigurationInput,
+  "apiKey"
+>;
+
+/**
+ * List chat-capable models from the selected vendor. `apiKey` is the unsaved
+ * key in the form; when it is omitted the main process uses the stored
+ * secret for the same provider (API key or OAuth). The renderer never
+ * receives credentials back.
+ */
+export interface ListAgentModelsInput {
+  readonly provider: AgentProvider;
+  readonly baseUrl?: string | null;
+  readonly apiKey?: string;
+}
+
+export interface AgentModelDto {
+  readonly id: string;
+  /** Vendor display name when the list endpoint provides one. */
+  readonly label?: string;
+}
+
+export interface AgentModelListDto {
+  readonly models: ReadonlyArray<AgentModelDto>;
 }
 
 export type ThemePreference = "light" | "dark" | "system";
@@ -1078,6 +1151,14 @@ export interface TeloDesktopApi {
     saveConfiguration(
       input: SaveAgentConfigurationInput,
     ): Promise<AgentConfigurationDto>;
+    connectAccount(
+      input: ConnectAgentAccountInput,
+    ): Promise<AgentConfigurationDto>;
+    disconnectAccount(
+      input: ConnectAgentAccountInput,
+    ): Promise<AgentConfigurationDto>;
+    /** Chat-capable models from the selected vendor; secrets stay main-side. */
+    listModels(input: ListAgentModelsInput): Promise<AgentModelListDto>;
     run(input: RunAgentInput): Promise<void>;
     /** Streams a summary of the given chat messages into the thread. */
     runChatSummary(input: RunChatAgentInput): Promise<void>;

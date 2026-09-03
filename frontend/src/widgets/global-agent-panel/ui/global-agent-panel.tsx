@@ -324,7 +324,7 @@ export function GlobalAgentPanel({ onOpenSettings }: GlobalAgentPanelProps) {
           <div className="grid min-h-0 flex-1 place-items-center text-sm text-muted-foreground">
             {copy.loading}
           </div>
-        ) : !configuration.hasApiKey ? (
+        ) : !configuration.hasCredential ? (
           <div className="grid min-h-0 flex-1 place-items-center px-8">
             <div className="flex flex-col items-center gap-3 text-center">
               <Sparkle className="size-8 text-muted-foreground" />

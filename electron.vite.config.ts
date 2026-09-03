@@ -18,12 +18,53 @@ export default defineConfig(({ mode }) => {
     mode === "e2e"
       ? ""
       : process.env.TELO_TELEGRAM_API_HASH || env.TELO_TELEGRAM_API_HASH || "";
+  const googleOAuthClientId =
+    mode === "e2e"
+      ? ""
+      : process.env.TELO_GOOGLE_OAUTH_CLIENT_ID ||
+        env.TELO_GOOGLE_OAUTH_CLIENT_ID ||
+        "";
+  const openaiOAuthClientId =
+    mode === "e2e"
+      ? ""
+      : process.env.TELO_OPENAI_OAUTH_CLIENT_ID ||
+        env.TELO_OPENAI_OAUTH_CLIENT_ID ||
+        "";
+  const anthropicOAuthClientId =
+    mode === "e2e"
+      ? ""
+      : process.env.TELO_ANTHROPIC_OAUTH_CLIENT_ID ||
+        env.TELO_ANTHROPIC_OAUTH_CLIENT_ID ||
+        "";
+  const xaiOAuthClientId =
+    mode === "e2e"
+      ? ""
+      : process.env.TELO_XAI_OAUTH_CLIENT_ID ||
+        env.TELO_XAI_OAUTH_CLIENT_ID ||
+        "";
+  const kimiOAuthClientId =
+    mode === "e2e"
+      ? ""
+      : process.env.TELO_KIMI_OAUTH_CLIENT_ID ||
+        env.TELO_KIMI_OAUTH_CLIENT_ID ||
+        "";
 
   return {
     main: {
       define: {
         "process.env.TELO_TELEGRAM_API_ID": JSON.stringify(telegramApiId),
         "process.env.TELO_TELEGRAM_API_HASH": JSON.stringify(telegramApiHash),
+        "process.env.TELO_GOOGLE_OAUTH_CLIENT_ID":
+          JSON.stringify(googleOAuthClientId),
+        "process.env.TELO_OPENAI_OAUTH_CLIENT_ID":
+          JSON.stringify(openaiOAuthClientId),
+        "process.env.TELO_ANTHROPIC_OAUTH_CLIENT_ID": JSON.stringify(
+          anthropicOAuthClientId,
+        ),
+        "process.env.TELO_XAI_OAUTH_CLIENT_ID":
+          JSON.stringify(xaiOAuthClientId),
+        "process.env.TELO_KIMI_OAUTH_CLIENT_ID":
+          JSON.stringify(kimiOAuthClientId),
       },
       plugins: [externalizeDepsPlugin()],
       build: {

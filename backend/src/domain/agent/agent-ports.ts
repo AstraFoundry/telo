@@ -1,11 +1,51 @@
-import type { UiContextSnapshot } from "../../../../contracts/src/ipc";
+import type {
+  AgentOAuthProvider,
+  UiContextSnapshot,
+} from "../../../../contracts/src/ipc";
 import type { AgentAuditRecord } from "./agent-audit";
-import type { AgentConfiguration } from "./agent-configuration";
+import type {
+  AgentConfiguration,
+  AgentOAuthTokens,
+  AgentProvider,
+} from "./agent-configuration";
 import type { AgentThread, AgentThreadRole } from "./agent-thread";
 
 export interface AgentConfigurationRepository {
   get(): Promise<AgentConfiguration>;
   save(configuration: AgentConfiguration): Promise<void>;
+}
+
+/**
+ * Vendor OAuth for a named BYOA provider. Tokens never leave the main
+ * process; the renderer only sees `accountLabel`.
+ */
+export interface AgentOAuthClient {
+  configuredProviders(): ReadonlyArray<AgentOAuthProvider>;
+  isConfigured(provider: AgentProvider): boolean;
+  supports(provider: AgentProvider): boolean;
+  authorize(provider: AgentProvider): Promise<AgentOAuthTokens>;
+  refresh(
+    provider: AgentProvider,
+    session: AgentOAuthTokens,
+  ): Promise<AgentOAuthTokens>;
+}
+
+export interface AgentModelCatalogEntry {
+  readonly id: string;
+  readonly label?: string;
+}
+
+/**
+ * Vendor `/models` (or equivalent) list. Implemented in infrastructure so
+ * the use case never talks HTTP; tokens stay in the main process.
+ */
+export interface AgentModelCatalog {
+  list(input: {
+    readonly provider: AgentProvider;
+    readonly baseUrl: string | null;
+    readonly apiKey: string | null;
+    readonly oauth: AgentOAuthTokens | null;
+  }): Promise<ReadonlyArray<AgentModelCatalogEntry>>;
 }
 
 export interface AgentThreadRepository {
