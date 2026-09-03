@@ -869,3 +869,46 @@ describe("registerIpc media file actions", () => {
     );
   });
 });
+
+describe("registerIpc telegram accounts", () => {
+  const accounts = [
+    {
+      id: "acc-1",
+      displayName: "Alice",
+      username: "alice",
+      avatarDataUrl: null,
+      active: true,
+      unreadCount: 3,
+    },
+  ];
+
+  function telegramContainer(): ApplicationContainer {
+    return {
+      telegram: {
+        listAccounts: vi.fn(async () => accounts),
+        setActiveAccount: vi.fn(async () => undefined),
+      },
+    } as unknown as ApplicationContainer;
+  }
+
+  it("forwards listAccounts to the telegram coordinator", async () => {
+    const container = telegramContainer();
+    registerIpc(container);
+    const handler = ipc.handlers.get(channels.telegramAccountsList);
+    if (!handler) throw new Error("list-accounts handler was not registered");
+
+    await expect(handler({})).resolves.toBe(accounts);
+    expect(container.telegram.listAccounts).toHaveBeenCalledTimes(1);
+  });
+
+  it("forwards setActiveAccount with the account id", async () => {
+    const container = telegramContainer();
+    registerIpc(container);
+    const handler = ipc.handlers.get(channels.telegramAccountActivate);
+    if (!handler)
+      throw new Error("set-active-account handler was not registered");
+
+    await expect(handler({}, "acc-2")).resolves.toBeUndefined();
+    expect(container.telegram.setActiveAccount).toHaveBeenCalledWith("acc-2");
+  });
+});

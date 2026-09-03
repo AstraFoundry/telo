@@ -142,6 +142,9 @@ const api: TeloDesktopApi = {
     logout: () => ipcRenderer.invoke(channels.telegramLogout),
     onAuthState: (listener) =>
       subscribe<TelegramAuthState>(channels.telegramAuthEvent, listener),
+    listAccounts: () => ipcRenderer.invoke(channels.telegramAccountsList),
+    setActiveAccount: (accountId) =>
+      ipcRenderer.invoke(channels.telegramAccountActivate, accountId),
   },
   shell: {
     notify: (title, body, tag) =>

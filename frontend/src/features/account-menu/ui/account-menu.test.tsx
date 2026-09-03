@@ -43,6 +43,8 @@ describe("AccountMenu", () => {
       auth: null,
       configuration: null,
       currentUser: null,
+      accounts: [],
+      addingAccount: false,
     });
     useChatStore.setState({ chats: [], activeChatId: null });
     // jsdom does not implement ResizeObserver, which the popover positioning
@@ -144,5 +146,100 @@ describe("AccountMenu", () => {
         .getByRole("button", { name: copy.openAccountMenu })
         .getAttribute("aria-expanded"),
     ).toBe("false");
+  });
+  it("lists every account above the first option, rings the active one, and always offers a plus", async () => {
+    useTelegramStore.setState({
+      currentUser,
+      accounts: [
+        {
+          id: "a1",
+          displayName: "Ada Lovelace",
+          username: "ada",
+          avatarDataUrl: null,
+          active: true,
+          unreadCount: 0,
+        },
+        {
+          id: "a2",
+          displayName: "Grace Hopper",
+          username: "grace",
+          avatarDataUrl: null,
+          active: false,
+          unreadCount: 7,
+        },
+      ],
+    });
+    const user = userEvent.setup();
+    render(<AccountMenu onOpenSettings={vi.fn()} />);
+
+    await user.click(
+      screen.getByRole("button", { name: copy.openAccountMenu }),
+    );
+
+    expect(screen.getByRole("button", { name: "Ada Lovelace" })).toBeTruthy();
+    expect(
+      screen
+        .getByRole("button", { name: "Ada Lovelace" })
+        .getAttribute("aria-current"),
+    ).toBe("true");
+    expect(screen.getByRole("button", { name: "Grace Hopper" })).toBeTruthy();
+    // The plus disc is the default add-account affordance, present with one
+    // account or several.
+    expect(screen.getByRole("button", { name: copy.addAccount })).toBeTruthy();
+  });
+
+  it("switches to the tapped account and closes the menu", async () => {
+    const switchAccount = vi.fn();
+    useTelegramStore.setState({
+      currentUser,
+      switchAccount,
+      accounts: [
+        {
+          id: "a1",
+          displayName: "Ada Lovelace",
+          username: "ada",
+          avatarDataUrl: null,
+          active: true,
+          unreadCount: 0,
+        },
+        {
+          id: "a2",
+          displayName: "Grace Hopper",
+          username: "grace",
+          avatarDataUrl: null,
+          active: false,
+          unreadCount: 7,
+        },
+      ],
+    });
+    const user = userEvent.setup();
+    render(<AccountMenu onOpenSettings={vi.fn()} />);
+
+    await user.click(
+      screen.getByRole("button", { name: copy.openAccountMenu }),
+    );
+    await user.click(screen.getByRole("button", { name: "Grace Hopper" }));
+
+    expect(switchAccount).toHaveBeenCalledWith("a2");
+    // The active account's disc closes the menu without switching.
+    await user.click(
+      screen.getByRole("button", { name: copy.openAccountMenu }),
+    );
+    await user.click(screen.getByRole("button", { name: "Ada Lovelace" }));
+    expect(switchAccount).toHaveBeenCalledTimes(1);
+  });
+
+  it("starts the add-account flow from the plus disc", async () => {
+    const startAddingAccount = vi.fn();
+    useTelegramStore.setState({ currentUser, startAddingAccount });
+    const user = userEvent.setup();
+    render(<AccountMenu onOpenSettings={vi.fn()} />);
+
+    await user.click(
+      screen.getByRole("button", { name: copy.openAccountMenu }),
+    );
+    await user.click(screen.getByRole("button", { name: copy.addAccount }));
+
+    expect(startAddingAccount).toHaveBeenCalledOnce();
   });
 });

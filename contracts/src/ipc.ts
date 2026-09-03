@@ -1069,6 +1069,28 @@ export interface TelegramLoginConfigurationDto {
   readonly applicationCredentialsConfigured: boolean;
 }
 
+/**
+ * One signed-in Telegram account on this device, the unit the account
+ * switcher lists. Telegram Desktop's own cap is 3 accounts for free users
+ * (`Main::Domain::kMaxAccounts`), which this client follows.
+ */
+export interface TelegramAccountDto {
+  /** Stable id assigned at first login; never the Telegram user id. */
+  readonly id: string;
+  readonly displayName: string;
+  readonly username: string | null;
+  /** Profile photo (`telo-media://` or a data URL); null when unknown. */
+  readonly avatarDataUrl: string | null;
+  /** Whether this is the account the workspace is currently attached to. */
+  readonly active: boolean;
+  /**
+   * Unread messages as last seen while this account was connected. Only the
+   * active account stays connected, so an inactive account's count is what it
+   * was when the account was last active — never a live number.
+   */
+  readonly unreadCount: number;
+}
+
 export type TelegramAuthState =
   | { readonly status: "idle" }
   | { readonly status: "restoring" }
@@ -1257,6 +1279,18 @@ export interface TeloDesktopApi {
     getAuthState(): Promise<TelegramAuthState>;
     logout(): Promise<void>;
     onAuthState(listener: (state: TelegramAuthState) => void): () => void;
+    /**
+     * Every signed-in Telegram account on this device, in the order the
+     * switcher shows them (most recently used first, the active one first).
+     */
+    listAccounts(): Promise<ReadonlyArray<TelegramAccountDto>>;
+    /**
+     * Makes another signed-in account the active one. Only the active account
+     * stays connected — workspace events and every workspace method address
+     * it alone, and the renderer reloads its workspace when the auth state
+     * settles back to `"ready"`.
+     */
+    setActiveAccount(accountId: string): Promise<void>;
   };
   readonly shell: {
     /** `tag` is echoed back by `onNotificationClick` (e.g. a chat id). */

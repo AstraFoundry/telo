@@ -11,10 +11,14 @@ test("renders folder tabs with unread badges", async ({ window }) => {
   await expect(work).toBeVisible();
   await expect(work.getByLabel("3 unread")).toBeVisible();
 
-  // The Archive holds the archived Offsite Planning chat (2 unread).
-  const archive = tabs.getByRole("tab", { name: /Archive/ });
+  // The Archive is not a tab: it is the pinned row at the top of the All
+  // list, and the folder badge sits on it in the muted grey.
+  const archive = window
+    .getByRole("navigation", { name: "Chats" })
+    .getByRole("button", { name: /Archived Chats/ });
   await expect(archive).toBeVisible();
-  await expect(archive.getByLabel("2 unread")).toBeVisible();
+  await expect(archive.getByText("2")).toBeVisible();
+  await expect(tabs.getByRole("tab", { name: /Archive/ })).toHaveCount(0);
 });
 
 test("selecting a folder filters the chat list", async ({ window }) => {
@@ -51,7 +55,7 @@ test("selecting a folder filters the chat list", async ({ window }) => {
   ).toBeVisible();
 });
 
-test("the Archive tab shows the archived chat", async ({ window }) => {
+test("the Archive directory shows the archived chat", async ({ window }) => {
   await waitForDemoWorkspace(window);
 
   const chats = window.getByRole("navigation", { name: "Chats" });
@@ -59,7 +63,10 @@ test("the Archive tab shows the archived chat", async ({ window }) => {
     chats.getByRole("button", { name: /Offsite Planning/ }),
   ).toHaveCount(0);
 
-  await window.getByRole("tab", { name: /Archive/ }).click();
+  await window
+    .getByRole("navigation", { name: "Chats" })
+    .getByRole("button", { name: /Archived Chats/ })
+    .click();
 
   await expect(
     chats.getByRole("button", { name: /Offsite Planning/ }),

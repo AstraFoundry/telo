@@ -79,7 +79,10 @@ test("the header shows avatar and presence and pins the chat", async ({
   await waitForDemoWorkspace(window);
 
   // Offsite Planning (archived) is the demo's online direct chat.
-  await window.getByRole("tab", { name: /Archive/ }).click();
+  await window
+    .getByRole("navigation", { name: "Chats" })
+    .getByRole("button", { name: /Archived Chats/ })
+    .click();
   await window
     .getByRole("navigation", { name: "Chats" })
     .getByRole("button", { name: /Offsite Planning/ })

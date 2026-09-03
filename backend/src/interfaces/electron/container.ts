@@ -37,6 +37,8 @@ import { DemoKeywordFolderRepository } from "../../infrastructure/keyword-folder
 import { FileTelegramSessionRepository } from "../../infrastructure/telegram/file-telegram-session-repository";
 import { FileTelegramConnectionProfileRepository } from "../../infrastructure/telegram/file-telegram-connection-profile-repository";
 import { FileTelegramDialogSnapshotRepository } from "../../infrastructure/telegram/file-telegram-dialog-snapshot-repository";
+import { FileTelegramAccountRegistry } from "../../infrastructure/telegram/file-telegram-account-registry";
+import { TelegramAccountCoordinator } from "../../infrastructure/telegram/telegram-account-coordinator";
 import { TelegramClientCoordinator } from "../../infrastructure/telegram/teleproto-telegram-repository";
 import {
   clearMediaCache,
@@ -58,7 +60,7 @@ export interface ApplicationContainer {
   readonly runChatExtraction: RunChatExtractionService;
   readonly runMessageAction: RunMessageActionService;
   readonly agentThreads: AgentThreadService;
-  readonly telegram: TelegramClientCoordinator;
+  readonly telegram: TelegramAccountCoordinator;
   readonly telegramLogout: TelegramLogoutService;
   readonly preferences: UpdateUserPreferencesService;
   readonly mediaCacheStorage: MediaCacheStore;
@@ -114,16 +116,6 @@ export function createContainer(
     configurations,
     oauthClient,
   );
-  const sessions = new FileTelegramSessionRepository(
-    path.join(dataDirectory, "telegram.session"),
-    encrypt,
-    decrypt,
-  );
-  const profiles = new FileTelegramConnectionProfileRepository(
-    path.join(dataDirectory, "telegram.profile"),
-    encrypt,
-    decrypt,
-  );
   const preferences = new FileUserPreferencesRepository(
     path.join(dataDirectory, "preferences.json"),
   );
@@ -138,20 +130,49 @@ export function createContainer(
   const applicationCredentials =
     Number.isInteger(apiId) && apiId > 0 && apiHash ? { apiId, apiHash } : null;
   const mediaCacheDirectory = path.join(dataDirectory, "media-cache");
-  const telegram = new TelegramClientCoordinator(
-    sessions,
-    profiles,
-    applicationCredentials,
-    onAuthState,
-    mediaCacheDirectory,
-    new FileTelegramDialogSnapshotRepository(
-      path.join(dataDirectory, "dialogs.json"),
+  // Multi-account, tdesktop-style: every signed-in account owns a session,
+  // profile, dialog snapshot, and media-cache directory keyed by its
+  // registry id; the account coordinator attaches the active one. The
+  // legacy single files stay named in legacyPaths so first boot can adopt
+  // them into the initial account instead of logging the user out.
+  const accountPaths = (accountId: string) => ({
+    session: path.join(dataDirectory, `telegram-${accountId}.session`),
+    profile: path.join(dataDirectory, `telegram-${accountId}.profile`),
+    snapshot: path.join(dataDirectory, `dialogs-${accountId}.json`),
+    mediaCacheDirectory: path.join(mediaCacheDirectory, accountId),
+  });
+  const telegram = new TelegramAccountCoordinator({
+    registry: new FileTelegramAccountRegistry(
+      path.join(dataDirectory, "accounts.json"),
     ),
-    // Read per eviction, not captured: raising or lowering the ceiling in
-    // settings governs the very next download.
-    async () =>
-      (await preferences.get()).snapshot().mediaCacheLimitMb * 1024 ** 2,
-  );
+    paths: accountPaths,
+    legacyPaths: {
+      session: path.join(dataDirectory, "telegram.session"),
+      profile: path.join(dataDirectory, "telegram.profile"),
+      snapshot: path.join(dataDirectory, "dialogs.json"),
+    },
+    createCoordinator: (accountId, onAccountState) => {
+      const paths = accountPaths(accountId);
+      return new TelegramClientCoordinator(
+        new FileTelegramSessionRepository(paths.session, encrypt, decrypt),
+        new FileTelegramConnectionProfileRepository(
+          paths.profile,
+          encrypt,
+          decrypt,
+        ),
+        applicationCredentials,
+        onAccountState,
+        paths.mediaCacheDirectory,
+        new FileTelegramDialogSnapshotRepository(paths.snapshot),
+        // Read per eviction, not captured: raising or lowering the ceiling
+        // in settings governs the very next download.
+        async () =>
+          (await preferences.get()).snapshot().mediaCacheLimitMb * 1024 ** 2,
+      );
+    },
+    onState: onAuthState,
+    demoWorkspace: process.env.TELO_DEMO_WORKSPACE === "1",
+  });
 
   // The demo workspace pairs its deterministic Telegram repository with an
   // equally deterministic agent gateway so e2e never touches a provider.

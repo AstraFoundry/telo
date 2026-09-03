@@ -1,5 +1,6 @@
 import path from "node:path";
 import { readdir, rm, stat, utimes } from "node:fs/promises";
+import type { Dirent } from "node:fs";
 
 /**
  * Default disk budget for the media cache, used until a caller passes the
@@ -56,24 +57,31 @@ export async function clearMediaCache(directory: string): Promise<number> {
   return reclaimed;
 }
 
-// The cache is flat (the media protocol rejects nested paths), so one readdir
-// plus a stat per entry is the whole traversal. A cache directory that does
-// not exist yet reads as empty; entries that vanish mid-walk are skipped.
+// Each account's cache is flat (the media protocol rejects nested paths),
+// but the userData root holds one such directory per account plus the
+// pre-multi-account flat files, so the walk recurses into subdirectories.
+// A cache directory that does not exist yet reads as empty; entries that
+// vanish mid-walk are skipped.
 async function listCacheFiles(
   directory: string,
 ): Promise<ReadonlyArray<CacheFile>> {
-  let entries: ReadonlyArray<string>;
+  let entries: ReadonlyArray<Dirent>;
   try {
-    entries = await readdir(directory);
+    entries = await readdir(directory, { withFileTypes: true });
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
     throw error;
   }
   const files: CacheFile[] = [];
   for (const entry of entries) {
-    const filePath = path.join(directory, entry);
+    const filePath = path.join(directory, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...(await listCacheFiles(filePath)));
+      continue;
+    }
+    if (!entry.isFile()) continue;
     const details = await stat(filePath).catch(() => null);
-    if (!details?.isFile()) continue;
+    if (!details) continue;
     files.push({
       path: filePath,
       size: details.size,
