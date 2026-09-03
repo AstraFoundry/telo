@@ -28,6 +28,8 @@ export const copy = {
   messageRead: "Read",
   resendMessage: "Resend",
   conversation: "Conversation",
+  // Sentinel only: the conversation header must never paint this string.
+  // Language-level and transport failures stay in the main-process log.
   syncError: "Telegram sync issue",
   connectionOffline: "Connecting…",
   connectionSynchronizing: "Updating…",

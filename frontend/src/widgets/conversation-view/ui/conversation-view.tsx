@@ -1460,7 +1460,7 @@ export function ConversationView() {
       </header>
       <InChatSearchBar />
       {activeChatId ? <PinnedMessageBar chatId={activeChatId} /> : null}
-      {syncError ? (
+      {syncError && syncError !== copy.syncError ? (
         <div
           role="status"
           aria-live="polite"
@@ -1470,12 +1470,7 @@ export function ConversationView() {
             aria-hidden="true"
             className="mt-0.5 size-4 shrink-0"
           />
-          <span className="min-w-0">
-            <span className="font-medium">{copy.syncError}</span>
-            {syncError !== copy.syncError ? (
-              <span className="ml-1 text-destructive/80">{syncError}</span>
-            ) : null}
-          </span>
+          <span className="min-w-0 font-medium">{syncError}</span>
         </div>
       ) : null}
       <div className="relative min-h-0 flex-1">

@@ -594,10 +594,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
             }));
           }
         },
-        (error: unknown) => {
-          if (request === selectionRequest) {
-            set({ syncError: errorMessage(error) });
-          }
+        () => {
+          // Folder unread is off the first-paint path. A GetDialogFilters
+          // failure must not raise the conversation banner: the chat list
+          // already painted, and Telegram never surfaces this as a header
+          // error.
         },
       );
     } catch (error) {
@@ -980,15 +981,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
         ),
       }));
     } catch (error) {
-      // The upload failed: drop the optimistic bubbles and surface the error.
-      // The composer keeps the files and caption selected, so resubmitting
-      // retries the same send instead of losing the user's input. A
-      // user-cancelled upload also rejects, but only after the `cancelled`
-      // event — the user's own action is not a sync failure.
-      const cancelled = get().mediaUploads[uploadId]?.state === "cancelled";
+      // The upload failed: drop the optimistic bubbles. The composer keeps
+      // the files and caption selected, so resubmitting retries the same
+      // send. A cancelled upload also rejects, after the `cancelled` event.
+      // Neither case belongs in the conversation header — the composer
+      // already owns the upload-failure surface.
       set((state) => ({
         messages: state.messages.filter((entry) => entry.clientId !== clientId),
-        ...(cancelled ? {} : { syncError: errorMessage(error) }),
       }));
       throw error;
     }
@@ -1290,11 +1289,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
             loading: false,
           },
         }));
-      } catch (error) {
+      } catch {
         if (request === chatSearchRequest) {
           set((state) => ({
             chatSearch: { ...state.chatSearch, loading: false },
-            syncError: errorMessage(error),
           }));
         }
         return;
@@ -1359,7 +1357,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
       return;
     }
     if (event.type === "connection-state") {
-      set({ connectionState: event.state });
+      set({
+        connectionState: event.state,
+        ...(event.state === "connected" ? {} : { syncError: null }),
+      });
       return;
     }
     if (event.type === "chats") {
@@ -1386,8 +1387,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       return;
     }
     if (event.type === "sync-error") {
-      if (isInternalExceptionMessage(event.message)) return;
-      set({ syncError: event.message });
+      const message = userFacingSyncMessage(event.message);
+      if (message) set({ syncError: message });
       return;
     }
     if (event.type === "chat-upsert") {
@@ -1635,11 +1636,13 @@ async function runGlobalSearch(term: string): Promise<void> {
         globalSearching: false,
       });
     }
-  } catch (error) {
+  } catch {
     if (request === globalSearchRequest) {
+      // Search owns its empty state in the sidebar. A failed query must
+      // not raise the conversation-header banner.
       useChatStore.setState({
+        globalSearchResults: { chats: [], messages: [] },
         globalSearching: false,
-        syncError: errorMessage(error),
       });
     }
   }
@@ -1670,11 +1673,10 @@ async function runChatSearch(chatId: string, term: string): Promise<void> {
         jumpTarget: { chatId, messageId: first, requestId: ++jumpRequest },
       });
     }
-  } catch (error) {
+  } catch {
     if (request !== chatSearchRequest) return;
     useChatStore.setState((state) => ({
       chatSearch: { ...state.chatSearch, loading: false },
-      syncError: errorMessage(error),
     }));
   }
 }
@@ -1836,15 +1838,27 @@ function compareTelegramIds(left: string, right: string): number {
 // connection, not something the reader can act on — the chat list title
 // already reads "Connecting…". Telegram reports it the same way and never
 // raises a second error surface for it, so this yields null and the banner
-// stays closed. The failure is still logged in the main process.
+// stays closed. Language-level failures and teleproto's disconnected
+// prose are the same class: they belong in the main-process log, never as
+// the generic "Telegram sync issue" copy under the conversation header.
 function errorMessage(error: unknown): string | null {
-  if (useChatStore.getState().connectionState !== "connected") return null;
   const message = error instanceof Error ? error.message : String(error);
-  return isInternalExceptionMessage(message) ? copy.syncError : message;
+  return userFacingSyncMessage(message);
+}
+
+function userFacingSyncMessage(message: string): string | null {
+  if (useChatStore.getState().connectionState !== "connected") return null;
+  if (isInternalExceptionMessage(message) || isTransportFailureMessage(message))
+    return null;
+  return message;
 }
 
 function isInternalExceptionMessage(message: string): boolean {
   return /is not callable|is not a function|instanceof|Cannot read propert/i.test(
     message,
   );
+}
+
+function isTransportFailureMessage(message: string): boolean {
+  return /cannot send requests while disconnected/i.test(message);
 }
