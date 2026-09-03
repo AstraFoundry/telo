@@ -1156,6 +1156,82 @@ describe("chat-store", () => {
     expect(useChatStore.getState().chats[0]?.pinned).toBe(false);
   });
 
+  it("setArchived() flips folderId optimistically and lists the Archive folder", async () => {
+    const telo = installTeloApiMock();
+    let resolveIpc: () => void = () => {};
+    telo.workspace.setChatArchived.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveIpc = resolve;
+        }),
+    );
+    useChatStore.setState({
+      chats: [chat("a"), { ...chat("b"), unreadCount: 2 }],
+      folders: [],
+    });
+
+    const pending = useChatStore.getState().setArchived("b", true);
+
+    // The flip lands before the IPC settles: the chat leaves the All view,
+    // keeps its unread count, and the Archive folder appears with its badge.
+    const optimistic = useChatStore.getState();
+    expect(optimistic.chats.find((entry) => entry.id === "b")).toMatchObject({
+      folderId: ARCHIVE_FOLDER_ID,
+      unreadCount: 2,
+    });
+    expect(optimistic.folders).toEqual([
+      { id: ARCHIVE_FOLDER_ID, title: "Archive", unreadCount: 2 },
+    ]);
+    expect(
+      chatsForFolder(optimistic.chats, null).map((entry) => entry.id),
+    ).toEqual(["a"]);
+
+    resolveIpc();
+    await pending;
+    expect(telo.workspace.setChatArchived).toHaveBeenCalledWith("b", true);
+  });
+
+  it("setArchived() drops the Archive folder when its last chat is restored", async () => {
+    const telo = installTeloApiMock();
+    useChatStore.setState({
+      chats: [{ ...chat("a"), folderId: ARCHIVE_FOLDER_ID, unreadCount: 5 }],
+      folders: [{ id: ARCHIVE_FOLDER_ID, title: "Archive", unreadCount: 5 }],
+    });
+
+    await useChatStore.getState().setArchived("a", false);
+
+    expect(telo.workspace.setChatArchived).toHaveBeenCalledWith("a", false);
+    expect(useChatStore.getState().chats[0]?.folderId).toBeNull();
+    expect(useChatStore.getState().folders).toEqual([]);
+    expect(chatsForFolder(useChatStore.getState().chats, null)).toHaveLength(1);
+  });
+
+  it("setArchived() rolls the chat and folder list back when the IPC fails", async () => {
+    const telo = installTeloApiMock();
+    telo.workspace.setChatArchived.mockRejectedValue(new Error("IPC down"));
+    useChatStore.setState({
+      chats: [{ ...chat("a"), folderId: ARCHIVE_FOLDER_ID }],
+      folders: [{ id: ARCHIVE_FOLDER_ID, title: "Archive", unreadCount: 0 }],
+    });
+
+    await expect(
+      useChatStore.getState().setArchived("a", false),
+    ).rejects.toThrow("IPC down");
+    expect(useChatStore.getState().chats[0]?.folderId).toBe(ARCHIVE_FOLDER_ID);
+    expect(useChatStore.getState().folders).toEqual([
+      { id: ARCHIVE_FOLDER_ID, title: "Archive", unreadCount: 0 },
+    ]);
+  });
+
+  it("setArchived() returns early for an unknown chat", async () => {
+    const telo = installTeloApiMock();
+    useChatStore.setState({ chats: [chat("a")] });
+
+    await useChatStore.getState().setArchived("missing", true);
+
+    expect(telo.workspace.setChatArchived).not.toHaveBeenCalled();
+  });
+
   it("startReply() and startEdit() set the composer target with a preview", () => {
     const target = message("m1", "a");
 

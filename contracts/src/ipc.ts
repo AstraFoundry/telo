@@ -1209,6 +1209,11 @@ export interface TeloDesktopApi {
       messageId: string,
       buttonId: string,
     ): Promise<BotCallbackAnswerDto>;
+    /**
+     * Moves a chat into or out of the Archive (Telegram
+     * `folders.editPeerFolders`, `folder_id` 1 ↔ 0).
+     */
+    setChatArchived(chatId: string, archived: boolean): Promise<void>;
     onEvent(listener: (event: TelegramWorkspaceEvent) => void): () => void;
   };
   readonly agent: {

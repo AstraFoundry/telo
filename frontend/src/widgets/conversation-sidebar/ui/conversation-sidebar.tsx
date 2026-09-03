@@ -1,7 +1,9 @@
 import {
+  Archive,
   Bell,
   BellSlash,
   Checks,
+  ArrowLeft,
   PushPin,
   PushPinSlash,
 } from "@phosphor-icons/react";
@@ -114,6 +116,8 @@ function ChatListRow({
   const togglePin = useChatStore((state) => state.togglePin);
   const toggleMute = useChatStore((state) => state.toggleMute);
   const toggleRead = useChatStore((state) => state.toggleRead);
+  const setArchived = useChatStore((state) => state.setArchived);
+  const archived = chat.folderId === ARCHIVE_FOLDER_ID;
 
   return (
     <ContextMenu>
@@ -193,6 +197,10 @@ function ChatListRow({
           )}
           {chat.muted ? copy.unmuteChat : copy.muteChat}
         </ContextMenuItem>
+        <ContextMenuItem onSelect={() => void setArchived(chat.id, !archived)}>
+          <Archive aria-hidden="true" className="size-4" />
+          {archived ? copy.unarchiveChat : copy.archiveChat}
+        </ContextMenuItem>
       </ContextMenuContent>
     </ContextMenu>
   );
@@ -243,6 +251,93 @@ function MessageSearchResultRow({
 }
 
 /**
+ * The pinned row at the top of the All list that opens the Archive.
+ *
+ * Telegram Web K's `ArchiveDialog` and tdesktop's `Data::Folder` row share
+ * this exact presentation: a blue-gradient disc with the archive glyph, the
+ * "Archived Chats" title, a comma-joined preview of the archived names, and
+ * an unread badge that is *always the muted grey* even when the archived
+ * chats are unmuted — the folder's badge reports muted chats by definition
+ * (`data_folder.cpp:385-398`). The row hides itself the moment the archive
+ * is empty.
+ */
+function ArchiveRow({
+  archived,
+  unread,
+  onSelect,
+}: {
+  readonly archived: ReadonlyArray<ChatDto>;
+  readonly unread: number;
+  onSelect(): void;
+}) {
+  return (
+    <Button
+      variant="ghost"
+      // High-frequency navigation: colour only, no spring, same rule the
+      // chat rows follow.
+      pressScale={1}
+      onClick={onSelect}
+      aria-label={
+        unread > 0
+          ? `${copy.archivedChats}, ${unread} ${copy.unread}`
+          : copy.archivedChats
+      }
+      className="mb-0.5 h-auto w-full justify-start rounded-xl px-2.5 py-2 text-left"
+    >
+      <span
+        aria-hidden="true"
+        className="grid size-10 shrink-0 place-items-center rounded-full bg-gradient-to-b from-[#5CAFFA] to-[#408ACF] text-white"
+      >
+        <Archive weight="fill" className="size-5" />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="flex items-center gap-2">
+          <span className="min-w-0 flex-1 truncate text-sm font-semibold">
+            {copy.archivedChats}
+          </span>
+          {unread > 0 ? (
+            <span
+              aria-hidden="true"
+              className="grid min-w-5 shrink-0 place-items-center rounded-full bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground tabular-nums"
+            >
+              {unread}
+            </span>
+          ) : null}
+        </span>
+        <span className="mt-0.5 block truncate text-xs font-normal text-muted-foreground">
+          {archived
+            .slice(0, ARCHIVE_PREVIEW_CHATS)
+            .map((chat) => chat.title)
+            .join(", ")}
+        </span>
+      </span>
+    </Button>
+  );
+}
+
+/**
+ * Inside the Archive the way out is a back affordance, the same pushed-view
+ * shape Telegram Web K's `AppArchivedTab` uses (back button plus the archive
+ * title), because the row that brought the reader here is no longer on screen.
+ */
+function ArchiveBackRow({ onBack }: { onBack(): void }) {
+  return (
+    <div className="mb-1 flex items-center gap-1">
+      <Button
+        size="icon"
+        variant="ghost"
+        aria-label={copy.backToAllChats}
+        className="size-10"
+        onClick={onBack}
+      >
+        <ArrowLeft aria-hidden="true" className="size-4" />
+      </Button>
+      <strong className="text-sm font-semibold">{copy.archivedChats}</strong>
+    </div>
+  );
+}
+
+/**
  * Bar widths per skeleton row. Fixed rather than random: Telegram Web K seeds
  * its own widths from the row index (`loadingDialogSkeleton.tsx:6-11`) exactly
  * so they stay put across re-renders — `Math.random()` in a render makes the
@@ -258,6 +353,14 @@ const CHAT_SKELETON_ROWS = [
   { title: "w-36", preview: "w-36" },
   { title: "w-28", preview: "w-44" },
 ] as const;
+
+/**
+ * How many archived names preview on the Archive row. Telegram Web K caps at
+ * ten names of twenty symbols; the sidebar here is a third of that width, so
+ * the cap scales down with it — three names is the most that survives the
+ * row without truncating the badge away.
+ */
+const ARCHIVE_PREVIEW_CHATS = 3;
 
 /**
  * The chat list's own geometry while the first page is in flight. A spinner
@@ -350,6 +453,18 @@ export function ConversationSidebar({
     [chats, countMutedChats],
   );
 
+  // The Archive row previews the archived list itself: names from the same
+  // `folderId` filter the tab view uses, and the folder's own unread total,
+  // which the store already computes server-side.
+  const archivedVisible = useMemo(
+    () => chatsForFolder(chats, ARCHIVE_FOLDER_ID),
+    [chats],
+  );
+  const archiveUnread = useMemo(
+    () => folderUnread(chats, ARCHIVE_FOLDER_ID, countMutedChats),
+    [chats, countMutedChats],
+  );
+
   // Message results enrich their rows with chat data from whichever list
   // knows the chat: the loaded sidebar chats or the search's chat section.
   const chatsById = useMemo(() => {
@@ -390,19 +505,21 @@ export function ConversationSidebar({
             unread={allUnread}
             onSelect={() => selectFolder(null)}
           />
-          {folders.map((folder) => (
-            <FolderTab
-              key={folder.id}
-              label={
-                folder.id === ARCHIVE_FOLDER_ID
-                  ? copy.archiveFolder
-                  : folder.title
-              }
-              selected={activeFolderId === folder.id}
-              unread={folder.unreadCount}
-              onSelect={() => selectFolder(folder.id)}
-            />
-          ))}
+          {/* The Archive is not a tab: both reference clients strip folder 1
+              from the tab strip and reach it through the pinned row at the
+              top of the All list (`stores/folders.ts:159`,
+              `dialogs.ts:96-120`). The row below owns that navigation. */}
+          {folders
+            .filter((folder) => folder.id !== ARCHIVE_FOLDER_ID)
+            .map((folder) => (
+              <FolderTab
+                key={folder.id}
+                label={folder.title}
+                selected={activeFolderId === folder.id}
+                unread={folder.unreadCount}
+                onSelect={() => selectFolder(folder.id)}
+              />
+            ))}
         </div>
       ) : null}
       <nav
@@ -462,6 +579,16 @@ export function ConversationSidebar({
           ) : null
         ) : (
           <>
+            {activeFolderId === ARCHIVE_FOLDER_ID ? (
+              <ArchiveBackRow onBack={() => selectFolder(null)} />
+            ) : null}
+            {activeFolderId === null && archivedVisible.length ? (
+              <ArchiveRow
+                archived={archivedVisible}
+                unread={archiveUnread}
+                onSelect={() => selectFolder(ARCHIVE_FOLDER_ID)}
+              />
+            ) : null}
             {pinnedVisible.length ? (
               <>
                 <div className="px-2.5 pb-1 pt-2 text-xs font-medium text-muted-foreground">

@@ -387,6 +387,11 @@ interface ChatState {
   togglePin(chatId: string): Promise<void>;
   toggleMute(chatId: string): Promise<void>;
   toggleRead(chatId: string): Promise<void>;
+  /**
+   * Moves a chat into or out of the Archive. The folderId flip and the
+   * Archive folder entry apply optimistically; a failed IPC rolls both back.
+   */
+  setArchived(chatId: string, archived: boolean): Promise<void>;
   setDraft(chatId: string, text: string): void;
   /**
    * Runs a message-level AI action (translate / rewrite / draft reply) and
@@ -476,6 +481,40 @@ function withKeywordUnread(
       unreadCount: folderUnread(chats, folder.id, countMuted),
     };
   });
+}
+
+// Archive membership is the chat's folderId, and the Archive folder entry
+// exists only while it holds chats — the rule the demo snapshot and the
+// teleproto folder mapping share. A local membership change therefore
+// rebuilds that entry alongside the chat patch: its position is preserved
+// when it was already listed, otherwise it is appended the way the server
+// snapshot lists it after the custom folders.
+function archivedChatPatch(
+  state: Pick<ChatState, "chats" | "folders">,
+  chatId: string,
+  folderId: number | null,
+): Pick<ChatState, "chats" | "folders"> {
+  const chats = patchChat(state.chats, chatId, { folderId }).chats;
+  const rest = state.folders.filter(
+    (folder) => folder.id !== ARCHIVE_FOLDER_ID,
+  );
+  const archived = chats.filter((chat) => chat.folderId === ARCHIVE_FOLDER_ID);
+  if (archived.length === 0) return { chats, folders: rest };
+  const entry: ChatFolderDto = {
+    id: ARCHIVE_FOLDER_ID,
+    title: "Archive",
+    unreadCount: archived.reduce((total, chat) => total + chat.unreadCount, 0),
+  };
+  const index = state.folders.findIndex(
+    (folder) => folder.id === ARCHIVE_FOLDER_ID,
+  );
+  return {
+    chats,
+    folders:
+      index === -1
+        ? [...rest, entry]
+        : [...rest.slice(0, index), entry, ...rest.slice(index)],
+  };
 }
 
 function assignKeywordMembership(
@@ -1134,6 +1173,22 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set((state) =>
       patchChat(state.chats, chatId, { unreadCount: read ? 0 : 1 }),
     );
+  },
+  async setArchived(chatId, archived) {
+    const chat = get().chats.find((entry) => entry.id === chatId);
+    if (!chat) return;
+    const folderId = archived ? ARCHIVE_FOLDER_ID : null;
+    // Optimistic like togglePin, but the Archive tab appears and disappears
+    // with its last chat, so the folder list is recomputed alongside the
+    // chat patch; a failed IPC restores both to how they were.
+    const previousFolderId = chat.folderId ?? null;
+    set((state) => archivedChatPatch(state, chatId, folderId));
+    try {
+      await window.telo.workspace.setChatArchived(chatId, archived);
+    } catch (error) {
+      set((state) => archivedChatPatch(state, chatId, previousFolderId));
+      throw error;
+    }
   },
   setDraft(chatId, text) {
     set((state) => ({ drafts: { ...state.drafts, [chatId]: text } }));

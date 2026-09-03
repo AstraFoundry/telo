@@ -1617,6 +1617,16 @@ export class DemoTelegramRepository implements TelegramRepository {
     this.emit({ type: "folders", folders: this.foldersSnapshot() });
   }
 
+  async setChatArchived(chatId: string, archived: boolean): Promise<void> {
+    this.updateChat(chatId, (chat) => ({
+      ...chat,
+      folderId: archived ? ARCHIVE_FOLDER_ID : null,
+    }));
+    // The Archive folder exists only while it holds chats, so a membership
+    // change reshapes the folder list itself, not just the badges.
+    this.emit({ type: "folders", folders: this.foldersSnapshot() });
+  }
+
   // Demo logout is a harmless no-op: resetting the demo workspace is owned by
   // the renderer clearing the demoWorkspace preference.
   async logout(): Promise<void> {}
