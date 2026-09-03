@@ -30,6 +30,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TELO_TELEGRAM_API_ID: ${{ secrets.TELO_TELEGRAM_API_ID }}
           TELO_TELEGRAM_API_HASH: ${{ secrets.TELO_TELEGRAM_API_HASH }}
+          TELO_GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.TELO_GOOGLE_OAUTH_CLIENT_ID }}
       - uses: actions/upload-artifact@v4
         with:
           name: telo-${{ matrix.os }}

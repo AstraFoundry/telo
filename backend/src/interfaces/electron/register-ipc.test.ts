@@ -266,6 +266,25 @@ describe("registerIpc agent threads", () => {
   });
 });
 
+describe("registerIpc agent model list", () => {
+  it("forwards the list input on agent:list-models", async () => {
+    const listAgentModels = {
+      execute: vi.fn().mockResolvedValue({
+        models: [{ id: "gpt-4.1-mini" }],
+      }),
+    };
+    registerIpc({ listAgentModels } as unknown as ApplicationContainer);
+    const handler = ipc.handlers.get(channels.agentModelsList);
+    if (!handler) throw new Error("model list handler was not registered");
+
+    const input = { provider: "openai" as const, apiKey: "sk-test" };
+    await expect(handler({}, input)).resolves.toEqual({
+      models: [{ id: "gpt-4.1-mini" }],
+    });
+    expect(listAgentModels.execute).toHaveBeenCalledWith(input);
+  });
+});
+
 describe("registerIpc chat agent actions", () => {
   function chatActionContainer(): ApplicationContainer {
     const stream = async function* (): AsyncIterable<AgentOutput> {

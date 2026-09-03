@@ -80,6 +80,7 @@ function configuration(
     baseUrl: null,
     instructions: "Be brief.",
     apiKey: "sk-test",
+    oauth: null,
     canInspectWorkspace: true,
     temperature: 0.7,
     maxSteps: 4,
@@ -134,11 +135,11 @@ describe("AiSdkAgentGateway", () => {
     ai.isStepCount.mockClear();
   });
 
-  it("requires an API key before contacting the provider", async () => {
+  it("requires a stored credential before contacting the provider", async () => {
     const outputs = await collect(configuration({ apiKey: null }));
 
     expect(outputs).toEqual([
-      { type: "error", message: "Add an API key in Agent settings." },
+      { type: "error", message: "Connect a provider in Agent settings." },
     ]);
     expect(ai.createOpenAI).not.toHaveBeenCalled();
     expect(ai.streamText).not.toHaveBeenCalled();
@@ -223,6 +224,30 @@ describe("AiSdkAgentGateway", () => {
     expect(args.messages).toEqual([{ role: "user", content: "Summarize" }]);
   });
 
+  it("uses Google OAuth Bearer tokens instead of an API key", async () => {
+    ai.streamText.mockReturnValue(emptyStream());
+
+    await collect(
+      configuration({
+        provider: "google",
+        model: "gemini-2.5-flash",
+        apiKey: null,
+        oauth: {
+          accessToken: "ya29.access",
+          refreshToken: "1//refresh",
+          expiresAt: "2026-09-03T12:00:00.000Z",
+          accountLabel: "mina@example.com",
+        },
+      }),
+    );
+
+    expect(ai.createGoogleGenerativeAI).toHaveBeenCalledWith({
+      apiKey: "oauth",
+      fetch: expect.any(Function),
+    });
+    expect(ai.createOpenAI).not.toHaveBeenCalled();
+  });
+
   it("uses the Anthropic SDK for an Anthropic account", async () => {
     ai.streamText.mockReturnValue(emptyStream());
 
@@ -233,6 +258,96 @@ describe("AiSdkAgentGateway", () => {
     expect(ai.createAnthropic).toHaveBeenCalledWith({ apiKey: "sk-test" });
     expect(ai.createOpenAI).not.toHaveBeenCalled();
     expect(ai.createOpenAICompatible).not.toHaveBeenCalled();
+  });
+
+  it("uses Anthropic OAuth Bearer tokens instead of an API key", async () => {
+    ai.streamText.mockReturnValue(emptyStream());
+
+    await collect(
+      configuration({
+        provider: "anthropic",
+        model: "claude-sonnet-4-5",
+        apiKey: null,
+        oauth: {
+          accessToken: "sk-ant-oauth",
+          refreshToken: "refresh",
+          expiresAt: "2026-09-03T12:00:00.000Z",
+          accountLabel: null,
+        },
+      }),
+    );
+
+    expect(ai.createAnthropic).toHaveBeenCalledWith({
+      apiKey: "oauth",
+      fetch: expect.any(Function),
+    });
+  });
+
+  it("uses an OpenAI OAuth access token", async () => {
+    ai.streamText.mockReturnValue(emptyStream());
+
+    await collect(
+      configuration({
+        provider: "openai",
+        apiKey: null,
+        oauth: {
+          accessToken: "chatgpt-access",
+          refreshToken: "chatgpt-refresh",
+          expiresAt: "2026-09-03T12:00:00.000Z",
+          accountLabel: null,
+        },
+      }),
+    );
+
+    expect(ai.createOpenAI).toHaveBeenCalledWith({
+      apiKey: "chatgpt-access",
+      headers: undefined,
+    });
+  });
+
+  it("uses an xAI OAuth access token", async () => {
+    ai.streamText.mockReturnValue(emptyStream());
+
+    await collect(
+      configuration({
+        provider: "xai",
+        model: "grok-3",
+        apiKey: null,
+        oauth: {
+          accessToken: "xai-access",
+          refreshToken: "xai-refresh",
+          expiresAt: "2026-09-03T12:00:00.000Z",
+          accountLabel: null,
+        },
+      }),
+    );
+
+    expect(ai.createXai).toHaveBeenCalledWith({ apiKey: "xai-access" });
+  });
+
+  it("uses the Kimi coding endpoint", async () => {
+    ai.streamText.mockReturnValue(emptyStream());
+
+    await collect(
+      configuration({
+        provider: "kimi",
+        model: "kimi-k2.5",
+        apiKey: null,
+        oauth: {
+          accessToken: "kimi-access",
+          refreshToken: "kimi-refresh",
+          expiresAt: "2026-09-03T12:00:00.000Z",
+          accountLabel: null,
+        },
+      }),
+    );
+
+    expect(ai.createOpenAICompatible).toHaveBeenCalledWith({
+      name: "kimi",
+      apiKey: "kimi-access",
+      baseURL: "https://api.kimi.com/coding/v1",
+    });
+    expect(ai.createOpenAI).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -319,7 +434,7 @@ describe("AiSdkAgentGateway", () => {
       { type: "text", delta: "partial" },
       {
         type: "error",
-        message: "The provider rejected the API key. Check Agent settings.",
+        message: "The provider rejected the credentials. Check Agent settings.",
       },
     ]);
     // The sanitized message carries no key material or provider URLs.
@@ -335,7 +450,7 @@ describe("AiSdkAgentGateway", () => {
 
     expect(outputs.at(-1)).toEqual({
       type: "error",
-      message: "The provider rejected the API key. Check Agent settings.",
+      message: "The provider rejected the credentials. Check Agent settings.",
     });
   });
 

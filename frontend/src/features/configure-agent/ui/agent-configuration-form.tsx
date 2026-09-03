@@ -9,7 +9,9 @@ import {
   AGENT_PROVIDER_DEFAULT_MODEL,
   AGENT_TEMPERATURE_MAX,
   AGENT_TEMPERATURE_MIN,
+  agentOAuthIsConfigured,
   type AgentProvider,
+  type ConnectAgentAccountInput,
 } from "../../../../../contracts/src/ipc";
 import { useAgentStore } from "entities/agent";
 import { copy } from "shared/config/copy";
@@ -23,6 +25,8 @@ import {
   Switch,
 } from "shared/ui";
 
+import { canListAgentModels, useAgentModels } from "../lib/use-agent-models";
+import { ModelPicker } from "./model-picker";
 import { ProviderPicker } from "./provider-picker";
 
 type SaveState = "idle" | "loading" | "success" | "error";
@@ -34,6 +38,8 @@ export function AgentConfigurationForm() {
   const configuration = useAgentStore((state) => state.configuration);
   const load = useAgentStore((state) => state.loadConfiguration);
   const save = useAgentStore((state) => state.saveConfiguration);
+  const connectAccount = useAgentStore((state) => state.connectAccount);
+  const disconnectAccount = useAgentStore((state) => state.disconnectAccount);
   const [provider, setProvider] = useState<AgentProvider>("openai");
   const [model, setModel] = useState(AGENT_PROVIDER_DEFAULT_MODEL.openai);
   const [baseUrl, setBaseUrl] = useState("");
@@ -44,10 +50,37 @@ export function AgentConfigurationForm() {
   const [maxSteps, setMaxSteps] = useState(4);
   const [historyLimit, setHistoryLimit] = useState(20);
   const [saveState, setSaveState] = useState<SaveState>("idle");
+  const [connectState, setConnectState] = useState<SaveState>("idle");
+  const [connectSuccess, setConnectSuccess] = useState<string>(
+    copy.accountConnected,
+  );
 
   const inspectId = useId();
   const inspectHintId = useId();
   const compatible = provider === AGENT_COMPATIBLE_PROVIDER;
+  const oauthPath = agentOAuthIsConfigured(
+    configuration?.configuredOAuthProviders ?? [],
+    provider,
+  );
+  const connected =
+    oauthPath &&
+    configuration?.provider === provider &&
+    configuration.authKind === "oauth";
+  const canList = canListAgentModels({
+    provider,
+    baseUrl,
+    apiKey,
+    storedProvider: configuration?.provider,
+    storedHasCredential: configuration?.hasCredential ?? false,
+    storedAuthKind: configuration?.authKind,
+    oauthPath,
+  });
+  const { models, error: modelsError } = useAgentModels({
+    provider,
+    baseUrl,
+    apiKey,
+    canList,
+  });
 
   useEffect(() => void load(), [load]);
   useEffect(() => {
@@ -70,25 +103,43 @@ export function AgentConfigurationForm() {
     if (next !== AGENT_COMPATIBLE_PROVIDER) setBaseUrl("");
   };
 
+  const accountFields = (): ConnectAgentAccountInput => ({
+    provider,
+    model,
+    baseUrl: compatible ? baseUrl || null : null,
+    instructions,
+    canInspectWorkspace: inspect,
+    temperature,
+    maxSteps,
+    historyLimit,
+  });
+
   const submit = async () => {
     setSaveState("loading");
     try {
       await save({
-        provider,
-        model,
-        baseUrl: compatible ? baseUrl || null : null,
+        ...accountFields(),
         apiKey: apiKey || undefined,
-        instructions,
-        canInspectWorkspace: inspect,
-        temperature,
-        maxSteps,
-        historyLimit,
       });
       setApiKey("");
       setSaveState("success");
       window.setTimeout(() => setSaveState("idle"), 1200);
     } catch {
       setSaveState("error");
+    }
+  };
+
+  const connect = async () => {
+    const disconnecting = connected;
+    setConnectState("loading");
+    try {
+      if (disconnecting) await disconnectAccount(accountFields());
+      else await connectAccount(accountFields());
+      setConnectSuccess(disconnecting ? copy.saved : copy.accountConnected);
+      setConnectState("success");
+      window.setTimeout(() => setConnectState("idle"), 1200);
+    } catch {
+      setConnectState("error");
     }
   };
 
@@ -107,13 +158,11 @@ export function AgentConfigurationForm() {
         <SettingsStackedRow label={copy.provider}>
           <ProviderPicker value={provider} onValueChange={changeProvider} />
         </SettingsStackedRow>
-        <SettingsStackedRow label={copy.model}>
-          <Input
-            value={model}
-            onChange={setModel}
-            aria-label={copy.model}
-            required
-          />
+        <SettingsStackedRow
+          label={copy.model}
+          description={modelsError ? copy.modelsUnavailable : undefined}
+        >
+          <ModelPicker value={model} models={models} onValueChange={setModel} />
         </SettingsStackedRow>
         {compatible ? (
           <SettingsStackedRow label={copy.baseUrl}>
@@ -125,15 +174,35 @@ export function AgentConfigurationForm() {
             />
           </SettingsStackedRow>
         ) : null}
-        <SettingsStackedRow label={copy.apiKey}>
-          <Input
-            type="password"
-            value={apiKey}
-            onChange={setApiKey}
-            aria-label={copy.apiKey}
-            placeholder={copy.apiKeyPlaceholder}
-          />
-        </SettingsStackedRow>
+        {oauthPath ? (
+          <SettingsRow
+            label={copy.account}
+            value={
+              connected ? (configuration?.accountLabel ?? undefined) : undefined
+            }
+          >
+            <StatefulButton
+              type="button"
+              state={connectState}
+              loadingText={copy.connectingAccount}
+              successText={connectSuccess}
+              errorText={copy.failed}
+              onClick={() => void connect()}
+            >
+              {connected ? copy.disconnectAccount : copy.connectAccount}
+            </StatefulButton>
+          </SettingsRow>
+        ) : (
+          <SettingsStackedRow label={copy.apiKey}>
+            <Input
+              type="password"
+              value={apiKey}
+              onChange={setApiKey}
+              aria-label={copy.apiKey}
+              placeholder={copy.apiKeyPlaceholder}
+            />
+          </SettingsStackedRow>
+        )}
       </SettingsGroup>
 
       <SettingsGroup title={copy.agentBehaviourGroup}>

@@ -3,6 +3,8 @@ import { z } from "zod";
 
 import type { AgentGateway, AgentOutput } from "../../domain/agent/agent-ports";
 
+import { agentConfigurationHasCredential } from "../../domain/agent/agent-configuration";
+
 import { createAgentLanguageModel } from "./ai-sdk-language-model";
 
 export class AiSdkAgentGateway implements AgentGateway {
@@ -10,8 +12,8 @@ export class AiSdkAgentGateway implements AgentGateway {
     input: Parameters<AgentGateway["stream"]>[0],
   ): AsyncIterable<AgentOutput> {
     const configuration = input.configuration.snapshot();
-    if (!configuration.apiKey) {
-      yield { type: "error", message: "Add an API key in Agent settings." };
+    if (!agentConfigurationHasCredential(configuration)) {
+      yield { type: "error", message: "Connect a provider in Agent settings." };
       return;
     }
 
@@ -85,7 +87,7 @@ function selectWorkspaceSection(
 }
 
 const AUTHENTICATION_MESSAGE =
-  "The provider rejected the API key. Check Agent settings.";
+  "The provider rejected the credentials. Check Agent settings.";
 const NETWORK_MESSAGE =
   "The provider could not be reached. Check the network connection.";
 const GENERIC_MESSAGE = "The agent request failed.";

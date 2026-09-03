@@ -1,6 +1,6 @@
 import path from "node:path";
 
-import { app, safeStorage } from "electron";
+import { app, safeStorage, shell } from "electron";
 
 import { RunAgentService } from "../../application/agent/run-agent";
 import { AgentContextService } from "../../application/agent/agent-context";
@@ -9,7 +9,9 @@ import { RunChatExtractionService } from "../../application/agent/run-chat-extra
 import { RunChatSummaryService } from "../../application/agent/run-chat-summary";
 import { RunMessageActionService } from "../../application/agent/run-message-action";
 import { AgentThreadService } from "../../application/agent/agent-threads";
+import { ListAgentModelsService } from "../../application/agent/list-agent-models";
 import { SaveAgentConfigurationService } from "../../application/agent/save-agent-configuration";
+import { RefreshingAgentConfigurationRepository } from "../../application/agent/refresh-agent-oauth";
 import { UpdateUserPreferencesService } from "../../application/preferences/update-user-preferences";
 import { KeywordFolderService } from "../../application/keyword-folder/keyword-folders";
 import { ChatActionsService } from "../../application/telegram/chat-actions";
@@ -19,6 +21,14 @@ import { TelegramWorkspaceService } from "../../application/telegram/telegram-wo
 import { AiSdkAgentGateway } from "../../infrastructure/agent/ai-sdk-agent-gateway";
 import { DemoAgentGateway } from "../../infrastructure/agent/demo-agent-gateway";
 import { FileAgentConfigurationRepository } from "../../infrastructure/agent/file-agent-configuration-repository";
+import { FixtureAgentModelCatalog } from "../../infrastructure/agent/fixture-agent-model-catalog";
+import { FixtureAgentOAuthClient } from "../../infrastructure/agent/fixture-agent-oauth-client";
+import { HttpAgentModelCatalog } from "../../infrastructure/agent/http-agent-model-catalog";
+import {
+  loadOrCreateKimiDeviceId,
+  kimiDeviceHeaders,
+} from "../../infrastructure/agent/kimi-device";
+import { VendorOAuthClient } from "../../infrastructure/agent/vendor-oauth-client";
 import { FileAgentAuditRepository } from "../../infrastructure/agent/file-agent-audit-repository";
 import { FileAgentThreadRepository } from "../../infrastructure/agent/file-agent-thread-repository";
 import { FileUserPreferencesRepository } from "../../infrastructure/preferences/file-user-preferences-repository";
@@ -40,6 +50,7 @@ export interface ApplicationContainer {
   readonly chatActions: ChatActionsService;
   readonly messageActions: MessageActionsService;
   readonly agentConfiguration: SaveAgentConfigurationService;
+  readonly listAgentModels: ListAgentModelsService;
   readonly runAgent: RunAgentService;
   readonly agentContext: AgentContextService;
   readonly agentAudit: AgentAuditService;
@@ -79,6 +90,29 @@ export function createContainer(
     path.join(dataDirectory, "agent.json"),
     encrypt,
     decrypt,
+  );
+  const oauthClient =
+    process.env.TELO_E2E === "1"
+      ? new FixtureAgentOAuthClient()
+      : new VendorOAuthClient({
+          clientIds: {
+            google: process.env.TELO_GOOGLE_OAUTH_CLIENT_ID?.trim() ?? "",
+            openai: process.env.TELO_OPENAI_OAUTH_CLIENT_ID?.trim() ?? "",
+            anthropic: process.env.TELO_ANTHROPIC_OAUTH_CLIENT_ID?.trim() ?? "",
+            xai: process.env.TELO_XAI_OAUTH_CLIENT_ID?.trim() ?? "",
+            kimi: process.env.TELO_KIMI_OAUTH_CLIENT_ID?.trim() ?? "",
+          },
+          openExternal: (url) => shell.openExternal(url).then(() => undefined),
+          kimiHeaders: kimiDeviceHeaders({
+            deviceId: loadOrCreateKimiDeviceId(
+              path.join(dataDirectory, "kimi-device-id"),
+            ),
+            appVersion: app.getVersion(),
+          }),
+        });
+  const liveConfigurations = new RefreshingAgentConfigurationRepository(
+    configurations,
+    oauthClient,
   );
   const sessions = new FileTelegramSessionRepository(
     path.join(dataDirectory, "telegram.session"),
@@ -135,7 +169,7 @@ export function createContainer(
   );
   const agentContext = new AgentContextService(telegram);
   const runAgent = new RunAgentService(
-    configurations,
+    liveConfigurations,
     gateway,
     threads,
     agentContext,
@@ -146,13 +180,22 @@ export function createContainer(
     workspace: new TelegramWorkspaceService(telegram, keywordFolders),
     chatActions: new ChatActionsService(telegram),
     messageActions: new MessageActionsService(telegram),
-    agentConfiguration: new SaveAgentConfigurationService(configurations),
+    agentConfiguration: new SaveAgentConfigurationService(
+      configurations,
+      oauthClient,
+    ),
+    listAgentModels: new ListAgentModelsService(
+      liveConfigurations,
+      process.env.TELO_E2E === "1"
+        ? new FixtureAgentModelCatalog()
+        : new HttpAgentModelCatalog(),
+    ),
     runAgent,
     agentContext,
     agentAudit: new AgentAuditService(audits),
     runChatSummary: new RunChatSummaryService(runAgent),
     runChatExtraction: new RunChatExtractionService(runAgent),
-    runMessageAction: new RunMessageActionService(configurations, gateway),
+    runMessageAction: new RunMessageActionService(liveConfigurations, gateway),
     agentThreads: new AgentThreadService(threads),
     telegram,
     telegramLogout: new TelegramLogoutService(telegram),

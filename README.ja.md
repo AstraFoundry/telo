@@ -139,6 +139,14 @@ Telo は業界標準の設計パターンを採用し、明確な関心の分離
 TELO_TELEGRAM_API_ID=1234567 TELO_TELEGRAM_API_HASH=0123456789abcdef0123456789abcdef make dev
 ```
 
+Google アカウント接続には Google Cloud のデスクトップ OAuth クライアント ID が必要です（Generative Language API を有効化し、ループバック `http://127.0.0.1` を許可）：
+
+```sh
+TELO_GOOGLE_OAUTH_CLIENT_ID=123456789.apps.googleusercontent.com make dev
+```
+
+OpenAI / Anthropic / xAI / Kimi の Connect は各社の公開ネイティブ OAuth クライアントを使います。上書きする場合は `TELO_OPENAI_OAUTH_CLIENT_ID`、`TELO_ANTHROPIC_OAUTH_CLIENT_ID`、`TELO_XAI_OAUTH_CLIENT_ID`、`TELO_KIMI_OAUTH_CLIENT_ID` を設定します。
+
 オンボーディングではなくデモワークスペースを開く場合：
 
 ```sh
@@ -195,14 +203,14 @@ make format
 
 Telo は各種設定情報を OS 標準の Electron `userData` ディレクトリに保存します。
 
-| ファイル名           | 用途                                                     | 保存形式                        |
-| -------------------- | -------------------------------------------------------- | ------------------------------- |
-| `agent.json`         | AI モデル設定およびシステムプロンプト                    | API キーは `safeStorage` 暗号化 |
-| `agent-threads.json` | AI との会話スレッド履歴および選択中スレッド ID           | プレーン JSON                   |
-| `telegram.session`   | Telegram MTProto セッション鍵                            | `safeStorage` 暗号化            |
-| `telegram.profile`   | ユーザープロファイルおよびキャッシュ画像                 | `safeStorage` 暗号化            |
-| `dialogs.json`       | 復元用のチャット一覧とフォルダ未読バッジ                 | プレーン JSON                   |
-| `preferences.json`   | テーマ、強調色、文字サイズ、時刻表記、ショートカット設定 | プレーン JSON                   |
+| ファイル名           | 用途                                                     | 保存形式             |
+| -------------------- | -------------------------------------------------------- | -------------------- |
+| `agent.json`         | モデル設定、暗号化 API キー、暗号化 OAuth トークン       | `safeStorage` 暗号化 |
+| `agent-threads.json` | AI との会話スレッド履歴および選択中スレッド ID           | プレーン JSON        |
+| `telegram.session`   | Telegram MTProto セッション鍵                            | `safeStorage` 暗号化 |
+| `telegram.profile`   | ユーザープロファイルおよびキャッシュ画像                 | `safeStorage` 暗号化 |
+| `dialogs.json`       | 復元用のチャット一覧とフォルダ未読バッジ                 | プレーン JSON        |
+| `preferences.json`   | テーマ、強調色、文字サイズ、時刻表記、ショートカット設定 | プレーン JSON        |
 
 _※ キーチェーンが存在しないヘッドレス Linux CI 環境では、`TELO_PLAINTEXT_SECRETS=1` を指定してテストを実行可能です。_
 
