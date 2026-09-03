@@ -121,6 +121,7 @@ export const copy = {
   forwardTo: "Forward to",
   forwardHideSender: "Hide sender",
   forwardedFrom: "Forwarded from",
+  forwardedSenderHidden: "The account was hidden by the user",
   deleteMessage: "Delete",
   deleteMessageConfirm: "Delete this message? This cannot be undone.",
   edited: "edited",

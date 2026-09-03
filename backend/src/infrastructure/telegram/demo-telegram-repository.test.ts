@@ -415,7 +415,15 @@ describe("DemoTelegramRepository", () => {
     });
 
     const target = await listMessages(repository, "saved");
-    expect(target.at(-1)?.forwardedFrom).toBe("Mina");
+    // Forwarding into Saved Messages is the wire header's savedFromPeer
+    // case: the copy names the original author and points back at the
+    // message it was made from.
+    expect(target.at(-1)?.forwardedFrom).toEqual({
+      senderName: "Mina",
+      senderId: "design",
+      messageId: "design-1",
+      postAuthor: null,
+    });
   });
 
   it("strips the sender attribution when forwarding with hideSender", async () => {
@@ -451,7 +459,13 @@ describe("DemoTelegramRepository", () => {
     });
 
     const product = await listMessages(repository, "product");
-    expect(product.at(-1)?.forwardedFrom).toBe("Mina");
+    // The header travels with the copy, target included.
+    expect(product.at(-1)?.forwardedFrom).toEqual({
+      senderName: "Mina",
+      senderId: "design",
+      messageId: "design-1",
+      postAuthor: null,
+    });
   });
 
   it("refreshes the target chat preview without touching unread count", async () => {

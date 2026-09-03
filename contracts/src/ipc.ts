@@ -183,6 +183,34 @@ export type MessageMediaKind =
   | "sticker";
 
 /**
+ * Attribution of a forwarded message (Telegram `MessageFwdHeader`), and where
+ * following it leads. Both reference clients resolve the target in the same
+ * order: `savedFromPeer` + `savedFromMsgId` first, then a channel post's
+ * `fromId` + `channelPost`, then a plain `fromId`, and finally a bare
+ * `fromName` — which means the original sender disallowed linking back, so
+ * there is nowhere to go.
+ */
+export interface MessageForwardDto {
+  /** Display name of the original author, or of the channel for a post. */
+  readonly senderName: string;
+  /**
+   * Peer to open. Null when the original sender hid their account, which is
+   * the only signal Telegram gives for a restricted forward.
+   */
+  readonly senderId: string | null;
+  /**
+   * Message to scroll to inside `senderId`. Null when only the peer is
+   * known, in which case following the attribution opens the peer itself.
+   */
+  readonly messageId: string | null;
+  /**
+   * Signed author of a channel post, shown after the channel name the way
+   * Telegram's `lng_forwarded_signed` does. Null/absent for everything else.
+   */
+  readonly postAuthor?: string | null;
+}
+
+/**
  * How a sticker document is encoded. Telegram tells these apart by mime type:
  * `image/webp` is a still, `application/x-tgsticker` is a gzipped Lottie
  * animation, and `video/webm` is a short silent video.
@@ -331,11 +359,11 @@ export interface MessageDto {
    */
   readonly clientId?: string | null;
   /**
-   * Sender attribution of a forwarded message (Telegram `fwdFrom`): the
-   * original author's display name. Null/absent for ordinary messages and
-   * for forwards sent with the sender hidden.
+   * Attribution of a forwarded message (Telegram `fwdFrom`), including where
+   * following it leads. Null/absent for ordinary messages and for forwards
+   * sent with the sender hidden by the forwarder.
    */
-  readonly forwardedFrom?: string | null;
+  readonly forwardedFrom?: MessageForwardDto | null;
 }
 
 export interface MessagePageInput {
