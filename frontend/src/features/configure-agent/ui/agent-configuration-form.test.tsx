@@ -218,7 +218,8 @@ describe("AgentConfigurationForm", () => {
     });
     await user.click(modelField());
     expect(screen.getByRole("option", { name: "Opus 4.1" })).toBeTruthy();
-    expect(modelField().value).toBe("claude-sonnet-4-5");
+    await user.keyboard("{Escape}");
+    expect(modelField().value).toBe("Sonnet 4.5");
   });
 
   it("keeps the typed model when the vendor list fails", async () => {

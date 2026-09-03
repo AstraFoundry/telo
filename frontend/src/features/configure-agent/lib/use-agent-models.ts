@@ -28,6 +28,12 @@ export function canListAgentModels(input: {
   return Boolean(input.apiKey.trim()) || storedForProvider;
 }
 
+interface ListedModels {
+  readonly key: string;
+  readonly models: ReadonlyArray<AgentModelDto>;
+  readonly error: boolean;
+}
+
 export function useAgentModels(input: {
   readonly provider: AgentProvider;
   readonly baseUrl: string;
@@ -37,19 +43,16 @@ export function useAgentModels(input: {
   readonly models: ReadonlyArray<AgentModelDto>;
   readonly error: boolean;
 } {
-  const [models, setModels] = useState<ReadonlyArray<AgentModelDto>>([]);
-  const [error, setError] = useState(false);
+  const [listed, setListed] = useState<ListedModels | null>(null);
   const generation = useRef(0);
   const compatible = input.provider === AGENT_COMPATIBLE_PROVIDER;
+  const key = `${input.provider}\0${compatible ? input.baseUrl : ""}\0${input.apiKey}`;
 
   useEffect(() => {
-    if (!input.canList) {
-      setModels([]);
-      setError(false);
-      return;
-    }
+    if (!input.canList) return;
     const requestId = generation.current + 1;
     generation.current = requestId;
+    const requestKey = key;
     const timer = window.setTimeout(() => {
       void window.telo.agent
         .listModels({
@@ -59,20 +62,33 @@ export function useAgentModels(input: {
         })
         .then((result) => {
           if (generation.current !== requestId) return;
-          setModels(result.models);
-          setError(false);
+          setListed({
+            key: requestKey,
+            models: result.models,
+            error: false,
+          });
         })
         .catch(() => {
           if (generation.current !== requestId) return;
-          setModels([]);
-          setError(true);
+          setListed({ key: requestKey, models: [], error: true });
         });
     }, AGENT_MODELS_DEBOUNCE_MS);
     return () => {
       window.clearTimeout(timer);
       generation.current += 1;
     };
-  }, [compatible, input.apiKey, input.baseUrl, input.canList, input.provider]);
+  }, [
+    compatible,
+    input.apiKey,
+    input.baseUrl,
+    input.canList,
+    input.provider,
+    key,
+  ]);
 
-  return { models, error };
+  const current = listed?.key === key ? listed : null;
+  return {
+    models: input.canList && current ? current.models : [],
+    error: Boolean(input.canList && current?.error),
+  };
 }

@@ -35,7 +35,7 @@ describe("HttpAgentModelCatalog", () => {
     const models = await catalog.list({ provider: "openai", ...keyAuth });
 
     expect(models).toEqual([{ id: "gpt-4.1-mini" }]);
-    expect(fetchImpl.mock.calls[0]?.[1]).toEqual({
+    expect(fetchImpl).toHaveBeenCalledWith("https://api.openai.com/v1/models", {
       headers: { Authorization: "Bearer sk-test" },
     });
   });
@@ -64,18 +64,25 @@ describe("HttpAgentModelCatalog", () => {
       { id: "claude-opus-4-1", label: "Opus 4.1" },
     ]);
     expect(fetchImpl).toHaveBeenCalledTimes(2);
-    expect(fetchImpl.mock.calls[0]?.[1]).toEqual({
-      headers: {
-        "anthropic-version": "2023-06-01",
-        "x-api-key": "sk-test",
+    expect(fetchImpl).toHaveBeenCalledWith(
+      expect.stringContaining("https://api.anthropic.com/v1/models"),
+      {
+        headers: {
+          "anthropic-version": "2023-06-01",
+          "x-api-key": "sk-test",
+        },
       },
-    });
+    );
   });
 
   it("sends Anthropic OAuth headers instead of x-api-key", async () => {
-    const fetchImpl = vi.fn(async () =>
-      jsonResponse({ data: [{ id: "claude-sonnet-4-5" }], has_more: false }),
-    );
+    const fetchImpl = vi.fn(async (url: string) => {
+      expect(url).toContain("https://api.anthropic.com/v1/models");
+      return jsonResponse({
+        data: [{ id: "claude-sonnet-4-5" }],
+        has_more: false,
+      });
+    });
     const catalog = new HttpAgentModelCatalog(fetchImpl);
 
     await catalog.list({
@@ -90,13 +97,16 @@ describe("HttpAgentModelCatalog", () => {
       },
     });
 
-    expect(fetchImpl.mock.calls[0]?.[1]).toEqual({
-      headers: {
-        "anthropic-version": "2023-06-01",
-        Authorization: "Bearer oauth-access",
-        "anthropic-beta": "oauth-2025-04-20",
+    expect(fetchImpl).toHaveBeenCalledWith(
+      expect.stringContaining("https://api.anthropic.com/v1/models"),
+      {
+        headers: {
+          "anthropic-version": "2023-06-01",
+          Authorization: "Bearer oauth-access",
+          "anthropic-beta": "oauth-2025-04-20",
+        },
       },
-    });
+    );
   });
 
   it("lists Google generateContent models and strips the models/ prefix", async () => {

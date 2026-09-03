@@ -70,7 +70,7 @@ export class HttpAgentModelCatalog implements AgentModelCatalog {
       ) {
         throw error;
       }
-      throw new Error(AGENT_MODELS_UNAVAILABLE);
+      throw new Error(AGENT_MODELS_UNAVAILABLE, { cause: error });
     }
   }
 
