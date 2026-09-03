@@ -1,9 +1,6 @@
 import { useEffect, useState } from "react";
 
-import type {
-  StickerItemDto,
-  StickerSetDto,
-} from "../../../../../contracts/src/ipc";
+import type { StickerItemDto } from "../../../../../contracts/src/ipc";
 import { useChatStore } from "entities/chat";
 import { copy } from "shared/config/copy";
 import { Button, Sticker } from "shared/ui";
@@ -75,30 +72,20 @@ function StickerCell({
  * round trip.
  */
 export function StickerPanel({ active, onPick }: StickerPanelProps) {
-  const [sets, setSets] = useState<ReadonlyArray<StickerSetDto> | null>(null);
+  // The sets live in the store because this panel unmounts with the
+  // composer's popover: component state is what made every reopen refetch
+  // every installed set.
+  const sets = useChatStore((state) => state.stickerSets);
+  const loadError = useChatStore((state) => state.stickerSetsError);
+  const loadStickerSets = useChatStore((state) => state.loadStickerSets);
   const [activeSet, setActiveSet] = useState<string | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!active || sets !== null) return;
-    let cancelled = false;
-    void window.telo.workspace.listStickerSets().then(
-      (next) => {
-        if (cancelled) return;
-        setSets(next);
-        setActiveSet(next[0]?.shortName ?? null);
-      },
-      (error: unknown) => {
-        if (cancelled) return;
-        setLoadError(error instanceof Error ? error.message : String(error));
-      },
-    );
-    return () => {
-      cancelled = true;
-    };
-  }, [active, sets]);
+    if (active) void loadStickerSets();
+  }, [active, loadStickerSets]);
 
-  const current = sets?.find((set) => set.shortName === activeSet) ?? null;
+  const current =
+    sets?.find((set) => set.shortName === activeSet) ?? sets?.[0] ?? null;
 
   return (
     <>

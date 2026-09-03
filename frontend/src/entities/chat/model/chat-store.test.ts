@@ -1594,6 +1594,40 @@ describe("chat-store", () => {
     expect(useChatStore.getState().customEmoji).toEqual({ "404": null });
   });
 
+  it("loadStickerSets() asks once and serves every reopen from state", async () => {
+    const telo = installTeloApiMock();
+    telo.workspace.listStickerSets.mockResolvedValue([
+      {
+        id: "1",
+        title: "Telo Pack",
+        shortName: "TeloPack",
+        stickers: [],
+        installed: true,
+      },
+    ]);
+    useChatStore.setState({ stickerSets: null, stickerSetsError: null });
+
+    await useChatStore.getState().loadStickerSets();
+    await useChatStore.getState().loadStickerSets();
+
+    expect(useChatStore.getState().stickerSets).toHaveLength(1);
+    // The picker unmounts with the composer's popover; the store is what
+    // keeps reopening it from refetching.
+    expect(telo.workspace.listStickerSets).toHaveBeenCalledTimes(1);
+  });
+
+  it("loadStickerSets() settles a failure instead of retrying per reveal", async () => {
+    const telo = installTeloApiMock();
+    telo.workspace.listStickerSets.mockRejectedValue(new Error("offline"));
+    useChatStore.setState({ stickerSets: null, stickerSetsError: null });
+
+    await useChatStore.getState().loadStickerSets();
+    await useChatStore.getState().loadStickerSets();
+
+    expect(useChatStore.getState().stickerSetsError).toBe("offline");
+    expect(telo.workspace.listStickerSets).toHaveBeenCalledTimes(1);
+  });
+
   it("sendSticker() paints the sticker at once and reconciles it with the ack", async () => {
     const telo = installTeloApiMock();
     const acked: MessageDto = {
