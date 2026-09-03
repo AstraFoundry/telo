@@ -71,6 +71,15 @@ describe("MediaPicker", () => {
     } as unknown as typeof ResizeObserver;
   });
 
+  beforeEach(async () => {
+    // The sticker sets moved from component state into the chat store, which
+    // is a singleton: a settled load must not leak into the next test. The
+    // dynamic import shares the graph reset no test here resets, so the same
+    // module instance is just mutated back.
+    const { useChatStore } = await import("../../../entities/chat");
+    useChatStore.setState({ stickerSets: null, stickerSetsError: null });
+  });
+
   it("puts emoji and stickers behind one composer button", async () => {
     const user = userEvent.setup();
     installTeloApiMock();

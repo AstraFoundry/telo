@@ -16,6 +16,7 @@ import type {
   MessageMediaKind,
   MessageReplyToDto,
   StickerItemDto,
+  StickerSetDto,
   TelegramWorkspaceEvent,
   UiContextSnapshot,
 } from "../../../../../contracts/src/ipc";
@@ -292,6 +293,19 @@ interface ChatState {
    */
   customEmoji: Record<string, StickerItemDto | null>;
   loadCustomEmoji(documentId: string): Promise<void>;
+  /**
+   * The account's installed sticker sets, null until the first load settles.
+   * They live here rather than in the picker because the picker unmounts with
+   * the composer's popover: holding them in the store is what keeps reopening
+   * it from refetching every installed set.
+   */
+  stickerSets: ReadonlyArray<StickerSetDto> | null;
+  /**
+   * Why the sets could not be loaded. Set once and left alone, so a failed
+   * load reads as failed instead of retrying on every reveal.
+   */
+  stickerSetsError: string | null;
+  loadStickerSets(): Promise<void>;
   notificationsEnabled: boolean;
   notificationSenderName: boolean;
   notificationPreview: boolean;
@@ -490,6 +504,10 @@ function assignKeywordMembership(
 // Ids being resolved right now. Kept outside the store because it is request
 // bookkeeping, not state any component renders.
 const inFlightCustomEmoji = new Set<string>();
+// True while the installed sticker sets are being fetched. Same reason as the
+// emoji ids above: it is request bookkeeping, and a second reveal must not
+// start a second listing.
+let loadingStickerSets = false;
 
 export const useChatStore = create<ChatState>((set, get) => ({
   chats: [],
@@ -508,6 +526,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
   scrollPositions: {},
   peerAvatars: {},
   customEmoji: {},
+  stickerSets: null,
+  stickerSetsError: null,
   notificationsEnabled: false,
   notificationSenderName: true,
   notificationPreview: true,
@@ -789,6 +809,23 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }));
     } finally {
       inFlightCustomEmoji.delete(documentId);
+    }
+  },
+  async loadStickerSets() {
+    // Settled data and an in-flight listing are both terminal for the caller:
+    // reopening the picker reads, it does not re-ask. A failed load settles
+    // with the error instead of retrying on every reveal, the way a missing
+    // custom emoji settles on its glyph.
+    if (get().stickerSets !== null || get().stickerSetsError !== null) return;
+    if (loadingStickerSets) return;
+    loadingStickerSets = true;
+    try {
+      const stickerSets = await window.telo.workspace.listStickerSets();
+      set({ stickerSets });
+    } catch (error) {
+      set({ stickerSetsError: errorMessage(error) });
+    } finally {
+      loadingStickerSets = false;
     }
   },
   async sendSticker(sticker) {
