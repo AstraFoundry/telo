@@ -6,9 +6,22 @@ import type { AgentGateway, AgentOutput } from "../../domain/agent/agent-ports";
 
 import { agentConfigurationHasCredential } from "../../domain/agent/agent-configuration";
 
+import type { TelegramRepository } from "../../domain/telegram/telegram-ports";
+import {
+  createAgentAutomationTools,
+  type AgentAutomationToolsDeps,
+} from "./agent-automation-tools";
+import { createAgentTelegramTools } from "./agent-telegram-tools";
 import { createAgentLanguageModel } from "./ai-sdk-language-model";
 
 export class AiSdkAgentGateway implements AgentGateway {
+  constructor(
+    private readonly deps?: {
+      telegram?: TelegramRepository;
+      automation?: AgentAutomationToolsDeps;
+    },
+  ) {}
+
   async *stream(
     input: Parameters<AgentGateway["stream"]>[0],
   ): AsyncIterable<AgentOutput> {
@@ -20,22 +33,35 @@ export class AiSdkAgentGateway implements AgentGateway {
 
     const model = createAgentLanguageModel(configuration);
     const workspace = input.context;
+    // inspectWorkspace reads the renderer's UI snapshot, so it stays gated on
+    // the user's workspace-access setting; Telegram and automation tools
+    // read main-process state and are available whenever wired.
     const tools = {
-      inspectWorkspace: tool({
-        description:
-          "Read the currently visible Telo workspace and registered frontend components.",
-        inputSchema: z.object({
-          section: z.enum([
-            "active-chat",
-            "messages",
-            "chats",
-            "components",
-            "all",
-          ]),
-        }),
-        execute: async ({ section }) =>
-          selectWorkspaceSection(workspace, section),
-      }),
+      ...(configuration.canInspectWorkspace
+        ? {
+            inspectWorkspace: tool({
+              description:
+                "Read the currently visible Telo workspace and registered frontend components.",
+              inputSchema: z.object({
+                section: z.enum([
+                  "active-chat",
+                  "messages",
+                  "chats",
+                  "components",
+                  "all",
+                ]),
+              }),
+              execute: async ({ section }) =>
+                selectWorkspaceSection(workspace, section),
+            }),
+          }
+        : {}),
+      ...(this.deps?.telegram
+        ? createAgentTelegramTools(this.deps.telegram)
+        : {}),
+      ...(this.deps?.automation
+        ? createAgentAutomationTools(this.deps.automation)
+        : {}),
     };
 
     yield { type: "activity", label: "Reading workspace" };
@@ -65,7 +91,7 @@ export class AiSdkAgentGateway implements AgentGateway {
           })),
           { role: "user" as const, content: input.prompt },
         ],
-        ...(configuration.canInspectWorkspace ? { tools } : {}),
+        ...(Object.keys(tools).length > 0 ? { tools } : {}),
         stopWhen: isStepCount(configuration.maxSteps),
       });
       // AI SDK v7's textStream swallows provider errors; the full stream

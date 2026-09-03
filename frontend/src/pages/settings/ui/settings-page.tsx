@@ -3,6 +3,7 @@ import { motion, useReducedMotionConfig } from "motion/react";
 import { useState } from "react";
 
 import { AgentConfigurationForm } from "features/configure-agent";
+import { AgentAutomationSettings } from "features/manage-agent-automation";
 import { KeywordFoldersSettings } from "features/manage-keyword-folders";
 import { copy } from "shared/config/copy";
 import { Button, EASE_OUT, Tooltip } from "shared/ui";
@@ -95,7 +96,12 @@ export function SettingsPage({
               {section === "chat" ? <ChatSection /> : null}
               {section === "notifications" ? <NotificationsSection /> : null}
               {section === "folders" ? <KeywordFoldersSettings /> : null}
-              {section === "agent" ? <AgentConfigurationForm /> : null}
+              {section === "agent" ? (
+                <>
+                  <AgentConfigurationForm />
+                  <AgentAutomationSettings />
+                </>
+              ) : null}
               {section === "storage" ? <StorageSection /> : null}
             </motion.section>
           </div>

@@ -34,6 +34,15 @@ The model field is a searchable combobox. Once a credential exists for the selec
 
 Three tuning fields ride the same configuration: `temperature` (0–2, default 0.7) is handed to the provider, `maxSteps` (1–8, default 4) caps the tool-call rounds one run may take, and `historyLimit` (0–50, default 20) bounds how many prior thread turns are replayed — the newest are kept, and 0 replays none. The domain re-validates every bound and rejects out-of-range values by name; a configuration file written before these fields existed reads back with the defaults. Kimi coding models (named Kimi, or a Kimi-family model id on an OpenAI-compatible endpoint) fix temperature per thinking mode and 400 if any other value is sent, so the gateway omits the field — matching Kimi's docs and oh-my-pi — and Settings hides the slider.
 
+## Automation
+
+Two entry types run the agent with no panel open, both managed from Settings → Agent below the configuration form and by the agent itself:
+
+- **Trigger rules** fire a run when an incoming message matches. Match dimensions (chats, senders, keywords, a regex pattern, a skip-muted-chats flag) combine with AND, keywords OR within their dimension, and at least one dimension must be set. The matched message is attached as the run's scoped payload.
+- **Scheduled tasks** fire a run on a five-field cron expression in local time (recurring) or a single future timestamp (once, then spent) and deliver the result to a fixed chat. An optional context scope attaches the unread messages of a chat or folder to the run.
+
+Delivery is declared per entry: `auto-send` posts the reply into the chat (trigger runs reply to the matched message), while the default `draft-only` parks it in the composer draft — and never overwrites an occupied one, reporting a `draft-conflict` instead. Outgoing messages never trigger rules, so automation cannot loop on its own sends, and automation is scoped to the foreground account only. The agent's `configureTriggerRule` / `configureScheduledTask` tools author entries with immediate effect; they appear in Settings marked as created by the agent, and every run is audited and pushed to the renderer as an `agent:automation-event`. The safety decisions are recorded in [`../decisions/003-agent-automation-safety.md`](../decisions/003-agent-automation-safety.md).
+
 ## Frontend component context
 
 The renderer registers these stable component IDs:

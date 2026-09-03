@@ -58,3 +58,14 @@ export interface OrderRepository {
 ```
 
 Implementations of these ports live in `infrastructure/`.
+
+## Agent automation
+
+The automation subsystem (`domain/agent/`) adds two entities and the shared vocabulary they use (`agent-automation.ts`).
+
+- **`AgentDeliveryMode`** — `"auto-send" | "draft-only"`, declared per rule/task. The global default is `AGENT_DELIVERY_DEFAULT = "draft-only"`: nothing leaves the account unless an entry explicitly opts into auto-send. `AgentAutomationCreator` (`"user" | "agent"`) records who authored the entry; agent-authored entries take effect immediately.
+- **`AgentTriggerRule`** (`agent-trigger-rule.ts`) — fires an agent run when an incoming message matches. The match dimensions (`chatIds`, `senderIds`, `keywords`, `pattern`, `excludeMuted`) combine with AND; several keywords are OR within their dimension (case-insensitive substring); `pattern` is a case-insensitive JavaScript regex validated at construction. A rule must restrict at least one dimension, so it cannot match every message by accident; `excludeMuted` defaults to true. Outgoing messages never match — the anti-loop invariant lives in `matches()`. New rules start enabled.
+- **`AgentScheduledTask`** (`agent-scheduled-task.ts`) — fires an agent run on a timer and delivers the result to a fixed `chatId`. The schedule is `{ kind: "cron", expression }` (recurring) or `{ kind: "once", runAt }` (one ISO instant; once attempted, the task is spent and never fires again, even if re-enabled). The optional context scope is `unread` or `folder` — never `selected`, because pinned message ids go stale between scheduling and firing; an `unread` scope without an explicit chat defaults to the delivery chat. `nextRunAt` returns null for spent one-shots and impossible crons.
+- **`CronExpression`** (`agent-cron.ts`) — five-field cron (minute hour day-of-month month day-of-week) in the machine's local timezone: star wildcards, numbers, ranges `a-b`, steps (`*/n`, `a-b/n`), comma-separated lists, three-letter English month/day names, both 0 and 7 for Sunday. When day-of-month and day-of-week are both restricted, a day matches either field (Vixie cron semantics). The next-fire search gives up after four years, so an impossible expression ("Feb 30") resolves to no occurrence instead of hanging.
+
+Both entities validate in `create` and re-validate on `restore`, so a hand-edited persistence file cannot smuggle in an invalid match or schedule.

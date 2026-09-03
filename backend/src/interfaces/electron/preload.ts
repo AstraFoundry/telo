@@ -3,6 +3,7 @@ import type { AGUIEvent } from "@ag-ui/core";
 
 import type {
   ConnectAgentAccountInput,
+  AgentAutomationEvent,
   ListAgentModelsInput,
   SaveAgentConfigurationInput,
   TeloDesktopApi,
@@ -130,6 +131,23 @@ const api: TeloDesktopApi = {
     createThread: () => ipcRenderer.invoke(channels.agentThreadCreate),
     selectThread: (threadId) =>
       ipcRenderer.invoke(channels.agentThreadSelect, threadId),
+    listTriggerRules: () => ipcRenderer.invoke(channels.agentTriggerRulesList),
+    saveTriggerRule: (input) =>
+      ipcRenderer.invoke(channels.agentTriggerRuleSave, input),
+    removeTriggerRule: (ruleId) =>
+      ipcRenderer.invoke(channels.agentTriggerRuleRemove, ruleId),
+    setTriggerRuleEnabled: (ruleId, enabled) =>
+      ipcRenderer.invoke(channels.agentTriggerRuleEnable, ruleId, enabled),
+    listScheduledTasks: () =>
+      ipcRenderer.invoke(channels.agentScheduledTasksList),
+    saveScheduledTask: (input) =>
+      ipcRenderer.invoke(channels.agentScheduledTaskSave, input),
+    removeScheduledTask: (taskId) =>
+      ipcRenderer.invoke(channels.agentScheduledTaskRemove, taskId),
+    setScheduledTaskEnabled: (taskId, enabled) =>
+      ipcRenderer.invoke(channels.agentScheduledTaskEnable, taskId, enabled),
+    onAutomationEvent: (listener) =>
+      subscribe<AgentAutomationEvent>(channels.agentAutomationEvent, listener),
   },
   telegram: {
     getLoginConfiguration: () =>

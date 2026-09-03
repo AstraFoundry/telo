@@ -22,8 +22,8 @@ The renderer's imports from `contracts/src` are an intentional exception to FSD.
 
 ## Backend
 
-- `domain`: agent configuration and thread invariants, user preferences, keyword folders, and Telegram/agent ports.
-- `application`: save configuration, connect/disconnect a vendor OAuth account, list vendor models, run agent, manage agent threads, update preferences, keyword-folder CRUD and projection, and Telegram workspace, chat-state, message-action, and logout use cases.
+- `domain`: agent configuration, thread, and automation (trigger rule, scheduled task, cron expression) invariants, user preferences, keyword folders, and Telegram/agent ports.
+- `application`: save configuration, connect/disconnect a vendor OAuth account, list vendor models, run agent, manage agent threads, manage and execute agent automation (automation service, run runner, trigger engine, scheduler), update preferences, keyword-folder CRUD and projection, and Telegram workspace, chat-state, message-action, and logout use cases.
 - `infrastructure`: AI SDK provider packages, vendor OAuth (PKCE loopback and device code), vendor model-list HTTP, Teleproto, encrypted JSON, session storage, and demo adapters.
 - `interfaces`: Electron lifecycle, context bridge, IPC channels, and AG-UI event mapping.
 
@@ -43,6 +43,8 @@ The app uses local files rather than a database, cache, or message broker. Elect
 Agent threads (transcripts plus the active-thread pointer) are persisted by the main process in `agent-threads.json` under Electron's user-data directory. The panel loads the thread list and the active transcript on mount; starting or switching a conversation goes through typed IPC so the selection survives restarts.
 
 The renderer loads the agent configuration at startup. The panel renders a loading placeholder until it arrives, an unconfigured state with a Settings recovery action when no credential is stored, and the conversation UI once configured.
+
+Agent automation runs without the panel. The trigger engine subscribes to the active account's workspace events and fires matching rules on new incoming messages; the scheduler fires cron and one-shot tasks on a single re-armed timer. Both execute through the automation runner (scoped payload, gateway stream, audit record) and deliver per the entry's mode — `auto-send` posts into the chat, `draft-only` parks a composer draft and never overwrites an occupied one. Every run pushes an `agent:automation-event` to the renderer; rules and tasks are managed from Settings → Agent or by the agent itself through its management tools, and persist in `agent-automation-rules.json` / `agent-automation-tasks.json`. Safety decisions are recorded in [`../decisions/003-agent-automation-safety.md`](../decisions/003-agent-automation-safety.md).
 
 ### Telegram
 

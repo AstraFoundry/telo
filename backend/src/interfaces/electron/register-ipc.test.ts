@@ -955,3 +955,164 @@ describe("registerIpc telegram accounts", () => {
     expect(container.telegram.setActiveAccount).toHaveBeenCalledWith("acc-2");
   });
 });
+
+describe("registerIpc agent automation", () => {
+  const ruleSnapshot = {
+    ruleId: "rule-1",
+    name: "Design mentions",
+    enabled: true,
+    match: {
+      chatIds: [],
+      senderIds: [],
+      keywords: ["design"],
+      pattern: null,
+      excludeMuted: false,
+    },
+    delivery: "draft-only",
+    promptTemplate: "Summarize the mention",
+    createdBy: "user",
+    createdAt: "2026-09-01T00:00:00.000Z",
+    updatedAt: "2026-09-01T00:00:00.000Z",
+  };
+  const taskSnapshot = {
+    taskId: "task-1",
+    name: "Morning digest",
+    enabled: true,
+    schedule: { kind: "cron", expression: "0 9 * * *" },
+    delivery: "auto-send",
+    promptTemplate: "Digest unread",
+    chatId: "chat-1",
+    context: null,
+    lastRunAt: null,
+    createdBy: "user",
+    createdAt: "2026-09-01T00:00:00.000Z",
+    updatedAt: "2026-09-01T00:00:00.000Z",
+  };
+  const nextRun = new Date("2026-09-04T09:00:00.000Z");
+
+  function automationContainer(): ApplicationContainer {
+    const rule = { snapshot: () => ruleSnapshot };
+    const task = { snapshot: () => taskSnapshot, nextRunAt: () => nextRun };
+    const spentTask = { snapshot: () => taskSnapshot, nextRunAt: () => null };
+    return {
+      agentAutomation: {
+        listRules: vi.fn(async () => [rule]),
+        saveRule: vi.fn(async () => rule),
+        removeRule: vi.fn(async () => undefined),
+        setRuleEnabled: vi.fn(async () => rule),
+        listTasks: vi.fn(async () => [task, spentTask]),
+        saveTask: vi.fn(async () => task),
+        removeTask: vi.fn(async () => undefined),
+        setTaskEnabled: vi.fn(async () => spentTask),
+      },
+    } as unknown as ApplicationContainer;
+  }
+
+  function handler(channel: string): (...args: unknown[]) => unknown {
+    const found = ipc.handlers.get(channel);
+    if (!found) throw new Error(`${channel} handler was not registered`);
+    return found;
+  }
+
+  it("lists rules as snapshots and tasks with a derived nextRunAt", async () => {
+    registerIpc(automationContainer());
+
+    await expect(handler(channels.agentTriggerRulesList)({})).resolves.toEqual([
+      ruleSnapshot,
+    ]);
+    await expect(
+      handler(channels.agentScheduledTasksList)({}),
+    ).resolves.toEqual([
+      { ...taskSnapshot, nextRunAt: nextRun.toISOString() },
+      { ...taskSnapshot, nextRunAt: null },
+    ]);
+  });
+
+  it("forwards rule saves, removals, and toggles to the service as user edits", async () => {
+    const container = automationContainer();
+    registerIpc(container);
+    const input = {
+      name: ruleSnapshot.name,
+      match: { keywords: ["design"] },
+      promptTemplate: ruleSnapshot.promptTemplate,
+    };
+
+    await expect(
+      handler(channels.agentTriggerRuleSave)({}, input),
+    ).resolves.toEqual(ruleSnapshot);
+    expect(container.agentAutomation.saveRule).toHaveBeenCalledWith(
+      input,
+      "user",
+    );
+
+    await expect(
+      handler(channels.agentTriggerRuleRemove)({}, "rule-1"),
+    ).resolves.toBeUndefined();
+    expect(container.agentAutomation.removeRule).toHaveBeenCalledWith("rule-1");
+
+    await expect(
+      handler(channels.agentTriggerRuleEnable)({}, "rule-1", false),
+    ).resolves.toEqual(ruleSnapshot);
+    expect(container.agentAutomation.setRuleEnabled).toHaveBeenCalledWith(
+      "rule-1",
+      false,
+    );
+  });
+
+  it("forwards task saves, removals, and toggles to the service as user edits", async () => {
+    const container = automationContainer();
+    registerIpc(container);
+    const input = {
+      name: taskSnapshot.name,
+      schedule: taskSnapshot.schedule,
+      promptTemplate: taskSnapshot.promptTemplate,
+      chatId: taskSnapshot.chatId,
+    };
+
+    await expect(
+      handler(channels.agentScheduledTaskSave)({}, input),
+    ).resolves.toEqual({ ...taskSnapshot, nextRunAt: nextRun.toISOString() });
+    expect(container.agentAutomation.saveTask).toHaveBeenCalledWith(
+      input,
+      "user",
+    );
+
+    await expect(
+      handler(channels.agentScheduledTaskRemove)({}, "task-1"),
+    ).resolves.toBeUndefined();
+    expect(container.agentAutomation.removeTask).toHaveBeenCalledWith("task-1");
+
+    await expect(
+      handler(channels.agentScheduledTaskEnable)({}, "task-1", true),
+    ).resolves.toEqual({ ...taskSnapshot, nextRunAt: null });
+    expect(container.agentAutomation.setTaskEnabled).toHaveBeenCalledWith(
+      "task-1",
+      true,
+    );
+  });
+
+  it("rejects saves without a name or prompt template before hitting the service", async () => {
+    const container = automationContainer();
+    registerIpc(container);
+    const ruleInput = {
+      name: "  ",
+      match: {},
+      promptTemplate: "Do something",
+    };
+    const taskInput = {
+      name: "Digest",
+      schedule: { kind: "once", runAt: "2026-09-04T09:00:00.000Z" },
+      promptTemplate: "",
+      chatId: "chat-1",
+    };
+
+    await expect(
+      handler(channels.agentTriggerRuleSave)({}, ruleInput),
+    ).rejects.toThrow("Trigger rule name is required");
+    await expect(
+      handler(channels.agentScheduledTaskSave)({}, taskInput),
+    ).rejects.toThrow("Scheduled task prompt template is required");
+    expect(container.agentAutomation.saveRule).not.toHaveBeenCalled();
+    expect(container.agentAutomation.saveTask).not.toHaveBeenCalled();
+  });
+});

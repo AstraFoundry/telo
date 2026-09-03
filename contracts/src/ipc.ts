@@ -1093,6 +1093,116 @@ export interface AgentContextPreviewDto {
   readonly messages: ReadonlyArray<AgentContextMessageDto>;
   readonly redactionCounts: AgentRedactionCounts;
 }
+/**
+ * How an automation (trigger rule or scheduled task) delivers the agent
+ * run's result: `auto-send` posts it into the chat, `draft-only` parks it
+ * in the composer draft. Declared per rule/task; the global default is
+ * draft-only.
+ */
+export type AgentDeliveryMode = "auto-send" | "draft-only";
+
+/**
+ * Match dimensions of a trigger rule. Dimensions combine with AND; several
+ * keywords are OR within their dimension. At least one dimension must be
+ * set. Automation never fires on the account's own outgoing messages.
+ */
+export interface AgentTriggerRuleMatchDto {
+  readonly chatIds: ReadonlyArray<string>;
+  readonly senderIds: ReadonlyArray<string>;
+  readonly keywords: ReadonlyArray<string>;
+  /** Regular expression tested against the message body; null when unused. */
+  readonly pattern: string | null;
+  /** When true, muted chats never fire the rule. */
+  readonly excludeMuted: boolean;
+}
+
+export interface AgentTriggerRuleDto {
+  readonly ruleId: string;
+  readonly name: string;
+  readonly enabled: boolean;
+  readonly match: AgentTriggerRuleMatchDto;
+  readonly delivery: AgentDeliveryMode;
+  /** Instruction of the triggered run; the matched message is the payload. */
+  readonly promptTemplate: string;
+  readonly createdBy: "user" | "agent";
+  readonly createdAt: string;
+  readonly updatedAt: string;
+}
+
+/**
+ * Create-or-replace input for a trigger rule: an absent `ruleId` creates
+ * (the main process mints the id), a present one replaces the editable
+ * fields of that rule.
+ */
+export interface SaveTriggerRuleInput {
+  readonly ruleId?: string;
+  readonly name: string;
+  readonly match: Partial<AgentTriggerRuleMatchDto>;
+  readonly delivery?: AgentDeliveryMode;
+  readonly promptTemplate: string;
+}
+
+/** When a scheduled task fires: recurring cron or a single future instant. */
+export type AgentTaskScheduleDto =
+  | { readonly kind: "cron"; readonly expression: string }
+  | { readonly kind: "once"; readonly runAt: string };
+
+/**
+ * Optional context scope of a scheduled run. "selected" is excluded on
+ * purpose: pinned message ids go stale between scheduling and firing.
+ */
+export interface AgentTaskContextDto {
+  readonly scope: "unread" | "folder";
+  readonly chatId?: string;
+  readonly folderId?: number;
+}
+
+export interface AgentScheduledTaskDto {
+  readonly taskId: string;
+  readonly name: string;
+  readonly enabled: boolean;
+  readonly schedule: AgentTaskScheduleDto;
+  readonly delivery: AgentDeliveryMode;
+  readonly promptTemplate: string;
+  /** Chat the run's result is delivered to (message or draft). */
+  readonly chatId: string;
+  readonly context: AgentTaskContextDto | null;
+  readonly lastRunAt: string | null;
+  /** Next fire after now; null for spent one-shots and impossible crons. */
+  readonly nextRunAt: string | null;
+  readonly createdBy: "user" | "agent";
+  readonly createdAt: string;
+  readonly updatedAt: string;
+}
+
+/** Create-or-replace input for a scheduled task; same ruleId semantics. */
+export interface SaveScheduledTaskInput {
+  readonly taskId?: string;
+  readonly name: string;
+  readonly schedule: AgentTaskScheduleDto;
+  readonly delivery?: AgentDeliveryMode;
+  readonly promptTemplate: string;
+  readonly chatId: string;
+  readonly context?: AgentTaskContextDto | null;
+}
+
+/**
+ * Pushed to the renderer whenever an automation finishes (or fails) a run,
+ * so the UI can surface what happened without polling. `preview` is the
+ * first 200 characters of the delivered/attempted text. `draft-conflict`
+ * means draft-only delivery found an occupied composer and left it alone.
+ */
+export interface AgentAutomationEvent {
+  readonly type: "automation-run";
+  readonly source: "trigger" | "schedule";
+  readonly sourceId: string;
+  readonly sourceName: string;
+  readonly chatId: string;
+  readonly delivery: AgentDeliveryMode;
+  readonly status: "sent" | "draft" | "draft-conflict" | "empty" | "error";
+  readonly preview: string;
+  readonly error?: string;
+}
 
 /**
  * Local audit trail entry for one agent run. Records what left the device
@@ -1347,6 +1457,28 @@ export interface TeloDesktopApi {
     getThread(threadId: string): Promise<AgentThreadDto | null>;
     createThread(): Promise<AgentThreadDto>;
     selectThread(threadId: string): Promise<AgentThreadDto>;
+    /** Trigger rules in creation order, both user- and agent-authored. */
+    listTriggerRules(): Promise<ReadonlyArray<AgentTriggerRuleDto>>;
+    saveTriggerRule(input: SaveTriggerRuleInput): Promise<AgentTriggerRuleDto>;
+    removeTriggerRule(ruleId: string): Promise<void>;
+    setTriggerRuleEnabled(
+      ruleId: string,
+      enabled: boolean,
+    ): Promise<AgentTriggerRuleDto>;
+    /** Scheduled tasks in creation order, both user- and agent-authored. */
+    listScheduledTasks(): Promise<ReadonlyArray<AgentScheduledTaskDto>>;
+    saveScheduledTask(
+      input: SaveScheduledTaskInput,
+    ): Promise<AgentScheduledTaskDto>;
+    removeScheduledTask(taskId: string): Promise<void>;
+    setScheduledTaskEnabled(
+      taskId: string,
+      enabled: boolean,
+    ): Promise<AgentScheduledTaskDto>;
+    /** Automation run outcomes (sent / parked in draft / failed). */
+    onAutomationEvent(
+      listener: (event: AgentAutomationEvent) => void,
+    ): () => void;
   };
   readonly telegram: {
     getLoginConfiguration(): Promise<TelegramLoginConfigurationDto>;
