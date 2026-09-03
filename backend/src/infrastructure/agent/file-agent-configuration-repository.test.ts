@@ -40,6 +40,7 @@ describe("FileAgentConfigurationRepository", () => {
       baseUrl: null,
       instructions: "Be brief.",
       apiKey: "sk-secret",
+      oauth: null,
       canInspectWorkspace: true,
       temperature: 1.2,
       maxSteps: 6,
@@ -66,6 +67,37 @@ describe("FileAgentConfigurationRepository", () => {
       '"encryptedApiKey": null',
     );
     expect((await repository.get()).snapshot().apiKey).toBeNull();
+  });
+
+  it("encrypts OAuth tokens and restores the Google session", async () => {
+    const filePath = await temporaryFile();
+    const repository = repositoryAt(filePath);
+    const configuration = AgentConfiguration.create({
+      provider: "google",
+      model: "gemini-2.5-flash",
+      baseUrl: null,
+      instructions: "Be brief.",
+      apiKey: null,
+      oauth: {
+        accessToken: "ya29.secret",
+        refreshToken: "1//refresh",
+        expiresAt: "2026-09-03T12:00:00.000Z",
+        accountLabel: "mina@example.com",
+      },
+      canInspectWorkspace: true,
+      temperature: 0.7,
+      maxSteps: 4,
+      historyLimit: 20,
+    });
+
+    await repository.save(configuration);
+
+    const raw = await readFile(filePath, "utf8");
+    expect(raw).not.toContain("ya29.secret");
+    expect(raw).not.toContain("1//refresh");
+    expect((await repository.get()).snapshot()).toEqual(
+      configuration.snapshot(),
+    );
   });
 
   it("rejects an unrecognized provider instead of falling back", async () => {

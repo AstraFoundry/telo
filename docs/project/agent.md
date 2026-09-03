@@ -10,9 +10,9 @@ While a run is active and the assistant has not streamed any text yet, the trans
 
 ## Configuration
 
-Agent settings live on the dedicated Settings surface. Bring-your-own-account is the preferred path: the user picks a named provider (OpenAI, Anthropic, Google, Groq, xAI, DeepSeek, or Mistral) and stores that account's API key. OpenAI-compatible HTTPS endpoints are the fallback and are the only case that asks for a base URL. An empty API-key field preserves the stored key. The backend never returns the key; it returns only `hasApiKey`.
+Agent settings live on the dedicated Settings surface. Bring-your-own-account is the preferred path: the user picks a named provider (OpenAI, Anthropic, Google, Groq, xAI, DeepSeek, or Mistral). Google connects through desktop OAuth (PKCE loopback in the main process) when the build has a Google OAuth client id; the renderer shows Connect account and the email, never a key. Vendors that only issue API keys still store that key in the main process. OpenAI-compatible HTTPS endpoints are the fallback and are the only case that asks for a base URL. An empty API-key field preserves the stored key. The backend never returns secrets; it returns `hasCredential`, `authKind`, and `accountLabel`.
 
-The panel resolves one of three states from the configuration loaded at startup: loading (configuration not yet read), not configured (no API key — the composer is replaced by a recovery action that opens the Settings surface), and ready (the conversation UI).
+The panel resolves one of three states from the configuration loaded at startup: loading (configuration not yet read), not configured (no stored credential — the composer is replaced by a recovery action that opens the Settings surface), and ready (the conversation UI).
 
 The default system instruction limits answers to the visible Telegram workspace. Turning off workspace inspection omits the inspection tool entirely.
 
@@ -34,7 +34,7 @@ Adding a context-aware widget requires a stable ID, semantic role, JSON-safe sta
 
 Each run emits `RUN_STARTED`, `STATE_SNAPSHOT`, then — only once response text actually streams — `TEXT_MESSAGE_START`, zero or more `TEXT_MESSAGE_CONTENT` events, and `TEXT_MESSAGE_END`, followed by `RUN_FINISHED`. Activity uses a `CUSTOM` event named `activity` and may precede the message sequence. Provider failures use `RUN_ERROR` instead of `RUN_FINISHED`; a run that fails (or ends) without text never emits a `TEXT_MESSAGE_*` sequence, so no empty assistant shell is minted.
 
-Provider failures never surface raw provider payloads: the gateway classifies them into authentication (rejected API key), network (provider unreachable), or a generic failure, and emits a fixed friendly message with no key material or endpoint URLs. Error rows render as assistant messages without copy or feedback actions; the `error` flag is persisted on the transcript message (domain, `agent-threads.json`, and the IPC DTO), so reloaded threads keep the diagnostic rendering instead of regaining message actions. The renderer still skips an empty assistant shell defensively if one ever arrives.
+Provider failures never surface raw provider payloads: the gateway classifies them into authentication (rejected credentials), network (provider unreachable), or a generic failure, and emits a fixed friendly message with no key material or endpoint URLs. Error rows render as assistant messages without copy or feedback actions; the `error` flag is persisted on the transcript message (domain, `agent-threads.json`, and the IPC DTO), so reloaded threads keep the diagnostic rendering instead of regaining message actions. The renderer still skips an empty assistant shell defensively if one ever arrives.
 
 ## Message actions
 

@@ -29,13 +29,15 @@ Local Telegram application credentials live in `.env` (gitignored; copy `.env.ex
 TELO_TELEGRAM_API_ID=12345 TELO_TELEGRAM_API_HASH=... make dev
 ```
 
+Google Connect account uses the same injection for a Desktop OAuth client id (`TELO_GOOGLE_OAUTH_CLIENT_ID`). Register a Desktop app in Google Cloud, enable the Generative Language API, and allow loopback redirects (`http://127.0.0.1`). A build without that id still configures Google with an API key. `TELO_E2E=1` (Playwright) swaps in a fixture OAuth client so Connect does not open a browser.
+
 The demo workspace is a local-development and e2e launch flag, not a product surface:
 
 ```sh
 make dev DEMO=1
 ```
 
-The release workflow reads the same values from the `TELO_TELEGRAM_API_ID` and `TELO_TELEGRAM_API_HASH` repository secrets and embeds them in the Electron main bundle. Users never enter credentials: a configured release shows only phone number, login code, and optional two-factor password, while a build without them shows a "missing credentials" notice instead of the sign-in form. On Linux CI, run Electron tests under `xvfb-run`.
+The release workflow reads the same values from the `TELO_TELEGRAM_API_ID`, `TELO_TELEGRAM_API_HASH`, and `TELO_GOOGLE_OAUTH_CLIENT_ID` repository secrets and embeds them in the Electron main bundle. Users never enter credentials: a configured release shows only phone number, login code, and optional two-factor password, while a build without them shows a "missing credentials" notice instead of the sign-in form. On Linux CI, run Electron tests under `xvfb-run`.
 
 `pnpm test:e2e` builds with Electron Vite's `e2e` mode, which deliberately omits local Telegram application credentials. This keeps the missing-credentials onboarding path deterministic even when the developer has a populated `.env`; production and ordinary development builds continue to embed their configured credentials.
 

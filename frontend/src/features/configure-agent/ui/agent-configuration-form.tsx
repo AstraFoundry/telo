@@ -9,7 +9,9 @@ import {
   AGENT_PROVIDER_DEFAULT_MODEL,
   AGENT_TEMPERATURE_MAX,
   AGENT_TEMPERATURE_MIN,
+  agentProviderSupportsOAuth,
   type AgentProvider,
+  type ConnectAgentAccountInput,
 } from "../../../../../contracts/src/ipc";
 import { useAgentStore } from "entities/agent";
 import { copy } from "shared/config/copy";
@@ -34,6 +36,8 @@ export function AgentConfigurationForm() {
   const configuration = useAgentStore((state) => state.configuration);
   const load = useAgentStore((state) => state.loadConfiguration);
   const save = useAgentStore((state) => state.saveConfiguration);
+  const connectAccount = useAgentStore((state) => state.connectAccount);
+  const disconnectAccount = useAgentStore((state) => state.disconnectAccount);
   const [provider, setProvider] = useState<AgentProvider>("openai");
   const [model, setModel] = useState(AGENT_PROVIDER_DEFAULT_MODEL.openai);
   const [baseUrl, setBaseUrl] = useState("");
@@ -44,10 +48,21 @@ export function AgentConfigurationForm() {
   const [maxSteps, setMaxSteps] = useState(4);
   const [historyLimit, setHistoryLimit] = useState(20);
   const [saveState, setSaveState] = useState<SaveState>("idle");
+  const [connectState, setConnectState] = useState<SaveState>("idle");
+  const [connectSuccess, setConnectSuccess] = useState<string>(
+    copy.accountConnected,
+  );
 
   const inspectId = useId();
   const inspectHintId = useId();
   const compatible = provider === AGENT_COMPATIBLE_PROVIDER;
+  const oauthPath =
+    agentProviderSupportsOAuth(provider) &&
+    Boolean(configuration?.oauthClientConfigured);
+  const connected =
+    oauthPath &&
+    configuration?.provider === provider &&
+    configuration.authKind === "oauth";
 
   useEffect(() => void load(), [load]);
   useEffect(() => {
@@ -70,25 +85,43 @@ export function AgentConfigurationForm() {
     if (next !== AGENT_COMPATIBLE_PROVIDER) setBaseUrl("");
   };
 
+  const accountFields = (): ConnectAgentAccountInput => ({
+    provider,
+    model,
+    baseUrl: compatible ? baseUrl || null : null,
+    instructions,
+    canInspectWorkspace: inspect,
+    temperature,
+    maxSteps,
+    historyLimit,
+  });
+
   const submit = async () => {
     setSaveState("loading");
     try {
       await save({
-        provider,
-        model,
-        baseUrl: compatible ? baseUrl || null : null,
+        ...accountFields(),
         apiKey: apiKey || undefined,
-        instructions,
-        canInspectWorkspace: inspect,
-        temperature,
-        maxSteps,
-        historyLimit,
       });
       setApiKey("");
       setSaveState("success");
       window.setTimeout(() => setSaveState("idle"), 1200);
     } catch {
       setSaveState("error");
+    }
+  };
+
+  const connect = async () => {
+    const disconnecting = connected;
+    setConnectState("loading");
+    try {
+      if (disconnecting) await disconnectAccount(accountFields());
+      else await connectAccount(accountFields());
+      setConnectSuccess(disconnecting ? copy.saved : copy.accountConnected);
+      setConnectState("success");
+      window.setTimeout(() => setConnectState("idle"), 1200);
+    } catch {
+      setConnectState("error");
     }
   };
 
@@ -125,15 +158,35 @@ export function AgentConfigurationForm() {
             />
           </SettingsStackedRow>
         ) : null}
-        <SettingsStackedRow label={copy.apiKey}>
-          <Input
-            type="password"
-            value={apiKey}
-            onChange={setApiKey}
-            aria-label={copy.apiKey}
-            placeholder={copy.apiKeyPlaceholder}
-          />
-        </SettingsStackedRow>
+        {oauthPath ? (
+          <SettingsRow
+            label={copy.account}
+            value={
+              connected ? (configuration?.accountLabel ?? undefined) : undefined
+            }
+          >
+            <StatefulButton
+              type="button"
+              state={connectState}
+              loadingText={copy.connectingAccount}
+              successText={connectSuccess}
+              errorText={copy.failed}
+              onClick={() => void connect()}
+            >
+              {connected ? copy.disconnectAccount : copy.connectAccount}
+            </StatefulButton>
+          </SettingsRow>
+        ) : (
+          <SettingsStackedRow label={copy.apiKey}>
+            <Input
+              type="password"
+              value={apiKey}
+              onChange={setApiKey}
+              aria-label={copy.apiKey}
+              placeholder={copy.apiKeyPlaceholder}
+            />
+          </SettingsStackedRow>
+        )}
       </SettingsGroup>
 
       <SettingsGroup title={copy.agentBehaviourGroup}>

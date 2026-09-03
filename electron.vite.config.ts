@@ -18,12 +18,20 @@ export default defineConfig(({ mode }) => {
     mode === "e2e"
       ? ""
       : process.env.TELO_TELEGRAM_API_HASH || env.TELO_TELEGRAM_API_HASH || "";
+  const googleOAuthClientId =
+    mode === "e2e"
+      ? ""
+      : process.env.TELO_GOOGLE_OAUTH_CLIENT_ID ||
+        env.TELO_GOOGLE_OAUTH_CLIENT_ID ||
+        "";
 
   return {
     main: {
       define: {
         "process.env.TELO_TELEGRAM_API_ID": JSON.stringify(telegramApiId),
         "process.env.TELO_TELEGRAM_API_HASH": JSON.stringify(telegramApiHash),
+        "process.env.TELO_GOOGLE_OAUTH_CLIENT_ID":
+          JSON.stringify(googleOAuthClientId),
       },
       plugins: [externalizeDepsPlugin()],
       build: {

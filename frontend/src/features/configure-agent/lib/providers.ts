@@ -22,7 +22,7 @@ export const AGENT_PROVIDER_KEYWORDS: Record<
 > = {
   openai: ["chatgpt", "gpt"],
   anthropic: ["claude"],
-  google: ["gemini"],
+  google: ["gemini", "oauth"],
   groq: ["llama"],
   xai: ["grok"],
   deepseek: [],

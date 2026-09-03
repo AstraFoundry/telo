@@ -37,7 +37,7 @@ This document defines logging and error-observability conventions for Telo's Ele
 
 ## What not to log
 
-- API keys, Telegram session strings, login codes, or passwords.
+- API keys, OAuth tokens, Telegram session strings, login codes, or passwords.
 - Message bodies or other user content crossing IPC.
 - Full IPC payloads that contain user data — log shape and identifiers only.
 - Filesystem paths in user-facing error messages (they may appear in internal debug logs only).

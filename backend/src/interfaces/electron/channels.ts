@@ -35,6 +35,8 @@ export const channels = {
   chatDraftSave: "workspace:save-draft",
   agentConfigGet: "agent:config-get",
   agentConfigSave: "agent:config-save",
+  agentAccountConnect: "agent:account-connect",
+  agentAccountDisconnect: "agent:account-disconnect",
   agentRun: "agent:run",
   agentRunChatSummary: "agent:run-chat-summary",
   agentRunChatExtraction: "agent:run-chat-extraction",

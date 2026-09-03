@@ -619,9 +619,10 @@ export const AGENT_HISTORY_LIMIT_MIN = 0;
 export const AGENT_HISTORY_LIMIT_MAX = 50;
 
 /**
- * First-class BYOA providers. Each maps to an official AI SDK package and
- * authenticates with the user's own account key. OpenAI-compatible is the
- * fallback for any other HTTPS endpoint and is listed last.
+ * First-class BYOA providers. Each maps to an official AI SDK package.
+ * Google authenticates with desktop OAuth when this build has a client id;
+ * the rest authenticate with the account key the vendor issues. OpenAI-compatible
+ * is the fallback for any other HTTPS endpoint and is listed last.
  */
 export const FIRST_CLASS_AGENT_PROVIDERS = [
   "openai",
@@ -641,6 +642,23 @@ export const AGENT_PROVIDERS = [
 ] as const;
 
 export type AgentProvider = (typeof AGENT_PROVIDERS)[number];
+
+/**
+ * Vendors that publish a third-party desktop OAuth program Telo can use.
+ * ChatGPT and Claude subscription OAuth are not on this list: those flows
+ * are licensed only to the vendor's own apps.
+ */
+export const AGENT_OAUTH_PROVIDERS = ["google"] as const;
+
+export type AgentOAuthProvider = (typeof AGENT_OAUTH_PROVIDERS)[number];
+
+export type AgentAuthKind = "oauth" | "api-key";
+
+export function agentProviderSupportsOAuth(
+  provider: AgentProvider,
+): provider is AgentOAuthProvider {
+  return (AGENT_OAUTH_PROVIDERS as readonly string[]).includes(provider);
+}
 
 /** Model id filled in when the user picks this provider. */
 export const AGENT_PROVIDER_DEFAULT_MODEL: Record<AgentProvider, string> = {
@@ -663,7 +681,18 @@ export interface AgentConfigurationDto {
   readonly model: string;
   readonly baseUrl: string | null;
   readonly instructions: string;
-  readonly hasApiKey: boolean;
+  /** True when an API key or OAuth tokens are stored in the main process. */
+  readonly hasCredential: boolean;
+  /** Which stored secret will authenticate the next run; null when none. */
+  readonly authKind: AgentAuthKind | null;
+  /** Connected account email (or similar); never a token. */
+  readonly accountLabel: string | null;
+  /**
+   * True when this build can run Google's desktop OAuth (a client id is
+   * injected, or the e2e fixture is active). Combined with
+   * `agentProviderSupportsOAuth` in the renderer to decide Connect vs key.
+   */
+  readonly oauthClientConfigured: boolean;
   readonly canInspectWorkspace: boolean;
   /** Sampling temperature handed to the provider. */
   readonly temperature: number;
@@ -684,6 +713,12 @@ export interface SaveAgentConfigurationInput {
   readonly maxSteps: number;
   readonly historyLimit: number;
 }
+
+/** Persist provider fields and start (or finish) the vendor OAuth loop. */
+export type ConnectAgentAccountInput = Omit<
+  SaveAgentConfigurationInput,
+  "apiKey"
+>;
 
 export type ThemePreference = "light" | "dark" | "system";
 
@@ -1077,6 +1112,12 @@ export interface TeloDesktopApi {
     getConfiguration(): Promise<AgentConfigurationDto>;
     saveConfiguration(
       input: SaveAgentConfigurationInput,
+    ): Promise<AgentConfigurationDto>;
+    connectAccount(
+      input: ConnectAgentAccountInput,
+    ): Promise<AgentConfigurationDto>;
+    disconnectAccount(
+      input: ConnectAgentAccountInput,
     ): Promise<AgentConfigurationDto>;
     run(input: RunAgentInput): Promise<void>;
     /** Streams a summary of the given chat messages into the thread. */

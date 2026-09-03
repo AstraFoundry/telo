@@ -80,6 +80,7 @@ function configuration(
     baseUrl: null,
     instructions: "Be brief.",
     apiKey: "sk-test",
+    oauth: null,
     canInspectWorkspace: true,
     temperature: 0.7,
     maxSteps: 4,
@@ -134,11 +135,11 @@ describe("AiSdkAgentGateway", () => {
     ai.isStepCount.mockClear();
   });
 
-  it("requires an API key before contacting the provider", async () => {
+  it("requires a stored credential before contacting the provider", async () => {
     const outputs = await collect(configuration({ apiKey: null }));
 
     expect(outputs).toEqual([
-      { type: "error", message: "Add an API key in Agent settings." },
+      { type: "error", message: "Connect a provider in Agent settings." },
     ]);
     expect(ai.createOpenAI).not.toHaveBeenCalled();
     expect(ai.streamText).not.toHaveBeenCalled();
@@ -221,6 +222,30 @@ describe("AiSdkAgentGateway", () => {
 
     const args = ai.streamText.mock.calls[0]?.[0] as StreamTextArgs;
     expect(args.messages).toEqual([{ role: "user", content: "Summarize" }]);
+  });
+
+  it("uses Google OAuth Bearer tokens instead of an API key", async () => {
+    ai.streamText.mockReturnValue(emptyStream());
+
+    await collect(
+      configuration({
+        provider: "google",
+        model: "gemini-2.5-flash",
+        apiKey: null,
+        oauth: {
+          accessToken: "ya29.access",
+          refreshToken: "1//refresh",
+          expiresAt: "2026-09-03T12:00:00.000Z",
+          accountLabel: "mina@example.com",
+        },
+      }),
+    );
+
+    expect(ai.createGoogleGenerativeAI).toHaveBeenCalledWith({
+      apiKey: "oauth",
+      fetch: expect.any(Function),
+    });
+    expect(ai.createOpenAI).not.toHaveBeenCalled();
   });
 
   it("uses the Anthropic SDK for an Anthropic account", async () => {
@@ -319,7 +344,7 @@ describe("AiSdkAgentGateway", () => {
       { type: "text", delta: "partial" },
       {
         type: "error",
-        message: "The provider rejected the API key. Check Agent settings.",
+        message: "The provider rejected the credentials. Check Agent settings.",
       },
     ]);
     // The sanitized message carries no key material or provider URLs.
@@ -335,7 +360,7 @@ describe("AiSdkAgentGateway", () => {
 
     expect(outputs.at(-1)).toEqual({
       type: "error",
-      message: "The provider rejected the API key. Check Agent settings.",
+      message: "The provider rejected the credentials. Check Agent settings.",
     });
   });
 

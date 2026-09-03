@@ -14,6 +14,7 @@ import type {
   DeleteMessageInput,
   AgentContextScopeInput,
   ChatPageInput,
+  ConnectAgentAccountInput,
   EditMessageInput,
   ForwardMessageInput,
   MessagePageInput,
@@ -206,6 +207,16 @@ export function registerIpc(container: ApplicationContainer): void {
     channels.agentConfigSave,
     (_event, input: SaveAgentConfigurationInput) =>
       container.agentConfiguration.execute(input),
+  );
+  ipcMain.handle(
+    channels.agentAccountConnect,
+    (_event, input: ConnectAgentAccountInput) =>
+      container.agentConfiguration.connect(input),
+  );
+  ipcMain.handle(
+    channels.agentAccountDisconnect,
+    (_event, input: ConnectAgentAccountInput) =>
+      container.agentConfiguration.disconnect(input),
   );
   ipcMain.handle(channels.telegramLoginConfiguration, () =>
     container.telegram.getLoginConfiguration(),

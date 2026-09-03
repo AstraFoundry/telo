@@ -8,6 +8,7 @@ const valid = {
   baseUrl: null,
   instructions: "Use visible context.",
   apiKey: "secret",
+  oauth: null,
   canInspectWorkspace: true,
   temperature: 0.7,
   maxSteps: 4,
@@ -24,6 +25,7 @@ describe("AgentConfiguration", () => {
     expect(value.snapshot()).toMatchObject({
       model: "gpt-5-mini",
       apiKey: "secret",
+      oauth: null,
     });
   });
 
@@ -90,6 +92,7 @@ describe("AgentConfiguration", () => {
     expect(AgentConfiguration.default().snapshot()).toMatchObject({
       provider: "openai",
       apiKey: null,
+      oauth: null,
       canInspectWorkspace: true,
       temperature: 0.7,
       maxSteps: 4,
@@ -119,5 +122,51 @@ describe("AgentConfiguration", () => {
         provider: "mystery" as AgentProvider,
       }),
     ).toThrow("Unknown agent provider");
+  });
+
+  it("keeps Google OAuth tokens and strips them on other providers", () => {
+    const oauth = {
+      accessToken: " ya29.token ",
+      refreshToken: " 1//refresh ",
+      expiresAt: "2026-09-03T12:00:00.000Z",
+      accountLabel: " mina@example.com ",
+    };
+    expect(
+      AgentConfiguration.create({
+        ...valid,
+        provider: "google",
+        model: "gemini-2.5-flash",
+        oauth,
+      }).snapshot().oauth,
+    ).toEqual({
+      accessToken: "ya29.token",
+      refreshToken: "1//refresh",
+      expiresAt: "2026-09-03T12:00:00.000Z",
+      accountLabel: "mina@example.com",
+    });
+    expect(
+      AgentConfiguration.create({
+        ...valid,
+        provider: "anthropic",
+        model: "claude-sonnet-4-5",
+        oauth,
+      }).snapshot().oauth,
+    ).toBeNull();
+  });
+
+  it("rejects a malformed OAuth expiry", () => {
+    expect(() =>
+      AgentConfiguration.create({
+        ...valid,
+        provider: "google",
+        model: "gemini-2.5-flash",
+        oauth: {
+          accessToken: "ya29.token",
+          refreshToken: null,
+          expiresAt: "not-a-date",
+          accountLabel: null,
+        },
+      }),
+    ).toThrow("Agent OAuth expiry is invalid");
   });
 });

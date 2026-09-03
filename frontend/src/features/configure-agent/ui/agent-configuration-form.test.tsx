@@ -15,7 +15,10 @@ const CONFIGURATION: AgentConfigurationDto = {
   model: "gpt-4.1-mini",
   baseUrl: null,
   instructions: "Answer from the visible workspace.",
-  hasApiKey: false,
+  hasCredential: false,
+  authKind: null,
+  accountLabel: null,
+  oauthClientConfigured: true,
   canInspectWorkspace: true,
   temperature: 0.7,
   maxSteps: 4,
@@ -50,7 +53,17 @@ describe("AgentConfigurationForm", () => {
       ...CONFIGURATION,
       ...input,
       baseUrl: input.baseUrl ?? null,
-      hasApiKey: Boolean(input.apiKey) || CONFIGURATION.hasApiKey,
+      hasCredential: Boolean(input.apiKey) || CONFIGURATION.hasCredential,
+      authKind: input.apiKey ? "api-key" : CONFIGURATION.authKind,
+    }));
+    telo.agent.connectAccount.mockImplementation(async (input) => ({
+      ...CONFIGURATION,
+      ...input,
+      baseUrl: input.baseUrl ?? null,
+      hasCredential: true,
+      authKind: "oauth",
+      accountLabel: "mina@example.com",
+      provider: input.provider,
     }));
     useAgentStore.setState({ configuration: null });
   });
@@ -113,5 +126,31 @@ describe("AgentConfigurationForm", () => {
         }),
       );
     });
+  });
+
+  it("connects a Google account instead of asking for a key", async () => {
+    const user = userEvent.setup();
+    await renderForm();
+
+    await user.click(screen.getByRole("combobox", { name: copy.provider }));
+    await user.click(screen.getByRole("option", { name: copy.google }));
+
+    expect(screen.queryByLabelText(copy.apiKey)).toBeNull();
+    await user.click(screen.getByRole("button", { name: copy.connectAccount }));
+
+    await waitFor(() => {
+      expect(telo.agent.connectAccount).toHaveBeenCalledWith(
+        expect.objectContaining({
+          provider: "google",
+          model: "gemini-2.5-flash",
+        }),
+      );
+    });
+    expect(await screen.findByText("mina@example.com")).toBeTruthy();
+    expect(
+      screen.getByRole("button", {
+        name: new RegExp(`${copy.accountConnected}|${copy.disconnectAccount}`),
+      }),
+    ).toBeTruthy();
   });
 });

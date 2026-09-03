@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer, webUtils } from "electron";
 import type { AGUIEvent } from "@ag-ui/core";
 
 import type {
+  ConnectAgentAccountInput,
   SaveAgentConfigurationInput,
   TeloDesktopApi,
   TelegramAuthState,
@@ -98,6 +99,10 @@ const api: TeloDesktopApi = {
     getConfiguration: () => ipcRenderer.invoke(channels.agentConfigGet),
     saveConfiguration: (input: SaveAgentConfigurationInput) =>
       ipcRenderer.invoke(channels.agentConfigSave, input),
+    connectAccount: (input: ConnectAgentAccountInput) =>
+      ipcRenderer.invoke(channels.agentAccountConnect, input),
+    disconnectAccount: (input: ConnectAgentAccountInput) =>
+      ipcRenderer.invoke(channels.agentAccountDisconnect, input),
     run: (input) => ipcRenderer.invoke(channels.agentRun, input),
     runChatSummary: (input) =>
       ipcRenderer.invoke(channels.agentRunChatSummary, input),

@@ -139,6 +139,12 @@ To connect to live Telegram accounts, supply your application credentials obtain
 TELO_TELEGRAM_API_ID=1234567 TELO_TELEGRAM_API_HASH=0123456789abcdef0123456789abcdef make dev
 ```
 
+Google Connect account needs a Desktop OAuth client id from Google Cloud (Generative Language API, loopback `http://127.0.0.1`):
+
+```sh
+TELO_GOOGLE_OAUTH_CLIENT_ID=123456789.apps.googleusercontent.com make dev
+```
+
 To open the in-memory demo workspace instead of onboarding:
 
 ```sh
@@ -195,14 +201,14 @@ make format
 
 Telo persists user configurations under the platform-specific Electron `userData` directory:
 
-| File                 | Purpose                                                               | Storage Mode                      |
-| -------------------- | --------------------------------------------------------------------- | --------------------------------- |
-| `agent.json`         | Model configuration and custom system instructions                    | Encrypted API key (`safeStorage`) |
-| `agent-threads.json` | Stored AI assistant conversation transcripts and active thread ID     | Plain JSON                        |
-| `telegram.session`   | Telegram MTProto session key                                          | Encrypted (`safeStorage`)         |
-| `telegram.profile`   | Current user profile and cached avatar                                | Encrypted (`safeStorage`)         |
-| `dialogs.json`       | Cached chat list and folder badges for session restore                | Plain JSON                        |
-| `preferences.json`   | Theme, accent color, text size, time format, and shortcut preferences | Plain JSON                        |
+| File                 | Purpose                                                               | Storage Mode              |
+| -------------------- | --------------------------------------------------------------------- | ------------------------- |
+| `agent.json`         | Model configuration, encrypted API key, encrypted OAuth tokens        | Encrypted (`safeStorage`) |
+| `agent-threads.json` | Stored AI assistant conversation transcripts and active thread ID     | Plain JSON                |
+| `telegram.session`   | Telegram MTProto session key                                          | Encrypted (`safeStorage`) |
+| `telegram.profile`   | Current user profile and cached avatar                                | Encrypted (`safeStorage`) |
+| `dialogs.json`       | Cached chat list and folder badges for session restore                | Plain JSON                |
+| `preferences.json`   | Theme, accent color, text size, time format, and shortcut preferences | Plain JSON                |
 
 _For headless Linux CI environments without an OS keychain, set `TELO_PLAINTEXT_SECRETS=1` to enable local testing fallback._
 

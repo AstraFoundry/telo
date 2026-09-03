@@ -1,11 +1,29 @@
 import type { UiContextSnapshot } from "../../../../contracts/src/ipc";
 import type { AgentAuditRecord } from "./agent-audit";
-import type { AgentConfiguration } from "./agent-configuration";
+import type {
+  AgentConfiguration,
+  AgentOAuthTokens,
+  AgentProvider,
+} from "./agent-configuration";
 import type { AgentThread, AgentThreadRole } from "./agent-thread";
 
 export interface AgentConfigurationRepository {
   get(): Promise<AgentConfiguration>;
   save(configuration: AgentConfiguration): Promise<void>;
+}
+
+/**
+ * Vendor OAuth for a named BYOA provider. Tokens never leave the main
+ * process; the renderer only sees `accountLabel`.
+ */
+export interface AgentOAuthClient {
+  isConfigured(): boolean;
+  supports(provider: AgentProvider): boolean;
+  authorize(provider: AgentProvider): Promise<AgentOAuthTokens>;
+  refresh(
+    provider: AgentProvider,
+    session: AgentOAuthTokens,
+  ): Promise<AgentOAuthTokens>;
 }
 
 export interface AgentThreadRepository {

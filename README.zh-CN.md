@@ -139,6 +139,12 @@ Telo 采用业界成熟的分层与模块化架构设计：
 TELO_TELEGRAM_API_ID=1234567 TELO_TELEGRAM_API_HASH=0123456789abcdef0123456789abcdef make dev
 ```
 
+Google 账号登录需要 Google Cloud 的桌面应用 OAuth 客户端 ID（启用 Generative Language API，并允许回环 `http://127.0.0.1`）：
+
+```sh
+TELO_GOOGLE_OAUTH_CLIENT_ID=123456789.apps.googleusercontent.com make dev
+```
+
 如需打开内存演示工作区而非引导页：
 
 ```sh
@@ -195,14 +201,14 @@ make format
 
 Telo 将所有用户数据与配置持久化在 Electron 的系统 `userData` 目录下：
 
-| 文件名称             | 作用说明                                     | 存储加密方式                       |
-| -------------------- | -------------------------------------------- | ---------------------------------- |
-| `agent.json`         | AI 智能体模型配置与自定义系统 Prompt         | 敏感 API Key 经 `safeStorage` 加密 |
-| `agent-threads.json` | 历史智能体对话流记录与当前活动会话 ID        | 明文 JSON                          |
-| `telegram.session`   | Telegram MTProto 登录鉴权 Session 密钥       | 经 `safeStorage` 系统钥匙串加密    |
-| `telegram.profile`   | 当前登录用户信息与头像缓存                   | 经 `safeStorage` 加密              |
-| `dialogs.json`       | 会话列表与文件夹角标快照，供恢复登录时使用   | 明文 JSON                          |
-| `preferences.json`   | 主题、强调色、字体大小、时间格式与快捷键偏好 | 明文 JSON                          |
+| 文件名称             | 作用说明                                      | 存储加密方式                    |
+| -------------------- | --------------------------------------------- | ------------------------------- |
+| `agent.json`         | AI 智能体模型配置、加密 API Key 与 OAuth 令牌 | 经 `safeStorage` 加密           |
+| `agent-threads.json` | 历史智能体对话流记录与当前活动会话 ID         | 明文 JSON                       |
+| `telegram.session`   | Telegram MTProto 登录鉴权 Session 密钥        | 经 `safeStorage` 系统钥匙串加密 |
+| `telegram.profile`   | 当前登录用户信息与头像缓存                    | 经 `safeStorage` 加密           |
+| `dialogs.json`       | 会话列表与文件夹角标快照，供恢复登录时使用    | 明文 JSON                       |
+| `preferences.json`   | 主题、强调色、字体大小、时间格式与快捷键偏好  | 明文 JSON                       |
 
 _在无桌面钥匙串的无头 Linux CI 环境中，可通过配置 `TELO_PLAINTEXT_SECRETS=1` 启用 base64 回退模式进行自动化测试。_
 

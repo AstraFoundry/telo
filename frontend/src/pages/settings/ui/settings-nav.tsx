@@ -134,6 +134,11 @@ export const SETTINGS_INDEX: ReadonlyArray<SettingsIndexEntry> = [
   },
   { section: "agent", label: copy.model, terms: [] },
   { section: "agent", label: copy.baseUrl, terms: ["endpoint"] },
+  {
+    section: "agent",
+    label: copy.account,
+    terms: ["oauth", "connect", "sign in"],
+  },
   { section: "agent", label: copy.apiKey, terms: ["token", "secret"] },
   { section: "agent", label: copy.instructions, terms: ["system prompt"] },
   { section: "agent", label: copy.inspectWorkspace, terms: ["tools"] },

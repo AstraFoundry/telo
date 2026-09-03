@@ -1,49 +1,89 @@
 import type {
-  AgentConfigurationDto,
+  ConnectAgentAccountInput,
   SaveAgentConfigurationInput,
 } from "../../../../contracts/src/ipc";
+import { AGENT_PROVIDER_DEFAULT_MODEL } from "../../../../contracts/src/ipc";
 import { AgentConfiguration } from "../../domain/agent/agent-configuration";
-import type { AgentConfigurationRepository } from "../../domain/agent/agent-ports";
+import type {
+  AgentConfigurationRepository,
+  AgentOAuthClient,
+} from "../../domain/agent/agent-ports";
+
+import { toAgentConfigurationDto } from "./agent-configuration-dto";
 
 export class SaveAgentConfigurationService {
-  constructor(private readonly repository: AgentConfigurationRepository) {}
+  constructor(
+    private readonly repository: AgentConfigurationRepository,
+    private readonly oauth: AgentOAuthClient,
+  ) {}
 
-  async get(): Promise<AgentConfigurationDto> {
-    return toDto(await this.repository.get());
+  async get() {
+    return toAgentConfigurationDto(
+      await this.repository.get(),
+      this.oauth.isConfigured(),
+    );
   }
 
-  async execute(
-    input: SaveAgentConfigurationInput,
-  ): Promise<AgentConfigurationDto> {
-    const current = await this.repository.get();
-    const currentSnapshot = current.snapshot();
+  async execute(input: SaveAgentConfigurationInput) {
+    const current = (await this.repository.get()).snapshot();
+    const providerChanged = input.provider !== current.provider;
+    const nextKey = input.apiKey?.trim() || "";
     const configuration = AgentConfiguration.create({
       provider: input.provider,
       model: input.model,
       baseUrl: input.baseUrl ?? null,
       instructions: input.instructions,
-      apiKey: input.apiKey?.trim() || currentSnapshot.apiKey,
+      apiKey: nextKey || (providerChanged ? null : current.apiKey),
+      // A newly typed key replaces OAuth. Switching providers drops the
+      // previous vendor's session rather than reusing it.
+      oauth: nextKey || providerChanged ? null : current.oauth,
       canInspectWorkspace: input.canInspectWorkspace,
       temperature: input.temperature,
       maxSteps: input.maxSteps,
       historyLimit: input.historyLimit,
     });
     await this.repository.save(configuration);
-    return toDto(configuration);
+    return toAgentConfigurationDto(configuration, this.oauth.isConfigured());
   }
-}
 
-function toDto(configuration: AgentConfiguration): AgentConfigurationDto {
-  const value = configuration.snapshot();
-  return {
-    provider: value.provider,
-    model: value.model,
-    baseUrl: value.baseUrl,
-    instructions: value.instructions,
-    hasApiKey: Boolean(value.apiKey),
-    canInspectWorkspace: value.canInspectWorkspace,
-    temperature: value.temperature,
-    maxSteps: value.maxSteps,
-    historyLimit: value.historyLimit,
-  };
+  async connect(input: ConnectAgentAccountInput) {
+    if (!this.oauth.supports(input.provider)) {
+      throw new Error("OAuth is not available for this provider");
+    }
+    if (!this.oauth.isConfigured()) {
+      throw new Error("This build is missing a Google OAuth client.");
+    }
+    const session = await this.oauth.authorize(input.provider);
+    const configuration = AgentConfiguration.create({
+      provider: input.provider,
+      model: input.model.trim() || AGENT_PROVIDER_DEFAULT_MODEL[input.provider],
+      baseUrl: input.baseUrl ?? null,
+      instructions: input.instructions,
+      apiKey: null,
+      oauth: session,
+      canInspectWorkspace: input.canInspectWorkspace,
+      temperature: input.temperature,
+      maxSteps: input.maxSteps,
+      historyLimit: input.historyLimit,
+    });
+    await this.repository.save(configuration);
+    return toAgentConfigurationDto(configuration, this.oauth.isConfigured());
+  }
+
+  async disconnect(input: ConnectAgentAccountInput) {
+    const configuration = AgentConfiguration.create({
+      provider: input.provider,
+      model: input.model,
+      baseUrl: input.baseUrl ?? null,
+      instructions: input.instructions,
+      apiKey: null,
+      oauth: null,
+      canInspectWorkspace: input.canInspectWorkspace,
+      temperature: input.temperature,
+      maxSteps: input.maxSteps,
+      historyLimit: input.historyLimit,
+    });
+    await this.repository.save(configuration);
+    return toAgentConfigurationDto(configuration, this.oauth.isConfigured());
+  }
 }

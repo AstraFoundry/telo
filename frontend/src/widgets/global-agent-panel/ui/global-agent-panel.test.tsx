@@ -26,7 +26,10 @@ function configuration(
     model: "gpt-4.1-mini",
     baseUrl: null,
     instructions: "",
-    hasApiKey: true,
+    hasCredential: true,
+    authKind: "api-key",
+    accountLabel: null,
+    oauthClientConfigured: true,
     canInspectWorkspace: true,
     temperature: 0.7,
     maxSteps: 4,
@@ -101,7 +104,7 @@ describe("GlobalAgentPanel", () => {
 
   it("blocks the composer and offers a settings recovery when no API key is set", async () => {
     useAgentStore.setState({
-      configuration: configuration({ hasApiKey: false }),
+      configuration: configuration({ hasCredential: false }),
     });
     const onOpenSettings = vi.fn();
     const user = userEvent.setup();

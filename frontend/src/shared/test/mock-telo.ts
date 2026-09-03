@@ -154,6 +154,8 @@ export function installTeloApiMock(): TeloApiMock {
     agent: {
       getConfiguration: vi.fn(),
       saveConfiguration: vi.fn(),
+      connectAccount: vi.fn(),
+      disconnectAccount: vi.fn(),
       run: vi.fn(),
       runChatSummary: vi.fn(),
       runChatExtraction: vi.fn(),
