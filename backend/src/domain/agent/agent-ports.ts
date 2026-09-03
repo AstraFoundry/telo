@@ -9,6 +9,8 @@ import type {
   AgentProvider,
 } from "./agent-configuration";
 import type { AgentThread, AgentThreadRole } from "./agent-thread";
+import type { AgentTriggerRule } from "./agent-trigger-rule";
+import type { AgentScheduledTask } from "./agent-scheduled-task";
 
 export interface AgentConfigurationRepository {
   get(): Promise<AgentConfiguration>;
@@ -61,6 +63,21 @@ export interface AgentAuditRepository {
   append(record: AgentAuditRecord): Promise<void>;
   /** Newest first, capped at `limit` records. */
   listRecent(limit: number): Promise<ReadonlyArray<AgentAuditRecord>>;
+}
+/** Trigger rules, user- and agent-authored, in creation order. */
+export interface AgentTriggerRuleRepository {
+  list(): Promise<ReadonlyArray<AgentTriggerRule>>;
+  /** Insert or replace by ruleId. */
+  save(rule: AgentTriggerRule): Promise<void>;
+  remove(ruleId: string): Promise<void>;
+}
+
+/** Scheduled tasks, user- and agent-authored, in creation order. */
+export interface AgentScheduledTaskRepository {
+  list(): Promise<ReadonlyArray<AgentScheduledTask>>;
+  /** Insert or replace by taskId. */
+  save(task: AgentScheduledTask): Promise<void>;
+  remove(taskId: string): Promise<void>;
 }
 
 export interface AgentHistoryMessage {

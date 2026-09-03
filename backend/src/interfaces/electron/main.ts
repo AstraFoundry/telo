@@ -17,6 +17,9 @@ import {
 registerMediaScheme();
 
 let mainWindow: BrowserWindow | null = null;
+// Stops the trigger engine (unsubscribes workspace events) and the
+// scheduler (clears pending timers); set once the container exists.
+let stopAutomation: (() => void) | null = null;
 
 // Workspace and auth events can race window teardown (e.g. a repository
 // timer firing mid-quit). After the window is destroyed there is no
@@ -89,9 +92,14 @@ function createWindow(): void {
 }
 
 app.whenReady().then(async () => {
-  const container = createContainer((state) => {
-    sendToRenderer(channels.telegramAuthEvent, state);
-  });
+  const container = createContainer(
+    (state) => {
+      sendToRenderer(channels.telegramAuthEvent, state);
+    },
+    (event) => {
+      sendToRenderer(channels.agentAutomationEvent, event);
+    },
+  );
   // The handler is safe under Playwright too: the quit-race that once hung
   // E2E teardown is fixed by the destroyed-window guard in sendToRenderer,
   // and before-quit still unhandles the scheme. The root resolves per
@@ -113,6 +121,12 @@ app.whenReady().then(async () => {
       : {}),
   });
   registerIpc(container);
+  const stopTriggerEngine = container.agentTriggerEngine.start();
+  container.agentScheduler.start();
+  stopAutomation = () => {
+    stopTriggerEngine();
+    container.agentScheduler.stop();
+  };
   createWindow();
   void container.telegram.initialize();
   app.on("activate", () => {
@@ -124,4 +138,7 @@ app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
 });
 
-app.on("before-quit", unhandleMediaProtocol);
+app.on("before-quit", () => {
+  unhandleMediaProtocol();
+  stopAutomation?.();
+});

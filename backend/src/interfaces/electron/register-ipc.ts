@@ -13,6 +13,7 @@ import {
 import type {
   DeleteMessageInput,
   AgentContextScopeInput,
+  AgentScheduledTaskDto,
   ChatPageInput,
   ConnectAgentAccountInput,
   ListAgentModelsInput,
@@ -25,6 +26,8 @@ import type {
   RunAgentInput,
   RunChatAgentInput,
   SaveAgentConfigurationInput,
+  SaveScheduledTaskInput,
+  SaveTriggerRuleInput,
   SendMessageInput,
   SendMediaInput,
   TelegramLoginInput,
@@ -37,6 +40,7 @@ import {
   MESSAGE_ACTION_EVENT_NAME,
 } from "../../../../contracts/src/ipc";
 import type { AgentOutput } from "../../domain/agent/agent-ports";
+import type { AgentScheduledTask } from "../../domain/agent/agent-scheduled-task";
 import type { ApplicationContainer } from "./container";
 import { channels } from "./channels";
 
@@ -352,8 +356,72 @@ export function registerIpc(container: ApplicationContainer): void {
   ipcMain.handle(channels.agentThreadSelect, (_event, threadId: string) =>
     container.agentThreads.selectThread(threadId),
   );
+  ipcMain.handle(channels.agentTriggerRulesList, async () =>
+    (await container.agentAutomation.listRules()).map((rule) =>
+      rule.snapshot(),
+    ),
+  );
+  ipcMain.handle(
+    channels.agentTriggerRuleSave,
+    async (_event, input: SaveTriggerRuleInput) => {
+      if (!input.name?.trim()) {
+        throw new Error("Trigger rule name is required");
+      }
+      if (!input.promptTemplate?.trim()) {
+        throw new Error("Trigger rule prompt template is required");
+      }
+      return (
+        await container.agentAutomation.saveRule(input, "user")
+      ).snapshot();
+    },
+  );
+  ipcMain.handle(channels.agentTriggerRuleRemove, (_event, ruleId: string) =>
+    container.agentAutomation.removeRule(ruleId),
+  );
+  ipcMain.handle(
+    channels.agentTriggerRuleEnable,
+    async (_event, ruleId: string, enabled: boolean) =>
+      (
+        await container.agentAutomation.setRuleEnabled(ruleId, enabled)
+      ).snapshot(),
+  );
+  ipcMain.handle(channels.agentScheduledTasksList, async () =>
+    (await container.agentAutomation.listTasks()).map(scheduledTaskDto),
+  );
+  ipcMain.handle(
+    channels.agentScheduledTaskSave,
+    async (_event, input: SaveScheduledTaskInput) => {
+      if (!input.name?.trim()) {
+        throw new Error("Scheduled task name is required");
+      }
+      if (!input.promptTemplate?.trim()) {
+        throw new Error("Scheduled task prompt template is required");
+      }
+      return scheduledTaskDto(
+        await container.agentAutomation.saveTask(input, "user"),
+      );
+    },
+  );
+  ipcMain.handle(channels.agentScheduledTaskRemove, (_event, taskId: string) =>
+    container.agentAutomation.removeTask(taskId),
+  );
+  ipcMain.handle(
+    channels.agentScheduledTaskEnable,
+    async (_event, taskId: string, enabled: boolean) =>
+      scheduledTaskDto(
+        await container.agentAutomation.setTaskEnabled(taskId, enabled),
+      ),
+  );
 }
 
+// The snapshot carries persisted state; nextRunAt is derived per request so
+// the renderer always sees the next fire relative to now.
+function scheduledTaskDto(task: AgentScheduledTask): AgentScheduledTaskDto {
+  return {
+    ...task.snapshot(),
+    nextRunAt: task.nextRunAt()?.toISOString() ?? null,
+  };
+}
 const MAX_ALBUM_FILES = 10;
 // Telegram rejects user uploads past 2 GB per file.
 const MAX_UPLOAD_FILE_BYTES = 2 * 1024 ** 3;

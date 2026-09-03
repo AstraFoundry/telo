@@ -49,3 +49,14 @@ sendMessage: (chatId, body, input) =>
 
 - Expected application/domain errors cross IPC as concise, user-safe messages (see [`api-conventions.md`](api-conventions.md)).
 - Unexpected errors are logged in the main process (see [`logging.md`](logging.md)) and reach the renderer as generic failures. Never leak stack traces, secrets, or filesystem paths.
+
+## Agent automation channels
+
+The automation management surface adds eight invoke channels and one event stream, all exposed under `window.telo.agent`:
+
+- `agent:trigger-rules-list`, `agent:trigger-rule-save`, `agent:trigger-rule-remove`, `agent:trigger-rule-enable`
+- `agent:scheduled-tasks-list`, `agent:scheduled-task-save`, `agent:scheduled-task-remove`, `agent:scheduled-task-enable`
+
+Saves are create-or-replace (`SaveTriggerRuleInput` / `SaveScheduledTaskInput`): an absent id mints one in the main process, a present id replaces the editable fields of that entry. Handlers validate that name and prompt template are non-empty, then call `AgentAutomationService` with `createdBy: "user"`; the agent's own tools reach the same service with `createdBy: "agent"`. Scheduled-task reads derive `nextRunAt` per request, so the renderer always sees the next fire relative to now; `null` means the task never fires again (spent one-shot or impossible cron).
+
+`agent:automation-event` pushes an `AgentAutomationEvent` (`type: "automation-run"`) after every automation run: `source` (`trigger` or `schedule`), the entry id and name, the delivery chat and mode, the outcome (`sent`, `draft`, `draft-conflict`, `empty`, `error`), and a 200-character preview of the reply text. Like every event channel, the subscription returns an unsubscribe function.

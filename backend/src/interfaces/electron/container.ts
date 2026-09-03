@@ -3,6 +3,10 @@ import path from "node:path";
 import { app, safeStorage, shell } from "electron";
 
 import { RunAgentService } from "../../application/agent/run-agent";
+import { AgentAutomationService } from "../../application/agent/agent-automation";
+import { AgentAutomationRunner } from "../../application/agent/agent-automation-runner";
+import { AgentScheduler } from "../../application/agent/agent-scheduler";
+import { AgentTriggerEngine } from "../../application/agent/agent-trigger-engine";
 import { AgentContextService } from "../../application/agent/agent-context";
 import { AgentAuditService } from "../../application/agent/agent-audit";
 import { RunChatExtractionService } from "../../application/agent/run-chat-extraction";
@@ -30,6 +34,8 @@ import {
 } from "../../infrastructure/agent/kimi-device";
 import { VendorOAuthClient } from "../../infrastructure/agent/vendor-oauth-client";
 import { FileAgentAuditRepository } from "../../infrastructure/agent/file-agent-audit-repository";
+import { FileAgentScheduledTaskRepository } from "../../infrastructure/agent/file-agent-scheduled-task-repository";
+import { FileAgentTriggerRuleRepository } from "../../infrastructure/agent/file-agent-trigger-rule-repository";
 import { FileAgentThreadRepository } from "../../infrastructure/agent/file-agent-thread-repository";
 import { FileUserPreferencesRepository } from "../../infrastructure/preferences/file-user-preferences-repository";
 import { FileKeywordFolderRepository } from "../../infrastructure/keyword-folder/file-keyword-folder-repository";
@@ -45,7 +51,10 @@ import {
   mediaCacheUsageBytes,
 } from "../../infrastructure/telegram/media-cache";
 import type { MediaCacheStore } from "../../domain/storage/storage-ports";
-import type { TelegramAuthState } from "../../../../contracts/src/ipc";
+import type {
+  AgentAutomationEvent,
+  TelegramAuthState,
+} from "../../../../contracts/src/ipc";
 
 export interface ApplicationContainer {
   readonly workspace: TelegramWorkspaceService;
@@ -60,6 +69,10 @@ export interface ApplicationContainer {
   readonly runChatExtraction: RunChatExtractionService;
   readonly runMessageAction: RunMessageActionService;
   readonly agentThreads: AgentThreadService;
+  readonly agentAutomation: AgentAutomationService;
+  readonly agentAutomationRunner: AgentAutomationRunner;
+  readonly agentScheduler: AgentScheduler;
+  readonly agentTriggerEngine: AgentTriggerEngine;
   readonly telegram: TelegramAccountCoordinator;
   readonly telegramLogout: TelegramLogoutService;
   readonly preferences: UpdateUserPreferencesService;
@@ -68,6 +81,7 @@ export interface ApplicationContainer {
 
 export function createContainer(
   onAuthState: (state: TelegramAuthState) => void,
+  onAutomationEvent?: (event: AgentAutomationEvent) => void,
 ): ApplicationContainer {
   const dataDirectory = app.getPath("userData");
   // TELO_PLAINTEXT_SECRETS=1 is a local-development/e2e escape hatch:
@@ -125,6 +139,24 @@ export function createContainer(
   const audits = new FileAgentAuditRepository(
     path.join(dataDirectory, "agent-audit.jsonl"),
   );
+  const automationRules = new FileAgentTriggerRuleRepository(
+    path.join(dataDirectory, "agent-automation-rules.json"),
+  );
+  const automationTasks = new FileAgentScheduledTaskRepository(
+    path.join(dataDirectory, "agent-automation-tasks.json"),
+  );
+  // The task-change hook reschedules, but the scheduler is built after the
+  // service (it needs the runner, which needs the gateway, which needs the
+  // service). The holder bridges that ordering; hooks only fire on saves.
+  let scheduler: AgentScheduler | null = null;
+  const agentAutomation = new AgentAutomationService(
+    automationRules,
+    automationTasks,
+    {
+      onTasksChanged: () => void scheduler?.refresh(),
+      onRulesChanged: () => undefined,
+    },
+  );
   const apiId = Number(process.env.TELO_TELEGRAM_API_ID);
   const apiHash = process.env.TELO_TELEGRAM_API_HASH?.trim();
   const applicationCredentials =
@@ -179,7 +211,7 @@ export function createContainer(
   const gateway =
     process.env.TELO_DEMO_WORKSPACE === "1"
       ? new DemoAgentGateway()
-      : new AiSdkAgentGateway();
+      : new AiSdkAgentGateway({ telegram, automation: agentAutomation });
   const keywordFolders = new KeywordFolderService(
     process.env.TELO_DEMO_WORKSPACE === "1"
       ? new DemoKeywordFolderRepository()
@@ -189,6 +221,30 @@ export function createContainer(
     telegram,
   );
   const agentContext = new AgentContextService(telegram);
+  const agentAutomationRunner = new AgentAutomationRunner(
+    liveConfigurations,
+    gateway,
+    agentContext,
+    telegram,
+    audits,
+  );
+  const notifyAutomation = (event: AgentAutomationEvent): void => {
+    onAutomationEvent?.(event);
+  };
+  const agentScheduler = new AgentScheduler(
+    automationTasks,
+    agentAutomationRunner,
+    notifyAutomation,
+    undefined,
+    undefined,
+  );
+  scheduler = agentScheduler;
+  const agentTriggerEngine = new AgentTriggerEngine(
+    automationRules,
+    telegram,
+    agentAutomationRunner,
+    notifyAutomation,
+  );
   const runAgent = new RunAgentService(
     liveConfigurations,
     gateway,
@@ -218,6 +274,10 @@ export function createContainer(
     runChatExtraction: new RunChatExtractionService(runAgent),
     runMessageAction: new RunMessageActionService(liveConfigurations, gateway),
     agentThreads: new AgentThreadService(threads),
+    agentAutomation,
+    agentAutomationRunner,
+    agentScheduler,
+    agentTriggerEngine,
     telegram,
     telegramLogout: new TelegramLogoutService(telegram),
     preferences: new UpdateUserPreferencesService(preferences),

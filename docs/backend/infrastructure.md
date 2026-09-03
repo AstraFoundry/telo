@@ -50,3 +50,11 @@ export class SqlOrderRepository implements OrderRepository {
 - Failures in external services should be translated into domain or application errors, not leaked as raw HTTP errors.
 - The agent gateway uses the Vercel AI SDK. Named BYOA providers each have an official `@ai-sdk/*` package except Kimi, which uses `@ai-sdk/openai-compatible` against `https://api.kimi.com/coding/v1`. Construction lives in `createAgentLanguageModel`. `streamText` omits `temperature` when `agentRequestOmitsTemperature` is true (Kimi coding / Moonshot K2.5+), because those models only accept the server's mode-fixed sampler. OAuth tokens are exchanged in `VendorOAuthClient` (PKCE loopback or device code) and attached as a Bearer credential.
 - Vendor model lists are fetched by `HttpAgentModelCatalog` (`GET /v1/models`, Anthropic `/v1/models`, Google `v1beta/models`). Failures become a single user-safe message so response bodies never leave the adapter. `TELO_E2E=1` swaps in `FixtureAgentModelCatalog`.
+
+## Agent tools
+
+`AiSdkAgentGateway` assembles the model's tool set per run:
+
+- `inspectWorkspace` reads the renderer's UI snapshot, so it stays gated on the user's workspace-access setting.
+- `createAgentTelegramTools` (`agent-telegram-tools.ts`) provides read-only Telegram access — `listChats`, `readChatHistory`, `searchChatMessages`, `searchGlobal`. Tool output is forwarded to the model provider, so sender names and message bodies pass through the same redaction as the scoped-payload pipeline before they leave the main process. Sending stays out of reach: delivery is owned by the automation runner's draft/auto-send pipeline.
+- `createAgentAutomationTools` (`agent-automation-tools.ts`) lets the agent manage its own automation: `configureTriggerRule` and `configureScheduledTask` (list / create / update / set-enabled / remove). Everything configured here is authored as `createdBy: "agent"` and takes effect immediately; the tools depend on a structural view of `AgentAutomationService` so the infrastructure layer imports no application class.
