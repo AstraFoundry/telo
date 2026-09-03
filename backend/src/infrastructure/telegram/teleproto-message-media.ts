@@ -3,6 +3,7 @@ import type {
   MessageStickerDto,
   StickerFormat,
 } from "../../../../contracts/src/ipc";
+import { strippedThumbnailOf } from "./media-thumbnail";
 import { stickerOutlineOf } from "./sticker-outline";
 
 interface TeleprotoFileView {
@@ -109,6 +110,19 @@ export function mapMessageMedia(
       "spoiler" in message.media &&
       message.media.spoiler,
     ),
+    // Stickers have their vector outline instead, and a voice note, audio
+    // track or video note has no visual placeholder worth decoding — only the
+    // kinds the renderer actually blurs behind a download pay for the base64.
+    blurredThumbnail:
+      kind === "photo"
+        ? strippedThumbnailOf(message.photo)
+        : kind === "video"
+          ? strippedThumbnailOf(message.video)
+          : kind === "animation"
+            ? strippedThumbnailOf(message.gif)
+            : kind === "file"
+              ? strippedThumbnailOf(message.document)
+              : null,
     sticker: kind === "sticker" ? stickerOf(message.document, mimeType) : null,
   };
 }

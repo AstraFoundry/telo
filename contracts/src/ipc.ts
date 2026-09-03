@@ -254,6 +254,16 @@ export interface MessageFileMediaDto {
   readonly height: number | null;
   readonly duration: number | null;
   readonly spoiler: boolean;
+  /**
+   * `data:` URL of Telegram's stripped thumbnail (`PhotoStrippedSize`,
+   * `type: "i"`) — a ~100-byte JPEG a few dozen pixels wide that arrives with
+   * the message. It is what both reference clients draw, blurred and
+   * upscaled, while the real photo or video downloads; the caller must never
+   * blur the full-resolution image instead, which costs a GPU pass per frame
+   * while scrolling. Null/absent when Telegram sent no stripped thumbnail,
+   * which is when the renderer falls back to a skeleton.
+   */
+  readonly blurredThumbnail?: string | null;
   /** Sticker attributes; null for every other document kind. */
   readonly sticker?: MessageStickerDto | null;
 }
