@@ -1443,11 +1443,22 @@ export class DemoTelegramRepository implements TelegramRepository {
       status: "sent",
       // A forwarded copy is not a reply; it never carries the source replyTo.
       replyTo: null,
-      // Telegram keeps the original author on chained forwards; "hide sender"
-      // drops the attribution entirely, like dropAuthor on the wire.
+      // Telegram keeps the original author on chained forwards, header and
+      // all — a copy is never re-attributed to whoever forwarded it. "Hide
+      // sender" drops the attribution entirely, like dropAuthor on the wire.
+      // A first forward mirrors the header's `savedFromPeer` case, which is
+      // literally what forwarding into Saved Messages produces on the wire:
+      // the copy points back at the chat and the message it was made from,
+      // so following the attribution lands on a peer and a message the demo
+      // workspace actually holds.
       forwardedFrom: input.hideSender
         ? null
-        : (source.forwardedFrom ?? source.senderName),
+        : (source.forwardedFrom ?? {
+            senderName: source.senderName,
+            senderId: input.fromChatId,
+            messageId: input.messageId,
+            postAuthor: null,
+          }),
     };
     const current = this.messages.get(input.toChatId) ?? [];
     this.messages.set(input.toChatId, [...current, forwarded]);

@@ -35,6 +35,7 @@ import {
 import type {
   MessageAgentActionTone,
   MessageDto,
+  MessageForwardDto,
   TimeFormatPreference,
 } from "../../../../../contracts/src/ipc";
 import {
@@ -325,6 +326,71 @@ function authorKey(message: MessageDto): string {
   return message.outgoing ? "self" : `peer:${message.senderId}`;
 }
 
+/**
+ * The "Forwarded from X" line above a forwarded bubble, and following it.
+ *
+ * Both reference clients make the name — never the words in front of it — the
+ * link, and resolve the target in one order: the original message when the
+ * header names one, otherwise the original peer, otherwise nothing, because a
+ * bare `fromName` means the sender disallowed linking back
+ * (`history_item_components.cpp:390-393`, `bubbles.ts:3460-3506`). The last
+ * case still explains itself rather than looking inert.
+ */
+function ForwardedAttribution({ forward }: { forward: MessageForwardDto }) {
+  const chats = useChatStore((state) => state.chats);
+  const select = useChatStore((state) => state.select);
+  const requestJumpToMessage = useChatStore(
+    (state) => state.requestJumpToMessage,
+  );
+  const openForPeer = useChatProfileStore((state) => state.openForPeer);
+
+  const name = forward.postAuthor
+    ? `${forward.senderName} (${forward.postAuthor})`
+    : forward.senderName;
+  const line = (label: ReactNode) => (
+    <div className="mb-1 text-xs text-muted-foreground">
+      {copy.forwardedFrom} {label}
+    </div>
+  );
+
+  if (!forward.senderId) {
+    return line(
+      <Tooltip content={copy.forwardedSenderHidden}>
+        <span className="font-medium text-foreground/80">{name}</span>
+      </Tooltip>,
+    );
+  }
+  const peerId = forward.senderId;
+  // A forward can point at a peer this account has no dialog with, and the
+  // transcript can only page a chat it knows. Those open as an identity card
+  // instead, which is the same surface a message author with no dialog gets.
+  const hasDialog = chats.some((chat) => chat.id === peerId);
+  const follow = () => {
+    if (!hasDialog) {
+      openForPeer(peerId);
+      return;
+    }
+    if (forward.messageId) {
+      void requestJumpToMessage(peerId, forward.messageId);
+      return;
+    }
+    void select(peerId);
+  };
+
+  return line(
+    <button
+      type="button"
+      onClick={(event) => {
+        event.stopPropagation();
+        follow();
+      }}
+      className="rounded font-medium text-foreground/80 underline-offset-2 hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+    >
+      {name}
+    </button>,
+  );
+}
+
 // Telegram anchors the photo to the bottom of a run's last row; earlier rows
 // keep an invisible slot so every bubble in the run stays on one edge. The
 // account photo is resolved once for outgoing rows instead of being cached
@@ -572,12 +638,7 @@ function ConversationMessage({
                     the preference resolves. */}
                 <MessageBubbleContent className="text-[length:var(--message-font-size,14px)]">
                   {message.forwardedFrom ? (
-                    <div className="mb-1 text-xs text-muted-foreground">
-                      {copy.forwardedFrom}{" "}
-                      <span className="font-medium text-foreground/80">
-                        {message.forwardedFrom}
-                      </span>
-                    </div>
+                    <ForwardedAttribution forward={message.forwardedFrom} />
                   ) : null}
                   {message.replyTo ? (
                     <PressableBlock
@@ -825,12 +886,7 @@ function AlbumMessage({
         <MessageBubble variant={first.outgoing ? "tint" : "soft"}>
           <MessageBubbleContent className="text-[length:var(--message-font-size,14px)]">
             {first.forwardedFrom ? (
-              <div className="mb-1 text-xs text-muted-foreground">
-                {copy.forwardedFrom}{" "}
-                <span className="font-medium text-foreground/80">
-                  {first.forwardedFrom}
-                </span>
-              </div>
+              <ForwardedAttribution forward={first.forwardedFrom} />
             ) : null}
             <div
               ref={preloadRef}

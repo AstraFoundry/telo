@@ -205,7 +205,14 @@ describe("ConversationView", () => {
   it("labels forwarded bubbles with their original sender", async () => {
     await renderView({
       messages: [
-        message({ id: "m1", forwardedFrom: "Ada Byron" }),
+        message({
+          id: "m1",
+          forwardedFrom: {
+            senderName: "Ada Byron",
+            senderId: null,
+            messageId: null,
+          },
+        }),
         message({ id: "m2", body: "Original message" }),
       ],
     });
@@ -214,6 +221,87 @@ describe("ConversationView", () => {
     expect(screen.getByText("Ada Byron")).toBeTruthy();
     // A non-forwarded bubble carries no attribution.
     expect(screen.getAllByText(copy.forwardedFrom)).toHaveLength(1);
+    // A sender who disallowed linking gives nothing to follow, so the name is
+    // not a control that would do nothing.
+    expect(screen.queryByRole("button", { name: "Ada Byron" })).toBeNull();
+  });
+
+  it("follows a forward to the original message in the original chat", async () => {
+    const { useChatStore, telo } = await renderView({
+      chats: [
+        chat({ id: "chat-1", title: "Saved Messages", kind: "saved" }),
+        chat({ id: "chat-2", title: "Telo Design" }),
+      ],
+      messages: [
+        message({
+          id: "m1",
+          forwardedFrom: {
+            senderName: "Mina",
+            senderId: "chat-2",
+            messageId: "design-7",
+          },
+        }),
+      ],
+    });
+    telo.workspace.listMessagePage.mockResolvedValue({
+      items: [],
+      nextCursor: null,
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Mina" }));
+
+    await waitFor(() => {
+      expect(useChatStore.getState().activeChatId).toBe("chat-2");
+      expect(useChatStore.getState().jumpTarget).toMatchObject({
+        chatId: "chat-2",
+        messageId: "design-7",
+      });
+    });
+  });
+
+  it("opens an identity card when the forward's peer has no dialog", async () => {
+    await renderView({
+      messages: [
+        message({
+          id: "m1",
+          forwardedFrom: {
+            senderName: "Ada Byron",
+            senderId: "peer-ada",
+            messageId: "post-3",
+          },
+        }),
+      ],
+    });
+    // `vi.resetModules()` per test means the store the component holds is
+    // only reachable through the same fresh graph — the reason renderView
+    // imports it this way too.
+    const { useChatProfileStore } = await import("../../../entities/chat");
+
+    fireEvent.click(screen.getByRole("button", { name: "Ada Byron" }));
+
+    // The transcript can only page a chat it knows; a peer without one gets
+    // the same card a message author without a dialog gets.
+    expect(useChatProfileStore.getState().peerId).toBe("peer-ada");
+  });
+
+  it("names the channel's signed author after the channel", async () => {
+    await renderView({
+      messages: [
+        message({
+          id: "m1",
+          forwardedFrom: {
+            senderName: "Telo News",
+            senderId: "channel-1",
+            messageId: "42",
+            postAuthor: "Mina",
+          },
+        }),
+      ],
+    });
+
+    expect(
+      screen.getByRole("button", { name: "Telo News (Mina)" }),
+    ).toBeTruthy();
   });
 
   it("paints the author photo on an incoming row and the account photo on an outgoing row", async () => {

@@ -37,6 +37,7 @@ import type {
   GlobalSearchResultDto,
   MessageDto,
   MessageEntityDto,
+  MessageForwardDto,
   MessagePageDto,
   MessagePageInput,
   MessageReplyToDto,
@@ -120,6 +121,13 @@ type ResolvedSender = {
   readonly name: string;
   /** The peer to download the photo from, undefined when none resolved. */
   readonly entity: AvatarEntity | undefined;
+};
+
+// Where following a forward attribution leads: the peer to open and, when the
+// header pins one down, the message to scroll to inside it.
+type ForwardTarget = {
+  readonly peer: Api.TypePeer;
+  readonly messageId: string | null;
 };
 
 const AVATAR_DOWNLOAD_CONCURRENCY = 3;
@@ -2287,24 +2295,56 @@ class TeleprotoRepository implements TelegramRepository {
         typeof message.editDate === "number"
           ? new Date(message.editDate * 1000).toISOString()
           : null,
-      forwardedFrom: await this.forwardedFromName(message),
+      forwardedFrom: await this.resolveForward(message),
     };
   }
 
-  // The original author of a forwarded message. `fromName` covers authors
-  // who hide their account on forwards; an ordinary forward only carries the
-  // peer, resolved through the client's entity cache. A peer that fails to
-  // resolve must not fail the message mapping — the copy stays unattributed,
-  // like a hidden-sender forward.
-  private async forwardedFromName(
+  // The attribution of a forwarded message: who wrote it and where following
+  // the header leads. `fromName` covers authors who hide their account on
+  // forwards; an ordinary forward only carries peers, resolved through the
+  // client's entity cache. A peer that fails to resolve must not fail the
+  // message mapping — the copy stays unattributed, like a hidden-sender
+  // forward, and a target that fails to resolve simply cannot be followed.
+  private async resolveForward(
     message: TeleprotoMessage,
-  ): Promise<string | null> {
+  ): Promise<MessageForwardDto | null> {
     const header = message.fwdFrom;
     if (!header) return null;
-    if (header.fromName) return header.fromName;
-    if (!header.fromId) return null;
+    const target = forwardTarget(header);
+    // The header names its author independently of where the jump lands: a
+    // copy saved out of a chat keeps the original sender's name while
+    // pointing back at the chat it was saved from, so the name falls back to
+    // `fromId` and only then to the target peer (a bare `savedFromPeer`).
+    const senderName =
+      header.fromName ||
+      (await this.forwardPeerTitle(header.fromId ?? target?.peer));
+    if (!senderName) return null;
+    let senderId: string | null = null;
+    if (target) {
+      try {
+        senderId = await this.client.getPeerId(target.peer);
+      } catch {
+        // A target peer the client cannot resolve has nothing to open; the
+        // attribution still names its author.
+      }
+    }
+    return {
+      senderName,
+      senderId,
+      // A message id is only addressable inside a peer that resolved.
+      messageId: senderId ? (target?.messageId ?? null) : null,
+      postAuthor: header.postAuthor ?? null,
+    };
+  }
+
+  private async forwardPeerTitle(
+    peer: Api.TypePeer | undefined,
+  ): Promise<string | null> {
+    if (!peer) return null;
     try {
-      const entity = (await this.client.getEntity(header.fromId)) as
+      // Teleproto's entity union splits the name across constructors;
+      // NamedPeer is the one shape every one of them answers.
+      const entity = (await this.client.getEntity(peer)) as
         NamedPeer | undefined;
       return namedPeerTitle(entity);
     } catch {
@@ -2374,6 +2414,36 @@ async function resolveSender(
   if (!name) throw new Error(`Telegram message ${message.id} has no sender`);
   const peer = sender ?? chat;
   return { id: peer?.id?.toString() ?? "", name, entity: peer };
+}
+
+// Where a forward attribution points, resolved in the order both reference
+// clients use (Desktop's history_item_components.cpp, Web K's
+// appMessagesManager):
+//   1. `savedFromPeer` + `savedFromMsgId` — the explicit pointer Telegram
+//      sets on copies in Saved Messages and on the discussion group's copy of
+//      a channel post.
+//   2. a `channelPost` authored by a channel `fromId`. Such a header carries
+//      no `saved_from_*` at all, which is why forwarding a channel post into
+//      a private chat still knows the post it came from.
+//   3. a bare `fromId` — only the author is known, so following the
+//      attribution opens the peer itself.
+//   4. nothing: a `fromName`-only header means the original sender forbade
+//      linking back, and there is nowhere to go.
+function forwardTarget(header: Api.MessageFwdHeader): ForwardTarget | null {
+  if (header.savedFromPeer && typeof header.savedFromMsgId === "number") {
+    return {
+      peer: header.savedFromPeer,
+      messageId: header.savedFromMsgId.toString(),
+    };
+  }
+  if (
+    typeof header.channelPost === "number" &&
+    header.fromId instanceof Api.PeerChannel
+  ) {
+    return { peer: header.fromId, messageId: header.channelPost.toString() };
+  }
+  if (header.fromId) return { peer: header.fromId, messageId: null };
+  return null;
 }
 
 // Telegram keeps the emoji a sticker stands for on DocumentAttributeSticker,

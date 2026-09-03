@@ -1766,33 +1766,64 @@ describe("TelegramClientCoordinator", () => {
     });
   });
 
-  it("maps the forward attribution from fromName and resolves fromId peers", async () => {
+  it("resolves the forward target in Telegram's order: savedFrom, channel post, bare peer, name only", async () => {
     const coordinator = await connectedCoordinator();
-    FakeTelegramClient.entityBehavior = async () => ({
-      firstName: "Mina",
-      lastName: "K",
-    });
+    FakeTelegramClient.entityBehavior = async (entity) => {
+      const peer = entity as { channelId?: unknown; userId?: unknown };
+      if (peer?.channelId != null) return { title: "Telo Channel" };
+      return { firstName: "Mina", lastName: "K" };
+    };
     FakeTelegramClient.getMessagesBehavior = async () => [
       {
         id: 5,
-        message: "Named forward",
+        message: "Saved copy",
         date: 1_700_000_005,
         out: false,
-        fwdFrom: { fromName: "Hidden Author" },
+        // The explicit pointer: the copy knows both the chat it was saved
+        // out of and the message inside it, while the header still names the
+        // original author.
+        fwdFrom: {
+          fromId: { userId: BigInt(1) },
+          savedFromPeer: new fake.FakePeerChannel({ channelId: BigInt(77) }),
+          savedFromMsgId: 31,
+        },
         getSender: async () => ({ firstName: "You" }),
       },
       {
         id: 6,
-        message: "Peer forward",
+        message: "Channel post",
         date: 1_700_000_006,
+        out: false,
+        // A channel post forwarded elsewhere carries no saved_from_* pair;
+        // channelPost plus a channel fromId is the only way back to it.
+        fwdFrom: {
+          fromId: new fake.FakePeerChannel({ channelId: BigInt(88) }),
+          channelPost: 12,
+          postAuthor: "Mina K",
+        },
+        getSender: async () => ({ firstName: "You" }),
+      },
+      {
+        id: 7,
+        message: "Peer forward",
+        date: 1_700_000_007,
         out: false,
         fwdFrom: { fromId: { userId: BigInt(1) } },
         getSender: async () => ({ firstName: "You" }),
       },
       {
-        id: 7,
+        id: 8,
+        message: "Named forward",
+        date: 1_700_000_008,
+        out: false,
+        // fromName only: the author disallowed linking back.
+        fwdFrom: { fromName: "Hidden Author" },
+        getSender: async () => ({ firstName: "You" }),
+      },
+      {
+        id: 9,
         message: "Plain message",
-        date: 1_700_000_007,
+        date: 1_700_000_009,
         out: false,
         getSender: async () => ({ firstName: "You" }),
       },
@@ -1801,10 +1832,56 @@ describe("TelegramClientCoordinator", () => {
     const page = await coordinator.listMessagePage("chat-1", { limit: 50 });
 
     expect(page.items.map((message) => message.forwardedFrom)).toEqual([
-      "Hidden Author",
-      "Mina K",
+      {
+        senderName: "Mina K",
+        senderId: "77",
+        messageId: "31",
+        postAuthor: null,
+      },
+      {
+        senderName: "Telo Channel",
+        senderId: "88",
+        messageId: "12",
+        postAuthor: "Mina K",
+      },
+      {
+        senderName: "Mina K",
+        senderId: "1",
+        messageId: null,
+        postAuthor: null,
+      },
+      {
+        senderName: "Hidden Author",
+        senderId: null,
+        messageId: null,
+        postAuthor: null,
+      },
       null,
     ]);
+  });
+
+  it("leaves a forward unattributed when its peer does not resolve", async () => {
+    const coordinator = await connectedCoordinator();
+    FakeTelegramClient.entityBehavior = async () => {
+      throw new Error("Could not find the input entity");
+    };
+    FakeTelegramClient.getMessagesBehavior = async () => [
+      {
+        id: 5,
+        message: "Peer forward",
+        date: 1_700_000_005,
+        out: false,
+        fwdFrom: { fromId: { userId: BigInt(1) } },
+        getSender: async () => ({ firstName: "You" }),
+      },
+    ];
+
+    const page = await coordinator.listMessagePage("chat-1", { limit: 50 });
+
+    // A header nobody can name is indistinguishable from a hidden sender,
+    // and it must not fail the surrounding message mapping.
+    expect(page.items[0]?.forwardedFrom).toBeNull();
+    expect(page.items[0]?.body).toBe("Peer forward");
   });
 
   it("maps media-only messages to an empty body string", async () => {
