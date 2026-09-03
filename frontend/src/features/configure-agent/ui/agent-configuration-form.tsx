@@ -25,6 +25,8 @@ import {
   Switch,
 } from "shared/ui";
 
+import { canListAgentModels, useAgentModels } from "../lib/use-agent-models";
+import { ModelPicker } from "./model-picker";
 import { ProviderPicker } from "./provider-picker";
 
 type SaveState = "idle" | "loading" | "success" | "error";
@@ -64,6 +66,21 @@ export function AgentConfigurationForm() {
     oauthPath &&
     configuration?.provider === provider &&
     configuration.authKind === "oauth";
+  const canList = canListAgentModels({
+    provider,
+    baseUrl,
+    apiKey,
+    storedProvider: configuration?.provider,
+    storedHasCredential: configuration?.hasCredential ?? false,
+    storedAuthKind: configuration?.authKind,
+    oauthPath,
+  });
+  const { models, error: modelsError } = useAgentModels({
+    provider,
+    baseUrl,
+    apiKey,
+    canList,
+  });
 
   useEffect(() => void load(), [load]);
   useEffect(() => {
@@ -141,13 +158,11 @@ export function AgentConfigurationForm() {
         <SettingsStackedRow label={copy.provider}>
           <ProviderPicker value={provider} onValueChange={changeProvider} />
         </SettingsStackedRow>
-        <SettingsStackedRow label={copy.model}>
-          <Input
-            value={model}
-            onChange={setModel}
-            aria-label={copy.model}
-            required
-          />
+        <SettingsStackedRow
+          label={copy.model}
+          description={modelsError ? copy.modelsUnavailable : undefined}
+        >
+          <ModelPicker value={model} models={models} onValueChange={setModel} />
         </SettingsStackedRow>
         {compatible ? (
           <SettingsStackedRow label={copy.baseUrl}>

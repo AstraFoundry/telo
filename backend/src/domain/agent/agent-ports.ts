@@ -30,6 +30,24 @@ export interface AgentOAuthClient {
   ): Promise<AgentOAuthTokens>;
 }
 
+export interface AgentModelCatalogEntry {
+  readonly id: string;
+  readonly label?: string;
+}
+
+/**
+ * Vendor `/models` (or equivalent) list. Implemented in infrastructure so
+ * the use case never talks HTTP; tokens stay in the main process.
+ */
+export interface AgentModelCatalog {
+  list(input: {
+    readonly provider: AgentProvider;
+    readonly baseUrl: string | null;
+    readonly apiKey: string | null;
+    readonly oauth: AgentOAuthTokens | null;
+  }): Promise<ReadonlyArray<AgentModelCatalogEntry>>;
+}
+
 export interface AgentThreadRepository {
   listThreads(): Promise<ReadonlyArray<AgentThread>>;
   getThread(threadId: string): Promise<AgentThread | null>;

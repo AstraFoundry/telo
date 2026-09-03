@@ -736,6 +736,28 @@ export type ConnectAgentAccountInput = Omit<
   "apiKey"
 >;
 
+/**
+ * List chat-capable models from the selected vendor. `apiKey` is the unsaved
+ * key in the form; when it is omitted the main process uses the stored
+ * secret for the same provider (API key or OAuth). The renderer never
+ * receives credentials back.
+ */
+export interface ListAgentModelsInput {
+  readonly provider: AgentProvider;
+  readonly baseUrl?: string | null;
+  readonly apiKey?: string;
+}
+
+export interface AgentModelDto {
+  readonly id: string;
+  /** Vendor display name when the list endpoint provides one. */
+  readonly label?: string;
+}
+
+export interface AgentModelListDto {
+  readonly models: ReadonlyArray<AgentModelDto>;
+}
+
 export type ThemePreference = "light" | "dark" | "system";
 
 export type AccentColorPreference =
@@ -1135,6 +1157,8 @@ export interface TeloDesktopApi {
     disconnectAccount(
       input: ConnectAgentAccountInput,
     ): Promise<AgentConfigurationDto>;
+    /** Chat-capable models from the selected vendor; secrets stay main-side. */
+    listModels(input: ListAgentModelsInput): Promise<AgentModelListDto>;
     run(input: RunAgentInput): Promise<void>;
     /** Streams a summary of the given chat messages into the thread. */
     runChatSummary(input: RunChatAgentInput): Promise<void>;

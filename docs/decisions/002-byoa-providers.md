@@ -28,6 +28,8 @@ A third question was how the user authenticates. "Bring your own account" means 
 
 Adding a vendor means a catalog entry, a copy label, a gateway test, and — when the vendor has desktop OAuth — a profile in `AGENT_OAUTH_PROFILE`. The Settings form hides the key field when `configuredOAuthProviders` includes the selected provider. Custom or self-hosted endpoints keep using the compatible fallback. Unknown stored provider ids are rejected rather than silently remapped.
 
+Once a credential exists for the selected vendor, Settings lists models through `agent:list-models`. The main process GETs the vendor's `/models` (or Google `v1beta/models`) endpoint with the stored or typed secret and returns `{ id, label? }[]`. The renderer never sees the credential. A failed fetch leaves the current model id editable and does not substitute a hardcoded catalog. Playwright uses `FixtureAgentModelCatalog` (`TELO_E2E=1`) so the list path does not call a real vendor.
+
 Google OAuth and Telegram credentials remain build-injected secrets. The other OAuth clients are public native ids, so Connect works in a local build without extra registration.
 
 ## Alternatives considered

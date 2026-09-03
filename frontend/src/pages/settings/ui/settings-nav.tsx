@@ -134,7 +134,7 @@ export const SETTINGS_INDEX: ReadonlyArray<SettingsIndexEntry> = [
       "account",
     ],
   },
-  { section: "agent", label: copy.model, terms: [] },
+  { section: "agent", label: copy.model, terms: ["catalog"] },
   { section: "agent", label: copy.baseUrl, terms: ["endpoint"] },
   {
     section: "agent",

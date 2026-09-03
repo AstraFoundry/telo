@@ -37,6 +37,7 @@ export const channels = {
   agentConfigSave: "agent:config-save",
   agentAccountConnect: "agent:account-connect",
   agentAccountDisconnect: "agent:account-disconnect",
+  agentModelsList: "agent:list-models",
   agentRun: "agent:run",
   agentRunChatSummary: "agent:run-chat-summary",
   agentRunChatExtraction: "agent:run-chat-extraction",

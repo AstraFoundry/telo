@@ -9,6 +9,7 @@ import { RunChatExtractionService } from "../../application/agent/run-chat-extra
 import { RunChatSummaryService } from "../../application/agent/run-chat-summary";
 import { RunMessageActionService } from "../../application/agent/run-message-action";
 import { AgentThreadService } from "../../application/agent/agent-threads";
+import { ListAgentModelsService } from "../../application/agent/list-agent-models";
 import { SaveAgentConfigurationService } from "../../application/agent/save-agent-configuration";
 import { RefreshingAgentConfigurationRepository } from "../../application/agent/refresh-agent-oauth";
 import { UpdateUserPreferencesService } from "../../application/preferences/update-user-preferences";
@@ -20,7 +21,9 @@ import { TelegramWorkspaceService } from "../../application/telegram/telegram-wo
 import { AiSdkAgentGateway } from "../../infrastructure/agent/ai-sdk-agent-gateway";
 import { DemoAgentGateway } from "../../infrastructure/agent/demo-agent-gateway";
 import { FileAgentConfigurationRepository } from "../../infrastructure/agent/file-agent-configuration-repository";
+import { FixtureAgentModelCatalog } from "../../infrastructure/agent/fixture-agent-model-catalog";
 import { FixtureAgentOAuthClient } from "../../infrastructure/agent/fixture-agent-oauth-client";
+import { HttpAgentModelCatalog } from "../../infrastructure/agent/http-agent-model-catalog";
 import {
   loadOrCreateKimiDeviceId,
   kimiDeviceHeaders,
@@ -47,6 +50,7 @@ export interface ApplicationContainer {
   readonly chatActions: ChatActionsService;
   readonly messageActions: MessageActionsService;
   readonly agentConfiguration: SaveAgentConfigurationService;
+  readonly listAgentModels: ListAgentModelsService;
   readonly runAgent: RunAgentService;
   readonly agentContext: AgentContextService;
   readonly agentAudit: AgentAuditService;
@@ -179,6 +183,12 @@ export function createContainer(
     agentConfiguration: new SaveAgentConfigurationService(
       configurations,
       oauthClient,
+    ),
+    listAgentModels: new ListAgentModelsService(
+      liveConfigurations,
+      process.env.TELO_E2E === "1"
+        ? new FixtureAgentModelCatalog()
+        : new HttpAgentModelCatalog(),
     ),
     runAgent,
     agentContext,

@@ -156,6 +156,7 @@ export function installTeloApiMock(): TeloApiMock {
       saveConfiguration: vi.fn(),
       connectAccount: vi.fn(),
       disconnectAccount: vi.fn(),
+      listModels: vi.fn(async () => ({ models: [] })),
       run: vi.fn(),
       runChatSummary: vi.fn(),
       runChatExtraction: vi.fn(),

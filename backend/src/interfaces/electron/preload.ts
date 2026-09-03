@@ -3,6 +3,7 @@ import type { AGUIEvent } from "@ag-ui/core";
 
 import type {
   ConnectAgentAccountInput,
+  ListAgentModelsInput,
   SaveAgentConfigurationInput,
   TeloDesktopApi,
   TelegramAuthState,
@@ -103,6 +104,8 @@ const api: TeloDesktopApi = {
       ipcRenderer.invoke(channels.agentAccountConnect, input),
     disconnectAccount: (input: ConnectAgentAccountInput) =>
       ipcRenderer.invoke(channels.agentAccountDisconnect, input),
+    listModels: (input: ListAgentModelsInput) =>
+      ipcRenderer.invoke(channels.agentModelsList, input),
     run: (input) => ipcRenderer.invoke(channels.agentRun, input),
     runChatSummary: (input) =>
       ipcRenderer.invoke(channels.agentRunChatSummary, input),

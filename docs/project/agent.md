@@ -16,6 +16,8 @@ The panel resolves one of three states from the configuration loaded at startup:
 
 The default system instruction limits answers to the visible Telegram workspace. Turning off workspace inspection omits the inspection tool entirely.
 
+The model field is a searchable combobox. Once a credential exists for the selected vendor (Connect, a stored key, or a key typed in the form), the main process GETs that vendor's model list and the renderer shows the ids. The current id stays selected even when the vendor omitted it, and a typed id that is not in the list can still be saved. A failed fetch shows a user-safe error and does not invent a catalog. The renderer never receives the key or OAuth token used to list.
+
 Three tuning fields ride the same configuration: `temperature` (0–2, default 0.7) is handed to the provider, `maxSteps` (1–8, default 4) caps the tool-call rounds one run may take, and `historyLimit` (0–50, default 20) bounds how many prior thread turns are replayed — the newest are kept, and 0 replays none. The domain re-validates every bound and rejects out-of-range values by name; a configuration file written before these fields existed reads back with the defaults.
 
 ## Frontend component context

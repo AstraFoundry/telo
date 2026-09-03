@@ -73,9 +73,16 @@ describe("AgentConfigurationForm", () => {
     render(<AgentConfigurationForm />);
     await waitFor(() => {
       expect(
-        (screen.getByLabelText(copy.model) as HTMLInputElement).value,
+        (screen.getByRole("combobox", { name: copy.model }) as HTMLInputElement)
+          .value,
       ).toBe("gpt-4.1-mini");
     });
+  }
+
+  function modelField(): HTMLInputElement {
+    return screen.getByRole("combobox", {
+      name: copy.model,
+    }) as HTMLInputElement;
   }
 
   it("hides the base URL for a named account", async () => {
@@ -96,9 +103,7 @@ describe("AgentConfigurationForm", () => {
     await user.click(screen.getByRole("combobox", { name: copy.provider }));
     await user.click(screen.getByRole("option", { name: copy.anthropic }));
 
-    expect((screen.getByLabelText(copy.model) as HTMLInputElement).value).toBe(
-      "claude-sonnet-4-5",
-    );
+    expect(modelField().value).toBe("claude-sonnet-4-5");
     expect(screen.queryByLabelText(copy.baseUrl)).toBeNull();
     expect(screen.queryByLabelText(copy.apiKey)).toBeNull();
     expect(
@@ -144,9 +149,7 @@ describe("AgentConfigurationForm", () => {
     await user.click(screen.getByRole("combobox", { name: copy.provider }));
     await user.click(screen.getByRole("option", { name: copy.kimi }));
 
-    expect((screen.getByLabelText(copy.model) as HTMLInputElement).value).toBe(
-      "kimi-k2.5",
-    );
+    expect(modelField().value).toBe("kimi-k2.5");
     expect(screen.queryByLabelText(copy.apiKey)).toBeNull();
     await user.click(screen.getByRole("button", { name: copy.connectAccount }));
 
@@ -184,5 +187,52 @@ describe("AgentConfigurationForm", () => {
         name: new RegExp(`${copy.accountConnected}|${copy.disconnectAccount}`),
       }),
     ).toBeTruthy();
+  });
+
+  it("does not list models until a credential exists", async () => {
+    await renderForm();
+
+    expect(telo.agent.listModels).not.toHaveBeenCalled();
+  });
+
+  it("lists vendor models after Connect and keeps the current id", async () => {
+    const user = userEvent.setup();
+    telo.agent.listModels.mockResolvedValue({
+      models: [
+        { id: "claude-sonnet-4-5", label: "Sonnet 4.5" },
+        { id: "claude-opus-4-1", label: "Opus 4.1" },
+      ],
+    });
+    await renderForm();
+
+    await user.click(screen.getByRole("combobox", { name: copy.provider }));
+    await user.click(screen.getByRole("option", { name: copy.anthropic }));
+    await user.click(screen.getByRole("button", { name: copy.connectAccount }));
+
+    await waitFor(() => {
+      expect(telo.agent.listModels).toHaveBeenCalledWith({
+        provider: "anthropic",
+        baseUrl: null,
+        apiKey: undefined,
+      });
+    });
+    await user.click(modelField());
+    expect(screen.getByRole("option", { name: "Opus 4.1" })).toBeTruthy();
+    expect(modelField().value).toBe("claude-sonnet-4-5");
+  });
+
+  it("keeps the typed model when the vendor list fails", async () => {
+    const user = userEvent.setup();
+    telo.agent.listModels.mockRejectedValue(new Error("unauthorized"));
+    await renderForm();
+
+    await user.click(screen.getByRole("combobox", { name: copy.provider }));
+    await user.click(screen.getByRole("option", { name: copy.groq }));
+    await user.type(screen.getByLabelText(copy.apiKey), "gsk-test");
+
+    await waitFor(() => {
+      expect(screen.getByText(copy.modelsUnavailable)).toBeTruthy();
+    });
+    expect(modelField().value).toBe("llama-3.3-70b-versatile");
   });
 });
