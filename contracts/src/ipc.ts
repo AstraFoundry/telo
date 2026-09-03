@@ -444,6 +444,11 @@ export type TelegramWorkspaceEvent =
       readonly direction: "inbox" | "outbox";
     }
   | {
+      /**
+       * Catch-up / update-queue failures. The adapter logs these in the
+       * main process and no longer publishes this variant; the renderer
+       * ignores it if an older main process still emits one.
+       */
       readonly type: "sync-error";
       readonly message: string;
     }

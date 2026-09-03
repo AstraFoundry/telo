@@ -273,7 +273,6 @@ interface ChatState {
   loadingOlderMessages: boolean;
   chatCursor: ChatPageCursorDto | null;
   messageCursor: string | null;
-  syncError: string | null;
   connectionState: "offline" | "synchronizing" | "connected";
   composerTarget: ComposerTarget | null;
   /** Composer text per chat id, restored when switching back to a chat. */
@@ -503,7 +502,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
   loadingOlderMessages: false,
   chatCursor: null,
   messageCursor: null,
-  syncError: null,
   connectionState: "connected",
   composerTarget: null,
   drafts: {},
@@ -571,7 +569,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
         loading: false,
         loadingMoreChats: false,
         loadingOlderMessages: false,
-        syncError: null,
         drafts: hydrateDrafts(state.drafts, chats),
         notificationsEnabled: preferences.notificationsEnabled,
         notificationSenderName: preferences.notificationSenderName,
@@ -594,15 +591,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
             }));
           }
         },
-        (error: unknown) => {
-          if (request === selectionRequest) {
-            set({ syncError: errorMessage(error) });
-          }
+        () => {
+          // Folder unread is off the first-paint path. A GetDialogFilters
+          // failure stays in the main-process log: the chat list already
+          // painted, and the conversation header has no error strip.
         },
       );
-    } catch (error) {
+    } catch {
       if (request === selectionRequest) {
-        set({ loading: false, syncError: errorMessage(error) });
+        set({ loading: false });
       }
     }
   },
@@ -618,11 +615,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
         chats: mergeChats(state.chats, page.items),
         chatCursor: page.nextCursor,
         loadingMoreChats: false,
-        syncError: null,
         drafts: hydrateDrafts(state.drafts, page.items),
       }));
-    } catch (error) {
-      set({ syncError: errorMessage(error), loadingMoreChats: false });
+    } catch {
+      set({ loadingMoreChats: false });
     }
   },
   async select(chatId) {
@@ -654,13 +650,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
           messages: page.items,
           messageCursor: page.nextCursor,
           loading: false,
-          syncError: null,
           animateInMessageIds: [],
         });
       }
-    } catch (error) {
+    } catch {
       if (request === selectionRequest && get().activeChatId === chatId) {
-        set({ loading: false, syncError: errorMessage(error) });
+        set({ loading: false });
       }
     }
   },
@@ -682,11 +677,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
         messages: mergeMessages(page.items, state.messages),
         messageCursor: page.nextCursor,
         loadingOlderMessages: false,
-        syncError: null,
       }));
-    } catch (error) {
+    } catch {
       if (get().activeChatId === chatId) {
-        set({ syncError: errorMessage(error), loadingOlderMessages: false });
+        set({ loadingOlderMessages: false });
       }
     }
   },
@@ -981,15 +975,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
         ),
       }));
     } catch (error) {
-      // The upload failed: drop the optimistic bubbles and surface the error.
-      // The composer keeps the files and caption selected, so resubmitting
-      // retries the same send instead of losing the user's input. A
-      // user-cancelled upload also rejects, but only after the `cancelled`
-      // event — the user's own action is not a sync failure.
-      const cancelled = get().mediaUploads[uploadId]?.state === "cancelled";
+      // The upload failed: drop the optimistic bubbles. The composer keeps
+      // the files and caption selected, so resubmitting retries the same
+      // send. A cancelled upload also rejects, after the `cancelled` event.
+      // Neither case belongs in the conversation header — the composer
+      // already owns the upload-failure surface.
       set((state) => ({
         messages: state.messages.filter((entry) => entry.clientId !== clientId),
-        ...(cancelled ? {} : { syncError: errorMessage(error) }),
       }));
       throw error;
     }
@@ -1291,11 +1283,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
             loading: false,
           },
         }));
-      } catch (error) {
+      } catch {
         if (request === chatSearchRequest) {
           set((state) => ({
             chatSearch: { ...state.chatSearch, loading: false },
-            syncError: errorMessage(error),
           }));
         }
         return;
@@ -1387,8 +1378,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       return;
     }
     if (event.type === "sync-error") {
-      if (isInternalExceptionMessage(event.message)) return;
-      set({ syncError: event.message });
+      // Catch-up and update-queue failures stay in the main-process log.
+      // The conversation header has no error strip.
       return;
     }
     if (event.type === "chat-upsert") {
@@ -1467,7 +1458,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
               ? withIds(state.animateInMessageIds, [event.message.id])
               : state.animateInMessageIds,
           animateChatIds: promoted.moved ? [event.message.chatId] : [],
-          syncError: null,
         };
       });
       return;
@@ -1636,11 +1626,13 @@ async function runGlobalSearch(term: string): Promise<void> {
         globalSearching: false,
       });
     }
-  } catch (error) {
+  } catch {
     if (request === globalSearchRequest) {
+      // Search owns its empty state in the sidebar. A failed query must
+      // not raise the conversation-header banner.
       useChatStore.setState({
+        globalSearchResults: { chats: [], messages: [] },
         globalSearching: false,
-        syncError: errorMessage(error),
       });
     }
   }
@@ -1671,11 +1663,10 @@ async function runChatSearch(chatId: string, term: string): Promise<void> {
         jumpTarget: { chatId, messageId: first, requestId: ++jumpRequest },
       });
     }
-  } catch (error) {
+  } catch {
     if (request !== chatSearchRequest) return;
     useChatStore.setState((state) => ({
       chatSearch: { ...state.chatSearch, loading: false },
-      syncError: errorMessage(error),
     }));
   }
 }
@@ -1833,19 +1824,21 @@ function compareTelegramIds(left: string, right: string): number {
   return leftId < rightId ? -1 : leftId > rightId ? 1 : 0;
 }
 
-// A request that fails while the transport is down is a symptom of the
-// connection, not something the reader can act on — the chat list title
-// already reads "Connecting…". Telegram reports it the same way and never
-// raises a second error surface for it, so this yields null and the banner
-// stays closed. The failure is still logged in the main process.
+// Media-card and composer-action details. Language-level and disconnected
+// transport prose belong in the main-process log, not on those surfaces.
 function errorMessage(error: unknown): string | null {
-  if (useChatStore.getState().connectionState !== "connected") return null;
   const message = error instanceof Error ? error.message : String(error);
-  return isInternalExceptionMessage(message) ? copy.syncError : message;
+  if (isInternalExceptionMessage(message) || isTransportFailureMessage(message))
+    return null;
+  return message;
 }
 
 function isInternalExceptionMessage(message: string): boolean {
   return /is not callable|is not a function|instanceof|Cannot read propert/i.test(
     message,
   );
+}
+
+function isTransportFailureMessage(message: string): boolean {
+  return /cannot send requests while disconnected/i.test(message);
 }
