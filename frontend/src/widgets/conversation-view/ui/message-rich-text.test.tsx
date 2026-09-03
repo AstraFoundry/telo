@@ -43,7 +43,7 @@ describe("MessageRichText", () => {
     expect(container.textContent).toBe("🙂 bold");
   });
 
-  it("reveals spoiler content without an ornamental transition", () => {
+  it("reveals a spoiler on click and stops advertising the action", () => {
     render(
       <MessageRichText
         body="hidden"
@@ -58,6 +58,28 @@ describe("MessageRichText", () => {
       screen.queryByRole("button", { name: copy.revealSpoiler }),
     ).toBeNull();
     expect(screen.getByText("hidden")).toBeTruthy();
+  });
+
+  it("reveals every spoiler in the message from one click", () => {
+    render(
+      <MessageRichText
+        body="one and two"
+        entities={[
+          { type: "spoiler", offset: 0, length: 3 },
+          { type: "spoiler", offset: 8, length: 3 },
+        ]}
+        revealSpoilerLabel={copy.revealSpoiler}
+      />,
+    );
+
+    // Telegram flips the whole text object rather than the clicked run
+    // (history_view_element.cpp:1362), so one press uncovers both.
+    const runs = screen.getAllByRole("button", { name: copy.revealSpoiler });
+    expect(runs).toHaveLength(2);
+    fireEvent.click(runs[0]);
+    expect(
+      screen.queryAllByRole("button", { name: copy.revealSpoiler }),
+    ).toHaveLength(0);
   });
 
   it("keeps links inside spoilers non-interactive until the text is revealed", () => {
