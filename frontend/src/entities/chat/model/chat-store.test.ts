@@ -69,7 +69,6 @@ describe("chat-store", () => {
       loadingOlderMessages: false,
       chatCursor: null,
       messageCursor: null,
-      syncError: null,
       connectionState: "connected",
       composerTarget: null,
       drafts: {},
@@ -373,44 +372,41 @@ describe("chat-store", () => {
     expect(useChatStore.getState().connectionState).toBe("connected");
   });
 
-  it("receive() ignores language-level sync failures", () => {
-    useChatStore.getState().receive({
-      type: "sync-error",
-      message: "Right-hand side of 'instanceof' is not callable",
-    });
-    expect(useChatStore.getState().syncError).toBeNull();
+  it("receive() ignores sync-error events", () => {
+    const chats = [chat("a")];
+    useChatStore.setState({ chats, loading: false });
+    for (const message of [
+      "Right-hand side of 'instanceof' is not callable",
+      "Cannot send requests while disconnected. Please reconnect.",
+      "FLOOD_WAIT_30",
+    ]) {
+      useChatStore.getState().receive({ type: "sync-error", message });
+    }
+    expect(useChatStore.getState().chats).toEqual(chats);
+    expect(useChatStore.getState().loading).toBe(false);
   });
 
-  it("receive() keeps user-facing sync failures", () => {
-    useChatStore.getState().receive({
-      type: "sync-error",
-      message: "FLOOD_WAIT_30",
-    });
-    expect(useChatStore.getState().syncError).toBe("FLOOD_WAIT_30");
+  it("does not keep a request failure as renderer state", async () => {
+    const telo = installTeloApiMock();
+    telo.workspace.listChatPage.mockRejectedValue(new Error("FLOOD_WAIT_30"));
+    useChatStore.setState({ connectionState: "connected", loading: true });
+
+    await useChatStore.getState().load();
+
+    expect(useChatStore.getState().loading).toBe(false);
+    expect(useChatStore.getState().chats).toEqual([]);
   });
 
-  it("does not raise the error banner for a request that failed while offline", async () => {
+  it("settles loading when a request fails while offline", async () => {
     const telo = installTeloApiMock();
     telo.workspace.listChatPage.mockRejectedValue(
       new Error("Cannot send requests while disconnected. Please reconnect."),
     );
-    useChatStore.setState({ connectionState: "offline" });
+    useChatStore.setState({ connectionState: "offline", loading: true });
 
     await useChatStore.getState().load();
 
-    // The chat list title already reads "Connecting…"; a second surface
-    // repeating the transport state is what Telegram never does.
-    expect(useChatStore.getState().syncError).toBeNull();
-  });
-
-  it("still reports a request failure once the transport is up", async () => {
-    const telo = installTeloApiMock();
-    telo.workspace.listChatPage.mockRejectedValue(new Error("FLOOD_WAIT_30"));
-    useChatStore.setState({ connectionState: "connected" });
-
-    await useChatStore.getState().load();
-
-    expect(useChatStore.getState().syncError).toBe("FLOOD_WAIT_30");
+    expect(useChatStore.getState().loading).toBe(false);
   });
 
   it("receive() replaces the chat list after a live GetDialogs refresh", () => {
@@ -433,15 +429,26 @@ describe("chat-store", () => {
     expect(useChatStore.getState().chatCursor).toBeNull();
   });
 
-  it("load() maps language-level failures to the generic sync copy", async () => {
+  it("load() keeps the chat list when folder unread fails", async () => {
     const telo = installTeloApiMock();
-    telo.workspace.listChatPage.mockRejectedValue(
-      new TypeError("Right-hand side of 'instanceof' is not callable"),
-    );
+    telo.workspace.listChatPage.mockResolvedValue({
+      items: [chat("a")],
+      nextCursor: null,
+    });
+    telo.workspace.listMessagePage.mockResolvedValue({
+      items: [],
+      nextCursor: null,
+    });
+    telo.workspace.listFolders.mockRejectedValue(new Error("FLOOD_WAIT_30"));
 
     await useChatStore.getState().load();
+    await expect(
+      telo.workspace.listFolders.mock.results[0]?.value,
+    ).rejects.toThrow("FLOOD_WAIT_30");
 
-    expect(useChatStore.getState().syncError).toBe(copy.syncError);
+    expect(useChatStore.getState().chats.map((entry) => entry.id)).toEqual([
+      "a",
+    ]);
   });
 
   it("send() returns early when no chat is active", async () => {
@@ -1554,7 +1561,6 @@ describe("chat-store", () => {
     ).rejects.toThrow("Upload failed");
 
     expect(useChatStore.getState().messages).toEqual([message("m1", "a")]);
-    expect(useChatStore.getState().syncError).toBe("Upload failed");
   });
 
   it("loadCustomEmoji() caches the document and asks only once per id", async () => {
@@ -1640,7 +1646,7 @@ describe("chat-store", () => {
     });
   });
 
-  it("sendMedia() does not raise syncError for a user-cancelled upload", async () => {
+  it("sendMedia() drops optimistic bubbles on a user-cancelled upload", async () => {
     const telo = installTeloApiMock();
     telo.workspace.sendMedia.mockRejectedValue(
       new Error("Media upload was cancelled"),
@@ -1660,7 +1666,6 @@ describe("chat-store", () => {
     ).rejects.toThrow("Media upload was cancelled");
 
     expect(useChatStore.getState().messages).toEqual([message("m1", "a")]);
-    expect(useChatStore.getState().syncError).toBeNull();
   });
 
   it("sendMedia() refuses to send while an edit is pending", async () => {
@@ -1880,7 +1885,6 @@ describe("chat-store search", () => {
       chats: [],
       messages: [],
       activeChatId: null,
-      syncError: null,
       searchQuery: "",
       globalSearchResults: null,
       globalSearching: false,
@@ -1936,6 +1940,20 @@ describe("chat-store search", () => {
     expect(telo.workspace.searchGlobal).toHaveBeenCalledTimes(1);
   });
 
+  it("does not raise the conversation banner when global search fails", async () => {
+    const telo = installTeloApiMock();
+    telo.workspace.searchGlobal.mockRejectedValue(new Error("FLOOD_WAIT_30"));
+
+    useChatStore.getState().setSearchQuery("repo");
+    await vi.advanceTimersByTimeAsync(300);
+
+    expect(useChatStore.getState().globalSearching).toBe(false);
+    expect(useChatStore.getState().globalSearchResults).toEqual({
+      chats: [],
+      messages: [],
+    });
+  });
+
   it("stores in-chat matches newest first and jumps to the latest", async () => {
     const telo = installTeloApiMock();
     telo.workspace.searchMessages.mockResolvedValue({
@@ -1956,6 +1974,18 @@ describe("chat-store search", () => {
     expect(state.chatSearch.cursor).toBe("m2");
     expect(state.jumpTarget).toMatchObject({ chatId: "a", messageId: "m3" });
     expect(telo.workspace.searchMessages).toHaveBeenCalledWith("a", "rep");
+  });
+
+  it("does not raise the conversation banner when in-chat search fails", async () => {
+    const telo = installTeloApiMock();
+    telo.workspace.searchMessages.mockRejectedValue(new Error("FLOOD_WAIT_30"));
+    useChatStore.setState({ activeChatId: "a" });
+
+    useChatStore.getState().openChatSearch();
+    useChatStore.getState().setChatSearchQuery("rep");
+    await vi.advanceTimersByTimeAsync(300);
+
+    expect(useChatStore.getState().chatSearch.loading).toBe(false);
   });
 
   it("advances through matches and pages the server when they run out", async () => {

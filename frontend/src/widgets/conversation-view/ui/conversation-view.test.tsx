@@ -683,6 +683,23 @@ describe("ConversationView", () => {
     expect(screen.queryByText(copy.connectionSynchronizing)).toBeNull();
   });
 
+  it("does not paint a sync failure under the conversation header", async () => {
+    const { useChatStore } = await renderView();
+
+    act(() => {
+      useChatStore.getState().receive({
+        type: "sync-error",
+        message: copy.syncError,
+      });
+      useChatStore.getState().receive({
+        type: "sync-error",
+        message: "FLOOD_WAIT_30",
+      });
+    });
+    expect(screen.queryByText(copy.syncError)).toBeNull();
+    expect(screen.queryByText("FLOOD_WAIT_30")).toBeNull();
+  });
+
   it("renders outgoing bubbles with the accent tint variant", async () => {
     const { container } = await renderView({
       messages: [

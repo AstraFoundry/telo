@@ -28,6 +28,7 @@ export const copy = {
   messageRead: "Read",
   resendMessage: "Resend",
   conversation: "Conversation",
+  // Never painted. E2E and widget tests assert this string is absent.
   syncError: "Telegram sync issue",
   connectionOffline: "Connecting…",
   connectionSynchronizing: "Updating…",
