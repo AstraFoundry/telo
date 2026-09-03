@@ -177,6 +177,11 @@ export function registerIpc(container: ApplicationContainer): void {
       container.messageActions.forwardMessage(input),
   );
   ipcMain.handle(
+    channels.botCallbackAnswer,
+    (_event, chatId: string, messageId: string, buttonId: string) =>
+      container.messageActions.answerBotCallback(chatId, messageId, buttonId),
+  );
+  ipcMain.handle(
     channels.chatPinSet,
     (_event, chatId: string, pinned: boolean) =>
       container.chatActions.setPinned(chatId, pinned),

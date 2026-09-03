@@ -34,6 +34,7 @@ import {
 
 import type {
   MessageAgentActionTone,
+  MessageButtonDto,
   MessageDto,
   MessageForwardDto,
   TimeFormatPreference,
@@ -56,9 +57,12 @@ import { ChatProfileToggle } from "features/toggle-chat-profile";
 import { copy } from "shared/config/copy";
 import { useEdgeSentinel } from "shared/lib/use-edge-sentinel";
 import { useHotkeys } from "shared/lib/use-hotkeys";
+import { safeLink } from "shared/lib/safe-link";
 import {
   Avatar,
   Button,
+  CenterMorphModal,
+  CenterMorphModalContent,
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
@@ -73,6 +77,7 @@ import {
   MessageContent,
   MessageFooter,
   MessageHeader,
+  MessageKeyboard,
   MessageMarker,
   MessageScroller,
   MessageTyping,
@@ -324,6 +329,93 @@ function DeliveryGlyph({ status }: { status: MessageDto["status"] }) {
 // account, whose peer id a not-yet-acknowledged placeholder does not carry.
 function authorKey(message: MessageDto): string {
   return message.outgoing ? "self" : `peer:${message.senderId}`;
+}
+
+const BOT_KEYBOARD_LABELS = {
+  keyboard: copy.botKeyboard,
+  unsupported: copy.botButtonUnsupported,
+} as const;
+
+/**
+ * A bot's inline keyboard under one bubble, plus the answer a press produces.
+ *
+ * The press state is per message and never outlives it, so it stays here
+ * rather than in the chat store — the same reason the sticker-set sheet owns
+ * its own fetch. Telegram's answer precedence is the adapter's job; this only
+ * decides where each shape is shown: an alert is a modal, a plain message is
+ * a line under the keyboard, and a url opens outside the app.
+ */
+function BotKeyboard({ message }: { message: MessageDto }) {
+  const [pendingButtonId, setPendingButtonId] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [alert, setAlert] = useState<string | null>(null);
+  const noticeTimer = useRef<number | undefined>(undefined);
+
+  useEffect(() => () => window.clearTimeout(noticeTimer.current), []);
+
+  const showNotice = (text: string) => {
+    setNotice(text);
+    window.clearTimeout(noticeTimer.current);
+    // Telegram's toast for a bot answer lives 3s (`components/toast.ts:32`).
+    noticeTimer.current = window.setTimeout(() => setNotice(null), 3000);
+  };
+
+  const press = async (button: MessageButtonDto) => {
+    if (button.kind === "copy") {
+      await navigator.clipboard?.writeText(button.copyText ?? button.text);
+      showNotice(copy.copied);
+      return;
+    }
+    if (button.kind !== "callback") return;
+    setPendingButtonId(button.id);
+    try {
+      const answer = await window.telo.workspace.answerBotCallback(
+        message.chatId,
+        message.id,
+        button.id,
+      );
+      if (answer.kind === "message") {
+        if (answer.alert) setAlert(answer.text);
+        else showNotice(answer.text);
+      } else if (answer.kind === "url") {
+        const target = safeLink(answer.url);
+        if (target) window.open(target, "_blank", "noreferrer");
+      }
+    } catch (error) {
+      showNotice(
+        error instanceof Error
+          ? `${copy.botButtonFailed}: ${error.message}`
+          : copy.botButtonFailed,
+      );
+    } finally {
+      setPendingButtonId(null);
+    }
+  };
+
+  return (
+    <>
+      <MessageKeyboard
+        keyboard={message.keyboard!}
+        pendingButtonId={pendingButtonId}
+        notice={notice}
+        labels={BOT_KEYBOARD_LABELS}
+        onPress={(button) => void press(button)}
+      />
+      <CenterMorphModal
+        open={alert !== null}
+        onOpenChange={(open) => {
+          if (!open) setAlert(null);
+        }}
+      >
+        <CenterMorphModalContent
+          ariaLabel={copy.botKeyboard}
+          closeButtonLabel={copy.closeDialog}
+        >
+          <p className="max-w-sm p-5 text-sm">{alert}</p>
+        </CenterMorphModalContent>
+      </CenterMorphModal>
+    </>
+  );
 }
 
 /**
@@ -670,6 +762,7 @@ function ConversationMessage({
                       renderCustomEmoji={renderCustomEmoji}
                     />
                   ) : null}
+                  {message.keyboard ? <BotKeyboard message={message} /> : null}
                 </MessageBubbleContent>
               </MessageBubble>
             )}
@@ -915,6 +1008,7 @@ function AlbumMessage({
                 renderCustomEmoji={renderCustomEmoji}
               />
             ) : null}
+            {first.keyboard ? <BotKeyboard message={first} /> : null}
           </MessageBubbleContent>
         </MessageBubble>
         <MessageFooter className="text-foreground/70 tabular-nums">

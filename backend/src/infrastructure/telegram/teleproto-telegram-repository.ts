@@ -24,6 +24,7 @@ import {
 import { ChannelInvalidError, FloodWaitError } from "teleproto/errors/index.js";
 
 import type {
+  BotCallbackAnswerDto,
   ChatDto,
   ChatFolderDto,
   ChatMemberDto,
@@ -85,7 +86,9 @@ import {
   messageGroupedId,
   stickerFormat,
 } from "./teleproto-message-media";
+import { mapBotCallbackAnswer, mapReplyMarkup } from "./teleproto-reply-markup";
 import { stickerOutlineOf } from "./sticker-outline";
+import { countStickersHash } from "./sticker-hash";
 import {
   buildChatFolders,
   dialogFolderId,
@@ -130,6 +133,16 @@ type ForwardTarget = {
   readonly messageId: string | null;
 };
 
+// The installed sticker list as this adapter last resolved it. `hash` is the
+// value messages.getAllStickers is to be called with, computed over the same
+// sets the server hashed. `documents` holds what the DTO media ids point at,
+// so a not-modified answer can keep them reachable without refetching a set.
+type CachedStickerSets = {
+  readonly hash: bigint;
+  readonly sets: ReadonlyArray<StickerSetDto>;
+  readonly documents: ReadonlyArray<Api.Document>;
+};
+
 const AVATAR_DOWNLOAD_CONCURRENCY = 3;
 const AVATAR_CACHE_LIMIT = 200;
 // Global search scans the most recent dialogs for title matches; message
@@ -150,6 +163,13 @@ const STICKER_MEDIA_PREFIX = "sticker/";
 // such an install many times over, and evicting the least recently used ids
 // past it only costs another listing.
 const STICKER_DOCUMENT_CACHE_LIMIT = 4000;
+// Callback payloads of the inline keyboards this connection has mapped, so a
+// press can hand Telegram back the exact bytes the bot authored. Keyboards
+// are rare next to plain messages and only a mapped one can be pressed, so a
+// few transcript pages' worth is generous; the least recently used message
+// falls out past it, and its buttons then report themselves as gone rather
+// than sending a payload from the wrong message.
+const CALLBACK_DATA_MESSAGE_LIMIT = 500;
 // The cache file name carries the extension the renderer sniffs a sticker's
 // encoding from. Set documents rarely publish a filename attribute, so the
 // name comes from the format their mime type already decides.
@@ -550,6 +570,14 @@ export class TelegramClientCoordinator implements TelegramRepository {
     return this.repository.forwardMessage(input);
   }
 
+  answerBotCallback(
+    chatId: string,
+    messageId: string,
+    buttonId: string,
+  ): Promise<BotCallbackAnswerDto> {
+    return this.repository.answerBotCallback(chatId, messageId, buttonId);
+  }
+
   setChatPinned(chatId: string, pinned: boolean): Promise<void> {
     return this.repository.setChatPinned(chatId, pinned);
   }
@@ -663,6 +691,21 @@ class TeleprotoRepository implements TelegramRepository {
   // the media id the picker or the set sheet hands back. Least-recently-used
   // order, bounded like the avatars.
   private readonly stickerDocuments = new Map<string, Api.Document>();
+  // Inline keyboard callback payloads, indexed per message: the outer key is
+  // `chatId:messageId` and the inner one is the button id, so a press names
+  // the triple it was mapped under. The message is the eviction unit because
+  // a keyboard's buttons live and die together — half a keyboard is never
+  // useful, and pressing any of them refreshes the whole message's recency.
+  // Least-recently-used order, bounded like the sticker documents.
+  private readonly messageCallbackData = new Map<
+    string,
+    ReadonlyMap<string, Buffer>
+  >();
+  // The picker's installed sets, kept beside the hash Telegram is to be asked
+  // with next time. While the account's list is unchanged Telegram answers
+  // that hash with messages.allStickersNotModified, which is the whole point:
+  // reopening the picker then costs one request instead of one per set.
+  private stickerSets: CachedStickerSets | null = null;
   private readonly mediaUploads = new Map<string, UploadProgress>();
   // Cached dialog filters (custom folders); loaded with the first chat page
   // and refreshed when Telegram reports filter/folder changes.
@@ -1236,17 +1279,63 @@ class TeleprotoRepository implements TelegramRepository {
   // The picker draws the account's installed sets, which Telegram answers in
   // two steps: the set headers, then the documents of each set. The per-set
   // requests run one after another on purpose — Telegram rate-limits a burst
-  // of them, and the picker loads this list once.
+  // of them.
+  //
+  // Every reopen of the picker calls this, so the resolved list is cached and
+  // the request carries the hash Telegram's own clients send: while the
+  // account's sets are unchanged the answer is messages.allStickersNotModified
+  // and not a single GetStickerSet runs.
   async listStickerSets(): Promise<ReadonlyArray<StickerSetDto>> {
+    const cached = this.stickerSets;
     const installed = await this.client.invoke(
-      new Api.messages.GetAllStickers({}),
+      new Api.messages.GetAllStickers({
+        // teleproto's TL layer takes big-integer values, not native bigint.
+        hash: helpers.returnBigInt(cached?.hash ?? 0n),
+      }),
     );
-    // messages.allStickersNotModified answers a hash this adapter never sends.
-    if (!("sets" in installed)) return [];
+    if (!("sets" in installed)) {
+      // messages.allStickersNotModified: the list still hashes to what was
+      // sent, so the cached DTOs stand as they are. Their sticker documents
+      // are another matter — the media ids in them are only downloadable and
+      // sendable while `stickerDocuments` still holds the document behind
+      // each, and that map is a bounded LRU other sticker traffic (custom
+      // emoji, the set sheet) evicts from. Nothing on this path resolves them
+      // again, so touching them here is what keeps the list usable.
+      if (cached) {
+        for (const document of cached.documents) {
+          this.cacheStickerDocument(
+            `${STICKER_MEDIA_PREFIX}${document.id}`,
+            document,
+          );
+        }
+        return cached.sets;
+      }
+      // Only reachable with the zero hash, which the empty list also hashes
+      // to: an account with no installed sets.
+      return [];
+    }
     const sets: StickerSetDto[] = [];
+    const documents: Api.Document[] = [];
+    let complete = true;
     for (const set of installed.sets) {
       const resolved = await this.stickerSet(set);
-      if (resolved) sets.push(resolved);
+      if (!resolved) {
+        complete = false;
+        continue;
+      }
+      sets.push(resolved.set);
+      documents.push(...resolved.documents);
+    }
+    // A list missing a set Telegram refused would otherwise be pinned by a
+    // hash that keeps matching, hiding that set until the account installs or
+    // removes something. Leaving the cache alone costs a full resolve next
+    // time and gives the failed set another chance.
+    if (complete) {
+      this.stickerSets = {
+        hash: countStickersHash(installed.sets),
+        sets,
+        documents,
+      };
     }
     return sets;
   }
@@ -1254,9 +1343,10 @@ class TeleprotoRepository implements TelegramRepository {
   // One set failing — a pack Telegram pulled, a flood wait on that id — must
   // not cost the picker every other installed set, so it drops out of the
   // list instead of rejecting it.
-  private async stickerSet(
-    set: Api.TypeStickerSet,
-  ): Promise<StickerSetDto | null> {
+  private async stickerSet(set: Api.TypeStickerSet): Promise<{
+    readonly set: StickerSetDto;
+    readonly documents: ReadonlyArray<Api.Document>;
+  } | null> {
     try {
       const resolved = await this.client.invoke(
         new Api.messages.GetStickerSet({
@@ -1270,9 +1360,10 @@ class TeleprotoRepository implements TelegramRepository {
       if (!("documents" in resolved)) {
         throw new Error("Telegram returned no documents for the set");
       }
+      const documents = stickerDocumentsOf(resolved.documents);
       // GetAllStickers answers with the account's own sets, so every set this
       // path maps is installed by definition.
-      return this.stickerSetOf(set, resolved.documents, true);
+      return { set: this.stickerSetOf(set, documents, true), documents };
     } catch (error) {
       console.error(`Telegram sticker set ${set.shortName} failed`, error);
       return null;
@@ -1303,7 +1394,7 @@ class TeleprotoRepository implements TelegramRepository {
     }
     return this.stickerSetOf(
       resolved.set,
-      resolved.documents,
+      stickerDocumentsOf(resolved.documents),
       resolved.set.installedDate !== undefined,
     );
   }
@@ -1319,11 +1410,17 @@ class TeleprotoRepository implements TelegramRepository {
       await this.client.invoke(
         new Api.messages.InstallStickerSet({ stickerset, archived: false }),
       );
-      return;
+    } else {
+      await this.client.invoke(
+        new Api.messages.UninstallStickerSet({ stickerset }),
+      );
     }
-    await this.client.invoke(
-      new Api.messages.UninstallStickerSet({ stickerset }),
-    );
+    // The cache is a claim about which sets the account has installed, and
+    // this call just falsified it. Telegram would also refuse the now-stale
+    // hash and answer with the full list, but that is the server noticing a
+    // change this client made itself: dropping the cache here keeps the claim
+    // honest without waiting to be corrected.
+    this.stickerSets = null;
   }
 
   // A custom-emoji entity names a bare document id. Those documents are
@@ -1352,7 +1449,7 @@ class TeleprotoRepository implements TelegramRepository {
   // short name — end at the same set and documents, so they map here.
   private stickerSetOf(
     set: Api.StickerSet,
-    documents: ReadonlyArray<Api.TypeDocument>,
+    documents: ReadonlyArray<Api.Document>,
     installed: boolean,
   ): StickerSetDto {
     return {
@@ -1360,11 +1457,7 @@ class TeleprotoRepository implements TelegramRepository {
       title: set.title,
       shortName: set.shortName,
       installed,
-      stickers: documents
-        // documentEmpty is a sticker Telegram no longer serves; it carries
-        // no mime type, so there is nothing to draw or send.
-        .filter((document): document is Api.Document => "mimeType" in document)
-        .map((document) => this.stickerItem(document)),
+      stickers: documents.map((document) => this.stickerItem(document)),
     };
   }
 
@@ -1694,6 +1787,58 @@ class TeleprotoRepository implements TelegramRepository {
       // its author attribution and reads as the sender's own message.
       dropAuthor: input.hideSender ?? false,
     });
+  }
+
+  async answerBotCallback(
+    chatId: string,
+    messageId: string,
+    buttonId: string,
+  ): Promise<BotCallbackAnswerDto> {
+    const answer = await this.client.invoke(
+      new Api.messages.GetBotCallbackAnswer({
+        peer: chatId,
+        msgId: telegramMessageId(messageId),
+        data: this.callbackData(chatId, messageId, buttonId),
+      }),
+    );
+    return mapBotCallbackAnswer(answer);
+  }
+
+  // Only a mapped keyboard can be pressed, and only its callback buttons
+  // carry a payload. An id that resolves to neither is not a press this
+  // client can make: the button may be a url or copy control the renderer
+  // should have handled itself, or it may belong to a message this cache has
+  // since evicted. Either way, guessing a payload would press the wrong
+  // button, so the press fails naming the button — the way an unknown
+  // sticker id fails its download.
+  private callbackData(
+    chatId: string,
+    messageId: string,
+    buttonId: string,
+  ): Buffer {
+    const key = `${chatId}:${messageId}`;
+    const buttons = this.messageCallbackData.get(key);
+    const data = buttons?.get(buttonId);
+    if (!buttons || !data) {
+      throw new Error(
+        `Telegram callback button ${buttonId} of message ${messageId} was not found`,
+      );
+    }
+    this.cacheCallbackData(key, buttons);
+    return data;
+  }
+
+  private cacheCallbackData(
+    key: string,
+    buttons: ReadonlyMap<string, Buffer>,
+  ): void {
+    this.messageCallbackData.delete(key);
+    this.messageCallbackData.set(key, buttons);
+    while (this.messageCallbackData.size > CALLBACK_DATA_MESSAGE_LIMIT) {
+      const oldest = this.messageCallbackData.keys().next().value;
+      if (oldest === undefined) break;
+      this.messageCallbackData.delete(oldest);
+    }
   }
 
   async setChatPinned(chatId: string, pinned: boolean): Promise<void> {
@@ -2271,6 +2416,12 @@ class TeleprotoRepository implements TelegramRepository {
     if (photoEntity) this.scheduleAvatar(sender.id, photoEntity);
     const senderAvatarPending = Boolean(photoEntity);
     const senderAvatarUrl = this.cachedAvatar(sender.id);
+    // Mapping the keyboard is also what makes it pressable: the callback
+    // payloads are indexed here, under the ids the returned buttons carry.
+    const keyboard = mapReplyMarkup(message.replyMarkup);
+    if (keyboard) {
+      this.cacheCallbackData(`${chatId}:${message.id}`, keyboard.callbackData);
+    }
     return {
       id: message.id.toString(),
       chatId,
@@ -2294,6 +2445,7 @@ class TeleprotoRepository implements TelegramRepository {
           ? new Date(message.editDate * 1000).toISOString()
           : null,
       forwardedFrom: await this.resolveForward(message),
+      keyboard: keyboard?.keyboard ?? null,
     };
   }
 
@@ -2442,6 +2594,17 @@ function forwardTarget(header: Api.MessageFwdHeader): ForwardTarget | null {
   }
   if (header.fromId) return { peer: header.fromId, messageId: null };
   return null;
+}
+
+// documentEmpty is a sticker Telegram no longer serves: it carries no mime
+// type, so there is nothing to draw or send, and it drops out before anything
+// downstream has to narrow the union again.
+function stickerDocumentsOf(
+  documents: ReadonlyArray<Api.TypeDocument>,
+): ReadonlyArray<Api.Document> {
+  return documents.filter(
+    (document): document is Api.Document => "mimeType" in document,
+  );
 }
 
 // Telegram keeps the emoji a sticker stands for on DocumentAttributeSticker,

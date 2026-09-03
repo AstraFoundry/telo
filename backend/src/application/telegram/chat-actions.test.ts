@@ -42,6 +42,7 @@ function repository(): TelegramRepository {
     editMessage: vi.fn(async () => undefined),
     deleteMessage: vi.fn(async () => undefined),
     forwardMessage: vi.fn(async () => undefined),
+    answerBotCallback: vi.fn(async () => ({ kind: "none" }) as const),
     setChatPinned: vi.fn(async () => undefined),
     setChatMuted: vi.fn(async () => undefined),
     setChatRead: vi.fn(async () => undefined),

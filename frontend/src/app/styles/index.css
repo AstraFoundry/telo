@@ -164,6 +164,18 @@
   }
 }
 
+/* Callback button in flight: tdesktop sweeps a glare across the button while
+   `messages.getBotCallbackAnswer` is pending, one 1100ms pass at a time
+   (`history_view_element.cpp:344-401`). Transform only, so it composites. */
+@keyframes telo-button-glare {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+
 /* Theme toggle: circular reveal from the last pointer. No page blur. */
 ::view-transition-old(root) {
   animation: none;

@@ -323,7 +323,18 @@ const fake = vi.hoisted(() => {
       this.shortName = params.shortName;
     }
   }
-  class FakeGetAllStickers {}
+  class FakeGetAllStickers {
+    hash: unknown;
+    constructor(params: { hash: unknown }) {
+      this.hash = params.hash;
+    }
+  }
+  class FakeGetCustomEmojiDocuments {
+    documentId: unknown;
+    constructor(params: { documentId: unknown }) {
+      this.documentId = params.documentId;
+    }
+  }
   class FakeGetStickerSet {
     stickerset: unknown;
     hash: unknown;
@@ -344,6 +355,44 @@ const fake = vi.hoisted(() => {
     stickerset: unknown;
     constructor(params: { stickerset: unknown }) {
       this.stickerset = params.stickerset;
+    }
+  }
+  // The inline keyboard constructors the message mapper narrows on, plus the
+  // request a press sends. Only the fields the adapter reads are modelled.
+  class FakeReplyInlineMarkup {
+    rows: ReadonlyArray<{ buttons: ReadonlyArray<unknown> }>;
+    constructor(params: {
+      rows: ReadonlyArray<{ buttons: ReadonlyArray<unknown> }>;
+    }) {
+      this.rows = params.rows;
+    }
+  }
+  class FakeInlineButtonTypeCallback {
+    data: Buffer;
+    constructor(params: { data: Buffer }) {
+      this.data = params.data;
+    }
+  }
+  class FakeInlineButtonTypeUrl {
+    url: string;
+    constructor(params: { url: string }) {
+      this.url = params.url;
+    }
+  }
+  class FakeInlineButtonTypeCopy {
+    copyText: string;
+    constructor(params: { copyText: string }) {
+      this.copyText = params.copyText;
+    }
+  }
+  class FakeGetBotCallbackAnswer {
+    peer: unknown;
+    msgId: unknown;
+    data: unknown;
+    constructor(params: { peer: unknown; msgId: unknown; data: unknown }) {
+      this.peer = params.peer;
+      this.msgId = params.msgId;
+      this.data = params.data;
     }
   }
 
@@ -367,10 +416,16 @@ const fake = vi.hoisted(() => {
     FakeMessageMediaDocument,
     FakeInputStickerSetID,
     FakeGetAllStickers,
+    FakeGetCustomEmojiDocuments,
     FakeGetStickerSet,
     FakeInputStickerSetShortName,
     FakeInstallStickerSet,
     FakeUninstallStickerSet,
+    FakeReplyInlineMarkup,
+    FakeInlineButtonTypeCallback,
+    FakeInlineButtonTypeUrl,
+    FakeInlineButtonTypeCopy,
+    FakeGetBotCallbackAnswer,
   };
 });
 
@@ -393,6 +448,10 @@ vi.mock("teleproto", () => ({
     MessageMediaDocument: fake.FakeMessageMediaDocument,
     InputStickerSetID: fake.FakeInputStickerSetID,
     InputStickerSetShortName: fake.FakeInputStickerSetShortName,
+    ReplyInlineMarkup: fake.FakeReplyInlineMarkup,
+    InlineButtonTypeCallback: fake.FakeInlineButtonTypeCallback,
+    InlineButtonTypeUrl: fake.FakeInlineButtonTypeUrl,
+    InlineButtonTypeCopy: fake.FakeInlineButtonTypeCopy,
     users: { GetFullUser: fake.FakeGetFullUser },
     channels: { GetFullChannel: fake.FakeGetFullChannel },
     messages: {
@@ -400,8 +459,13 @@ vi.mock("teleproto", () => ({
       GetStickerSet: fake.FakeGetStickerSet,
       InstallStickerSet: fake.FakeInstallStickerSet,
       UninstallStickerSet: fake.FakeUninstallStickerSet,
+      GetCustomEmojiDocuments: fake.FakeGetCustomEmojiDocuments,
+      GetBotCallbackAnswer: fake.FakeGetBotCallbackAnswer,
     },
   },
+  // teleproto's own returnBigInt normalises into its big-integer type; the
+  // identity keeps the value the adapter computed assertable as a bigint.
+  helpers: { returnBigInt: (value: unknown) => value },
 }));
 vi.mock("teleproto/sessions/index.js", () => ({ StringSession: class {} }));
 
@@ -545,6 +609,10 @@ const stickerSetHeader = {
   accessHash: BigInt(99),
   title: "Telo Faces",
   shortName: "telofaces",
+  // The per-set content hash the list hash is folded from. With a single
+  // installed set the fold is `0 mixed to 0, plus this`, so the list hash the
+  // next messages.getAllStickers carries is exactly this number.
+  hash: 1234,
 };
 
 const photoFile = {
@@ -579,7 +647,7 @@ describe("TelegramClientCoordinator", () => {
       displayName: "Demo User",
     });
     expect((await coordinator.listChatPage({ limit: 100 })).items).toHaveLength(
-      4,
+      5,
     );
   });
 
@@ -2303,6 +2371,114 @@ describe("TelegramClientCoordinator", () => {
     }
   });
 
+  it("sends the computed list hash and skips the set requests when Telegram answers not-modified", async () => {
+    const coordinator = await connectedCoordinator();
+    const documents = [
+      fakeStickerDocument(501, { mimeType: "image/webp", emoji: "😀" }),
+    ];
+    const listHashes: string[] = [];
+    let setRequests = 0;
+    let notModified = false;
+    FakeTelegramClient.invokeBehavior = async (request) => {
+      if (request instanceof fake.FakeGetAllStickers) {
+        listHashes.push(String(request.hash));
+        // messages.allStickersNotModified carries no `sets` field at all.
+        return notModified ? {} : { sets: [stickerSetHeader] };
+      }
+      if (!(request instanceof fake.FakeGetStickerSet)) {
+        throw new Error("Expected a messages.GetStickerSet request");
+      }
+      setRequests += 1;
+      return { documents };
+    };
+
+    const first = await coordinator.listStickerSets();
+    notModified = true;
+    const second = await coordinator.listStickerSets();
+
+    // Nothing is cached for the first call, so it sends the zero hash; the
+    // second sends what the answered list folds to.
+    expect(listHashes).toEqual(["0", "1234"]);
+    // The not-modified answer stands in for the whole list, so not one set is
+    // fetched again.
+    expect(setRequests).toBe(1);
+    expect(second).toEqual(first);
+  });
+
+  it("keeps a not-modified list's stickers downloadable after other stickers flood the document cache", async () => {
+    const directory = await mkdtemp(path.join(os.tmpdir(), "telo-notmod-"));
+    try {
+      const { coordinator } = createCoordinator({
+        session: "stored-session",
+        credentials: { apiId: 7, apiHash: "hash" },
+        mediaCacheDirectory: directory,
+      });
+      await coordinator.initialize();
+      const document = fakeStickerDocument(501, {
+        mimeType: "image/webp",
+        emoji: "😀",
+      });
+      // As many documents as STICKER_DOCUMENT_CACHE_LIMIT, so caching them
+      // all pushes exactly one entry out: the picker's sticker, the oldest.
+      const flood = Array.from({ length: 4000 }, (_, index) =>
+        fakeStickerDocument(10_000 + index, { mimeType: "image/webp" }),
+      );
+      let notModified = false;
+      FakeTelegramClient.invokeBehavior = async (request) => {
+        if (request instanceof fake.FakeGetAllStickers) {
+          return notModified ? {} : { sets: [stickerSetHeader] };
+        }
+        if (request instanceof fake.FakeGetCustomEmojiDocuments) return flood;
+        return { documents: [document] };
+      };
+      FakeTelegramClient.downloadMediaBehavior = async (_media, params) => {
+        await writeFile(params.outputFile, "sticker-bytes");
+      };
+
+      await coordinator.listStickerSets();
+      await coordinator.getCustomEmoji(flood.map((entry) => String(entry.id)));
+      notModified = true;
+      await coordinator.listStickerSets();
+
+      // Drawing a listed sticker needs the document behind its media id, not
+      // the DTO: the id outlived the flood only because the not-modified path
+      // put that document back instead of trusting the cached DTOs alone.
+      await coordinator.downloadMedia("sticker/501");
+      expect(FakeTelegramClient.instances.at(-1)?.downloadMediaCalls).toEqual([
+        expect.objectContaining({ document }),
+      ]);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("resolves the installed list again after the account installs a set", async () => {
+    const coordinator = await connectedCoordinator();
+    const documents = [
+      fakeStickerDocument(501, { mimeType: "image/webp", emoji: "😀" }),
+    ];
+    const listHashes: string[] = [];
+    let setRequests = 0;
+    FakeTelegramClient.invokeBehavior = async (request) => {
+      if (request instanceof fake.FakeGetAllStickers) {
+        listHashes.push(String(request.hash));
+        return { sets: [stickerSetHeader] };
+      }
+      if (request instanceof fake.FakeInstallStickerSet) return {};
+      setRequests += 1;
+      return { documents };
+    };
+
+    await coordinator.listStickerSets();
+    await coordinator.setStickerSetInstalled("teloocto", true);
+    await coordinator.listStickerSets();
+
+    // The install falsified the cached list, so the next call asks with the
+    // zero hash again and resolves the sets it is answered with.
+    expect(listHashes).toEqual(["0", "0"]);
+    expect(setRequests).toBe(2);
+  });
+
   it("downloads a set sticker from its cached document, not from a message", async () => {
     const directory = await mkdtemp(path.join(os.tmpdir(), "telo-stickers-"));
     try {
@@ -2940,5 +3116,171 @@ describe("TelegramClientCoordinator", () => {
         "upload-5",
       ),
     ).resolves.toHaveLength(1);
+  });
+
+  // One bot message carrying every button kind, so mapping and pressing are
+  // exercised against the same keyboard the adapter indexed.
+  function botMessage() {
+    return {
+      id: 77,
+      message: "Build 482 finished",
+      date: 1_700_000_077,
+      out: false,
+      getSender: async () => ({ firstName: "Telo Bot" }),
+      replyMarkup: new fake.FakeReplyInlineMarkup({
+        rows: [
+          {
+            buttons: [
+              {
+                text: "Approve",
+                type: new fake.FakeInlineButtonTypeCallback({
+                  data: Buffer.from("approve:482"),
+                }),
+              },
+              {
+                text: "Logs",
+                type: new fake.FakeInlineButtonTypeUrl({
+                  url: "https://example.com/logs",
+                }),
+              },
+            ],
+          },
+          { buttons: [] },
+          {
+            buttons: [
+              {
+                text: "Copy id",
+                type: new fake.FakeInlineButtonTypeCopy({
+                  copyText: "build-482",
+                }),
+              },
+              { text: "Play", type: {} },
+            ],
+          },
+        ],
+      }),
+    };
+  }
+
+  async function mappedBotKeyboard(): Promise<TelegramClientCoordinator> {
+    const coordinator = await connectedCoordinator();
+    FakeTelegramClient.getMessagesBehavior = async () => [botMessage()];
+    await coordinator.listMessagePage("chat-1", { limit: 50 });
+    return coordinator;
+  }
+
+  it("maps a bot's inline keyboard onto the message it belongs to", async () => {
+    const coordinator = await connectedCoordinator();
+    FakeTelegramClient.getMessagesBehavior = async () => [botMessage()];
+
+    const page = await coordinator.listMessagePage("chat-1", { limit: 50 });
+
+    expect(page.items[0]?.keyboard).toEqual({
+      rows: [
+        [
+          { id: "0:0", text: "Approve", kind: "callback" },
+          {
+            id: "0:1",
+            text: "Logs",
+            kind: "url",
+            url: "https://example.com/logs",
+          },
+        ],
+        [
+          {
+            id: "1:0",
+            text: "Copy id",
+            kind: "copy",
+            copyText: "build-482",
+          },
+          { id: "1:1", text: "Play", kind: "unsupported" },
+        ],
+      ],
+    });
+    // The callback bytes stay main-side; nothing on the wire carries them.
+    expect(JSON.stringify(page.items[0])).not.toContain("approve:482");
+  });
+
+  it("leaves messages without an inline keyboard alone", async () => {
+    const coordinator = await connectedCoordinator();
+    FakeTelegramClient.getMessagesBehavior = async () => [
+      {
+        id: 78,
+        message: "Plain",
+        date: 1_700_000_078,
+        out: false,
+        getSender: async () => ({ firstName: "Mina" }),
+      },
+    ];
+
+    const page = await coordinator.listMessagePage("chat-1", { limit: 50 });
+
+    expect(page.items[0]?.keyboard).toBeNull();
+  });
+
+  it("presses a callback button with the payload it kept for that message", async () => {
+    const coordinator = await mappedBotKeyboard();
+    FakeTelegramClient.invokeBehavior = async () => ({
+      message: "Approved",
+      alert: true,
+      cacheTime: 0,
+    });
+
+    await expect(
+      coordinator.answerBotCallback("chat-1", "77", "0:0"),
+    ).resolves.toEqual({ kind: "message", text: "Approved", alert: true });
+
+    const request = FakeTelegramClient.instances.at(-1)?.invokeCalls.at(-1);
+    expect(request).toBeInstanceOf(fake.FakeGetBotCallbackAnswer);
+    expect(request).toMatchObject({
+      peer: "chat-1",
+      msgId: 77,
+      data: Buffer.from("approve:482"),
+    });
+  });
+
+  it.each([
+    [
+      { message: "Saved", cacheTime: 0 },
+      { kind: "message", text: "Saved", alert: false },
+    ],
+    [
+      // Telegram's own precedence: a message wins over a url.
+      { message: "Saved", url: "https://example.com/x", cacheTime: 0 },
+      { kind: "message", text: "Saved", alert: false },
+    ],
+    [
+      { url: "https://example.com/open", cacheTime: 30 },
+      { kind: "url", url: "https://example.com/open" },
+    ],
+    [{ cacheTime: 0 }, { kind: "none" }],
+  ])("maps the bot answer %j to %j", async (answer, expected) => {
+    const coordinator = await mappedBotKeyboard();
+    FakeTelegramClient.invokeBehavior = async () => answer;
+
+    await expect(
+      coordinator.answerBotCallback("chat-1", "77", "0:0"),
+    ).resolves.toEqual(expected);
+  });
+
+  it.each(["0:1", "1:0", "1:1", "9:9"])(
+    "refuses to press button %s, which has no callback payload",
+    async (buttonId) => {
+      const coordinator = await mappedBotKeyboard();
+      FakeTelegramClient.invokeBehavior = async () => ({ cacheTime: 0 });
+
+      await expect(
+        coordinator.answerBotCallback("chat-1", "77", buttonId),
+      ).rejects.toThrow(`Telegram callback button ${buttonId} of message 77`);
+      expect(FakeTelegramClient.instances.at(-1)?.invokeCalls).toEqual([]);
+    },
+  );
+
+  it("refuses to press a keyboard it never mapped", async () => {
+    const coordinator = await connectedCoordinator();
+
+    await expect(
+      coordinator.answerBotCallback("chat-1", "77", "0:0"),
+    ).rejects.toThrow("Telegram callback button 0:0 of message 77");
   });
 });

@@ -8,6 +8,11 @@ export { LinkPreview } from "./link-preview";
 export type { LinkPreviewProps } from "./link-preview";
 export { OptionRow } from "./option-row";
 export type { OptionRowProps } from "./option-row";
+export { MessageKeyboard } from "./message-keyboard";
+export type {
+  MessageKeyboardLabels,
+  MessageKeyboardProps,
+} from "./message-keyboard";
 export { PressableBlock } from "./pressable-block";
 export type { PressableBlockProps } from "./pressable-block";
 export { ProgressRing } from "./progress-ring";

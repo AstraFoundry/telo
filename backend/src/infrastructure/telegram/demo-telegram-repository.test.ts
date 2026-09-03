@@ -91,7 +91,7 @@ describe("DemoTelegramRepository", () => {
 
   it("returns deterministic demo chats", async () => {
     const chats = await listChats(new DemoTelegramRepository());
-    expect(chats).toHaveLength(4);
+    expect(chats).toHaveLength(5);
     expect(chats[0]?.pinned).toBe(true);
   });
 
@@ -109,6 +109,7 @@ describe("DemoTelegramRepository", () => {
       2,
       2,
       ARCHIVE_FOLDER_ID,
+      null,
     ]);
   });
 
@@ -167,12 +168,17 @@ describe("DemoTelegramRepository", () => {
       limit: 1,
       cursor: third.nextCursor,
     });
+    const fifth = await repository.listChatPage({
+      limit: 1,
+      cursor: fourth.nextCursor,
+    });
 
     expect(first.items.map((chat) => chat.id)).toEqual(["saved"]);
     expect(second.items.map((chat) => chat.id)).toEqual(["design"]);
     expect(third.items.map((chat) => chat.id)).toEqual(["product"]);
     expect(fourth.items.map((chat) => chat.id)).toEqual(["offsite"]);
-    expect(fourth.nextCursor).toBeNull();
+    expect(fifth.items.map((chat) => chat.id)).toEqual(["telobot"]);
+    expect(fifth.nextCursor).toBeNull();
   });
 
   it("returns a snapshot that does not leak internal chat state", async () => {
@@ -839,7 +845,7 @@ describe("DemoTelegramRepository", () => {
 
     await repository.logout();
 
-    await expect(listChats(repository)).resolves.toHaveLength(4);
+    await expect(listChats(repository)).resolves.toHaveLength(5);
     await expect(repository.getCurrentUser()).resolves.toMatchObject({
       id: "demo-user",
     });
@@ -1165,6 +1171,92 @@ describe("DemoTelegramRepository", () => {
     const sets = await repository.listStickerSets();
     expect(sets).toHaveLength(1);
     expect(sets[0]).toMatchObject({ shortName: "TeloPack", installed: true });
+  });
+});
+
+describe("DemoTelegramRepository bot keyboards", () => {
+  it("attaches an inline keyboard covering every button kind to the bot's newest message", async () => {
+    const repository = new DemoTelegramRepository();
+
+    const messages = await listMessages(repository, "telobot");
+
+    expect(messages.at(-1)).toMatchObject({
+      id: "telobot-2",
+      keyboard: {
+        rows: [
+          [
+            { id: "0:0", text: "Approve deploy", kind: "callback" },
+            { id: "0:1", text: "Watch builds", kind: "callback" },
+          ],
+          [
+            {
+              id: "1:0",
+              text: "Open logs",
+              kind: "url",
+              url: "https://example.com/telo-bot/build/482",
+            },
+            {
+              id: "1:1",
+              text: "Copy build id",
+              kind: "copy",
+              copyText: "build-482",
+            },
+            { id: "1:2", text: "Play", kind: "unsupported" },
+          ],
+        ],
+      },
+    });
+  });
+
+  it("answers each callback button with its own deterministic answer", async () => {
+    const repository = new DemoTelegramRepository();
+
+    await expect(
+      repository.answerBotCallback("telobot", "telobot-2", "0:0"),
+    ).resolves.toEqual({
+      kind: "message",
+      text: "Deploy needs two approvals.",
+      alert: true,
+    });
+    await expect(
+      repository.answerBotCallback("telobot", "telobot-2", "0:1"),
+    ).resolves.toEqual({
+      kind: "message",
+      text: "Watching build alerts.",
+      alert: false,
+    });
+    await expect(
+      repository.answerBotCallback("telobot", "telobot-1", "0:0"),
+    ).resolves.toEqual({
+      kind: "url",
+      url: "https://example.com/telo-bot/dashboard",
+    });
+    await expect(
+      repository.answerBotCallback("telobot", "telobot-1", "0:1"),
+    ).resolves.toEqual({ kind: "none" });
+  });
+
+  it("rejects a press that is not a callback button", async () => {
+    const repository = new DemoTelegramRepository();
+
+    // The url, copy, and unsupported buttons of telobot-2 have no callback
+    // payload; the renderer services the first two itself.
+    for (const buttonId of ["1:0", "1:1", "1:2", "9:9"]) {
+      await expect(
+        repository.answerBotCallback("telobot", "telobot-2", buttonId),
+      ).rejects.toThrow(`Unknown callback button ${buttonId}`);
+    }
+  });
+
+  it("rejects a press against an unknown chat or message", async () => {
+    const repository = new DemoTelegramRepository();
+
+    await expect(
+      repository.answerBotCallback("nowhere", "telobot-2", "0:0"),
+    ).rejects.toThrow("Unknown chat nowhere");
+    await expect(
+      repository.answerBotCallback("telobot", "telobot-9", "0:0"),
+    ).rejects.toThrow("Unknown message telobot-9");
   });
 });
 

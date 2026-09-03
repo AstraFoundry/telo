@@ -144,6 +144,7 @@ export function installTeloApiMock(): TeloApiMock {
       setChatRead: vi.fn(),
       setTyping: vi.fn(),
       saveDraft: vi.fn(),
+      answerBotCallback: vi.fn(async () => ({ kind: "none" }) as const),
       onEvent: vi.fn((listener: (event: TelegramWorkspaceEvent) => void) => {
         workspaceListeners.add(listener);
         return () => {
