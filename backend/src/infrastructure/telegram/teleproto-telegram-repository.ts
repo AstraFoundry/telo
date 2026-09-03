@@ -590,6 +590,10 @@ export class TelegramClientCoordinator implements TelegramRepository {
     return this.repository.setChatRead(chatId, read);
   }
 
+  setChatArchived(chatId: string, archived: boolean): Promise<void> {
+    return this.repository.setChatArchived(chatId, archived);
+  }
+
   async logout(): Promise<void> {
     await this.disconnectCurrentClient();
     this.client = null;
@@ -1865,6 +1869,13 @@ class TeleprotoRepository implements TelegramRepository {
 
   async setTyping(chatId: string, typing: boolean): Promise<void> {
     await this.client.setTyping(chatId, typing ? "typing" : "cancel");
+  }
+
+  async setChatArchived(chatId: string, archived: boolean): Promise<void> {
+    // folders.editPeerFolders: folder 1 is the Archive, 0 the main list.
+    // teleproto resolves the chat id to an InputPeer and wraps it in an
+    // InputFolderPeer — the same entity resolution toggleDialogPin relies on.
+    await this.client.editPeerFolders(chatId, archived ? ARCHIVE_FOLDER_ID : 0);
   }
 
   async saveDraft(chatId: string, text: string): Promise<void> {

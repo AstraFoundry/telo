@@ -197,6 +197,11 @@ export function registerIpc(container: ApplicationContainer): void {
       container.chatActions.setRead(chatId, read),
   );
   ipcMain.handle(
+    channels.chatArchiveSet,
+    (_event, chatId: string, archived: boolean) =>
+      container.chatActions.setArchived(chatId, archived),
+  );
+  ipcMain.handle(
     channels.chatTypingSet,
     (_event, chatId: string, typing: boolean) =>
       container.workspace.setTyping(chatId, typing),

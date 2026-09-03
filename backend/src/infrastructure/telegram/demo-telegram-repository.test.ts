@@ -254,15 +254,51 @@ describe("DemoTelegramRepository", () => {
     expect(chats.find((chat) => chat.id === "saved")?.unreadCount).toBe(1);
   });
 
-  it.each(["setChatPinned", "setChatMuted", "setChatRead"] as const)(
-    "rejects %s for an unknown chat",
-    async (method) => {
-      const repository = new DemoTelegramRepository();
-      await expect(repository[method]("missing", true)).rejects.toThrow(
-        "Unknown chat missing",
-      );
-    },
-  );
+  it("archives and restores a chat, and the Archive folder follows its members", async () => {
+    const repository = new DemoTelegramRepository();
+    // "offsite" starts archived, so the Archive folder is already listed.
+    expect(
+      (await repository.listFolders()).some(
+        (folder) => folder.id === ARCHIVE_FOLDER_ID,
+      ),
+    ).toBe(true);
+
+    await repository.setChatArchived("telobot", true);
+    let chats = await listChats(repository);
+    expect(chats.find((chat) => chat.id === "telobot")?.folderId).toBe(
+      ARCHIVE_FOLDER_ID,
+    );
+    // The Archive badge sums its members: offsite (2) + telobot (0).
+    expect(
+      (await repository.listFolders()).find(
+        (folder) => folder.id === ARCHIVE_FOLDER_ID,
+      )?.unreadCount,
+    ).toBe(2);
+
+    await repository.setChatArchived("offsite", false);
+    await repository.setChatArchived("telobot", false);
+    chats = await listChats(repository);
+    expect(chats.find((chat) => chat.id === "offsite")?.folderId).toBeNull();
+    expect(chats.find((chat) => chat.id === "telobot")?.folderId).toBeNull();
+    // With no members left, the Archive folder disappears from the list.
+    expect(
+      (await repository.listFolders()).some(
+        (folder) => folder.id === ARCHIVE_FOLDER_ID,
+      ),
+    ).toBe(false);
+  });
+
+  it.each([
+    "setChatPinned",
+    "setChatMuted",
+    "setChatRead",
+    "setChatArchived",
+  ] as const)("rejects %s for an unknown chat", async (method) => {
+    const repository = new DemoTelegramRepository();
+    await expect(repository[method]("missing", true)).rejects.toThrow(
+      "Unknown chat missing",
+    );
+  });
 
   it("attaches a reply snapshot when sending with a reply target", async () => {
     const repository = new DemoTelegramRepository();

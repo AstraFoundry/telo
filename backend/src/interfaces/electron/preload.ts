@@ -100,6 +100,8 @@ const api: TeloDesktopApi = {
         messageId,
         buttonId,
       ),
+    setChatArchived: (chatId, archived) =>
+      ipcRenderer.invoke(channels.chatArchiveSet, chatId, archived),
     onEvent: (listener) =>
       subscribe<TelegramWorkspaceEvent>(channels.workspaceEvent, listener),
   },

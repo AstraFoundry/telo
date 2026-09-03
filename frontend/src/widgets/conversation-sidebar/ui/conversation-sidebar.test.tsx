@@ -550,10 +550,11 @@ describe("ConversationSidebar", () => {
         "3 unread",
       ),
     ).toBeTruthy();
-    const archive = within(tabs).getByRole("tab", {
-      name: new RegExp(copy.archiveFolder),
-    });
-    expect(within(archive).getByLabelText("2 unread")).toBeTruthy();
+    // The Archive is not a tab: both reference clients strip folder 1 from
+    // the tab strip and reach it through the pinned row on the All list.
+    expect(
+      within(tabs).queryByRole("tab", { name: new RegExp(copy.archiveFolder) }),
+    ).toBeNull();
   });
 
   it("filters the chat list by the selected folder tab", async () => {
@@ -590,9 +591,10 @@ describe("ConversationSidebar", () => {
     expect(
       within(list).queryByRole("button", { name: /Main Chat/ }),
     ).toBeNull();
-
+    // The row lives on the All list, so the walk returns there first.
+    await user.click(screen.getByRole("tab", { name: copy.allChats }));
     await user.click(
-      screen.getByRole("tab", { name: new RegExp(copy.archiveFolder) }),
+      screen.getByRole("button", { name: new RegExp(copy.archivedChats) }),
     );
 
     expect(
@@ -601,6 +603,85 @@ describe("ConversationSidebar", () => {
     expect(
       within(list).queryByRole("button", { name: /Work Chat/ }),
     ).toBeNull();
+  });
+
+  it("pins the archive row on the All list with its names and muted badge", async () => {
+    await renderSidebar({
+      chats: [
+        chat({ id: "main", title: "Main Chat", folderId: null }),
+        chat({
+          id: "offsite",
+          title: "Offsite Planning",
+          folderId: ARCHIVE_FOLDER_ID,
+          unreadCount: 2,
+        }),
+      ],
+      folders: [{ id: ARCHIVE_FOLDER_ID, title: "Archive", unreadCount: 2 }],
+    });
+    const list = screen.getByRole("navigation", { name: copy.chats });
+
+    const row = within(list).getByRole("button", {
+      name: `${copy.archivedChats}, 2 ${copy.unread}`,
+    });
+    expect(row.textContent).toContain("Offsite Planning");
+    // The badge is the folder's muted grey even though the chat is unmuted:
+    // the folder's unread is muted by definition (data_folder.cpp:385-398).
+    expect(row.querySelector('[class*="bg-muted"]')).not.toBeNull();
+
+    // Nothing archived → no row at all.
+    await renderSidebar({ chats: [chat({ id: "x", title: "Solo" })] });
+    expect(
+      screen.queryByRole("button", { name: new RegExp(copy.archivedChats) }),
+    ).toBeNull();
+  });
+
+  it("offers a way back to All chats from inside the archive", async () => {
+    const { useChatStore } = await renderSidebar({
+      chats: [
+        chat({ id: "main", title: "Main Chat", folderId: null }),
+        chat({
+          id: "offsite",
+          title: "Offsite Planning",
+          folderId: ARCHIVE_FOLDER_ID,
+        }),
+      ],
+      folders: [{ id: ARCHIVE_FOLDER_ID, title: "Archive", unreadCount: 0 }],
+    });
+    const user = userEvent.setup();
+
+    await user.click(
+      screen.getByRole("button", { name: new RegExp(copy.archivedChats) }),
+    );
+    expect(useChatStore.getState().activeFolderId).toBe(ARCHIVE_FOLDER_ID);
+
+    await user.click(screen.getByRole("button", { name: copy.backToAllChats }));
+    expect(useChatStore.getState().activeFolderId).toBeNull();
+  });
+
+  it("archives a chat from its row menu and unarchives it back", async () => {
+    const { useChatStore } = await renderSidebar({
+      chats: [chat({ id: "chat-1", title: "Ada Byron", folderId: null })],
+    });
+    const user = userEvent.setup();
+
+    fireEvent.contextMenu(screen.getByRole("button", { name: /Ada Byron/ }));
+    await user.click(
+      await screen.findByRole("menuitem", { name: copy.archiveChat }),
+    );
+
+    await vi.waitFor(() => {
+      expect(useChatStore.getState().chats[0]?.folderId).toBe(
+        ARCHIVE_FOLDER_ID,
+      );
+    });
+    // The archived chat leaves the All view immediately.
+    expect(screen.queryByRole("button", { name: /Ada Byron/ })).toBeNull();
+    // And the archive row takes its place with the chat's name on it. The
+    // accessible name stays the folder's; the preview is content.
+    const archiveRow = screen.getByRole("button", {
+      name: copy.archivedChats,
+    });
+    expect(archiveRow.textContent).toContain("Ada Byron");
   });
 
   it("shows Typing text instead of dots when the user prefers reduced motion", async () => {

@@ -46,6 +46,7 @@ function repository(): TelegramRepository {
     setChatPinned: vi.fn(async () => undefined),
     setChatMuted: vi.fn(async () => undefined),
     setChatRead: vi.fn(async () => undefined),
+    setChatArchived: vi.fn(async () => undefined),
     setTyping: vi.fn(async () => undefined),
     saveDraft: vi.fn(async () => undefined),
     logout: vi.fn(async () => undefined),
@@ -53,20 +54,22 @@ function repository(): TelegramRepository {
 }
 
 describe("ChatActionsService", () => {
-  it("forwards pin, mute, and read updates to the port", async () => {
+  it("forwards pin, mute, read, and archive updates to the port", async () => {
     const port = repository();
     const service = new ChatActionsService(port);
 
     await service.setPinned("chat", true);
     await service.setMuted("chat", false);
     await service.setRead("chat", true);
+    await service.setArchived("chat", true);
 
     expect(port.setChatPinned).toHaveBeenCalledWith("chat", true);
     expect(port.setChatMuted).toHaveBeenCalledWith("chat", false);
     expect(port.setChatRead).toHaveBeenCalledWith("chat", true);
+    expect(port.setChatArchived).toHaveBeenCalledWith("chat", true);
   });
 
-  it.each(["setPinned", "setMuted", "setRead"] as const)(
+  it.each(["setPinned", "setMuted", "setRead", "setArchived"] as const)(
     "rejects an empty chat id on %s",
     (method) => {
       const port = repository();
@@ -76,6 +79,7 @@ describe("ChatActionsService", () => {
       expect(port.setChatPinned).not.toHaveBeenCalled();
       expect(port.setChatMuted).not.toHaveBeenCalled();
       expect(port.setChatRead).not.toHaveBeenCalled();
+      expect(port.setChatArchived).not.toHaveBeenCalled();
     },
   );
 });

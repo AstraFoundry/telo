@@ -251,6 +251,15 @@ const fake = vi.hoisted(() => {
       this.forwardMessagesCalls.push({ entity, params });
     }
 
+    readonly editPeerFoldersCalls: Array<{
+      entity: unknown;
+      folderId: number;
+    }> = [];
+
+    async editPeerFolders(entity: unknown, folderId: number): Promise<void> {
+      this.editPeerFoldersCalls.push({ entity, folderId });
+    }
+
     static entityBehavior: ((entity: unknown) => Promise<unknown>) | null =
       null;
 
@@ -1740,6 +1749,22 @@ describe("TelegramClientCoordinator", () => {
         entity: "chat-2",
         params: { messages: [43], fromPeer: "chat-1", dropAuthor: true },
       },
+    ]);
+  });
+
+  it("moves a chat between the main list and the Archive via folders.editPeerFolders", async () => {
+    const coordinator = await connectedCoordinator();
+    const client = FakeTelegramClient.instances.at(-1);
+
+    await coordinator.setChatArchived("chat-1", true);
+    await coordinator.setChatArchived("chat-1", false);
+
+    // teleproto resolves the entity and invokes folders.EditPeerFolders with
+    // one InputFolderPeer per chat; folder id 1 is the Archive, 0 the main
+    // list.
+    expect(client?.editPeerFoldersCalls).toEqual([
+      { entity: "chat-1", folderId: ARCHIVE_FOLDER_ID },
+      { entity: "chat-1", folderId: 0 },
     ]);
   });
 

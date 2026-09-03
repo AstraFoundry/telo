@@ -342,6 +342,7 @@ describe("registerIpc chat actions", () => {
         setPinned: vi.fn().mockResolvedValue(undefined),
         setMuted: vi.fn().mockResolvedValue(undefined),
         setRead: vi.fn().mockResolvedValue(undefined),
+        setArchived: vi.fn().mockResolvedValue(undefined),
       },
     } as unknown as ApplicationContainer;
   }
@@ -353,12 +354,14 @@ describe("registerIpc chat actions", () => {
     const pin = ipc.handlers.get(channels.chatPinSet);
     const mute = ipc.handlers.get(channels.chatMuteSet);
     const read = ipc.handlers.get(channels.chatReadSet);
-    if (!pin || !mute || !read)
+    const archive = ipc.handlers.get(channels.chatArchiveSet);
+    if (!pin || !mute || !read || !archive)
       throw new Error("chat action handlers were not registered");
 
     await pin({}, "chat-1", true);
     await mute({}, "chat-2", false);
     await read({}, "chat-3", true);
+    await archive({}, "chat-4", true);
 
     expect(container.chatActions.setPinned).toHaveBeenCalledWith(
       "chat-1",
@@ -369,6 +372,10 @@ describe("registerIpc chat actions", () => {
       false,
     );
     expect(container.chatActions.setRead).toHaveBeenCalledWith("chat-3", true);
+    expect(container.chatActions.setArchived).toHaveBeenCalledWith(
+      "chat-4",
+      true,
+    );
   });
 });
 

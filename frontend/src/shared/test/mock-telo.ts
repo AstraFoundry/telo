@@ -142,6 +142,7 @@ export function installTeloApiMock(): TeloApiMock {
       setChatPinned: vi.fn(),
       setChatMuted: vi.fn(),
       setChatRead: vi.fn(),
+      setChatArchived: vi.fn(),
       setTyping: vi.fn(),
       saveDraft: vi.fn(),
       answerBotCallback: vi.fn(async () => ({ kind: "none" }) as const),

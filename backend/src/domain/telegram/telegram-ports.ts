@@ -134,6 +134,11 @@ export interface TelegramRepository {
    * flags the dialog (`unreadCount` becomes 1 in the demo workspace).
    */
   setChatRead(chatId: string, read: boolean): Promise<void>;
+  /**
+   * Moves a dialog into or out of the Archive (`folder_id` 1 ↔ 0). Archive
+   * membership is the dialog's `folderId`; unread counts are untouched.
+   */
+  setChatArchived(chatId: string, archived: boolean): Promise<void>;
   /** Sends (or cancels) the local user's typing signal for a chat. */
   setTyping(chatId: string, typing: boolean): Promise<void>;
   /** Persists the composer draft server-side; an empty string clears it. */

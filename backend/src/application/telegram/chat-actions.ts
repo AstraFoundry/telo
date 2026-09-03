@@ -17,4 +17,9 @@ export class ChatActionsService {
     if (!chatId.trim()) throw new Error("Chat id is required");
     return this.repository.setChatRead(chatId, read);
   }
+
+  setArchived(chatId: string, archived: boolean): Promise<void> {
+    if (!chatId.trim()) throw new Error("Chat id is required");
+    return this.repository.setChatArchived(chatId, archived);
+  }
 }

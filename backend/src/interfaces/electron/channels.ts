@@ -32,6 +32,7 @@ export const channels = {
   chatPinSet: "workspace:set-chat-pinned",
   chatMuteSet: "workspace:set-chat-muted",
   chatReadSet: "workspace:set-chat-read",
+  chatArchiveSet: "workspace:set-chat-archived",
   chatTypingSet: "workspace:set-typing",
   chatDraftSave: "workspace:save-draft",
   agentConfigGet: "agent:config-get",
