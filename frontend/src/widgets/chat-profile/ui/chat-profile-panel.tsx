@@ -16,10 +16,11 @@ import {
   AnimatedSidebarProvider,
   Avatar,
   Button,
-  LoadIndicator,
   MediaViewer,
   MessageMedia,
   OptionRow,
+  Skeleton,
+  SkeletonGroup,
   Tooltip,
 } from "shared/ui";
 import type { MediaViewerOrigin } from "shared/ui";
@@ -192,6 +193,54 @@ function peerStatus(profile: PeerProfileDto): string | null {
   if (profile.kind === "group") return copy.chatKindGroup;
   if (profile.kind === "channel") return copy.chatKindChannel;
   return null;
+}
+
+/**
+ * The panel's own geometry while the profile, shared media, and pinned
+ * messages are in flight. tdesktop draws exactly this — a skeleton shaped like
+ * the tab you opened (`info_profile_tab_skeleton.cpp:88-125`: a square grid
+ * for photos, rows of thumb-plus-bars for files) — rather than a spinner,
+ * which is what Telegram Web K settles for. The shaped version is what stops
+ * the "spinner vanishes, gap appears, content pops" sequence, so it is the one
+ * copied here.
+ */
+function ProfileSkeleton() {
+  return (
+    <SkeletonGroup
+      label={copy.loadingChatInfo}
+      className="flex flex-col gap-4 px-2 py-4"
+    >
+      {/* Identity block: 80px avatar, name, status — matching ProfileIdentity. */}
+      <div className="flex flex-col items-center gap-2 px-2 pb-3">
+        <Skeleton circle className="size-20" />
+        <Skeleton className="h-5 w-40" />
+        <Skeleton className="h-4 w-24" />
+      </div>
+      {/* Shared-media preview: the same 3-column, 2px-gutter grid of squares. */}
+      <div className="px-2">
+        <Skeleton className="mb-2 h-3.5 w-28" />
+        <div className="grid grid-cols-3 gap-0.5 overflow-hidden rounded-lg">
+          {[0, 1, 2, 3, 4, 5].map((index) => (
+            <Skeleton key={index} rounded className="aspect-square w-full" />
+          ))}
+        </div>
+      </div>
+      {/* Pinned preview: rows of a rounded thumb and staggered bars, whose
+          widths run 3/5 → 2/5 of the text column the way tdesktop's do. */}
+      <div className="flex flex-col gap-3 px-2">
+        <Skeleton className="h-3.5 w-24" />
+        {[0, 1].map((index) => (
+          <div key={index} className="flex items-center gap-2.5">
+            <Skeleton rounded className="size-10 shrink-0" />
+            <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+              <Skeleton className="h-3 w-3/5" />
+              <Skeleton className="h-3 w-2/5" />
+            </div>
+          </div>
+        ))}
+      </div>
+    </SkeletonGroup>
+  );
 }
 
 function PeerCard({ profile }: { profile: PeerProfileDto }) {
@@ -611,17 +660,13 @@ export function ChatProfilePanel() {
                 {copy.failed}: {peerCard.error}
               </p>
             ) : peerCard.profile === null ? (
-              <div className="grid place-items-center py-10">
-                <LoadIndicator label={copy.loading} />
-              </div>
+              <ProfileSkeleton />
             ) : (
               <PeerCard profile={peerCard.profile} />
             )
           ) : sharedMedia === null || pinned === null ? (
             loadError ? null : (
-              <div className="grid place-items-center py-10">
-                <LoadIndicator label={copy.loading} />
-              </div>
+              <ProfileSkeleton />
             )
           ) : current.view === "shared-media" ? (
             <div className="flex flex-col gap-4 px-4 py-4">

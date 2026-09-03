@@ -10,7 +10,8 @@ import {
   Button,
   CenterMorphModal,
   CenterMorphModalContent,
-  LoadIndicator,
+  Skeleton,
+  SkeletonGroup,
   Sticker,
 } from "shared/ui";
 
@@ -152,9 +153,27 @@ export function StickerSetDialog({
               {copy.failed}: {loadError}
             </p>
           ) : set === null ? (
-            <div className="grid place-items-center py-10">
-              <LoadIndicator label={copy.loading} />
-            </div>
+            /* The sheet is about to be a wall of same-size cells, so the
+               placeholder is that wall. Two rows is the shortest set worth
+               opening, which keeps the sheet from shrinking when the real
+               grid lands. */
+            <SkeletonGroup
+              label={copy.loadingStickerSet}
+              className="flex flex-wrap gap-0.5 px-1.5 py-1"
+            >
+              {Array.from({ length: 8 }, (_, index) => (
+                <div
+                  key={index}
+                  className="grid place-items-center"
+                  style={{ width: CELL_PX, height: CELL_PX }}
+                >
+                  <Skeleton
+                    rounded
+                    style={{ width: STICKER_PX, height: STICKER_PX }}
+                  />
+                </div>
+              ))}
+            </SkeletonGroup>
           ) : (
             <>
               <div className="min-h-0 flex-1 overflow-y-auto px-1.5">
