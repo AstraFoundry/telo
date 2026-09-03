@@ -10,7 +10,7 @@ While a run is active and the assistant has not streamed any text yet, the trans
 
 ## Configuration
 
-Agent settings live on the dedicated Settings surface. Telo supports OpenAI and HTTPS OpenAI-compatible endpoints. An empty API-key field preserves the stored key. The backend never returns the key; it returns only `hasApiKey`.
+Agent settings live on the dedicated Settings surface. Bring-your-own-account is the preferred path: the user picks a named provider (OpenAI, Anthropic, Google, Groq, xAI, DeepSeek, or Mistral) and stores that account's API key. OpenAI-compatible HTTPS endpoints are the fallback and are the only case that asks for a base URL. An empty API-key field preserves the stored key. The backend never returns the key; it returns only `hasApiKey`.
 
 The panel resolves one of three states from the configuration loaded at startup: loading (configuration not yet read), not configured (no API key — the composer is replaced by a recovery action that opens the Settings surface), and ready (the conversation UI).
 

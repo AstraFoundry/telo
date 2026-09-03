@@ -563,8 +563,48 @@ export const AGENT_MAX_STEPS_MAX = 8;
 export const AGENT_HISTORY_LIMIT_MIN = 0;
 export const AGENT_HISTORY_LIMIT_MAX = 50;
 
+/**
+ * First-class BYOA providers. Each maps to an official AI SDK package and
+ * authenticates with the user's own account key. OpenAI-compatible is the
+ * fallback for any other HTTPS endpoint and is listed last.
+ */
+export const FIRST_CLASS_AGENT_PROVIDERS = [
+  "openai",
+  "anthropic",
+  "google",
+  "groq",
+  "xai",
+  "deepseek",
+  "mistral",
+] as const;
+
+export const AGENT_COMPATIBLE_PROVIDER = "openai-compatible" as const;
+
+export const AGENT_PROVIDERS = [
+  ...FIRST_CLASS_AGENT_PROVIDERS,
+  AGENT_COMPATIBLE_PROVIDER,
+] as const;
+
+export type AgentProvider = (typeof AGENT_PROVIDERS)[number];
+
+/** Model id filled in when the user picks this provider. */
+export const AGENT_PROVIDER_DEFAULT_MODEL: Record<AgentProvider, string> = {
+  openai: "gpt-4.1-mini",
+  anthropic: "claude-sonnet-4-5",
+  google: "gemini-2.5-flash",
+  groq: "llama-3.3-70b-versatile",
+  xai: "grok-3",
+  deepseek: "deepseek-chat",
+  mistral: "mistral-small-latest",
+  "openai-compatible": "gpt-4.1-mini",
+};
+
+export function isAgentProvider(value: string): value is AgentProvider {
+  return (AGENT_PROVIDERS as readonly string[]).includes(value);
+}
+
 export interface AgentConfigurationDto {
-  readonly provider: "openai" | "openai-compatible";
+  readonly provider: AgentProvider;
   readonly model: string;
   readonly baseUrl: string | null;
   readonly instructions: string;

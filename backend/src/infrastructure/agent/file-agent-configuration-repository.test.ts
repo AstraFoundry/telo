@@ -35,8 +35,8 @@ describe("FileAgentConfigurationRepository", () => {
     const filePath = await temporaryFile();
     const repository = repositoryAt(filePath);
     const configuration = AgentConfiguration.create({
-      provider: "openai",
-      model: "gpt-4.1-mini",
+      provider: "anthropic",
+      model: "claude-sonnet-4-5",
       baseUrl: null,
       instructions: "Be brief.",
       apiKey: "sk-secret",
@@ -66,6 +66,24 @@ describe("FileAgentConfigurationRepository", () => {
       '"encryptedApiKey": null',
     );
     expect((await repository.get()).snapshot().apiKey).toBeNull();
+  });
+
+  it("rejects an unrecognized provider instead of falling back", async () => {
+    const filePath = await temporaryFile();
+    await writeFile(
+      filePath,
+      JSON.stringify({
+        provider: "mystery",
+        model: "gpt-4.1-mini",
+        baseUrl: null,
+        instructions: "Be brief.",
+        encryptedApiKey: null,
+        canInspectWorkspace: true,
+      }),
+    );
+    const repository = repositoryAt(filePath);
+
+    await expect(repository.get()).rejects.toThrow("Unknown agent provider");
   });
 
   it("backfills tuning defaults for a file written before they existed", async () => {
