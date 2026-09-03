@@ -183,6 +183,56 @@ export type MessageMediaKind =
   | "sticker";
 
 /**
+ * What pressing an inline keyboard button does. Telegram defines a dozen
+ * `KeyboardButton` variants; these are the three this client can honestly
+ * act on, plus `"unsupported"` for the rest.
+ *
+ * Unsupported buttons are still reported, because the keyboard is part of the
+ * message the bot sent and dropping rows would misrepresent it — Telegram
+ * Desktop does the same for the variants it cannot service, answering with an
+ * inform box (`api_bot.cpp:388-392`). The renderer shows them without an
+ * action rather than wiring a control that silently does nothing.
+ */
+export type MessageButtonKind = "callback" | "url" | "copy" | "unsupported";
+
+export interface MessageButtonDto {
+  /**
+   * Stable within the message, so the renderer can key an in-flight press and
+   * the main process can find the button's callback payload again. The
+   * callback `data` never crosses into web content.
+   */
+  readonly id: string;
+  readonly text: string;
+  readonly kind: MessageButtonKind;
+  /** Target of a `"url"` button. */
+  readonly url?: string | null;
+  /** Payload of a `"copy"` button, which the renderer writes to the clipboard. */
+  readonly copyText?: string | null;
+}
+
+/**
+ * A bot's inline keyboard (Telegram `ReplyInlineMarkup`), attached below the
+ * message that carries it. Rows are laid out in order and the buttons in a
+ * row share the width equally. This is not the reply keyboard, which is
+ * chat-level state shown above the composer.
+ */
+export interface MessageKeyboardDto {
+  readonly rows: ReadonlyArray<ReadonlyArray<MessageButtonDto>>;
+}
+
+/**
+ * Result of pressing a `"callback"` button (`messages.botCallbackAnswer`).
+ * Both reference clients apply the same precedence: a non-empty message wins
+ * over a url, and `alert` decides between a modal and a toast
+ * (`api_bot.cpp:118-152`). `cache_time` is ignored by both, so it is not
+ * modelled here.
+ */
+export type BotCallbackAnswerDto =
+  | { readonly kind: "none" }
+  | { readonly kind: "message"; readonly text: string; readonly alert: boolean }
+  | { readonly kind: "url"; readonly url: string };
+
+/**
  * Attribution of a forwarded message (Telegram `MessageFwdHeader`), and where
  * following it leads. Both reference clients resolve the target in the same
  * order: `savedFromPeer` + `savedFromMsgId` first, then a channel post's
@@ -364,6 +414,11 @@ export interface MessageDto {
    * sent with the sender hidden by the forwarder.
    */
   readonly forwardedFrom?: MessageForwardDto | null;
+  /**
+   * Inline keyboard the message carries (Telegram `ReplyInlineMarkup`).
+   * Null/absent for every message without one, which is almost all of them.
+   */
+  readonly keyboard?: MessageKeyboardDto | null;
 }
 
 export interface MessagePageInput {
@@ -1144,6 +1199,16 @@ export interface TeloDesktopApi {
     setTyping(chatId: string, typing: boolean): Promise<void>;
     /** Persists the composer draft server-side; an empty string clears it. */
     saveDraft(chatId: string, text: string): Promise<void>;
+    /**
+     * Presses a `"callback"` inline keyboard button. The callback payload is
+     * looked up main-side from the message, so the opaque bytes Telegram
+     * expects never reach web content.
+     */
+    answerBotCallback(
+      chatId: string,
+      messageId: string,
+      buttonId: string,
+    ): Promise<BotCallbackAnswerDto>;
     onEvent(listener: (event: TelegramWorkspaceEvent) => void): () => void;
   };
   readonly agent: {

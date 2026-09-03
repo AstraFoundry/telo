@@ -2,6 +2,7 @@ import path from "node:path";
 import { copyFile, mkdir, stat, writeFile } from "node:fs/promises";
 
 import type {
+  BotCallbackAnswerDto,
   ChatDto,
   ChatFolderDto,
   ChatMemberDto,
@@ -125,6 +126,26 @@ const INITIAL_CHATS: ReadonlyArray<ChatDto> = [
     typing: false,
     presence: "online",
     folderId: ARCHIVE_FOLDER_ID,
+  },
+  {
+    // The bot chat. Bots are the only peers that attach inline keyboards, so
+    // this dialog is where the demo workspace exercises them: both of its
+    // messages carry one, together covering every button kind and every
+    // callback answer shape.
+    id: "telobot",
+    title: "Telo Bot",
+    preview: "Build 482 finished: 12 tests, 0 failures.",
+    updatedAt: "2026-08-24T08:05:00.000Z",
+    unreadCount: 0,
+    lastReadMessageId: "telobot-2",
+    muted: false,
+    pinned: false,
+    kind: "direct",
+    initials: "TB",
+    avatarDataUrl: null,
+    draftPreview: null,
+    typing: false,
+    folderId: null,
   },
 ];
 
@@ -598,6 +619,97 @@ const INITIAL_MESSAGES: Record<string, ReadonlyArray<MessageDto>> = {
       status: "read",
     },
   ],
+  telobot: [
+    {
+      id: "telobot-1",
+      chatId: "telobot",
+      senderName: "Telo Bot",
+      senderId: "telobot",
+      senderAvatarUrl: null,
+      body: "Telo Bot is watching this repository.",
+      entities: [],
+      media: null,
+      groupedId: null,
+      sentAt: "2026-08-24T08:00:00.000Z",
+      outgoing: false,
+      status: "read",
+      // The two callback answers this keyboard produces are the ones the
+      // newest message's keyboard cannot: a url hand-off and a silent
+      // answer. Between the two messages every BotCallbackAnswerDto shape
+      // has a button behind it.
+      keyboard: {
+        rows: [
+          [
+            { id: "0:0", text: "Open dashboard", kind: "callback" },
+            { id: "0:1", text: "Ping", kind: "callback" },
+          ],
+        ],
+      },
+    },
+    {
+      id: "telobot-2",
+      chatId: "telobot",
+      senderName: "Telo Bot",
+      senderId: "telobot",
+      senderAvatarUrl: null,
+      body: "Build 482 finished: 12 tests, 0 failures.",
+      entities: [],
+      media: null,
+      groupedId: null,
+      sentAt: "2026-08-24T08:05:00.000Z",
+      outgoing: false,
+      status: "read",
+      // One keyboard per button kind: two callback buttons answering with a
+      // modal and a toast, then the two the renderer services on its own
+      // (url, copy) and one Telegram variant this client cannot act on.
+      keyboard: {
+        rows: [
+          [
+            { id: "0:0", text: "Approve deploy", kind: "callback" },
+            { id: "0:1", text: "Watch builds", kind: "callback" },
+          ],
+          [
+            {
+              id: "1:0",
+              text: "Open logs",
+              kind: "url",
+              url: "https://example.com/telo-bot/build/482",
+            },
+            {
+              id: "1:1",
+              text: "Copy build id",
+              kind: "copy",
+              copyText: "build-482",
+            },
+            { id: "1:2", text: "Play", kind: "unsupported" },
+          ],
+        ],
+      },
+    },
+  ],
+};
+
+// What the demo bot answers a press with, keyed by message id and then by
+// button id. Only callback buttons appear: a url or copy button is serviced
+// by the renderer without a round trip, and an unsupported one has no action
+// at all, so a press against any of them is a bug worth failing loudly.
+const DEMO_BOT_CALLBACK_ANSWERS: Record<
+  string,
+  Record<string, BotCallbackAnswerDto>
+> = {
+  "telobot-1": {
+    "0:0": { kind: "url", url: "https://example.com/telo-bot/dashboard" },
+    // A bot that acknowledges nothing is a real answer, not a failure.
+    "0:1": { kind: "none" },
+  },
+  "telobot-2": {
+    "0:0": {
+      kind: "message",
+      text: "Deploy needs two approvals.",
+      alert: true,
+    },
+    "0:1": { kind: "message", text: "Watching build alerts.", alert: false },
+  },
 };
 
 // The account's single installed sticker set, backing the composer picker.
@@ -1470,6 +1582,23 @@ export class DemoTelegramRepository implements TelegramRepository {
       updatedAt: forwarded.sentAt,
     }));
     this.emit({ type: "message-upsert", cause: "new", message: forwarded });
+  }
+
+  async answerBotCallback(
+    chatId: string,
+    messageId: string,
+    buttonId: string,
+  ): Promise<BotCallbackAnswerDto> {
+    // findMessage rejects an unknown chat or message; what remains to check
+    // is that the button exists and is a callback one.
+    const { message } = this.findMessage(chatId, messageId);
+    const answer = DEMO_BOT_CALLBACK_ANSWERS[message.id]?.[buttonId];
+    if (!answer) {
+      throw new Error(
+        `Unknown callback button ${buttonId} of message ${messageId}`,
+      );
+    }
+    return answer;
   }
 
   async setChatPinned(chatId: string, pinned: boolean): Promise<void> {

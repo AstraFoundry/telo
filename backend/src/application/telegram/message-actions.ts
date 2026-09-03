@@ -1,4 +1,5 @@
 import type {
+  BotCallbackAnswerDto,
   DeleteMessageInput,
   EditMessageInput,
   ForwardMessageInput,
@@ -33,5 +34,21 @@ export class MessageActionsService {
     if (!input.messageId.trim()) throw new Error("Message id is required");
     if (!input.toChatId.trim()) throw new Error("Chat id is required");
     return this.repository.forwardMessage(input);
+  }
+
+  /**
+   * Presses a `"callback"` inline keyboard button. The button id addresses
+   * the payload the adapter kept for that message, so nothing about the
+   * callback data needs to be trusted from the renderer.
+   */
+  answerBotCallback(
+    chatId: string,
+    messageId: string,
+    buttonId: string,
+  ): Promise<BotCallbackAnswerDto> {
+    if (!chatId.trim()) throw new Error("Chat id is required");
+    if (!messageId.trim()) throw new Error("Message id is required");
+    if (!buttonId.trim()) throw new Error("Button id is required");
+    return this.repository.answerBotCallback(chatId, messageId, buttonId);
   }
 }

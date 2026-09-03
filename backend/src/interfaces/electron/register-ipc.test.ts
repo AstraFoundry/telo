@@ -451,6 +451,7 @@ describe("registerIpc message actions", () => {
         editMessage: vi.fn().mockResolvedValue(undefined),
         deleteMessage: vi.fn().mockResolvedValue(undefined),
         forwardMessage: vi.fn().mockResolvedValue(undefined),
+        answerBotCallback: vi.fn().mockResolvedValue({ kind: "none" }),
       },
     } as unknown as ApplicationContainer;
   }
@@ -499,6 +500,23 @@ describe("registerIpc message actions", () => {
     );
     expect(container.messageActions.forwardMessage).toHaveBeenCalledWith(
       forwardInput,
+    );
+  });
+
+  it("forwards a keyboard press and returns the bot's answer", async () => {
+    const container = messageActionsContainer();
+    registerIpc(container);
+
+    const press = ipc.handlers.get(channels.botCallbackAnswer);
+    if (!press) throw new Error("bot callback handler was not registered");
+
+    await expect(press({}, "chat-1", "m-1", "1:2")).resolves.toEqual({
+      kind: "none",
+    });
+    expect(container.messageActions.answerBotCallback).toHaveBeenCalledWith(
+      "chat-1",
+      "m-1",
+      "1:2",
     );
   });
 });

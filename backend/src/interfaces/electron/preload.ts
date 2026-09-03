@@ -93,6 +93,13 @@ const api: TeloDesktopApi = {
       ipcRenderer.invoke(channels.chatTypingSet, chatId, typing),
     saveDraft: (chatId, text) =>
       ipcRenderer.invoke(channels.chatDraftSave, chatId, text),
+    answerBotCallback: (chatId, messageId, buttonId) =>
+      ipcRenderer.invoke(
+        channels.botCallbackAnswer,
+        chatId,
+        messageId,
+        buttonId,
+      ),
     onEvent: (listener) =>
       subscribe<TelegramWorkspaceEvent>(channels.workspaceEvent, listener),
   },

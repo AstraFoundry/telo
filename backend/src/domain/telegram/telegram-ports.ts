@@ -1,4 +1,5 @@
 import type {
+  BotCallbackAnswerDto,
   ChatDto,
   ChatFolderDto,
   ChatMemberDto,
@@ -137,6 +138,19 @@ export interface TelegramRepository {
   setTyping(chatId: string, typing: boolean): Promise<void>;
   /** Persists the composer draft server-side; an empty string clears it. */
   saveDraft(chatId: string, text: string): Promise<void>;
+  /**
+   * Presses a `"callback"` inline keyboard button. Adapters look the
+   * button's opaque callback payload up from the message it belongs to, so
+   * the bytes Telegram expects never leave the main process. Pressing a
+   * button of any other kind, or one the adapter can no longer resolve,
+   * rejects — a press that silently answered "nothing happened" would be
+   * indistinguishable from a bot that chose to stay silent.
+   */
+  answerBotCallback(
+    chatId: string,
+    messageId: string,
+    buttonId: string,
+  ): Promise<BotCallbackAnswerDto>;
   /**
    * Ends the current session: disconnects the client and clears the stored
    * session. A no-op for the demo workspace; the demo reset is owned by the

@@ -42,6 +42,11 @@ function repository(): TelegramRepository {
     editMessage: vi.fn(async () => undefined),
     deleteMessage: vi.fn(async () => undefined),
     forwardMessage: vi.fn(async () => undefined),
+    answerBotCallback: vi.fn(async () => ({
+      kind: "message" as const,
+      text: "Saved",
+      alert: true,
+    })),
     setChatPinned: vi.fn(async () => undefined),
     setChatMuted: vi.fn(async () => undefined),
     setChatRead: vi.fn(async () => undefined),
@@ -162,4 +167,35 @@ describe("MessageActionsService", () => {
     expect(() => service.forwardMessage(input)).toThrow(error);
     expect(port.forwardMessage).not.toHaveBeenCalled();
   });
+
+  it("forwards a keyboard press and returns the bot's answer", async () => {
+    const port = repository();
+    const service = new MessageActionsService(port);
+
+    await expect(
+      service.answerBotCallback("chat", "message", "0:1"),
+    ).resolves.toEqual({ kind: "message", text: "Saved", alert: true });
+    expect(port.answerBotCallback).toHaveBeenCalledWith(
+      "chat",
+      "message",
+      "0:1",
+    );
+  });
+
+  it.each([
+    [" ", "message", "0:0", "Chat id"],
+    ["chat", " ", "0:0", "Message id"],
+    ["chat", "message", " ", "Button id"],
+  ])(
+    "rejects a keyboard press with a blank %j / %j / %j",
+    (chatId, messageId, buttonId, error) => {
+      const port = repository();
+      const service = new MessageActionsService(port);
+
+      expect(() =>
+        service.answerBotCallback(chatId, messageId, buttonId),
+      ).toThrow(error);
+      expect(port.answerBotCallback).not.toHaveBeenCalled();
+    },
+  );
 });
