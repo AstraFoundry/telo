@@ -10,7 +10,7 @@ import {
   Play,
   X,
 } from "@phosphor-icons/react";
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 
 import type {
   MessageFileMediaDto,
@@ -22,7 +22,29 @@ import { PressableBlock } from "@/shared/ui/pressable-block";
 import { ProgressRing } from "@/shared/ui/progress-ring";
 import { Skeleton } from "@/shared/ui/skeleton";
 import { Sticker } from "@/shared/ui/sticker";
+import { SpoilerCover } from "@/shared/ui/spoiler-cover";
+import type { SpoilerRevealOrigin } from "@/shared/ui/spoiler-cover";
 import { Button } from "@components/motion/button";
+
+/**
+ * The hole a media spoiler's reveal punches, as a mask on the blurred layer.
+ * `SpoilerCover` writes the three variables every frame, so this stays a
+ * static style object and the geometry never round-trips through React.
+ * The gradient's soft inner stop matches the canvas hole's feathered edge.
+ */
+const SPOILER_HOLE_INITIAL = {
+  "--spoiler-x": "50%",
+  "--spoiler-y": "50%",
+  "--spoiler-r": "0px",
+} as CSSProperties;
+const SPOILER_HOLE_MASK: CSSProperties = {
+  // Stops are absolute lengths rather than a sized gradient, and a final
+  // stop pins the far field opaque: with every stop at 0 the gradient is
+  // degenerate and Chromium resolves the whole mask to transparent, which
+  // uncovers the media before the reveal has begun.
+  maskImage:
+    "radial-gradient(circle at var(--spoiler-x) var(--spoiler-y), transparent 0, transparent calc(var(--spoiler-r) * 0.55), black var(--spoiler-r), black 100%)",
+};
 
 export interface MessageMediaState {
   readonly state: "downloading" | "ready" | "cancelled" | "failed";
@@ -271,6 +293,8 @@ function VisualMedia({
   video: boolean;
 }) {
   const [spoilerRevealed, setSpoilerRevealed] = useState(!media.spoiler);
+  const [spoilerReveal, setSpoilerReveal] =
+    useState<SpoilerRevealOrigin | null>(null);
   const readyUrl = download?.state === "ready" ? download.url : null;
   const downloading = download?.state === "downloading";
   const failed = download?.state === "failed";
@@ -301,16 +325,55 @@ function VisualMedia({
   // difference when the real size arrives.
   const unsizedFrame = !tile && !box ? "max-h-96 min-h-40 w-full" : undefined;
 
-  const revealButton =
-    !spoilerRevealed && readyUrl ? (
-      <Button
-        size="sm"
-        variant="secondary"
-        onClick={() => setSpoilerRevealed(true)}
-        className="absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2"
+  // The cover is a layer over the media, not a blur on it: Telegram hides a
+  // spoilered photo behind its own blurred stripped thumbnail with the dot
+  // field on top, and blurring the full-resolution image instead is a GPU
+  // pass per frame for as long as the reader keeps scrolling.
+  const spoilerCover =
+    media.spoiler && !spoilerRevealed && readyUrl ? (
+      <div
+        className="absolute inset-0 z-10 overflow-hidden rounded-[inherit]"
+        style={SPOILER_HOLE_INITIAL}
       >
-        {labels.reveal}
-      </Button>
+        {media.blurredThumbnail ? (
+          <img
+            src={media.blurredThumbnail}
+            alt=""
+            aria-hidden="true"
+            className="absolute inset-0 size-full scale-110 object-cover blur-md"
+            style={SPOILER_HOLE_MASK}
+          />
+        ) : (
+          <div
+            aria-hidden="true"
+            className="absolute inset-0 bg-black/70"
+            style={SPOILER_HOLE_MASK}
+          />
+        )}
+        <SpoilerCover
+          mode="media"
+          revealFrom={spoilerReveal}
+          onRevealed={() => setSpoilerRevealed(true)}
+          className="z-10 text-white"
+        />
+        {spoilerReveal === null ? (
+          // Anywhere on the cover reveals, and the click never reaches the
+          // media underneath — it would otherwise open the viewer on the
+          // same press that uncovered it.
+          <button
+            type="button"
+            aria-label={labels.reveal}
+            className="absolute inset-0 z-20 size-full cursor-pointer"
+            onClick={(event) => {
+              const bounds = event.currentTarget.getBoundingClientRect();
+              setSpoilerReveal({
+                x: event.clientX - bounds.left,
+                y: event.clientY - bounds.top,
+              });
+            }}
+          />
+        ) : null}
+      </div>
     ) : null;
 
   if (!readyUrl) {
@@ -389,10 +452,7 @@ function VisualMedia({
                 muted
                 preload="metadata"
                 aria-hidden="true"
-                className={cn(
-                  "pointer-events-none size-full object-cover",
-                  !spoilerRevealed && "blur-xl",
-                )}
+                className="pointer-events-none size-full object-cover"
               />
               <Play
                 aria-hidden="true"
@@ -406,14 +466,11 @@ function VisualMedia({
             <img
               src={readyUrl}
               alt={media.fileName ?? ""}
-              className={cn(
-                "size-full object-cover",
-                !spoilerRevealed && "blur-xl",
-              )}
+              className="size-full object-cover"
             />
           )}
         </button>
-        {revealButton}
+        {spoilerCover}
       </div>
     );
   }
@@ -427,10 +484,7 @@ function VisualMedia({
             controls
             preload="metadata"
             aria-label={media.fileName ?? undefined}
-            className={cn(
-              box ? "size-full object-contain" : "max-h-96 w-full",
-              !spoilerRevealed && "blur-xl",
-            )}
+            className={box ? "size-full object-contain" : "max-h-96 w-full"}
           />
           {onOpen ? (
             <Button
@@ -464,12 +518,11 @@ function VisualMedia({
               box
                 ? "size-full object-contain"
                 : "max-h-96 w-full object-contain",
-              !spoilerRevealed && "blur-xl",
             )}
           />
         </button>
       )}
-      {revealButton}
+      {spoilerCover}
     </div>
   );
 }

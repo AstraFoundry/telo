@@ -2,12 +2,16 @@ import {
   createContext,
   Fragment,
   useContext,
+  useMemo,
   useState,
+  type MouseEvent as ReactMouseEvent,
   type ReactNode,
 } from "react";
 
 import { cn } from "@/shared/lib/cn";
 import { safeLink } from "@/shared/lib/safe-link";
+import { SpoilerCover } from "@/shared/ui/spoiler-cover";
+import type { SpoilerRevealOrigin } from "@/shared/ui/spoiler-cover";
 
 export type RichTextEntityType =
   | "mention"
@@ -142,6 +146,20 @@ function ExternalLink({
   );
 }
 
+/**
+ * Reveal state for every spoiler in one message. Telegram reveals them
+ * together — `Ui::Text::String::setSpoilerRevealed` flips the whole text
+ * object, not the run that was clicked (`history_view_element.cpp:1362`) —
+ * so the state and the cover both live at the message level.
+ */
+interface SpoilerControl {
+  readonly revealing: boolean;
+  readonly revealed: boolean;
+  reveal(event: ReactMouseEvent<HTMLElement>): void;
+}
+
+const SpoilerContext = createContext<SpoilerControl | null>(null);
+
 function Spoiler({
   renderContent,
   revealLabel,
@@ -149,16 +167,42 @@ function Spoiler({
   renderContent(revealed: boolean): ReactNode;
   revealLabel: string;
 }) {
-  const [revealed, setRevealed] = useState(false);
-  if (revealed) return <span>{renderContent(true)}</span>;
+  const control = useContext(SpoilerContext);
+  // Without the message-level provider there is no cover to punch, so the
+  // run falls back to hiding itself and revealing on click.
+  const [localRevealed, setLocalRevealed] = useState(false);
+  if (!control) {
+    if (localRevealed) return <span>{renderContent(true)}</span>;
+    return (
+      <button
+        type="button"
+        aria-label={revealLabel}
+        onClick={() => setLocalRevealed(true)}
+        className="rounded bg-foreground/80 px-0.5 text-transparent outline-none selection:text-transparent focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        {renderContent(false)}
+      </button>
+    );
+  }
+  // Once the cover is gone the run is ordinary text; leaving it a button
+  // would keep advertising a reveal action that has already happened.
+  if (control.revealed) return <span>{renderContent(true)}</span>;
   return (
     <button
       type="button"
+      data-spoiler
       aria-label={revealLabel}
-      onClick={() => setRevealed(true)}
-      className="rounded bg-foreground/80 px-0.5 text-transparent outline-none selection:text-transparent focus-visible:ring-2 focus-visible:ring-ring"
+      onClick={control.reveal}
+      // While covered the glyphs are transparent as well, so a cover that
+      // failed to paint still hides the text. Once the hole starts growing
+      // the text takes its real colour and the cover is what withholds it.
+      className={cn(
+        "rounded px-0.5 outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        !control.revealing &&
+          "text-transparent selection:text-transparent [&_*]:text-transparent",
+      )}
     >
-      {renderContent(false)}
+      {renderContent(control.revealing)}
     </button>
   );
 }
@@ -334,23 +378,69 @@ export function MessageRichText({
   compact?: boolean;
   className?: string;
 }) {
+  const [host, setHost] = useState<HTMLDivElement | null>(null);
+  const [revealFrom, setRevealFrom] = useState<SpoilerRevealOrigin | null>(
+    null,
+  );
+  const [revealed, setRevealed] = useState(false);
+  const hasSpoiler = entities.some((entity) => entity.type === "spoiler");
+
+  const control = useMemo<SpoilerControl>(
+    () => ({
+      revealing: revealFrom !== null,
+      revealed,
+      reveal: (event) => {
+        // The click must not also follow the link or open the media it was
+        // covering, which is why the cover swallows it.
+        event.preventDefault();
+        event.stopPropagation();
+        if (!host) return;
+        const bounds = host.getBoundingClientRect();
+        setRevealFrom({
+          x: event.clientX - bounds.left,
+          y: event.clientY - bounds.top,
+        });
+      },
+    }),
+    [host, revealFrom, revealed],
+  );
+
+  const content = (
+    <div
+      ref={setHost}
+      className={cn(
+        "relative whitespace-pre-wrap break-words",
+        compact && "line-clamp-1",
+        className,
+      )}
+    >
+      {renderRange(
+        body,
+        0,
+        body.length,
+        buildEntityTree(body, entities),
+        revealSpoilerLabel,
+      )}
+      {hasSpoiler && !revealed ? (
+        <SpoilerCover
+          mode="text"
+          container={host}
+          revealFrom={revealFrom}
+          onRevealed={() => setRevealed(true)}
+        />
+      ) : null}
+    </div>
+  );
+
   return (
     <CustomEmojiContext.Provider value={renderCustomEmoji ?? null}>
-      <div
-        className={cn(
-          "whitespace-pre-wrap break-words",
-          compact && "line-clamp-1",
-          className,
-        )}
-      >
-        {renderRange(
-          body,
-          0,
-          body.length,
-          buildEntityTree(body, entities),
-          revealSpoilerLabel,
-        )}
-      </div>
+      {hasSpoiler ? (
+        <SpoilerContext.Provider value={control}>
+          {content}
+        </SpoilerContext.Provider>
+      ) : (
+        content
+      )}
     </CustomEmojiContext.Provider>
   );
 }
