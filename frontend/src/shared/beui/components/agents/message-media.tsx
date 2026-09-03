@@ -19,6 +19,8 @@ import type {
 import { cn } from "@/shared/lib/cn";
 import { LinkPreview } from "@/shared/ui/link-preview";
 import { PressableBlock } from "@/shared/ui/pressable-block";
+import { ProgressRing } from "@/shared/ui/progress-ring";
+import { Skeleton } from "@/shared/ui/skeleton";
 import { Sticker } from "@/shared/ui/sticker";
 import { Button } from "@components/motion/button";
 
@@ -142,10 +144,6 @@ function FileMedia({
 
   const downloading = download?.state === "downloading";
   const failed = download?.state === "failed";
-  const percent =
-    downloading && download.totalBytes && download.totalBytes > 0
-      ? Math.min(100, (download.downloadedBytes / download.totalBytes) * 100)
-      : null;
   const Icon = video
     ? FileVideo
     : media.kind === "audio" || media.kind === "voice"
@@ -170,45 +168,45 @@ function FileMedia({
                 : formatBytes(media.size)}
           </div>
         </div>
-        <Button
-          size="icon"
-          variant="ghost"
-          className="size-10 shrink-0"
-          aria-label={
-            downloading
-              ? labels.cancel
-              : failed
-                ? labels.retry
-                : labels.download
-          }
-          onClick={downloading ? onCancel : onDownload}
-        >
+        <span className="relative grid size-10 shrink-0 place-items-center">
           {downloading ? (
-            <X aria-hidden="true" className="size-4" />
-          ) : failed ? (
-            <ArrowClockwise aria-hidden="true" className="size-4" />
-          ) : (
-            <DownloadSimple aria-hidden="true" className="size-4" />
-          )}
-        </Button>
-      </div>
-      {downloading ? (
-        <div
-          role="progressbar"
-          aria-valuemin={0}
-          aria-valuemax={download.totalBytes ?? undefined}
-          aria-valuenow={download.downloadedBytes}
-          className="mt-2 h-1 overflow-hidden rounded-full bg-foreground/10"
-        >
-          <div
-            className={cn(
-              "h-full rounded-full bg-primary",
-              percent === null && "w-1/3 animate-pulse",
+            // The ring wraps the cancel target rather than taking a row of
+            // its own under the file name, which is where Telegram puts it
+            // too: progress and "stop this" are one control.
+            <ProgressRing
+              value={
+                download.totalBytes && download.totalBytes > 0
+                  ? download.downloadedBytes / download.totalBytes
+                  : null
+              }
+              label={labels.download}
+              size={40}
+              className="absolute inset-0 text-primary"
+            />
+          ) : null}
+          <Button
+            size="icon"
+            variant="ghost"
+            className="size-10 rounded-full"
+            aria-label={
+              downloading
+                ? labels.cancel
+                : failed
+                  ? labels.retry
+                  : labels.download
+            }
+            onClick={downloading ? onCancel : onDownload}
+          >
+            {downloading ? (
+              <X aria-hidden="true" className="size-4" />
+            ) : failed ? (
+              <ArrowClockwise aria-hidden="true" className="size-4" />
+            ) : (
+              <DownloadSimple aria-hidden="true" className="size-4" />
             )}
-            style={percent === null ? undefined : { width: `${percent}%` }}
-          />
-        </div>
-      ) : null}
+          </Button>
+        </span>
+      </div>
       {failed ? (
         <p role="alert" className="mt-1.5 text-xs text-destructive">
           {labels.failed}
@@ -236,14 +234,23 @@ const VISUAL_MEDIA_MIN_ASPECT = 0.5;
 export function visualMediaBox(
   width: number | null,
   height: number | null,
-): { readonly aspectRatio: string; readonly width: string } | null {
+): {
+  readonly aspectRatio: string;
+  readonly width: string;
+  readonly maxWidth: string;
+} | null {
   if (!width || !height || width < 0 || height < 0) return null;
   const aspect = Math.max(width / height, VISUAL_MEDIA_MIN_ASPECT);
   return {
     aspectRatio: `${aspect}`,
     // Capping the width rather than the height is what avoids letterboxing:
     // the box never gets taller than the cap, so it never has spare room.
-    width: `min(100%, ${Math.round(aspect * VISUAL_MEDIA_MAX_HEIGHT)}px)`,
+    // The width is definite rather than `min(100%, …)`: a bubble with no
+    // caption is shrink-to-fit, so a percentage width would resolve against
+    // a parent that is itself sized by this element and collapse the box to
+    // a few pixels. `max-width` still keeps it inside a narrow column.
+    width: `${Math.round(aspect * VISUAL_MEDIA_MAX_HEIGHT)}px`,
+    maxWidth: "100%",
   };
 }
 
@@ -283,7 +290,11 @@ function VisualMedia({
   // A tile is already a square, so only the full card reserves a box.
   const box = tile ? null : visualMediaBox(media.width, media.height);
   const boxStyle = box
-    ? { aspectRatio: box.aspectRatio, width: box.width }
+    ? {
+        aspectRatio: box.aspectRatio,
+        width: box.width,
+        maxWidth: box.maxWidth,
+      }
     : undefined;
   // Without dimensions there is nothing to reserve; the frame falls back to a
   // bounded placeholder and the transcript's scroll anchoring absorbs the
@@ -305,6 +316,7 @@ function VisualMedia({
   if (!readyUrl) {
     return (
       <div className={cn(frame, unsizedFrame)} style={boxStyle}>
+        <MediaPlaceholder thumbnail={media.blurredThumbnail ?? null} />
         {showDownload ? (
           <Button
             size="icon"
@@ -321,39 +333,31 @@ function VisualMedia({
           </Button>
         ) : null}
         {showProgress ? (
-          <>
+          // Telegram puts the ring on the media and the cancel inside it, so
+          // one 40px target both reports progress and stops the download.
+          // A bar would need a row of its own and would sit on the photo it
+          // is describing.
+          <span className="absolute left-1/2 top-1/2 grid size-10 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-black/45 text-white">
+            <ProgressRing
+              value={
+                download.totalBytes && download.totalBytes > 0
+                  ? download.downloadedBytes / download.totalBytes
+                  : null
+              }
+              label={labels.download}
+              size={40}
+              className="absolute inset-0"
+            />
             <Button
               size="icon"
-              variant="secondary"
-              className="absolute right-2 top-2 size-10"
+              variant="ghost"
               aria-label={labels.cancel}
+              className="size-10 rounded-full text-white hover:bg-white/10"
               onClick={onCancel}
             >
               <X aria-hidden="true" className="size-4" />
             </Button>
-            <div
-              role="progressbar"
-              aria-valuemin={0}
-              aria-valuemax={download.totalBytes ?? undefined}
-              aria-valuenow={download.downloadedBytes}
-              className="absolute inset-x-3 bottom-3 h-1 overflow-hidden rounded-full bg-foreground/10"
-            >
-              <div
-                className="h-full rounded-full bg-primary"
-                style={{
-                  width: `${
-                    download.totalBytes && download.totalBytes > 0
-                      ? Math.min(
-                          100,
-                          (download.downloadedBytes / download.totalBytes) *
-                            100,
-                        )
-                      : 33
-                  }%`,
-                }}
-              />
-            </div>
-          </>
+          </span>
         ) : null}
         {failed ? (
           <p
@@ -367,7 +371,6 @@ function VisualMedia({
       </div>
     );
   }
-
   if (tile) {
     return (
       <div className={frame}>
@@ -468,6 +471,42 @@ function VisualMedia({
       )}
       {revealButton}
     </div>
+  );
+}
+
+/**
+ * What fills a photo or video's reserved box before its bytes arrive.
+ *
+ * Telegram's answer is the message's own stripped thumbnail — a ~100-byte
+ * JPEG a few dozen pixels wide — blurred and upscaled
+ * (`getStrippedThumbIfNeeded.ts:41-56`, `history_view_photo.cpp:1025`). The
+ * blur is applied at that tiny size and the compositor does the enlarging,
+ * which is why it costs nothing: blurring the full-resolution image instead
+ * is a GPU pass per frame for the whole time the reader keeps scrolling.
+ *
+ * Only when Telegram sent no thumbnail is there genuinely no shape to draw,
+ * and that is where the skeleton belongs.
+ */
+function MediaPlaceholder({
+  thumbnail,
+}: {
+  readonly thumbnail: string | null;
+}) {
+  if (!thumbnail) {
+    return (
+      <Skeleton rounded className="absolute inset-0 size-full rounded-none" />
+    );
+  }
+  return (
+    <img
+      src={thumbnail}
+      alt=""
+      aria-hidden="true"
+      // Blur samples transparent pixels past the edges and leaves a faded
+      // border, so the thumbnail is drawn slightly oversized and clipped by
+      // the frame — the CSS equivalent of both clients' over-draw.
+      className="absolute inset-0 size-full scale-110 object-cover blur-md"
+    />
   );
 }
 

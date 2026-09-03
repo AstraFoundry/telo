@@ -10,6 +10,8 @@ export { OptionRow } from "./option-row";
 export type { OptionRowProps } from "./option-row";
 export { PressableBlock } from "./pressable-block";
 export type { PressableBlockProps } from "./pressable-block";
+export { ProgressRing } from "./progress-ring";
+export type { ProgressRingProps } from "./progress-ring";
 export {
   SettingsGroup,
   SettingsLinkRow,

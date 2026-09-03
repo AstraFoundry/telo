@@ -51,6 +51,12 @@ const DEMO_WORK_FOLDER_TITLE = "Work";
 // previews and non-visual documents (audio, stickers, …) stay out.
 const SHARED_MEDIA_KINDS = new Set(["photo", "video", "file"]);
 
+// Stands in for Telegram's stripped thumbnail: a 2x2 solid-grey JPEG, small
+// enough to inline and real enough for the renderer to decode, so the demo
+// workspace exercises the blurred placeholder without a Telegram connection.
+const DEMO_BLURRED_THUMBNAIL =
+  "data:image/jpeg;base64,/9j/2wBDAAEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/wAALCAACAAIBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAAAP/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AP//Z";
+
 const INITIAL_CHATS: ReadonlyArray<ChatDto> = [
   {
     id: "saved",
@@ -297,6 +303,7 @@ const INITIAL_MESSAGES: Record<string, ReadonlyArray<MessageDto>> = {
         height: 480,
         duration: null,
         spoiler: false,
+        blurredThumbnail: DEMO_BLURRED_THUMBNAIL,
       },
       groupedId: null,
       sentAt: "2026-08-27T14:27:00.000Z",
@@ -321,6 +328,7 @@ const INITIAL_MESSAGES: Record<string, ReadonlyArray<MessageDto>> = {
         height: 96,
         duration: 1,
         spoiler: false,
+        blurredThumbnail: DEMO_BLURRED_THUMBNAIL,
       },
       groupedId: null,
       sentAt: "2026-08-27T14:27:10.000Z",
@@ -345,6 +353,7 @@ const INITIAL_MESSAGES: Record<string, ReadonlyArray<MessageDto>> = {
         height: 480,
         duration: null,
         spoiler: false,
+        blurredThumbnail: DEMO_BLURRED_THUMBNAIL,
       },
       groupedId: "demo-album-1",
       sentAt: "2026-08-27T14:27:20.000Z",
@@ -369,6 +378,7 @@ const INITIAL_MESSAGES: Record<string, ReadonlyArray<MessageDto>> = {
         height: 480,
         duration: null,
         spoiler: false,
+        blurredThumbnail: DEMO_BLURRED_THUMBNAIL,
       },
       groupedId: "demo-album-1",
       sentAt: "2026-08-27T14:27:20.000Z",
@@ -393,6 +403,7 @@ const INITIAL_MESSAGES: Record<string, ReadonlyArray<MessageDto>> = {
         height: 480,
         duration: null,
         spoiler: false,
+        blurredThumbnail: DEMO_BLURRED_THUMBNAIL,
       },
       groupedId: "demo-album-1",
       sentAt: "2026-08-27T14:27:20.000Z",

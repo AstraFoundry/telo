@@ -61,7 +61,7 @@ describe("MessageMedia", () => {
       />,
     );
     expect(screen.getByRole("progressbar").getAttribute("aria-valuenow")).toBe(
-      "1024",
+      "50",
     );
     await userEvent.click(screen.getByRole("button", { name: labels.cancel }));
     expect(onCancel).toHaveBeenCalledOnce();
@@ -140,9 +140,51 @@ describe("MessageMedia", () => {
         onCancel={vi.fn()}
       />,
     );
+    // The ring reports a percentage of the whole, which is what a
+    // progressbar with a 0..100 range means; byte counts stay in the label.
     expect(screen.getByRole("progressbar").getAttribute("aria-valuenow")).toBe(
-      "1024",
+      "50",
     );
+  });
+
+  it("fills the reserved box with the stripped thumbnail, blurred", () => {
+    const { container } = render(
+      <MessageMedia
+        media={{ ...media, blurredThumbnail: "data:image/jpeg;base64,AAAA" }}
+        download={null}
+        labels={labels}
+        onDownload={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+    );
+
+    const thumb = container.querySelector<HTMLImageElement>(
+      'img[aria-hidden="true"]',
+    );
+    expect(thumb?.getAttribute("src")).toBe("data:image/jpeg;base64,AAAA");
+    // The blur runs on the tiny thumbnail, which the compositor upscales;
+    // the full-resolution image is never the blur source.
+    expect(thumb?.className).toContain("blur-md");
+    expect(thumb?.className).toContain("scale-110");
+  });
+
+  it("falls back to a skeleton when the message carries no thumbnail", () => {
+    const { container } = render(
+      <MessageMedia
+        media={media}
+        download={null}
+        labels={labels}
+        onDownload={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+    );
+
+    expect(container.querySelector("img")).toBeNull();
+    // The old flat bar-and-box placeholder is gone; the sweep marks the box
+    // as pending instead.
+    expect(
+      container.querySelector('[class*="telo-skeleton-sweep"]'),
+    ).not.toBeNull();
   });
 
   it("offers a retry after a failed preload instead of a progress bar", () => {
@@ -234,12 +276,16 @@ describe("MessageMedia", () => {
     // 4:3 at the 384px height cap.
     expect(visualMediaBox(800, 600)).toEqual({
       aspectRatio: `${4 / 3}`,
-      width: "min(100%, 512px)",
+      // Definite, not `min(100%, …)`: a captionless bubble is shrink-to-fit,
+      // so a percentage would resolve against a parent this element sizes.
+      width: "512px",
+      maxWidth: "100%",
     });
     // A very tall photo is boxed at 1:2 rather than rendered as a sliver.
     expect(visualMediaBox(200, 1000)).toEqual({
       aspectRatio: "0.5",
-      width: "min(100%, 192px)",
+      width: "192px",
+      maxWidth: "100%",
     });
     // Nothing to reserve without dimensions; the caller falls back to a
     // bounded placeholder and lets scroll anchoring absorb the difference.

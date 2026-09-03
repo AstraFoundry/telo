@@ -30,6 +30,7 @@ describe("teleproto message media", () => {
       height: 600,
       duration: null,
       spoiler: true,
+      blurredThumbnail: null,
       sticker: null,
     });
     expect(messageGroupedId(message)).toBe("9001");
@@ -220,7 +221,35 @@ describe("teleproto message media", () => {
       height: 720,
       duration: 12,
       spoiler: false,
+      blurredThumbnail: null,
       sticker: null,
     });
+  });
+
+  it("maps a photo's stripped thumbnail into blurredThumbnail", () => {
+    const media = mapMessageMedia({
+      id: 11,
+      photo: {
+        sizes: [
+          { type: "s", w: 90, h: 90 },
+          { type: "i", bytes: Uint8Array.from([0x01, 24, 18, 0x2a]) },
+        ],
+      },
+      file: { mimeType: "image/jpeg" },
+    });
+    // The mapper's job is to hand the renderer a decodable URL; the byte-level
+    // expansion is covered in media-thumbnail.test.ts.
+    expect(media).toMatchObject({
+      kind: "photo",
+      blurredThumbnail: expect.stringMatching(/^data:image\/jpeg;base64,/),
+    });
+  });
+
+  it("leaves blurredThumbnail null when Telegram sent no stripped thumbnail", () => {
+    // Channel photos posted by some bots, and every document uploaded without
+    // a preview, arrive with no inline thumbnail at all.
+    expect(
+      mapMessageMedia({ id: 12, document: { thumbs: [] }, file: {} }),
+    ).toMatchObject({ kind: "file", blurredThumbnail: null });
   });
 });
