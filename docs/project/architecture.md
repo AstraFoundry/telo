@@ -23,8 +23,8 @@ The renderer's imports from `contracts/src` are an intentional exception to FSD.
 ## Backend
 
 - `domain`: agent configuration and thread invariants, user preferences, keyword folders, and Telegram/agent ports.
-- `application`: save configuration, connect/disconnect a Google OAuth account, run agent, manage agent threads, update preferences, keyword-folder CRUD and projection, and Telegram workspace, chat-state, message-action, and logout use cases.
-- `infrastructure`: AI SDK provider packages, Google OAuth PKCE, Teleproto, encrypted JSON, session storage, and demo adapters.
+- `application`: save configuration, connect/disconnect a vendor OAuth account, run agent, manage agent threads, update preferences, keyword-folder CRUD and projection, and Telegram workspace, chat-state, message-action, and logout use cases.
+- `infrastructure`: AI SDK provider packages, vendor OAuth (PKCE loopback and device code), Teleproto, encrypted JSON, session storage, and demo adapters.
 - `interfaces`: Electron lifecycle, context bridge, IPC channels, and AG-UI event mapping.
 
 The app uses local files rather than a database, cache, or message broker. Electron Builder produces macOS, Windows, and Linux artifacts.
@@ -46,7 +46,7 @@ The renderer loads the agent configuration at startup. The panel renders a loadi
 
 ### Telegram
 
-1. Telegram application credentials and the Google OAuth client id are injected at build time (main-process `define` from build secrets); the renderer submits only the phone number and login challenges over typed IPC, and Connect account for Google never receives tokens. A build without Telegram credentials makes the connection flow render a configuration error instead of the form. A build without `TELO_GOOGLE_OAUTH_CLIENT_ID` offers Google through an API key instead of OAuth.
+1. Telegram application credentials and the Google OAuth client id are injected at build time (main-process `define` from build secrets); the renderer submits only the phone number and login challenges over typed IPC, and Connect account never receives tokens. A build without Telegram credentials makes the connection flow render a configuration error instead of the form. OpenAI, Anthropic, xAI, and Kimi Connect use those vendors' public native OAuth clients (overridable with `TELO_<VENDOR>_OAUTH_CLIENT_ID`). A build without `TELO_GOOGLE_OAUTH_CLIENT_ID` offers Google through an API key instead of OAuth.
 2. `TelegramClientCoordinator` owns the Teleproto client and session lifecycle.
 3. First launch stays in onboarding until authentication succeeds. The demo workspace is not an onboarding choice: it opens only when the process is launched with `TELO_DEMO_WORKSPACE=1` (`make dev DEMO=1`).
 4. Application credentials, phone metadata, and the session string are encrypted in Electron's user-data directory.

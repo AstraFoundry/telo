@@ -145,6 +145,8 @@ Google アカウント接続には Google Cloud のデスクトップ OAuth ク�
 TELO_GOOGLE_OAUTH_CLIENT_ID=123456789.apps.googleusercontent.com make dev
 ```
 
+OpenAI / Anthropic / xAI / Kimi の Connect は各社の公開ネイティブ OAuth クライアントを使います。上書きする場合は `TELO_OPENAI_OAUTH_CLIENT_ID`、`TELO_ANTHROPIC_OAUTH_CLIENT_ID`、`TELO_XAI_OAUTH_CLIENT_ID`、`TELO_KIMI_OAUTH_CLIENT_ID` を設定します。
+
 オンボーディングではなくデモワークスペースを開く場合：
 
 ```sh

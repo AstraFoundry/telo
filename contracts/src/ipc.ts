@@ -619,10 +619,11 @@ export const AGENT_HISTORY_LIMIT_MIN = 0;
 export const AGENT_HISTORY_LIMIT_MAX = 50;
 
 /**
- * First-class BYOA providers. Each maps to an official AI SDK package.
- * Google authenticates with desktop OAuth when this build has a client id;
- * the rest authenticate with the account key the vendor issues. OpenAI-compatible
- * is the fallback for any other HTTPS endpoint and is listed last.
+ * First-class BYOA providers. OpenAI, Anthropic, Google, xAI, and Kimi
+ * authenticate with desktop OAuth when a client is configured; Groq,
+ * DeepSeek, and Mistral still use the account key the vendor issues.
+ * OpenAI-compatible is the fallback for any other HTTPS endpoint and is
+ * listed last.
  */
 export const FIRST_CLASS_AGENT_PROVIDERS = [
   "openai",
@@ -630,6 +631,7 @@ export const FIRST_CLASS_AGENT_PROVIDERS = [
   "google",
   "groq",
   "xai",
+  "kimi",
   "deepseek",
   "mistral",
 ] as const;
@@ -644,11 +646,17 @@ export const AGENT_PROVIDERS = [
 export type AgentProvider = (typeof AGENT_PROVIDERS)[number];
 
 /**
- * Vendors that publish a third-party desktop OAuth program Telo can use.
- * ChatGPT and Claude subscription OAuth are not on this list: those flows
- * are licensed only to the vendor's own apps.
+ * Vendors whose Connect-account path is desktop OAuth. Groq, DeepSeek, and
+ * Mistral stay on API keys; they do not publish a native OAuth program Telo
+ * can run.
  */
-export const AGENT_OAUTH_PROVIDERS = ["google"] as const;
+export const AGENT_OAUTH_PROVIDERS = [
+  "openai",
+  "anthropic",
+  "google",
+  "xai",
+  "kimi",
+] as const;
 
 export type AgentOAuthProvider = (typeof AGENT_OAUTH_PROVIDERS)[number];
 
@@ -660,6 +668,14 @@ export function agentProviderSupportsOAuth(
   return (AGENT_OAUTH_PROVIDERS as readonly string[]).includes(provider);
 }
 
+/** True when this build can run Connect for `provider`. */
+export function agentOAuthIsConfigured(
+  configured: ReadonlyArray<AgentOAuthProvider>,
+  provider: AgentProvider,
+): boolean {
+  return agentProviderSupportsOAuth(provider) && configured.includes(provider);
+}
+
 /** Model id filled in when the user picks this provider. */
 export const AGENT_PROVIDER_DEFAULT_MODEL: Record<AgentProvider, string> = {
   openai: "gpt-4.1-mini",
@@ -667,6 +683,7 @@ export const AGENT_PROVIDER_DEFAULT_MODEL: Record<AgentProvider, string> = {
   google: "gemini-2.5-flash",
   groq: "llama-3.3-70b-versatile",
   xai: "grok-3",
+  kimi: "kimi-k2.5",
   deepseek: "deepseek-chat",
   mistral: "mistral-small-latest",
   "openai-compatible": "gpt-4.1-mini",
@@ -688,11 +705,10 @@ export interface AgentConfigurationDto {
   /** Connected account email (or similar); never a token. */
   readonly accountLabel: string | null;
   /**
-   * True when this build can run Google's desktop OAuth (a client id is
-   * injected, or the e2e fixture is active). Combined with
-   * `agentProviderSupportsOAuth` in the renderer to decide Connect vs key.
+   * OAuth vendors this build can Connect. Combined with the selected
+   * provider in the renderer to decide Connect vs key.
    */
-  readonly oauthClientConfigured: boolean;
+  readonly configuredOAuthProviders: ReadonlyArray<AgentOAuthProvider>;
   readonly canInspectWorkspace: boolean;
   /** Sampling temperature handed to the provider. */
   readonly temperature: number;

@@ -6,6 +6,7 @@ import type {
   AgentOAuthClient,
 } from "../../domain/agent/agent-ports";
 import { SaveAgentConfigurationService } from "./save-agent-configuration";
+import { agentProviderSupportsOAuth } from "../../../../contracts/src/ipc";
 
 class MemoryConfigurationRepository implements AgentConfigurationRepository {
   value = AgentConfiguration.create({
@@ -32,8 +33,9 @@ function oauthClient(
   overrides: Partial<AgentOAuthClient> = {},
 ): AgentOAuthClient {
   return {
-    isConfigured: () => true,
-    supports: (provider) => provider === "google",
+    configuredProviders: () => ["google"],
+    isConfigured: (provider) => provider === "google",
+    supports: (provider) => agentProviderSupportsOAuth(provider),
     authorize: async () => ({
       accessToken: "ya29.access",
       refreshToken: "1//refresh",
@@ -157,7 +159,7 @@ describe("SaveAgentConfigurationService", () => {
       hasCredential: true,
       authKind: "oauth",
       accountLabel: "mina@example.com",
-      oauthClientConfigured: true,
+      configuredOAuthProviders: ["google"],
     });
     expect(repository.value.snapshot()).toMatchObject({
       apiKey: null,
@@ -168,7 +170,7 @@ describe("SaveAgentConfigurationService", () => {
     });
   });
 
-  it("rejects OAuth for a vendor that has no third-party program", async () => {
+  it("rejects OAuth for a vendor that has no native program", async () => {
     const repository = new MemoryConfigurationRepository();
     const service = new SaveAgentConfigurationService(
       repository,
@@ -176,7 +178,7 @@ describe("SaveAgentConfigurationService", () => {
     );
 
     await expect(
-      service.connect({ ...googleFields, provider: "anthropic" }),
+      service.connect({ ...googleFields, provider: "groq" }),
     ).rejects.toThrow("OAuth is not available for this provider");
     expect(repository.value.snapshot().apiKey).toBe("existing-key");
   });
@@ -210,7 +212,7 @@ describe("SaveAgentConfigurationService", () => {
     );
 
     await expect(service.connect(googleFields)).rejects.toThrow(
-      "This build is missing a Google OAuth client.",
+      "This build is missing an OAuth client for this provider.",
     );
   });
 

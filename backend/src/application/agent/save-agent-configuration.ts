@@ -20,7 +20,7 @@ export class SaveAgentConfigurationService {
   async get() {
     return toAgentConfigurationDto(
       await this.repository.get(),
-      this.oauth.isConfigured(),
+      this.oauth.configuredProviders(),
     );
   }
 
@@ -43,15 +43,20 @@ export class SaveAgentConfigurationService {
       historyLimit: input.historyLimit,
     });
     await this.repository.save(configuration);
-    return toAgentConfigurationDto(configuration, this.oauth.isConfigured());
+    return toAgentConfigurationDto(
+      configuration,
+      this.oauth.configuredProviders(),
+    );
   }
 
   async connect(input: ConnectAgentAccountInput) {
     if (!this.oauth.supports(input.provider)) {
       throw new Error("OAuth is not available for this provider");
     }
-    if (!this.oauth.isConfigured()) {
-      throw new Error("This build is missing a Google OAuth client.");
+    if (!this.oauth.isConfigured(input.provider)) {
+      throw new Error(
+        "This build is missing an OAuth client for this provider.",
+      );
     }
     const session = await this.oauth.authorize(input.provider);
     const configuration = AgentConfiguration.create({
@@ -67,7 +72,10 @@ export class SaveAgentConfigurationService {
       historyLimit: input.historyLimit,
     });
     await this.repository.save(configuration);
-    return toAgentConfigurationDto(configuration, this.oauth.isConfigured());
+    return toAgentConfigurationDto(
+      configuration,
+      this.oauth.configuredProviders(),
+    );
   }
 
   async disconnect(input: ConnectAgentAccountInput) {
@@ -84,6 +92,9 @@ export class SaveAgentConfigurationService {
       historyLimit: input.historyLimit,
     });
     await this.repository.save(configuration);
-    return toAgentConfigurationDto(configuration, this.oauth.isConfigured());
+    return toAgentConfigurationDto(
+      configuration,
+      this.oauth.configuredProviders(),
+    );
   }
 }

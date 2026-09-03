@@ -12,6 +12,7 @@ import type {
   ChatDto,
   MessageDto,
 } from "../../../../../contracts/src/ipc";
+import { AGENT_OAUTH_PROVIDERS } from "../../../../../contracts/src/ipc";
 import { useAgentStore } from "../../../entities/agent";
 import { useChatStore } from "../../../entities/chat";
 import { installTeloApiMock } from "../../../shared/test/mock-telo";
@@ -29,7 +30,7 @@ function configuration(
     hasCredential: true,
     authKind: "api-key",
     accountLabel: null,
-    oauthClientConfigured: true,
+    configuredOAuthProviders: [...AGENT_OAUTH_PROVIDERS],
     canInspectWorkspace: true,
     temperature: 0.7,
     maxSteps: 4,

@@ -1,22 +1,29 @@
-import { agentProviderSupportsOAuth } from "../../../../contracts/src/ipc";
+import {
+  AGENT_OAUTH_PROVIDERS,
+  agentProviderSupportsOAuth,
+} from "../../../../contracts/src/ipc";
 import type { AgentOAuthTokens } from "../../domain/agent/agent-configuration";
 import type { AgentProvider } from "../../domain/agent/agent-configuration";
 import type { AgentOAuthClient } from "../../domain/agent/agent-ports";
 
 const FIXTURE: AgentOAuthTokens = {
-  accessToken: "e2e-google-access",
-  refreshToken: "e2e-google-refresh",
+  accessToken: "e2e-oauth-access",
+  refreshToken: "e2e-oauth-refresh",
   expiresAt: "2099-01-01T00:00:00.000Z",
   accountLabel: "e2e@example.com",
 };
 
 /**
- * Completes Google Connect without a browser. Selected when `TELO_E2E=1` so
+ * Completes Connect without a browser. Selected when `TELO_E2E=1` so
  * Playwright can exercise the account path that production uses.
  */
 export class FixtureAgentOAuthClient implements AgentOAuthClient {
-  isConfigured(): boolean {
-    return true;
+  configuredProviders() {
+    return AGENT_OAUTH_PROVIDERS;
+  }
+
+  isConfigured(provider: AgentProvider): boolean {
+    return agentProviderSupportsOAuth(provider);
   }
 
   supports(provider: AgentProvider): boolean {

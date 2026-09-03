@@ -49,8 +49,8 @@ export class AgentConfiguration {
     // Named providers talk to the vendor endpoint. A leftover compatible URL
     // must not ride along after the user switches accounts.
     const baseUrl = compatible ? input.baseUrl?.trim() || null : null;
-    // OAuth tokens are vendor-specific. A leftover Google session must not
-    // authenticate Anthropic (or anyone else) after the user switches.
+    // OAuth tokens are vendor-specific. A leftover session must not
+    // authenticate a different vendor after the user switches.
     const oauth = agentProviderSupportsOAuth(input.provider)
       ? normalizeOAuth(input.oauth)
       : null;

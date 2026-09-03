@@ -145,6 +145,8 @@ Google 账号登录需要 Google Cloud 的桌面应用 OAuth 客户端 ID（启�
 TELO_GOOGLE_OAUTH_CLIENT_ID=123456789.apps.googleusercontent.com make dev
 ```
 
+OpenAI、Anthropic、xAI 和 Kimi 的 Connect 使用各厂商公开的原生 OAuth 客户端。如需覆盖，可设置 `TELO_OPENAI_OAUTH_CLIENT_ID`、`TELO_ANTHROPIC_OAUTH_CLIENT_ID`、`TELO_XAI_OAUTH_CLIENT_ID`、`TELO_KIMI_OAUTH_CLIENT_ID`。
+
 如需打开内存演示工作区而非引导页：
 
 ```sh

@@ -124,7 +124,7 @@ describe("AgentConfiguration", () => {
     ).toThrow("Unknown agent provider");
   });
 
-  it("keeps Google OAuth tokens and strips them on other providers", () => {
+  it("keeps OAuth tokens on OAuth providers and strips them on API-key vendors", () => {
     const oauth = {
       accessToken: " ya29.token ",
       refreshToken: " 1//refresh ",
@@ -149,6 +149,19 @@ describe("AgentConfiguration", () => {
         ...valid,
         provider: "anthropic",
         model: "claude-sonnet-4-5",
+        oauth,
+      }).snapshot().oauth,
+    ).toEqual({
+      accessToken: "ya29.token",
+      refreshToken: "1//refresh",
+      expiresAt: "2026-09-03T12:00:00.000Z",
+      accountLabel: "mina@example.com",
+    });
+    expect(
+      AgentConfiguration.create({
+        ...valid,
+        provider: "groq",
+        model: "llama-3.3-70b-versatile",
         oauth,
       }).snapshot().oauth,
     ).toBeNull();

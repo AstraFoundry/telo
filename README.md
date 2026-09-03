@@ -145,6 +145,8 @@ Google Connect account needs a Desktop OAuth client id from Google Cloud (Genera
 TELO_GOOGLE_OAUTH_CLIENT_ID=123456789.apps.googleusercontent.com make dev
 ```
 
+OpenAI, Anthropic, xAI, and Kimi Connect use those vendors' public native OAuth clients. Optional overrides: `TELO_OPENAI_OAUTH_CLIENT_ID`, `TELO_ANTHROPIC_OAUTH_CLIENT_ID`, `TELO_XAI_OAUTH_CLIENT_ID`, `TELO_KIMI_OAUTH_CLIENT_ID`.
+
 To open the in-memory demo workspace instead of onboarding:
 
 ```sh

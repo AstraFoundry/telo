@@ -9,7 +9,7 @@ import {
   AGENT_PROVIDER_DEFAULT_MODEL,
   AGENT_TEMPERATURE_MAX,
   AGENT_TEMPERATURE_MIN,
-  agentProviderSupportsOAuth,
+  agentOAuthIsConfigured,
   type AgentProvider,
   type ConnectAgentAccountInput,
 } from "../../../../../contracts/src/ipc";
@@ -56,9 +56,10 @@ export function AgentConfigurationForm() {
   const inspectId = useId();
   const inspectHintId = useId();
   const compatible = provider === AGENT_COMPATIBLE_PROVIDER;
-  const oauthPath =
-    agentProviderSupportsOAuth(provider) &&
-    Boolean(configuration?.oauthClientConfigured);
+  const oauthPath = agentOAuthIsConfigured(
+    configuration?.configuredOAuthProviders ?? [],
+    provider,
+  );
   const connected =
     oauthPath &&
     configuration?.provider === provider &&

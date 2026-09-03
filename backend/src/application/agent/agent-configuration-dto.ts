@@ -1,6 +1,7 @@
 import type {
   AgentAuthKind,
   AgentConfigurationDto,
+  AgentOAuthProvider,
 } from "../../../../contracts/src/ipc";
 import {
   AgentConfiguration,
@@ -9,7 +10,7 @@ import {
 
 export function toAgentConfigurationDto(
   configuration: AgentConfiguration,
-  oauthClientConfigured: boolean,
+  configuredOAuthProviders: ReadonlyArray<AgentOAuthProvider>,
 ): AgentConfigurationDto {
   const value = configuration.snapshot();
   const hasCredential = agentConfigurationHasCredential(value);
@@ -26,7 +27,7 @@ export function toAgentConfigurationDto(
     hasCredential,
     authKind,
     accountLabel: value.oauth?.accountLabel ?? null,
-    oauthClientConfigured,
+    configuredOAuthProviders: [...configuredOAuthProviders],
     canInspectWorkspace: value.canInspectWorkspace,
     temperature: value.temperature,
     maxSteps: value.maxSteps,

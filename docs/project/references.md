@@ -9,6 +9,8 @@
 - [AI SDK OpenAI-compatible provider](https://ai-sdk.dev/providers/openai-compatible-providers)
 - [Google OAuth 2.0 for desktop apps](https://developers.google.com/identity/protocols/oauth2/native-app)
 - [Gemini API OAuth](https://ai.google.dev/gemini-api/docs/oauth)
+- [RFC 8628 Device Authorization Grant](https://datatracker.ietf.org/doc/html/rfc8628)
+- [Kimi CLI OAuth](https://github.com/MoonshotAI/kimi-cli/blob/main/src/kimi_cli/auth/oauth.py)
 - [AG-UI protocol](https://docs.ag-ui.com/)
 - [Teleproto](https://github.com/Sanyok12345/Teleproto)
 - [Telegram update synchronization](https://core.telegram.org/api/updates)

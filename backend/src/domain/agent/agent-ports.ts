@@ -1,4 +1,7 @@
-import type { UiContextSnapshot } from "../../../../contracts/src/ipc";
+import type {
+  AgentOAuthProvider,
+  UiContextSnapshot,
+} from "../../../../contracts/src/ipc";
 import type { AgentAuditRecord } from "./agent-audit";
 import type {
   AgentConfiguration,
@@ -17,7 +20,8 @@ export interface AgentConfigurationRepository {
  * process; the renderer only sees `accountLabel`.
  */
 export interface AgentOAuthClient {
-  isConfigured(): boolean;
+  configuredProviders(): ReadonlyArray<AgentOAuthProvider>;
+  isConfigured(provider: AgentProvider): boolean;
   supports(provider: AgentProvider): boolean;
   authorize(provider: AgentProvider): Promise<AgentOAuthTokens>;
   refresh(

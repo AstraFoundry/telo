@@ -126,6 +126,8 @@ export const SETTINGS_INDEX: ReadonlyArray<SettingsIndexEntry> = [
       "groq",
       "xai",
       "grok",
+      "kimi",
+      "moonshot",
       "deepseek",
       "mistral",
       "compatible",

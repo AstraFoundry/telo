@@ -75,6 +75,7 @@ export const copy = {
   google: "Google",
   groq: "Groq",
   xai: "xAI",
+  kimi: "Kimi",
   deepseek: "DeepSeek",
   mistral: "Mistral",
   compatible: "OpenAI-compatible",

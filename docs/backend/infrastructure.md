@@ -48,4 +48,4 @@ export class SqlOrderRepository implements OrderRepository {
 - Wrap third-party APIs in thin adapters.
 - Define the port in `domain/` or `application/` and implement it here.
 - Failures in external services should be translated into domain or application errors, not leaked as raw HTTP errors.
-- The agent gateway uses the Vercel AI SDK. Named BYOA providers each have an official `@ai-sdk/*` package; OpenAI-compatible endpoints go through `@ai-sdk/openai-compatible`. Construction lives in `createAgentLanguageModel`. Google OAuth tokens are exchanged in `GoogleOAuthClient` (PKCE loopback) and attached as a Bearer fetch wrapper.
+- The agent gateway uses the Vercel AI SDK. Named BYOA providers each have an official `@ai-sdk/*` package except Kimi, which uses `@ai-sdk/openai-compatible` against `https://api.kimi.com/coding/v1`. Construction lives in `createAgentLanguageModel`. OAuth tokens are exchanged in `VendorOAuthClient` (PKCE loopback or device code) and attached as a Bearer credential.

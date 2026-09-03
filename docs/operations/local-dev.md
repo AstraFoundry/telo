@@ -29,7 +29,7 @@ Local Telegram application credentials live in `.env` (gitignored; copy `.env.ex
 TELO_TELEGRAM_API_ID=12345 TELO_TELEGRAM_API_HASH=... make dev
 ```
 
-Google Connect account uses the same injection for a Desktop OAuth client id (`TELO_GOOGLE_OAUTH_CLIENT_ID`). Register a Desktop app in Google Cloud, enable the Generative Language API, and allow loopback redirects (`http://127.0.0.1`). A build without that id still configures Google with an API key. `TELO_E2E=1` (Playwright) swaps in a fixture OAuth client so Connect does not open a browser.
+Google Connect account uses the same injection for a Desktop OAuth client id (`TELO_GOOGLE_OAUTH_CLIENT_ID`). Register a Desktop app in Google Cloud, enable the Generative Language API, and allow loopback redirects (`http://127.0.0.1`). A build without that id still configures Google with an API key. OpenAI, Anthropic, xAI, and Kimi Connect use public native clients by default; set `TELO_OPENAI_OAUTH_CLIENT_ID`, `TELO_ANTHROPIC_OAUTH_CLIENT_ID`, `TELO_XAI_OAUTH_CLIENT_ID`, or `TELO_KIMI_OAUTH_CLIENT_ID` to override. `TELO_E2E=1` (Playwright) swaps in a fixture OAuth client so Connect does not open a browser.
 
 The demo workspace is a local-development and e2e launch flag, not a product surface:
 
@@ -43,7 +43,7 @@ The release workflow reads the same values from the `TELO_TELEGRAM_API_ID`, `TEL
 
 ## Stored data
 
-The application writes `agent.json`, `agent-threads.json`, `agent-audit.jsonl`, `telegram.profile`, `telegram.session`, `dialogs.json`, `keyword-folders.json`, `preferences.json`, and `media-cache/` under Electron's `app.getPath("userData")`. Telegram profile and session data are encrypted with Electron `safeStorage`; `preferences.json`, `dialogs.json`, and `agent-threads.json` hold no secrets and stay plain JSON. `make reset` deletes the userData (and cache/log) directories so the next `make dev` is a first-run launch. Demo conversations are in memory.
+The application writes `agent.json`, `agent-threads.json`, `agent-audit.jsonl`, `kimi-device-id`, `telegram.profile`, `telegram.session`, `dialogs.json`, `keyword-folders.json`, `preferences.json`, and `media-cache/` under Electron's `app.getPath("userData")`. Telegram profile and session data are encrypted with Electron `safeStorage`; `preferences.json`, `dialogs.json`, and `agent-threads.json` hold no secrets and stay plain JSON. `kimi-device-id` is a non-secret UUID Kimi OAuth sends as `X-Msh-Device-Id`. `make reset` deletes the userData (and cache/log) directories so the next `make dev` is a first-run launch. Demo conversations are in memory.
 
 `safeStorage` requires an OS keychain. On machines or sessions without one (headless Linux, Playwright), set `TELO_PLAINTEXT_SECRETS=1` to fall back to plain base64 encoding for secrets. This escape hatch exists only for local development and the e2e suite — never use it in production or with real accounts.
 

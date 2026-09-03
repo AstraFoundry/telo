@@ -88,13 +88,14 @@ describe("GoogleOAuthClient", () => {
     expect(String(tokenCall?.[1]?.body)).not.toContain("client_secret");
   });
 
-  it("is unconfigured without a client id", () => {
+  it("is unconfigured for Google without a client id", () => {
     const client = new GoogleOAuthClient({
       clientId: "  ",
       openExternal: async () => undefined,
     });
-    expect(client.isConfigured()).toBe(false);
-    expect(client.supports("openai")).toBe(false);
+    expect(client.isConfigured("google")).toBe(false);
+    expect(client.isConfigured("openai")).toBe(true);
+    expect(client.supports("openai")).toBe(true);
     expect(client.supports("google")).toBe(true);
   });
 });

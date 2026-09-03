@@ -57,6 +57,7 @@ describe("RefreshingAgentConfigurationRepository", () => {
     };
     const client: AgentOAuthClient = {
       isConfigured: () => true,
+      configuredProviders: () => ["google"],
       supports: (provider) => provider === "google",
       authorize: async () => oauth,
       refresh: async () => ({
@@ -93,6 +94,7 @@ describe("RefreshingAgentConfigurationRepository", () => {
       inner,
       {
         isConfigured: () => true,
+        configuredProviders: () => ["google"],
         supports: () => true,
         authorize: async () => oauth,
         refresh: async () => oauth,
@@ -113,6 +115,7 @@ describe("RefreshingAgentConfigurationRepository", () => {
     };
     const repository = new RefreshingAgentConfigurationRepository(inner, {
       isConfigured: () => true,
+      configuredProviders: () => ["google"],
       supports: () => true,
       authorize: async () => oauth,
       refresh: async () => oauth,
@@ -133,6 +136,7 @@ describe("RefreshingAgentConfigurationRepository", () => {
       inner,
       {
         isConfigured: () => true,
+        configuredProviders: () => ["google"],
         supports: () => true,
         authorize: async () => oauth,
         refresh: async () => {

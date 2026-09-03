@@ -260,6 +260,96 @@ describe("AiSdkAgentGateway", () => {
     expect(ai.createOpenAICompatible).not.toHaveBeenCalled();
   });
 
+  it("uses Anthropic OAuth Bearer tokens instead of an API key", async () => {
+    ai.streamText.mockReturnValue(emptyStream());
+
+    await collect(
+      configuration({
+        provider: "anthropic",
+        model: "claude-sonnet-4-5",
+        apiKey: null,
+        oauth: {
+          accessToken: "sk-ant-oauth",
+          refreshToken: "refresh",
+          expiresAt: "2026-09-03T12:00:00.000Z",
+          accountLabel: null,
+        },
+      }),
+    );
+
+    expect(ai.createAnthropic).toHaveBeenCalledWith({
+      apiKey: "oauth",
+      fetch: expect.any(Function),
+    });
+  });
+
+  it("uses an OpenAI OAuth access token", async () => {
+    ai.streamText.mockReturnValue(emptyStream());
+
+    await collect(
+      configuration({
+        provider: "openai",
+        apiKey: null,
+        oauth: {
+          accessToken: "chatgpt-access",
+          refreshToken: "chatgpt-refresh",
+          expiresAt: "2026-09-03T12:00:00.000Z",
+          accountLabel: null,
+        },
+      }),
+    );
+
+    expect(ai.createOpenAI).toHaveBeenCalledWith({
+      apiKey: "chatgpt-access",
+      headers: undefined,
+    });
+  });
+
+  it("uses an xAI OAuth access token", async () => {
+    ai.streamText.mockReturnValue(emptyStream());
+
+    await collect(
+      configuration({
+        provider: "xai",
+        model: "grok-3",
+        apiKey: null,
+        oauth: {
+          accessToken: "xai-access",
+          refreshToken: "xai-refresh",
+          expiresAt: "2026-09-03T12:00:00.000Z",
+          accountLabel: null,
+        },
+      }),
+    );
+
+    expect(ai.createXai).toHaveBeenCalledWith({ apiKey: "xai-access" });
+  });
+
+  it("uses the Kimi coding endpoint", async () => {
+    ai.streamText.mockReturnValue(emptyStream());
+
+    await collect(
+      configuration({
+        provider: "kimi",
+        model: "kimi-k2.5",
+        apiKey: null,
+        oauth: {
+          accessToken: "kimi-access",
+          refreshToken: "kimi-refresh",
+          expiresAt: "2026-09-03T12:00:00.000Z",
+          accountLabel: null,
+        },
+      }),
+    );
+
+    expect(ai.createOpenAICompatible).toHaveBeenCalledWith({
+      name: "kimi",
+      apiKey: "kimi-access",
+      baseURL: "https://api.kimi.com/coding/v1",
+    });
+    expect(ai.createOpenAI).not.toHaveBeenCalled();
+  });
+
   it.each([
     ["google", "gemini-2.5-flash", () => ai.createGoogleGenerativeAI],
     ["groq", "llama-3.3-70b-versatile", () => ai.createGroq],

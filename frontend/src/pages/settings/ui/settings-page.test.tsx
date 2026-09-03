@@ -8,6 +8,7 @@ import type {
   CurrentUserDto,
   UserPreferencesDto,
 } from "../../../../../contracts/src/ipc";
+import { AGENT_OAUTH_PROVIDERS } from "../../../../../contracts/src/ipc";
 import { copy } from "../../../shared/config/copy";
 import { installTeloApiMock } from "../../../shared/test/mock-telo";
 
@@ -29,7 +30,7 @@ const AGENT_CONFIGURATION: AgentConfigurationDto = {
   hasCredential: false,
   authKind: null,
   accountLabel: null,
-  oauthClientConfigured: true,
+  configuredOAuthProviders: [...AGENT_OAUTH_PROVIDERS],
   canInspectWorkspace: true,
   temperature: 0.7,
   maxSteps: 4,

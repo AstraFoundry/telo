@@ -21,7 +21,11 @@ import { AiSdkAgentGateway } from "../../infrastructure/agent/ai-sdk-agent-gatew
 import { DemoAgentGateway } from "../../infrastructure/agent/demo-agent-gateway";
 import { FileAgentConfigurationRepository } from "../../infrastructure/agent/file-agent-configuration-repository";
 import { FixtureAgentOAuthClient } from "../../infrastructure/agent/fixture-agent-oauth-client";
-import { GoogleOAuthClient } from "../../infrastructure/agent/google-oauth-client";
+import {
+  loadOrCreateKimiDeviceId,
+  kimiDeviceHeaders,
+} from "../../infrastructure/agent/kimi-device";
+import { VendorOAuthClient } from "../../infrastructure/agent/vendor-oauth-client";
 import { FileAgentAuditRepository } from "../../infrastructure/agent/file-agent-audit-repository";
 import { FileAgentThreadRepository } from "../../infrastructure/agent/file-agent-thread-repository";
 import { FileUserPreferencesRepository } from "../../infrastructure/preferences/file-user-preferences-repository";
@@ -86,9 +90,21 @@ export function createContainer(
   const oauthClient =
     process.env.TELO_E2E === "1"
       ? new FixtureAgentOAuthClient()
-      : new GoogleOAuthClient({
-          clientId: process.env.TELO_GOOGLE_OAUTH_CLIENT_ID?.trim() ?? "",
+      : new VendorOAuthClient({
+          clientIds: {
+            google: process.env.TELO_GOOGLE_OAUTH_CLIENT_ID?.trim() ?? "",
+            openai: process.env.TELO_OPENAI_OAUTH_CLIENT_ID?.trim() ?? "",
+            anthropic: process.env.TELO_ANTHROPIC_OAUTH_CLIENT_ID?.trim() ?? "",
+            xai: process.env.TELO_XAI_OAUTH_CLIENT_ID?.trim() ?? "",
+            kimi: process.env.TELO_KIMI_OAUTH_CLIENT_ID?.trim() ?? "",
+          },
           openExternal: (url) => shell.openExternal(url).then(() => undefined),
+          kimiHeaders: kimiDeviceHeaders({
+            deviceId: loadOrCreateKimiDeviceId(
+              path.join(dataDirectory, "kimi-device-id"),
+            ),
+            appVersion: app.getVersion(),
+          }),
         });
   const liveConfigurations = new RefreshingAgentConfigurationRepository(
     configurations,

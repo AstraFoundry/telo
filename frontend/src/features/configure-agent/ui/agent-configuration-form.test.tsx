@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import type { AgentConfigurationDto } from "../../../../../contracts/src/ipc";
+import { AGENT_OAUTH_PROVIDERS } from "../../../../../contracts/src/ipc";
 import { useAgentStore } from "entities/agent";
 import { copy } from "shared/config/copy";
 import type { TeloApiMock } from "shared/test/mock-telo";
@@ -18,7 +19,7 @@ const CONFIGURATION: AgentConfigurationDto = {
   hasCredential: false,
   authKind: null,
   accountLabel: null,
-  oauthClientConfigured: true,
+  configuredOAuthProviders: [...AGENT_OAUTH_PROVIDERS],
   canInspectWorkspace: true,
   temperature: 0.7,
   maxSteps: 4,
@@ -82,9 +83,13 @@ describe("AgentConfigurationForm", () => {
 
     expect(screen.getByRole("combobox", { name: copy.provider })).toBeTruthy();
     expect(screen.queryByLabelText(copy.baseUrl)).toBeNull();
+    expect(screen.queryByLabelText(copy.apiKey)).toBeNull();
+    expect(
+      screen.getByRole("button", { name: copy.connectAccount }),
+    ).toBeTruthy();
   });
 
-  it("fills the Anthropic default model and keeps the base URL hidden", async () => {
+  it("fills the Anthropic default model and offers Connect instead of a key", async () => {
     const user = userEvent.setup();
     await renderForm();
 
@@ -95,6 +100,10 @@ describe("AgentConfigurationForm", () => {
       "claude-sonnet-4-5",
     );
     expect(screen.queryByLabelText(copy.baseUrl)).toBeNull();
+    expect(screen.queryByLabelText(copy.apiKey)).toBeNull();
+    expect(
+      screen.getByRole("button", { name: copy.connectAccount }),
+    ).toBeTruthy();
   });
 
   it("shows the base URL only for the OpenAI-compatible fallback", async () => {
@@ -107,22 +116,45 @@ describe("AgentConfigurationForm", () => {
     expect(screen.getByLabelText(copy.baseUrl)).toBeTruthy();
   });
 
-  it("saves an Anthropic account without a base URL", async () => {
+  it("saves a Groq account with an API key", async () => {
     const user = userEvent.setup();
     await renderForm();
 
     await user.click(screen.getByRole("combobox", { name: copy.provider }));
-    await user.click(screen.getByRole("option", { name: copy.anthropic }));
-    await user.type(screen.getByLabelText(copy.apiKey), "sk-ant-test");
+    await user.click(screen.getByRole("option", { name: copy.groq }));
+    await user.type(screen.getByLabelText(copy.apiKey), "gsk-test");
     await user.click(screen.getByRole("button", { name: copy.save }));
 
     await waitFor(() => {
       expect(telo.agent.saveConfiguration).toHaveBeenCalledWith(
         expect.objectContaining({
-          provider: "anthropic",
-          model: "claude-sonnet-4-5",
+          provider: "groq",
+          model: "llama-3.3-70b-versatile",
           baseUrl: null,
-          apiKey: "sk-ant-test",
+          apiKey: "gsk-test",
+        }),
+      );
+    });
+  });
+
+  it("connects a Kimi account instead of asking for a key", async () => {
+    const user = userEvent.setup();
+    await renderForm();
+
+    await user.click(screen.getByRole("combobox", { name: copy.provider }));
+    await user.click(screen.getByRole("option", { name: copy.kimi }));
+
+    expect((screen.getByLabelText(copy.model) as HTMLInputElement).value).toBe(
+      "kimi-k2.5",
+    );
+    expect(screen.queryByLabelText(copy.apiKey)).toBeNull();
+    await user.click(screen.getByRole("button", { name: copy.connectAccount }));
+
+    await waitFor(() => {
+      expect(telo.agent.connectAccount).toHaveBeenCalledWith(
+        expect.objectContaining({
+          provider: "kimi",
+          model: "kimi-k2.5",
         }),
       );
     });

@@ -1,20 +1,9 @@
-import { demoTest as test, expect, waitForDemoWorkspace } from "./fixtures";
-
-/** Avatar menu -> Settings -> Agent, the entry point a reader actually uses. */
-async function openAgentSettings(
-  window: Parameters<typeof waitForDemoWorkspace>[0],
-) {
-  await window.getByRole("button", { name: "Open account menu" }).click();
-  await window.getByRole("button", { name: "Settings", exact: true }).click();
-  await window.getByRole("button", { name: "Agent settings" }).click();
-  await expect(
-    window.getByRole("heading", { name: "Agent settings" }),
-  ).toBeVisible();
-  // The form backfills asynchronously once the stored configuration loads.
-  await expect(window.getByLabel("Instructions")).toHaveValue(
-    "Answer from the visible Telegram workspace. Ask before acting outside it.",
-  );
-}
+import {
+  demoTest as test,
+  expect,
+  waitForDemoWorkspace,
+  openAgentSettings,
+} from "./fixtures";
 
 test("connects a first-class Anthropic account and unblocks the agent", async ({
   window,
@@ -27,11 +16,12 @@ test("connects a first-class Anthropic account and unblocks the agent", async ({
   await window.getByRole("option", { name: "Anthropic" }).click();
   await expect(window.getByLabel("Model")).toHaveValue("claude-sonnet-4-5");
   await expect(window.getByLabel("Base URL")).toHaveCount(0);
+  await expect(window.getByLabel("API key")).toHaveCount(0);
 
-  await window.getByLabel("API key").fill("sk-ant-e2e-not-a-real-key");
-  await window.getByRole("button", { name: "Save", exact: true }).click();
+  await window.getByRole("button", { name: "Connect account" }).click();
+  await expect(window.getByText("e2e@example.com")).toBeVisible();
   await expect(
-    window.getByRole("button", { name: "Saved", exact: true }),
+    window.getByRole("button", { name: "Disconnect" }),
   ).toBeVisible();
 
   await window.getByRole("button", { name: "Back to conversation" }).click();
@@ -89,6 +79,24 @@ test("connects a Google account through OAuth without an API key", async ({
   await expect(
     window.getByRole("button", { name: "Disconnect" }),
   ).toBeVisible();
+
+  await window.getByRole("button", { name: "Back to conversation" }).click();
+  await window.getByRole("button", { name: "Open agent" }).click();
+  await expect(window.getByLabel("Ask about this workspace…")).toBeVisible();
+});
+
+test("connects a Kimi account through OAuth without an API key", async ({
+  window,
+}) => {
+  await waitForDemoWorkspace(window);
+  await openAgentSettings(window);
+
+  await window.getByRole("combobox", { name: "Provider" }).click();
+  await window.getByRole("option", { name: "Kimi" }).click();
+  await expect(window.getByLabel("Model")).toHaveValue("kimi-k2.5");
+  await expect(window.getByLabel("API key")).toHaveCount(0);
+  await window.getByRole("button", { name: "Connect account" }).click();
+  await expect(window.getByText("e2e@example.com")).toBeVisible();
 
   await window.getByRole("button", { name: "Back to conversation" }).click();
   await window.getByRole("button", { name: "Open agent" }).click();
