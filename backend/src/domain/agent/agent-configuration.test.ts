@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { AgentConfiguration } from "./agent-configuration";
+import { AgentConfiguration, type AgentProvider } from "./agent-configuration";
 
 const valid = {
   provider: "openai" as const,
@@ -31,7 +31,14 @@ describe("AgentConfiguration", () => {
     [{ ...valid, model: "" }, "model"],
     [{ ...valid, instructions: "" }, "instructions"],
     [{ ...valid, provider: "openai-compatible" as const }, "base URL"],
-    [{ ...valid, baseUrl: "http://localhost:3000" }, "HTTPS"],
+    [
+      {
+        ...valid,
+        provider: "openai-compatible" as const,
+        baseUrl: "http://localhost:3000",
+      },
+      "HTTPS",
+    ],
     [
       { ...valid, temperature: -0.1 },
       "Agent temperature must be between 0 and 2",
@@ -88,5 +95,29 @@ describe("AgentConfiguration", () => {
       maxSteps: 4,
       historyLimit: 20,
     });
+  });
+
+  it("accepts a first-class provider without a base URL", () => {
+    expect(
+      AgentConfiguration.create({
+        ...valid,
+        provider: "anthropic",
+        model: "claude-sonnet-4-5",
+        baseUrl: "https://example.invalid/v1",
+      }).snapshot(),
+    ).toMatchObject({
+      provider: "anthropic",
+      model: "claude-sonnet-4-5",
+      baseUrl: null,
+    });
+  });
+
+  it("rejects an unrecognized provider", () => {
+    expect(() =>
+      AgentConfiguration.create({
+        ...valid,
+        provider: "mystery" as AgentProvider,
+      }),
+    ).toThrow("Unknown agent provider");
   });
 });

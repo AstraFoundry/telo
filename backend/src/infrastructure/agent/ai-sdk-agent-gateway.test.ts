@@ -8,11 +8,24 @@ import {
 import type { AgentOutput } from "../../domain/agent/agent-ports";
 import { AiSdkAgentGateway } from "./ai-sdk-agent-gateway";
 
-const ai = vi.hoisted(() => ({
-  streamText: vi.fn(),
-  createOpenAI: vi.fn(() => (model: string) => ({ provider: "openai", model })),
-  isStepCount: vi.fn(() => () => true),
-}));
+const ai = vi.hoisted(() => {
+  const languageModel = (provider: string) => () => (model: string) => ({
+    provider,
+    model,
+  });
+  return {
+    streamText: vi.fn(),
+    createOpenAI: vi.fn(languageModel("openai")),
+    createAnthropic: vi.fn(languageModel("anthropic")),
+    createGoogleGenerativeAI: vi.fn(languageModel("google")),
+    createGroq: vi.fn(languageModel("groq")),
+    createXai: vi.fn(languageModel("xai")),
+    createDeepSeek: vi.fn(languageModel("deepseek")),
+    createMistral: vi.fn(languageModel("mistral")),
+    createOpenAICompatible: vi.fn(languageModel("openai-compatible")),
+    isStepCount: vi.fn(() => () => true),
+  };
+});
 
 vi.mock("ai", () => ({
   streamText: ai.streamText,
@@ -21,6 +34,17 @@ vi.mock("ai", () => ({
 }));
 
 vi.mock("@ai-sdk/openai", () => ({ createOpenAI: ai.createOpenAI }));
+vi.mock("@ai-sdk/anthropic", () => ({ createAnthropic: ai.createAnthropic }));
+vi.mock("@ai-sdk/google", () => ({
+  createGoogleGenerativeAI: ai.createGoogleGenerativeAI,
+}));
+vi.mock("@ai-sdk/groq", () => ({ createGroq: ai.createGroq }));
+vi.mock("@ai-sdk/xai", () => ({ createXai: ai.createXai }));
+vi.mock("@ai-sdk/deepseek", () => ({ createDeepSeek: ai.createDeepSeek }));
+vi.mock("@ai-sdk/mistral", () => ({ createMistral: ai.createMistral }));
+vi.mock("@ai-sdk/openai-compatible", () => ({
+  createOpenAICompatible: ai.createOpenAICompatible,
+}));
 
 interface InspectWorkspaceTool {
   execute: (input: { section: string }) => Promise<unknown>;
@@ -100,6 +124,13 @@ describe("AiSdkAgentGateway", () => {
   beforeEach(() => {
     ai.streamText.mockReset();
     ai.createOpenAI.mockClear();
+    ai.createAnthropic.mockClear();
+    ai.createGoogleGenerativeAI.mockClear();
+    ai.createGroq.mockClear();
+    ai.createXai.mockClear();
+    ai.createDeepSeek.mockClear();
+    ai.createMistral.mockClear();
+    ai.createOpenAICompatible.mockClear();
     ai.isStepCount.mockClear();
   });
 
@@ -130,7 +161,6 @@ describe("AiSdkAgentGateway", () => {
     ]);
     expect(ai.createOpenAI).toHaveBeenCalledWith({
       apiKey: "sk-test",
-      baseURL: undefined,
     });
     const args = ai.streamText.mock.calls[0]?.[0] as StreamTextArgs;
     expect(args.messages).toEqual([{ role: "user", content: "Summarize" }]);
@@ -191,6 +221,56 @@ describe("AiSdkAgentGateway", () => {
 
     const args = ai.streamText.mock.calls[0]?.[0] as StreamTextArgs;
     expect(args.messages).toEqual([{ role: "user", content: "Summarize" }]);
+  });
+
+  it("uses the Anthropic SDK for an Anthropic account", async () => {
+    ai.streamText.mockReturnValue(emptyStream());
+
+    await collect(
+      configuration({ provider: "anthropic", model: "claude-sonnet-4-5" }),
+    );
+
+    expect(ai.createAnthropic).toHaveBeenCalledWith({ apiKey: "sk-test" });
+    expect(ai.createOpenAI).not.toHaveBeenCalled();
+    expect(ai.createOpenAICompatible).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["google", "gemini-2.5-flash", () => ai.createGoogleGenerativeAI],
+    ["groq", "llama-3.3-70b-versatile", () => ai.createGroq],
+    ["xai", "grok-3", () => ai.createXai],
+    ["deepseek", "deepseek-chat", () => ai.createDeepSeek],
+    ["mistral", "mistral-small-latest", () => ai.createMistral],
+  ] as const)(
+    "uses the %s SDK for that account",
+    async (provider, model, factory) => {
+      ai.streamText.mockReturnValue(emptyStream());
+
+      await collect(configuration({ provider, model }));
+
+      expect(factory()).toHaveBeenCalledWith({ apiKey: "sk-test" });
+      expect(ai.createOpenAI).not.toHaveBeenCalled();
+      expect(ai.createOpenAICompatible).not.toHaveBeenCalled();
+    },
+  );
+
+  it("uses the OpenAI-compatible SDK when a custom endpoint is configured", async () => {
+    ai.streamText.mockReturnValue(emptyStream());
+
+    await collect(
+      configuration({
+        provider: "openai-compatible",
+        model: "local-model",
+        baseUrl: "https://example.invalid/v1",
+      }),
+    );
+
+    expect(ai.createOpenAICompatible).toHaveBeenCalledWith({
+      name: "openai-compatible",
+      apiKey: "sk-test",
+      baseURL: "https://example.invalid/v1",
+    });
+    expect(ai.createOpenAI).not.toHaveBeenCalled();
   });
 
   it("omits tools when workspace inspection is disabled", async () => {

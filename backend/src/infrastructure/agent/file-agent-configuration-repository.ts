@@ -1,11 +1,12 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
+import type { AgentProvider } from "../../../../contracts/src/ipc";
 import { AgentConfiguration } from "../../domain/agent/agent-configuration";
 import type { AgentConfigurationRepository } from "../../domain/agent/agent-ports";
 
 interface StoredAgentConfiguration {
-  readonly provider: "openai" | "openai-compatible";
+  readonly provider: AgentProvider;
   readonly model: string;
   readonly baseUrl: string | null;
   readonly instructions: string;

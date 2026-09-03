@@ -1,13 +1,17 @@
 import {
+  AGENT_COMPATIBLE_PROVIDER,
   AGENT_HISTORY_LIMIT_MAX,
   AGENT_HISTORY_LIMIT_MIN,
   AGENT_MAX_STEPS_MAX,
   AGENT_MAX_STEPS_MIN,
+  AGENT_PROVIDER_DEFAULT_MODEL,
   AGENT_TEMPERATURE_MAX,
   AGENT_TEMPERATURE_MIN,
+  isAgentProvider,
+  type AgentProvider,
 } from "../../../../contracts/src/ipc";
 
-export type AgentProvider = "openai" | "openai-compatible";
+export type { AgentProvider };
 
 export interface AgentConfigurationSnapshot {
   readonly provider: AgentProvider;
@@ -25,14 +29,21 @@ export class AgentConfiguration {
   private constructor(private readonly value: AgentConfigurationSnapshot) {}
 
   static create(input: AgentConfigurationSnapshot): AgentConfiguration {
+    if (!isAgentProvider(input.provider)) {
+      throw new Error("Unknown agent provider");
+    }
+
     const model = input.model.trim();
     const instructions = input.instructions.trim();
     const apiKey = input.apiKey?.trim() || null;
-    const baseUrl = input.baseUrl?.trim() || null;
+    const compatible = input.provider === AGENT_COMPATIBLE_PROVIDER;
+    // Named providers talk to the vendor endpoint. A leftover compatible URL
+    // must not ride along after the user switches accounts.
+    const baseUrl = compatible ? input.baseUrl?.trim() || null : null;
 
     if (!model) throw new Error("Agent model is required");
     if (!instructions) throw new Error("Agent instructions are required");
-    if (input.provider === "openai-compatible" && !baseUrl) {
+    if (compatible && !baseUrl) {
       throw new Error(
         "A base URL is required for an OpenAI-compatible provider",
       );
@@ -78,7 +89,7 @@ export class AgentConfiguration {
   static default(): AgentConfiguration {
     return AgentConfiguration.create({
       provider: "openai",
-      model: "gpt-4.1-mini",
+      model: AGENT_PROVIDER_DEFAULT_MODEL.openai,
       baseUrl: null,
       instructions:
         "Answer from the visible Telegram workspace. Ask before acting outside it.",

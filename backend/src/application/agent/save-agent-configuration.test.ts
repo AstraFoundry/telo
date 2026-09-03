@@ -49,6 +49,28 @@ describe("SaveAgentConfigurationService", () => {
     expect(repository.value.snapshot().apiKey).toBe("existing-key");
   });
 
+  it("saves a first-class Anthropic account", async () => {
+    const repository = new MemoryConfigurationRepository();
+    const service = new SaveAgentConfigurationService(repository);
+    const result = await service.execute({
+      provider: "anthropic",
+      model: "claude-sonnet-4-5",
+      instructions: "Answer briefly.",
+      apiKey: "sk-ant-new",
+      canInspectWorkspace: true,
+      temperature: 0.7,
+      maxSteps: 4,
+      historyLimit: 20,
+    });
+    expect(result).toMatchObject({
+      provider: "anthropic",
+      model: "claude-sonnet-4-5",
+      baseUrl: null,
+      hasApiKey: true,
+    });
+    expect(repository.value.snapshot().apiKey).toBe("sk-ant-new");
+  });
+
   it("rejects an out-of-range step count without saving", async () => {
     const repository = new MemoryConfigurationRepository();
     const service = new SaveAgentConfigurationService(repository);

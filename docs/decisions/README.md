@@ -13,6 +13,7 @@ Write an ADR when the decision:
 ## Existing decisions
 
 - [`001-electron-ipc-boundary.md`](001-electron-ipc-boundary.md) — privileged services stay behind typed IPC.
+- [`002-byoa-providers.md`](002-byoa-providers.md) — named vendor accounts are the preferred agent path; OpenAI-compatible is the fallback, all through the AI SDK.
 - [`adr-template.md`](adr-template.md) — template for new ADRs.
 
 ## Naming

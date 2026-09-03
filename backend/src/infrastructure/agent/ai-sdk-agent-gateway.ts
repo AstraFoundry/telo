@@ -1,8 +1,9 @@
-import { createOpenAI } from "@ai-sdk/openai";
 import { isStepCount, streamText, tool } from "ai";
 import { z } from "zod";
 
 import type { AgentGateway, AgentOutput } from "../../domain/agent/agent-ports";
+
+import { createAgentLanguageModel } from "./ai-sdk-language-model";
 
 export class AiSdkAgentGateway implements AgentGateway {
   async *stream(
@@ -14,10 +15,7 @@ export class AiSdkAgentGateway implements AgentGateway {
       return;
     }
 
-    const provider = createOpenAI({
-      apiKey: configuration.apiKey,
-      baseURL: configuration.baseUrl ?? undefined,
-    });
+    const model = createAgentLanguageModel(configuration);
     const workspace = input.context;
     const tools = {
       inspectWorkspace: tool({
@@ -46,7 +44,7 @@ export class AiSdkAgentGateway implements AgentGateway {
           ? input.history.slice(-configuration.historyLimit)
           : [];
       const result = streamText({
-        model: provider(configuration.model),
+        model,
         instructions: configuration.instructions,
         temperature: configuration.temperature,
         messages: [

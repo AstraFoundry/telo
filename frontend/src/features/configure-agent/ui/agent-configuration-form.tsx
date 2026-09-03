@@ -1,29 +1,29 @@
 import { useEffect, useId, useState } from "react";
 
 import {
+  AGENT_COMPATIBLE_PROVIDER,
   AGENT_HISTORY_LIMIT_MAX,
   AGENT_HISTORY_LIMIT_MIN,
   AGENT_MAX_STEPS_MAX,
   AGENT_MAX_STEPS_MIN,
+  AGENT_PROVIDER_DEFAULT_MODEL,
   AGENT_TEMPERATURE_MAX,
   AGENT_TEMPERATURE_MIN,
+  type AgentProvider,
 } from "../../../../../contracts/src/ipc";
 import { useAgentStore } from "entities/agent";
 import { copy } from "shared/config/copy";
 import {
   Input,
   RangeSlider,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
   SettingsGroup,
   SettingsRow,
   SettingsStackedRow,
   StatefulButton,
   Switch,
 } from "shared/ui";
+
+import { ProviderPicker } from "./provider-picker";
 
 type SaveState = "idle" | "loading" | "success" | "error";
 
@@ -34,10 +34,8 @@ export function AgentConfigurationForm() {
   const configuration = useAgentStore((state) => state.configuration);
   const load = useAgentStore((state) => state.loadConfiguration);
   const save = useAgentStore((state) => state.saveConfiguration);
-  const [provider, setProvider] = useState<"openai" | "openai-compatible">(
-    "openai",
-  );
-  const [model, setModel] = useState("gpt-4.1-mini");
+  const [provider, setProvider] = useState<AgentProvider>("openai");
+  const [model, setModel] = useState(AGENT_PROVIDER_DEFAULT_MODEL.openai);
   const [baseUrl, setBaseUrl] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [instructions, setInstructions] = useState("");
@@ -49,6 +47,7 @@ export function AgentConfigurationForm() {
 
   const inspectId = useId();
   const inspectHintId = useId();
+  const compatible = provider === AGENT_COMPATIBLE_PROVIDER;
 
   useEffect(() => void load(), [load]);
   useEffect(() => {
@@ -65,13 +64,19 @@ export function AgentConfigurationForm() {
     });
   }, [configuration]);
 
+  const changeProvider = (next: AgentProvider) => {
+    setProvider(next);
+    setModel(AGENT_PROVIDER_DEFAULT_MODEL[next]);
+    if (next !== AGENT_COMPATIBLE_PROVIDER) setBaseUrl("");
+  };
+
   const submit = async () => {
     setSaveState("loading");
     try {
       await save({
         provider,
         model,
-        baseUrl: baseUrl || null,
+        baseUrl: compatible ? baseUrl || null : null,
         apiKey: apiKey || undefined,
         instructions,
         canInspectWorkspace: inspect,
@@ -99,22 +104,9 @@ export function AgentConfigurationForm() {
       }}
     >
       <SettingsGroup title={copy.agentProviderGroup}>
-        <SettingsRow label={copy.provider}>
-          <Select
-            value={provider}
-            onValueChange={(value) => setProvider(value as typeof provider)}
-          >
-            <SelectTrigger className="w-48">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="openai">{copy.openAi}</SelectItem>
-              <SelectItem value="openai-compatible">
-                {copy.compatible}
-              </SelectItem>
-            </SelectContent>
-          </Select>
-        </SettingsRow>
+        <SettingsStackedRow label={copy.provider}>
+          <ProviderPicker value={provider} onValueChange={changeProvider} />
+        </SettingsStackedRow>
         <SettingsStackedRow label={copy.model}>
           <Input
             value={model}
@@ -123,14 +115,16 @@ export function AgentConfigurationForm() {
             required
           />
         </SettingsStackedRow>
-        <SettingsStackedRow label={copy.baseUrl}>
-          <Input
-            value={baseUrl}
-            onChange={setBaseUrl}
-            aria-label={copy.baseUrl}
-            placeholder={copy.optional}
-          />
-        </SettingsStackedRow>
+        {compatible ? (
+          <SettingsStackedRow label={copy.baseUrl}>
+            <Input
+              value={baseUrl}
+              onChange={setBaseUrl}
+              aria-label={copy.baseUrl}
+              required
+            />
+          </SettingsStackedRow>
+        ) : null}
         <SettingsStackedRow label={copy.apiKey}>
           <Input
             type="password"
