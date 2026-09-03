@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { subscribeToAgentEvents, useAgentStore } from "entities/agent";
 import { subscribeToWorkspaceEvents, useChatStore } from "entities/chat";
@@ -11,6 +11,7 @@ import { ConversationView } from "widgets/conversation-view";
 
 import { useChatPreferenceSync } from "./chat-preference-sync";
 import { MotionPreferences } from "./motion-preferences";
+import { useTeloLinks } from "./telo-links";
 
 export function App() {
   return (
@@ -48,6 +49,8 @@ function AppSurfaces() {
 
   const [settingsSection, setSettingsSection] =
     useState<SettingsSectionId>("account");
+  const showConversation = useCallback(() => setSurface("conversation"), []);
+  useTeloLinks(showConversation);
 
   const openSettings = (section: SettingsSectionId = "account") => {
     closeAgent();

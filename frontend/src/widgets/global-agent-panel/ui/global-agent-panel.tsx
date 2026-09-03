@@ -1,34 +1,23 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { ClockCounterClockwise, Plus, Sparkle, X } from "@phosphor-icons/react";
+import { useReducedMotionConfig } from "motion/react";
+
+import type { ChatMemberDto } from "../../../../../contracts/src/ipc";
+import { parseReply, useAgentStore } from "entities/agent";
 import {
-  CaretDown,
-  CaretRight,
-  ClockCounterClockwise,
-  Plus,
-  Sparkle,
-  X,
-} from "@phosphor-icons/react";
-
-import { useAgentStore } from "entities/agent";
-import { buildWorkspaceContext, useChatStore } from "entities/chat";
-import { RIGHT_PANEL_WIDTH_CSS, useTimeFormat } from "entities/preferences";
+  buildMentionTargets,
+  buildWorkspaceContext,
+  useChatStore,
+} from "entities/chat";
+import { RIGHT_PANEL_WIDTH_CSS } from "entities/preferences";
 import { copy } from "shared/config/copy";
-import type {
-  AgentAuditRecordDto,
-  AgentContextPreviewDto,
-  AgentContextScope,
-  AgentContextScopeInput,
-  TimeFormatPreference,
-} from "../../../../../contracts/src/ipc";
-import type { AgentActivityItem } from "shared/ui";
 import {
-  AgentActivity,
-  AgentDisclosure,
   AnimatedSidebar,
   AnimatedSidebarProvider,
   Button,
+  MentionAutocomplete,
   Message,
-  MessageAvatar,
   MessageBubble,
   MessageBubbleContent,
   MessageContent,
@@ -40,36 +29,19 @@ import {
   Tooltip,
 } from "shared/ui";
 
+import { useMentionPicker } from "../lib/use-mention-picker";
 import { collectChatScope } from "../model/chat-scope";
-import { buildScopeInput, effectiveScope } from "../model/scope-input";
+import { indexMentionTargets, toMentionItems } from "../model/mention-items";
+import { buildScopeInput } from "../model/scope-input";
 import { AssistantMessageBody } from "./assistant-message-body";
+import { AttachedMessageCards } from "./attached-message-cards";
+import { ReplyText } from "./reply-text";
+import { ResponseSkeleton } from "./response-skeleton";
+import { RunFailedRow } from "./run-failed-row";
+import { type Suggestion, SuggestionPills } from "./suggestion-pills";
 
 interface GlobalAgentPanelProps {
   onOpenSettings(): void;
-}
-
-const SCOPE_LABELS: Record<AgentContextScope, string> = {
-  selected: copy.agentScopeSelected,
-  unread: copy.agentScopeUnread,
-  folder: copy.agentScopeFolder,
-};
-
-function redactedTotal(counts: {
-  emails: number;
-  phones: number;
-  tokens: number;
-}): number {
-  return counts.emails + counts.phones + counts.tokens;
-}
-
-// "system" defers to the locale's hour12 default, while 12h/24h pin it
-// explicitly — the same formatter the transcript timestamps use.
-function time(value: string, format: TimeFormatPreference): string {
-  return new Intl.DateTimeFormat(undefined, {
-    hour: "2-digit",
-    minute: "2-digit",
-    ...(format === "system" ? {} : { hour12: format === "12h" }),
-  }).format(new Date(value));
 }
 
 export function GlobalAgentPanel({ onOpenSettings }: GlobalAgentPanelProps) {
@@ -78,9 +50,14 @@ export function GlobalAgentPanel({ onOpenSettings }: GlobalAgentPanelProps) {
   const toggle = useAgentStore((state) => state.toggle);
   const messages = useAgentStore((state) => state.messages);
   const running = useAgentStore((state) => state.running);
+  const runFailed = useAgentStore((state) => state.runFailed);
   const activity = useAgentStore((state) => state.activity);
+  const attachments = useAgentStore((state) => state.attachments);
+  const followUps = useAgentStore((state) => state.suggestions);
+  const detachMessage = useAgentStore((state) => state.detachMessage);
   const run = useAgentStore((state) => state.run);
   const runChatAction = useAgentStore((state) => state.runChatAction);
+  const retryLastRun = useAgentStore((state) => state.retryLastRun);
   const configuration = useAgentStore((state) => state.configuration);
   const threads = useAgentStore((state) => state.threads);
   const threadId = useAgentStore((state) => state.threadId);
@@ -89,114 +66,77 @@ export function GlobalAgentPanel({ onOpenSettings }: GlobalAgentPanelProps) {
   const selectThread = useAgentStore((state) => state.selectThread);
   const chats = useChatStore((state) => state.chats);
   const chatMessages = useChatStore((state) => state.messages);
+  const peerAvatars = useChatStore((state) => state.peerAvatars);
   const activeChatId = useChatStore((state) => state.activeChatId);
   const activeFolderId = useChatStore((state) => state.activeFolderId);
-  const composerTarget = useChatStore((state) => state.composerTarget);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [followingLiveEdge, setFollowingLiveEdge] = useState(true);
+  const viewportRef = useRef<HTMLElement | null>(null);
+  const reduceMotion = useReducedMotionConfig() ?? false;
 
   useEffect(() => {
     void loadThreads();
   }, [loadThreads]);
 
-  // Explicit context scope for panel runs. Unread (of the open chat) is the
-  // default: the panel already answers about the open chat, and "summarize
-  // unread" is the wave's headline flow, so it is the least surprising
-  // starting scope. "Selected" means the composer's reply target until
-  // multi-select exists (Wave 4); without one it is disabled.
-  const [scope, setScope] = useState<AgentContextScope>("unread");
-  const selectedMessageId =
-    composerTarget?.mode === "reply" ? composerTarget.messageId : null;
-  const currentScope = effectiveScope({
-    scope,
-    activeChatId,
-    activeFolderId,
-    selectedMessageId,
-  });
-  const scopeInput = useMemo(
-    () =>
-      buildScopeInput({
-        scope,
-        activeChatId,
-        activeFolderId,
-        selectedMessageId,
-      }),
-    [scope, activeChatId, activeFolderId, selectedMessageId],
-  );
-
-  // The payload preview is assembled and redacted main-side, so what the
-  // disclosure lists is exactly what a run would send. It refetches as the
-  // workspace changes to stay that way; a result is only shown while it
-  // still matches the current scope input.
-  const [previewResult, setPreviewResult] = useState<{
-    key: AgentContextScopeInput;
-    value: AgentContextPreviewDto | null;
-    error: string | null;
+  // Members of the open chat complete `@` in the composer alongside the
+  // authors already on screen; the list is fetched once per chat while the
+  // panel is open and dropped when the chat changes.
+  const [members, setMembers] = useState<{
+    readonly chatId: string;
+    readonly list: ReadonlyArray<ChatMemberDto>;
   } | null>(null);
-  const unreadWithoutChat = currentScope === "unread" && !activeChatId;
   useEffect(() => {
-    if (!open || unreadWithoutChat) return;
+    if (!open || !activeChatId) return;
     let cancelled = false;
-    const key = scopeInput;
-    void window.telo.agent.previewContext(key).then(
-      (value) => {
-        if (!cancelled) setPreviewResult({ key, value, error: null });
-      },
-      (error: unknown) => {
-        if (!cancelled) {
-          setPreviewResult({
-            key,
-            value: null,
-            error: error instanceof Error ? error.message : String(error),
-          });
-        }
-      },
-    );
-    return () => {
-      cancelled = true;
-    };
-  }, [open, unreadWithoutChat, scopeInput, chats, chatMessages]);
-  const preview = unreadWithoutChat
-    ? {
-        scope: "unread" as const,
-        messages: [],
-        redactionCounts: { emails: 0, phones: 0, tokens: 0 },
-      }
-    : previewResult?.key === scopeInput
-      ? previewResult.value
-      : null;
-  const previewError = unreadWithoutChat
-    ? null
-    : previewResult?.key === scopeInput
-      ? previewResult.error
-      : null;
-
-  // The audit list loads with the panel and refreshes when a run settles.
-  const [auditRecords, setAuditRecords] = useState<
-    ReadonlyArray<AgentAuditRecordDto>
-  >([]);
-  useEffect(() => {
-    if (running) return;
-    let cancelled = false;
-    void window.telo.agent.listAuditRecords().then((records) => {
-      if (!cancelled) setAuditRecords(records);
+    void window.telo.workspace.listChatMembers(activeChatId).then((list) => {
+      if (!cancelled) setMembers({ chatId: activeChatId, list });
     });
     return () => {
       cancelled = true;
     };
-  }, [running]);
+  }, [open, activeChatId]);
 
-  const [previewOpen, setPreviewOpen] = useState(false);
-  const [runsOpen, setRunsOpen] = useState(false);
-  const { value: timeFormat } = useTimeFormat();
-  // Chat titles only add noise in a single-chat scope; they appear once the
-  // payload actually spans several chats (folder scope).
-  const previewSpansChats = preview
-    ? new Set(preview.messages.map((message) => message.chatId)).size > 1
-    : false;
+  const mentionTargets = useMemo(
+    () =>
+      buildMentionTargets({
+        chats,
+        messages: chatMessages,
+        peerAvatars,
+        members: members?.chatId === activeChatId ? members.list : [],
+      }),
+    [chats, chatMessages, peerAvatars, members, activeChatId],
+  );
+  const targetsByName = useMemo(
+    () => indexMentionTargets(mentionTargets),
+    [mentionTargets],
+  );
+  const mentionItems = useMemo(
+    () => toMentionItems(mentionTargets),
+    [mentionTargets],
+  );
+  const picker = useMentionPicker(mentionItems);
 
-  // The chat-scoped actions read the unread tail of the open chat (or the
-  // loaded page when the read boundary is unknown); an empty scope disables
-  // them rather than sending nothing to the model.
+  // The run's scope follows the workspace instead of a picker: cards in the
+  // composer, otherwise the open chat's unread tail, otherwise the folder.
+  const scopeInput = useMemo(
+    () => buildScopeInput({ attachments, activeChatId, activeFolderId }),
+    [attachments, activeChatId, activeFolderId],
+  );
+
+  // Failed runs leave their diagnostics main-side; the transcript only ever
+  // shows model replies, so persisted error rows are skipped too.
+  const visibleMessages = messages.filter(
+    (message) =>
+      !(message.from === "assistant" && (message.error || !message.body)),
+  );
+  const lastMessage = messages[messages.length - 1];
+  // While a run is active and no response text has streamed yet, the
+  // transcript holds the reply's place with a skeleton.
+  const awaitingResponse =
+    running && !(lastMessage?.from === "assistant" && lastMessage.body);
+
+  // Before the first exchange the pills are the chat's starting points; from
+  // then on they are the follow-ups the model proposed for its last reply.
   const chatScope = useMemo(
     () =>
       collectChatScope(
@@ -205,22 +145,50 @@ export function GlobalAgentPanel({ onOpenSettings }: GlobalAgentPanelProps) {
       ),
     [chats, chatMessages, activeChatId],
   );
+  const suggestions = useMemo<ReadonlyArray<Suggestion>>(() => {
+    if (attachments.length > 0 || running) return [];
+    if (followUps.length > 0) {
+      return followUps.map((label) => ({
+        id: label,
+        label,
+        onSelect: () => void run(label, buildWorkspaceContext(), scopeInput),
+      }));
+    }
+    if (visibleMessages.length > 0 || !chatScope) return [];
+    return [
+      {
+        id: "summary",
+        label: copy.agentSummarizeUnread,
+        onSelect: () =>
+          void runChatAction("summary", chatScope, buildWorkspaceContext()),
+      },
+      {
+        id: "extraction",
+        label: copy.agentExtractInsights,
+        onSelect: () =>
+          void runChatAction("extraction", chatScope, buildWorkspaceContext()),
+      },
+    ];
+  }, [
+    attachments.length,
+    running,
+    followUps,
+    visibleMessages.length,
+    chatScope,
+    run,
+    runChatAction,
+    scopeInput,
+  ]);
 
-  const lastMessage = messages[messages.length - 1];
-  // While a run is active and no response text has streamed yet, the
-  // transcript shows the live activity row instead of an empty shell.
-  const awaitingResponse =
-    running && !(lastMessage?.from === "assistant" && lastMessage.body);
-  const activityItems: AgentActivityItem[] = activity
-    ? [
-        {
-          id: "current-activity",
-          type: "step",
-          label: activity,
-          status: "active",
-        },
-      ]
-    : [];
+  const jumpToLatest = useCallback(() => {
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+    setFollowingLiveEdge(true);
+    viewport.scrollTo({
+      top: viewport.scrollHeight,
+      behavior: reduceMotion ? "auto" : "smooth",
+    });
+  }, [reduceMotion]);
 
   return (
     <AnimatedSidebarProvider
@@ -339,275 +307,107 @@ export function GlobalAgentPanel({ onOpenSettings }: GlobalAgentPanelProps) {
           </div>
         ) : (
           <>
-            <MessageScroller
-              label={copy.agentConversation}
-              busy={running}
-              className="min-h-0 flex-1"
-              contentClassName="flex flex-col gap-4 px-4 py-4"
-            >
-              {!messages.length ? (
-                <div className="grid min-h-48 place-items-center px-8 text-center text-sm text-muted-foreground">
-                  {copy.agentEmpty}
-                </div>
-              ) : null}
-              {messages.map((message, index) => {
-                const streaming = running && index === messages.length - 1;
-                // An empty assistant shell is either the not-yet-streaming
-                // placeholder (the activity row below stands in for it) or the
-                // leftover of a failed run; neither renders a row.
-                if (message.from === "assistant" && !message.body) {
-                  return null;
-                }
-                return (
-                  <Message key={message.id} from={message.from}>
-                    {message.from === "assistant" ? (
-                      <MessageAvatar>
-                        <Sparkle />
-                      </MessageAvatar>
-                    ) : null}
+            <div className="relative flex min-h-0 flex-1 flex-col">
+              <MessageScroller
+                label={copy.agentConversation}
+                busy={running}
+                viewportRef={viewportRef}
+                onFollowChange={setFollowingLiveEdge}
+                className="min-h-0 flex-1"
+                // Bottom padding keeps the last reply clear of the floating
+                // pill strip (28px) and its offset.
+                contentClassName="flex flex-col gap-4 px-4 pt-4 pb-14"
+              >
+                {!visibleMessages.length && !awaitingResponse ? (
+                  <div className="grid min-h-48 place-items-center px-8 text-center text-sm text-muted-foreground">
+                    {copy.agentEmpty}
+                  </div>
+                ) : null}
+                {visibleMessages.map((message, index) => {
+                  const streaming =
+                    running && index === visibleMessages.length - 1;
+                  return (
+                    <Message key={message.id} from={message.from}>
+                      <MessageContent>
+                        {message.from === "assistant" ? (
+                          <AssistantMessageBody
+                            message={message}
+                            streaming={streaming}
+                            running={running}
+                            mentionTargets={targetsByName}
+                          />
+                        ) : (
+                          <MessageBubble variant="tint">
+                            <MessageBubbleContent>
+                              <ReplyText
+                                segments={
+                                  parseReply(message.body, [
+                                    ...targetsByName.keys(),
+                                  ]).segments
+                                }
+                                targets={targetsByName}
+                              />
+                            </MessageBubbleContent>
+                          </MessageBubble>
+                        )}
+                      </MessageContent>
+                    </Message>
+                  );
+                })}
+                {awaitingResponse ? (
+                  <Message from="assistant">
                     <MessageContent>
-                      {message.from === "assistant" ? (
-                        <AssistantMessageBody
-                          message={message}
-                          streaming={streaming}
-                          running={running}
-                        />
-                      ) : (
-                        <MessageBubble variant="tint">
-                          <MessageBubbleContent>
-                            {message.body}
-                          </MessageBubbleContent>
-                        </MessageBubble>
-                      )}
+                      <ResponseSkeleton activity={activity} />
                     </MessageContent>
                   </Message>
-                );
-              })}
-              {awaitingResponse ? (
-                <Message from="assistant">
-                  <MessageAvatar>
-                    <Sparkle />
-                  </MessageAvatar>
-                  <MessageContent>
-                    <AgentActivity
-                      status="working"
-                      contentType="step"
-                      items={activityItems}
-                      activeLabel={copy.activityDefault}
-                    />
-                  </MessageContent>
-                </Message>
-              ) : null}
-            </MessageScroller>
-            <div className="border-t p-3">
-              {/* Chat-scoped actions: the scope (unread tail of the open chat)
-                  is collected from the chat store and sent main-side, where
-                  the use case assembles the machine prompt. */}
-              <div className="mb-2 flex gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="flex-1"
-                  disabled={running || !chatScope}
-                  onClick={() => {
-                    if (!chatScope) return;
-                    void runChatAction(
-                      "summary",
-                      chatScope,
-                      buildWorkspaceContext(),
-                    );
-                  }}
-                >
-                  {copy.agentSummarizeUnread}
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="flex-1"
-                  disabled={running || !chatScope}
-                  onClick={() => {
-                    if (!chatScope) return;
-                    void runChatAction(
-                      "extraction",
-                      chatScope,
-                      buildWorkspaceContext(),
-                    );
-                  }}
-                >
-                  {copy.agentExtractInsights}
-                </Button>
-              </div>
-              {/* Scope controls: the user picks exactly which messages the
-                  run reads; the preview below shows the redacted payload
-                  main-side assembly produces for that scope. */}
-              <div className="mb-2 flex flex-col gap-1">
-                <div
-                  role="group"
-                  aria-label={copy.agentScopeLabel}
-                  className="flex items-center justify-between gap-2"
-                >
-                  <span className="text-xs text-muted-foreground">
-                    {copy.agentScopeLabel}
-                  </span>
-                  <div className="flex rounded-full border border-border p-0.5">
-                    {(
-                      ["selected", "unread", "folder"] as AgentContextScope[]
-                    ).map((option) => {
-                      const unavailable =
-                        option === "selected" && !selectedMessageId;
-                      const button = (
-                        <Button
-                          key={option}
-                          variant="ghost"
-                          size="sm"
-                          aria-pressed={currentScope === option}
-                          disabled={unavailable || running}
-                          className={`rounded-full px-2.5${
-                            currentScope === option
-                              ? " bg-primary/10 text-foreground"
-                              : ""
-                          }`}
-                          onClick={() => setScope(option)}
-                        >
-                          {SCOPE_LABELS[option]}
-                        </Button>
-                      );
-                      // A disabled button swallows pointer events, so the
-                      // hint tooltip hangs on the wrapper instead.
-                      return unavailable ? (
-                        <Tooltip
-                          key={option}
-                          content={copy.agentScopeSelectedHint}
-                        >
-                          <span className="inline-flex">{button}</span>
-                        </Tooltip>
-                      ) : (
-                        button
-                      );
-                    })}
-                  </div>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  aria-expanded={previewOpen}
-                  aria-label={copy.agentPayloadPreview}
-                  className="w-full justify-between px-1.5 text-xs text-muted-foreground"
-                  onClick={() => setPreviewOpen(!previewOpen)}
-                >
-                  <span className="flex items-center gap-1">
-                    {previewOpen ? <CaretDown /> : <CaretRight />}
-                    {copy.agentPayloadPreview}
-                  </span>
-                  {preview ? (
-                    <span className="tabular-nums">
-                      {preview.messages.length}
-                    </span>
-                  ) : null}
-                </Button>
-                <AgentDisclosure open={previewOpen}>
-                  <div className="px-1.5 pb-1">
-                    {previewError ? (
-                      <p className="text-xs text-muted-foreground">
-                        {previewError}
-                      </p>
-                    ) : !preview ? (
-                      <p className="text-xs text-muted-foreground">
-                        {copy.loading}
-                      </p>
-                    ) : preview.messages.length === 0 ? (
-                      <p className="text-xs text-muted-foreground">
-                        {copy.agentPayloadEmpty}
-                      </p>
-                    ) : (
-                      <>
-                        <ul className="flex max-h-40 flex-col gap-2 overflow-y-auto">
-                          {preview.messages.map((message) => (
-                            <li
-                              key={message.messageId}
-                              className="flex flex-col"
-                            >
-                              <span className="flex items-baseline justify-between gap-2 text-xs">
-                                <span className="truncate font-medium">
-                                  {message.senderName}
-                                  {previewSpansChats
-                                    ? ` · ${message.chatTitle}`
-                                    : ""}
-                                </span>
-                                <span className="shrink-0 text-muted-foreground">
-                                  {message.messageId}
-                                </span>
-                              </span>
-                              <span className="text-xs text-muted-foreground">
-                                {message.body}
-                              </span>
-                            </li>
-                          ))}
-                        </ul>
-                        {redactedTotal(preview.redactionCounts) > 0 ? (
-                          <p className="pt-1 text-xs tabular-nums text-muted-foreground">
-                            {redactedTotal(preview.redactionCounts)}{" "}
-                            {copy.agentRedactedFields}
-                          </p>
-                        ) : null}
-                      </>
-                    )}
-                  </div>
-                </AgentDisclosure>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  aria-expanded={runsOpen}
-                  aria-label={copy.agentRecentRuns}
-                  className="w-full justify-between px-1.5 text-xs text-muted-foreground"
-                  onClick={() => setRunsOpen(!runsOpen)}
-                >
-                  <span className="flex items-center gap-1">
-                    {runsOpen ? <CaretDown /> : <CaretRight />}
-                    {copy.agentRecentRuns}
-                  </span>
-                  <span className="tabular-nums">{auditRecords.length}</span>
-                </Button>
-                <AgentDisclosure open={runsOpen}>
-                  <div className="px-1.5 pb-1">
-                    {auditRecords.length === 0 ? (
-                      <p className="text-xs text-muted-foreground">
-                        {copy.agentNoRuns}
-                      </p>
-                    ) : (
-                      <ul className="flex max-h-40 flex-col gap-1 overflow-y-auto">
-                        {auditRecords.slice(0, 5).map((record) => (
-                          <li
-                            key={record.id}
-                            className="flex items-baseline justify-between gap-2 text-xs"
-                          >
-                            <span className="truncate">
-                              {SCOPE_LABELS[record.scope]} ·{" "}
-                              {record.messageIds.length}
-                              {redactedTotal(record.redactionCounts) > 0
-                                ? ` · ${redactedTotal(record.redactionCounts)} ${copy.agentRedactedFields}`
-                                : ""}
-                            </span>
-                            <time className="shrink-0 tabular-nums text-muted-foreground">
-                              {time(record.timestamp, timeFormat)}
-                            </time>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-                </AgentDisclosure>
-              </div>
-              <PromptInput
-                minRows={1}
-                maxRows={6}
-                loading={running}
-                placeholder={copy.askAgent}
-                aria-label={copy.askAgent}
-                onSubmit={(prompt) =>
-                  run(prompt, buildWorkspaceContext(), scopeInput)
-                }
+                ) : null}
+                {runFailed && !running ? (
+                  <Message from="assistant">
+                    <MessageContent>
+                      <RunFailedRow onRetry={() => void retryLastRun()} />
+                    </MessageContent>
+                  </Message>
+                ) : null}
+              </MessageScroller>
+              <SuggestionPills
+                suggestions={suggestions}
+                disabled={running}
+                showJump={!followingLiveEdge}
+                onJump={jumpToLatest}
               />
+            </div>
+            <div className="relative border-t p-3">
+              <div className="relative">
+                <MentionAutocomplete
+                  id={picker.listboxId}
+                  items={picker.matches}
+                  activeIndex={picker.activeIndex}
+                  onHover={picker.setActiveIndex}
+                  onPick={picker.pick}
+                />
+                <PromptInput
+                  minRows={1}
+                  maxRows={6}
+                  loading={running}
+                  placeholder={copy.askAgent}
+                  aria-label={copy.askAgent}
+                  value={picker.value}
+                  onValueChange={picker.setValue}
+                  inputRef={picker.inputRef}
+                  {...picker.textareaProps}
+                  attachmentPreview={
+                    <AttachedMessageCards
+                      items={attachments}
+                      disabled={running}
+                      onRemove={detachMessage}
+                    />
+                  }
+                  onSubmit={(prompt) => {
+                    picker.setValue("");
+                    return run(prompt, buildWorkspaceContext(), scopeInput);
+                  }}
+                />
+              </div>
             </div>
           </>
         )}

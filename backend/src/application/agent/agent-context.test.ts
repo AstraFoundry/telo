@@ -6,6 +6,7 @@ import {
   type MessageDto,
   type MessagePageInput,
 } from "../../../../contracts/src/ipc";
+import { AGENT_REFERENCE_INSTRUCTION } from "../../domain/agent/agent-actions";
 import type { TelegramRepository } from "../../domain/telegram/telegram-ports";
 import { AgentContextService, buildScopedPrompt } from "./agent-context";
 
@@ -150,6 +151,46 @@ describe("AgentContextService", () => {
       "design-3",
       "design-4",
     ]);
+  });
+
+  it("stops paging the chat list as soon as the scoped chat is found", async () => {
+    const pages = [
+      {
+        items: [chatDto({ id: "first" }), chatDto({ unreadCount: 1 })],
+        cursor: 1,
+      },
+      { items: [chatDto({ id: "later" })], cursor: null },
+    ];
+    let requested = 0;
+    const telegram = {
+      listChatPage: async () => {
+        const page = pages[requested] ?? pages[pages.length - 1]!;
+        requested += 1;
+        return {
+          items: page.items,
+          nextCursor: page.cursor
+            ? { chatId: "x", topMessageId: "1", updatedAt: "2026-01-01" }
+            : null,
+        };
+      },
+      listMessagePage: async () => ({
+        items: [DESIGN_MESSAGES[3]!],
+        nextCursor: null,
+      }),
+    } as unknown as TelegramRepository;
+    const service = new AgentContextService(telegram);
+
+    const preview = await service.preview({
+      scope: "unread",
+      chatId: "design",
+    });
+
+    expect(preview.messages.map((message) => message.messageId)).toEqual([
+      "design-4",
+    ]);
+    // A single-chat scope must not walk the whole dialog list: that is what
+    // turned every panel run into a GetDialogs flood wait.
+    expect(requested).toBe(1);
   });
 
   it("assembles selected messages in chat order and rejects unknown ids", async () => {
@@ -326,9 +367,9 @@ describe("buildScopedPrompt", () => {
     expect(buildScopedPrompt("Summarize", context)).toBe(
       [
         "[[telo-input]]",
-        "id: design-4 | Lev: Ship the retry flow.",
+        "ref: telo://message/design/design-4 | Lev: Ship the retry flow.",
         "[[/telo-input]]",
-        "Cite the source message of every point with [[telo-cite:<message id>]] on its own line.",
+        AGENT_REFERENCE_INSTRUCTION,
         "",
         "Summarize",
       ].join("\n"),
@@ -354,13 +395,13 @@ describe("buildScopedPrompt", () => {
       [
         "[[telo-input]]",
         "chat: Telo Design",
-        "id: design-4 | Lev: Ship the retry flow.",
+        "ref: telo://message/design/design-4 | Lev: Ship the retry flow.",
         "chat: Product",
-        "id: product-1 | Lev: Ship the retry flow.",
+        "ref: telo://message/product/product-1 | Lev: Ship the retry flow.",
         "chat: Telo Design",
-        "id: design-5 | Lev: Ship the retry flow.",
+        "ref: telo://message/design/design-5 | Lev: Ship the retry flow.",
         "[[/telo-input]]",
-        "Cite the source message of every point with [[telo-cite:<message id>]] on its own line.",
+        AGENT_REFERENCE_INSTRUCTION,
         "",
         "Summarize",
       ].join("\n"),

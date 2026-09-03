@@ -65,16 +65,16 @@ describe("DemoAgentGateway", () => {
           "[[telo-action:summarize]]",
           "Summarize these messages.",
           "[[telo-input]]",
-          "id: design-4 | Lev: Ship the retry flow.",
-          "id: design-5 | Priya: Wait for the divider.",
+          "ref: telo://message/design/design-4 | Lev: Ship the retry flow.",
+          "ref: telo://message/design/design-5 | Priya: Wait for the divider.",
           "[[/telo-input]]",
         ].join("\n"),
       ),
     ).toBe(
       [
         "Demo summary of 2 messages.",
-        "[[telo-cite:design-4]]",
-        "[[telo-cite:design-5]]",
+        "- @Lev weighed in. telo://message/design/design-4",
+        "- @Priya weighed in. telo://message/design/design-5",
       ].join("\n"),
     );
   });
@@ -85,11 +85,24 @@ describe("DemoAgentGateway", () => {
         [
           "[[telo-action:extract]]",
           "[[telo-input]]",
-          "id: offsite-1 | Priya: Book the venue.",
+          "ref: telo://message/offsite/offsite-1 | Priya: Book the venue.",
           "[[/telo-input]]",
         ].join("\n"),
       ),
-    ).toBe("Demo summary of 1 messages.\n[[telo-cite:offsite-1]]");
+    ).toBe(
+      "Demo summary of 1 messages.\n- @Priya weighed in. telo://message/offsite/offsite-1",
+    );
+  });
+
+  it("proposes a fixed set of follow-ups capped at the limit", async () => {
+    const gateway = new DemoAgentGateway();
+    const items = await gateway.suggest({
+      prompt: "Summarize",
+      reply: "Demo summary",
+      configuration: AgentConfiguration.default(),
+      limit: 2,
+    });
+    expect(items).toEqual(["What should I reply?", "Who is waiting on me?"]);
   });
 
   it("answers anything else with the generic response", async () => {

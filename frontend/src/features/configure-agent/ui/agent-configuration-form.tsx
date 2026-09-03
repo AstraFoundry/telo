@@ -10,6 +10,7 @@ import {
   AGENT_TEMPERATURE_MAX,
   AGENT_TEMPERATURE_MIN,
   agentOAuthIsConfigured,
+  agentRequestOmitsTemperature,
   type AgentProvider,
   type ConnectAgentAccountInput,
 } from "../../../../../contracts/src/ipc";
@@ -229,20 +230,22 @@ export function AgentConfigurationForm() {
       </SettingsGroup>
 
       <SettingsGroup title={copy.agentTuningGroup}>
-        <SettingsStackedRow
-          label={copy.agentTemperature}
-          description={copy.agentTemperatureHint}
-          value={temperature.toFixed(1)}
-        >
-          <RangeSlider
-            min={AGENT_TEMPERATURE_MIN}
-            max={AGENT_TEMPERATURE_MAX}
-            step={TEMPERATURE_STEP}
-            value={temperature}
-            onValueChange={setTemperature}
-            aria-label={copy.agentTemperature}
-          />
-        </SettingsStackedRow>
+        {agentRequestOmitsTemperature(provider, model) ? null : (
+          <SettingsStackedRow
+            label={copy.agentTemperature}
+            description={copy.agentTemperatureHint}
+            value={temperature.toFixed(1)}
+          >
+            <RangeSlider
+              min={AGENT_TEMPERATURE_MIN}
+              max={AGENT_TEMPERATURE_MAX}
+              step={TEMPERATURE_STEP}
+              value={temperature}
+              onValueChange={setTemperature}
+              aria-label={copy.agentTemperature}
+            />
+          </SettingsStackedRow>
+        )}
         <SettingsStackedRow
           label={copy.agentMaxSteps}
           description={copy.agentMaxStepsHint}

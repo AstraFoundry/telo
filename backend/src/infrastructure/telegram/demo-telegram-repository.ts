@@ -211,6 +211,8 @@ function demoMembers(
     id,
     displayName: DEMO_PEERS[id].displayName,
     username: DEMO_PEERS[id].username,
+    // Demo peers carry no photo and are settled by construction.
+    avatarDataUrl: null,
   }));
 }
 

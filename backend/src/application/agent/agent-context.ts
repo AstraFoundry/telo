@@ -7,9 +7,12 @@ import {
   type ChatPageCursorDto,
   type MessageDto,
 } from "../../../../contracts/src/ipc";
+import { teloMessageLink } from "../../../../contracts/src/ipc";
 import {
   AGENT_INPUT_CLOSE,
   AGENT_INPUT_OPEN,
+  AGENT_REFERENCE_INSTRUCTION,
+  agentPayloadLine,
 } from "../../domain/agent/agent-actions";
 import type {
   AgentScopedContext,
@@ -179,10 +182,23 @@ export class AgentContextService {
     return incoming.slice(-chat.unreadCount);
   }
 
+  /**
+   * Page-until-found: the open chat is almost always on the first page,
+   * which the repository serves from its dialog cache, so a single-chat
+   * scope normally costs no `GetDialogs` round trip at all.
+   */
   private async findChat(chatId: string): Promise<ChatDto> {
-    const chat = (await this.listAllChats()).find((item) => item.id === chatId);
-    if (!chat) throw new Error(`Unknown chat: ${chatId}`);
-    return chat;
+    let cursor: ChatPageCursorDto | null = null;
+    do {
+      const page = await this.telegram.listChatPage({
+        limit: PAGE_LIMIT,
+        cursor,
+      });
+      const chat = page.items.find((item) => item.id === chatId);
+      if (chat) return chat;
+      cursor = page.nextCursor;
+    } while (cursor);
+    throw new Error(`Unknown chat: ${chatId}`);
   }
 
   private async listAllChats(): Promise<ReadonlyArray<ChatDto>> {
@@ -216,8 +232,8 @@ function toDto(message: AgentScopedMessage): AgentContextMessageDto {
 /**
  * Builds the exact prompt handed to the gateway for a scoped panel run: the
  * redacted payload first (the same `[[telo-input]]` block and
- * `id: <id> | <sender>: <body>` lines as the chat actions, so the demo
- * gateway and citation markers work unchanged), then the citation
+ * `ref: <link> | <sender>: <body>` lines as the chat actions, so the demo
+ * gateway and citation links work unchanged), then the reference
  * convention, then the user's question. A scope with no matching messages
  * sends the bare question — there is no payload to show or send.
  */
@@ -237,14 +253,18 @@ export function buildScopedPrompt(
       lines.push(`chat: ${singleLine(message.chatTitle)}`);
     }
     lines.push(
-      `id: ${message.messageId} | ${singleLine(message.senderName)}: ${singleLine(message.body)}`,
+      agentPayloadLine(
+        teloMessageLink(message.chatId, message.messageId),
+        singleLine(message.senderName),
+        singleLine(message.body),
+      ),
     );
   }
   return [
     AGENT_INPUT_OPEN,
     ...lines,
     AGENT_INPUT_CLOSE,
-    "Cite the source message of every point with [[telo-cite:<message id>]] on its own line.",
+    AGENT_REFERENCE_INSTRUCTION,
     "",
     prompt,
   ].join("\n");

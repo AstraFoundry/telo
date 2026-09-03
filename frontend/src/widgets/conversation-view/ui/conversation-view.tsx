@@ -50,6 +50,7 @@ import {
   useTimeFormat,
 } from "entities/preferences";
 import { useTelegramStore } from "entities/telegram";
+import { AddToAgentButton } from "features/add-to-agent";
 import { InChatSearchBar } from "features/chat-search";
 import { MessageComposer } from "features/send-message";
 import { AgentToggle } from "features/toggle-agent";
@@ -1805,6 +1806,7 @@ export function ConversationView() {
               <span className="min-w-0 flex-1 text-sm font-medium tabular-nums">
                 {selectedMessageIds.length} {copy.messagesSelected}
               </span>
+              <AddToAgentButton />
               <Button
                 variant="ghost"
                 className="h-10 gap-1.5 px-3"

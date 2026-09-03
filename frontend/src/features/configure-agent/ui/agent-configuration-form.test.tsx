@@ -119,6 +119,19 @@ describe("AgentConfigurationForm", () => {
     await user.click(screen.getByRole("option", { name: copy.compatible }));
 
     expect(screen.getByLabelText(copy.baseUrl)).toBeTruthy();
+    expect(screen.getByLabelText(copy.agentTemperature)).toBeTruthy();
+  });
+
+  it("hides temperature when an OpenAI-compatible model is a Kimi family id", async () => {
+    const user = userEvent.setup();
+    await renderForm();
+
+    await user.click(screen.getByRole("combobox", { name: copy.provider }));
+    await user.click(screen.getByRole("option", { name: copy.compatible }));
+    await user.clear(modelField());
+    await user.type(modelField(), "kimi-k2.5");
+
+    expect(screen.queryByLabelText(copy.agentTemperature)).toBeNull();
   });
 
   it("saves a Groq account with an API key", async () => {
@@ -151,6 +164,7 @@ describe("AgentConfigurationForm", () => {
 
     expect(modelField().value).toBe("kimi-k2.5");
     expect(screen.queryByLabelText(copy.apiKey)).toBeNull();
+    expect(screen.queryByLabelText(copy.agentTemperature)).toBeNull();
     await user.click(screen.getByRole("button", { name: copy.connectAccount }));
 
     await waitFor(() => {

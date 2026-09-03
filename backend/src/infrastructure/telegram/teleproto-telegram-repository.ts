@@ -909,22 +909,28 @@ class TeleprotoRepository implements TelegramRepository {
 
   private async fetchDialogPage(input: ChatPageInput): Promise<ChatPageDto> {
     const limit = input.limit ?? 50;
-    const dialogs = await this.dialogFetchQueue.run(() =>
-      this.client.getDialogs({
-        limit: limit + 1,
-        offsetDate: input.cursor
-          ? Math.floor(Date.parse(input.cursor.updatedAt) / 1000)
-          : undefined,
-        offsetId: input.cursor
-          ? telegramMessageId(input.cursor.topMessageId)
-          : undefined,
-        offsetPeer: input.cursor?.chatId,
-        ignorePinned: Boolean(input.cursor),
-        // Teleproto 1.229 inverts its ignoreMigrated predicate and returns
-        // only legacy Chat entities when this is true. Fetch the unfiltered
-        // slice and apply the intended predicate below.
-        ignoreMigrated: false,
-      }),
+    // A short flood wait is absorbed here, sleeping outside the exclusive
+    // queue so other dialog reads keep flowing. The caller only ever sees a
+    // page or a real failure — "Please wait N seconds" is a transport detail
+    // the renderer must never have to render.
+    const dialogs = await retryOnShortFloodWait(() =>
+      this.dialogFetchQueue.run(() =>
+        this.client.getDialogs({
+          limit: limit + 1,
+          offsetDate: input.cursor
+            ? Math.floor(Date.parse(input.cursor.updatedAt) / 1000)
+            : undefined,
+          offsetId: input.cursor
+            ? telegramMessageId(input.cursor.topMessageId)
+            : undefined,
+          offsetPeer: input.cursor?.chatId,
+          ignorePinned: Boolean(input.cursor),
+          // Teleproto 1.229 inverts its ignoreMigrated predicate and returns
+          // only legacy Chat entities when this is true. Fetch the unfiltered
+          // slice and apply the intended predicate below.
+          ignoreMigrated: false,
+        }),
+      ),
     );
     // Advance the cursor by the raw server slice, not the filtered result.
     // A page containing a migrated legacy group may therefore render short,
@@ -1037,12 +1043,14 @@ class TeleprotoRepository implements TelegramRepository {
     input: MessagePageInput,
   ): Promise<MessagePageDto> {
     const limit = input.limit ?? 50;
-    const messages = await this.client.getMessages(chatId, {
-      limit: limit + 1,
-      offsetId: input.beforeMessageId
-        ? telegramMessageId(input.beforeMessageId)
-        : undefined,
-    });
+    const messages = await retryOnShortFloodWait(() =>
+      this.client.getMessages(chatId, {
+        limit: limit + 1,
+        offsetId: input.beforeMessageId
+          ? telegramMessageId(input.beforeMessageId)
+          : undefined,
+      }),
+    );
     const page = messages.slice(0, limit);
     const replyTo = await this.replySnapshots(chatId, page);
     page.forEach((message) => this.indexMessage(chatId, message));
@@ -1199,13 +1207,23 @@ class TeleprotoRepository implements TelegramRepository {
     const participants = await this.client.getParticipants(chatId, {
       limit: 200,
     });
-    return participants.map((member) => ({
-      id: member.id.toString(),
-      displayName:
-        [member.firstName, member.lastName].filter(Boolean).join(" ") ||
-        (member.username ? `@${member.username}` : member.id.toString()),
-      username: member.username ?? null,
-    }));
+    return participants.map((member) => {
+      const id = member.id.toString();
+      // Photos ride the same per-peer avatar queue as message authors, so a
+      // member row and that member's transcript rows share one download and
+      // one settling `chat-avatar` event.
+      const avatarPending = !this.avatarCache.has(id);
+      if (avatarPending) this.scheduleAvatar(id, member);
+      return {
+        id,
+        displayName:
+          [member.firstName, member.lastName].filter(Boolean).join(" ") ||
+          (member.username ? `@${member.username}` : id),
+        username: member.username ?? null,
+        avatarDataUrl: this.cachedAvatar(id),
+        avatarPending,
+      };
+    });
   }
 
   // The identity card of a peer the user may have no dialog with: a group
@@ -2747,6 +2765,26 @@ function isMissingPath(error: unknown): boolean {
 function floodWaitSeconds(error: unknown): number | null {
   if (!(error instanceof FloodWaitError)) return null;
   return error.seconds > 0 ? error.seconds : null;
+}
+
+/**
+ * Longest flood wait a paged read sits through before failing. Telegram's
+ * usual waits on GetDialogs / GetHistory are a handful of seconds, which a
+ * loading skeleton covers; a long ban is a real failure the caller should
+ * hear about instead of a request that silently takes a minute.
+ */
+const FLOOD_WAIT_RETRY_CAP_SECONDS = 30;
+
+async function retryOnShortFloodWait<T>(request: () => Promise<T>): Promise<T> {
+  for (;;) {
+    try {
+      return await request();
+    } catch (error) {
+      const wait = floodWaitSeconds(error);
+      if (wait == null || wait > FLOOD_WAIT_RETRY_CAP_SECONDS) throw error;
+      await sleep(wait * 1000);
+    }
+  }
 }
 
 function isSkippableEntityError(error: unknown): boolean {

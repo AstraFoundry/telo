@@ -31,7 +31,11 @@ import type {
   UpdateKeywordFolderInput,
   UpdateUserPreferencesInput,
 } from "../../../../contracts/src/ipc";
-import { MESSAGE_ACTION_EVENT_NAME } from "../../../../contracts/src/ipc";
+import {
+  AGENT_SUGGESTIONS_EVENT_NAME,
+  type AgentSuggestionsPayload,
+  MESSAGE_ACTION_EVENT_NAME,
+} from "../../../../contracts/src/ipc";
 import type { AgentOutput } from "../../domain/agent/agent-ports";
 import type { ApplicationContainer } from "./container";
 import { channels } from "./channels";
@@ -283,6 +287,8 @@ export function registerIpc(container: ApplicationContainer): void {
       notification.show();
     },
   );
+  const suggestFollowUps = (threadId: string) =>
+    container.runAgent.suggestFollowUps(threadId);
   ipcMain.handle(channels.agentRun, async (event, input: RunAgentInput) => {
     // Message actions stream over CUSTOM events instead of the transcript
     // sequence: the result is written into the composer draft, never into
@@ -301,6 +307,7 @@ export function registerIpc(container: ApplicationContainer): void {
       event.sender,
       input,
       container.runAgent.execute(input),
+      suggestFollowUps,
     );
   });
   ipcMain.handle(
@@ -310,6 +317,7 @@ export function registerIpc(container: ApplicationContainer): void {
         event.sender,
         input,
         container.runChatSummary.execute(input),
+        suggestFollowUps,
       );
     },
   );
@@ -320,6 +328,7 @@ export function registerIpc(container: ApplicationContainer): void {
         event.sender,
         input,
         container.runChatExtraction.execute(input),
+        suggestFollowUps,
       );
     },
   );
@@ -409,6 +418,7 @@ async function streamAgentEvents(
   sender: WebContents,
   input: Pick<RunAgentInput, "threadId" | "context">,
   outputs: AsyncIterable<AgentOutput>,
+  suggestFollowUps: (threadId: string) => Promise<ReadonlyArray<string>>,
 ): Promise<void> {
   const runId = crypto.randomUUID();
   const messageId = crypto.randomUUID();
@@ -453,14 +463,24 @@ async function streamAgentEvents(
   if (messageStarted) {
     send(sender, { type: EventType.TEXT_MESSAGE_END, messageId });
   }
-  if (!failed) {
-    send(sender, {
-      type: EventType.RUN_FINISHED,
-      threadId: input.threadId,
-      runId,
-      outcome: { type: "success" },
-    });
-  }
+  if (failed) return;
+  send(sender, {
+    type: EventType.RUN_FINISHED,
+    threadId: input.threadId,
+    runId,
+    outcome: { type: "success" },
+  });
+  // Follow-up pills trail the closed run so a slow suggestion call never
+  // keeps the reply in its streaming state; an empty list sends nothing.
+  if (!messageStarted) return;
+  const items = await suggestFollowUps(input.threadId);
+  if (items.length === 0) return;
+  const value: AgentSuggestionsPayload = { items };
+  send(sender, {
+    type: EventType.CUSTOM,
+    name: AGENT_SUGGESTIONS_EVENT_NAME,
+    value,
+  });
 }
 
 function send(sender: WebContents, event: AGUIEvent): void {

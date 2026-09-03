@@ -15,6 +15,7 @@ const ai = vi.hoisted(() => {
   });
   return {
     streamText: vi.fn(),
+    generateText: vi.fn(),
     createOpenAI: vi.fn(languageModel("openai")),
     createAnthropic: vi.fn(languageModel("anthropic")),
     createGoogleGenerativeAI: vi.fn(languageModel("google")),
@@ -29,6 +30,7 @@ const ai = vi.hoisted(() => {
 
 vi.mock("ai", () => ({
   streamText: ai.streamText,
+  generateText: ai.generateText,
   tool: (config: unknown): unknown => config,
   isStepCount: ai.isStepCount,
 }));
@@ -53,7 +55,7 @@ interface InspectWorkspaceTool {
 interface StreamTextArgs {
   messages: Array<{ role: string; content: string }>;
   instructions: string;
-  temperature: number;
+  temperature?: number;
   tools?: Record<string, InspectWorkspaceTool>;
 }
 
@@ -124,6 +126,7 @@ async function collect(
 describe("AiSdkAgentGateway", () => {
   beforeEach(() => {
     ai.streamText.mockReset();
+    ai.generateText.mockReset();
     ai.createOpenAI.mockClear();
     ai.createAnthropic.mockClear();
     ai.createGoogleGenerativeAI.mockClear();
@@ -193,6 +196,44 @@ describe("AiSdkAgentGateway", () => {
     const args = ai.streamText.mock.calls[0]?.[0] as StreamTextArgs;
     expect(args.temperature).toBe(1.4);
     expect(ai.isStepCount).toHaveBeenCalledWith(7);
+  });
+
+  it("omits temperature for Kimi so the server can apply its fixed sampler", async () => {
+    ai.streamText.mockReturnValue(emptyStream());
+
+    await collect(
+      configuration({
+        provider: "kimi",
+        model: "kimi-k2.5",
+        temperature: 0.7,
+        apiKey: null,
+        oauth: {
+          accessToken: "kimi-access",
+          refreshToken: "kimi-refresh",
+          expiresAt: "2026-09-03T12:00:00.000Z",
+          accountLabel: null,
+        },
+      }),
+    );
+
+    const args = ai.streamText.mock.calls[0]?.[0] as StreamTextArgs;
+    expect(args.temperature).toBeUndefined();
+  });
+
+  it("omits temperature for a Kimi model on an OpenAI-compatible endpoint", async () => {
+    ai.streamText.mockReturnValue(emptyStream());
+
+    await collect(
+      configuration({
+        provider: "openai-compatible",
+        model: "kimi-k2.5",
+        baseUrl: "https://api.moonshot.ai/v1",
+        temperature: 0.7,
+      }),
+    );
+
+    const args = ai.streamText.mock.calls[0]?.[0] as StreamTextArgs;
+    expect(args.temperature).toBeUndefined();
   });
 
   it("replays only the newest history entries within the limit", async () => {
@@ -482,6 +523,64 @@ describe("AiSdkAgentGateway", () => {
     expect(outputs.at(-1)).toEqual({
       type: "error",
       message: "The agent request failed.",
+    });
+  });
+
+  describe("suggest", () => {
+    const suggestInput = {
+      prompt: "Summarize",
+      reply: "Lev shipped the retry flow.",
+      limit: 3,
+    };
+
+    it("asks for follow-ups in one non-streaming call and parses the array", async () => {
+      ai.generateText.mockResolvedValue({
+        text: 'Sure:\n```json\n["What did Lev change?", "Who reviewed it?", "", "What did Lev change?", 42]\n```',
+      });
+
+      const items = await new AiSdkAgentGateway().suggest({
+        ...suggestInput,
+        configuration: configuration(),
+      });
+
+      expect(items).toEqual(["What did Lev change?", "Who reviewed it?"]);
+      const args = ai.generateText.mock.calls[0]?.[0] as StreamTextArgs;
+      expect(args.messages.map((message) => message.role)).toEqual([
+        "user",
+        "assistant",
+        "user",
+      ]);
+      expect(args.messages[1]?.content).toBe(suggestInput.reply);
+    });
+
+    it("resolves empty when the provider fails or has no credential", async () => {
+      const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+      ai.generateText.mockRejectedValue(new Error("quota exceeded"));
+
+      expect(
+        await new AiSdkAgentGateway().suggest({
+          ...suggestInput,
+          configuration: configuration(),
+        }),
+      ).toEqual([]);
+      expect(
+        await new AiSdkAgentGateway().suggest({
+          ...suggestInput,
+          configuration: configuration({ apiKey: null }),
+        }),
+      ).toEqual([]);
+      expect(ai.generateText).toHaveBeenCalledTimes(1);
+      errors.mockRestore();
+    });
+
+    it("yields nothing for output that is not a string array", async () => {
+      ai.generateText.mockResolvedValue({ text: "I cannot help with that." });
+      expect(
+        await new AiSdkAgentGateway().suggest({
+          ...suggestInput,
+          configuration: configuration(),
+        }),
+      ).toEqual([]);
     });
   });
 });

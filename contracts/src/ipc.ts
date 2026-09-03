@@ -641,6 +641,14 @@ export interface ChatMemberDto {
   readonly id: string;
   readonly displayName: string;
   readonly username: string | null;
+  /**
+   * Member photo from the shared per-peer avatar cache, or null when the
+   * member has no photo or the download has not settled — see `avatarPending`.
+   * A later `chat-avatar` event keyed by `id` carries the settled photo.
+   */
+  readonly avatarDataUrl: string | null;
+  /** True until the photo settles, exactly like `ChatDto.avatarPending`. */
+  readonly avatarPending?: boolean;
 }
 
 /**
@@ -746,6 +754,26 @@ export const AGENT_PROVIDER_DEFAULT_MODEL: Record<AgentProvider, string> = {
 
 export function isAgentProvider(value: string): value is AgentProvider {
   return (AGENT_PROVIDERS as readonly string[]).includes(value);
+}
+
+/**
+ * Kimi coding / Moonshot models fix temperature per thinking mode (1.0 when
+ * thinking, 0.6 when not). Sending any other value returns 400
+ * (`invalid temperature: only 1 is allowed for this model`). Official Kimi
+ * docs and oh-my-pi omit the field so the server applies the mode default.
+ * Named Kimi always talks to that API; compatible endpoints need the same
+ * treatment when the id is a Kimi family id.
+ */
+export function agentRequestOmitsTemperature(
+  provider: AgentProvider,
+  model: string,
+): boolean {
+  return provider === "kimi" || isKimiFamilyModelId(model);
+}
+
+/** `kimi-k2.5`, `moonshotai/kimi-k2.6`, `vendor/kimi-k3`. */
+export function isKimiFamilyModelId(model: string): boolean {
+  return model.includes("moonshotai/kimi") || /(^|\/)kimi[-.]/i.test(model);
 }
 
 export interface AgentConfigurationDto {
@@ -969,6 +997,47 @@ export const MESSAGE_ACTION_THREAD_ID = "message-action";
 
 /** CUSTOM AG-UI event name carrying MessageAgentActionOutput values. */
 export const MESSAGE_ACTION_EVENT_NAME = "message-action";
+
+/**
+ * CUSTOM AG-UI event emitted once per successful panel run, after the reply
+ * text and before `RUN_FINISHED`, carrying `AgentSuggestionsPayload`: short
+ * follow-up prompts the composer offers as pills. Absent when the model had
+ * nothing to propose.
+ */
+export const AGENT_SUGGESTIONS_EVENT_NAME = "suggestions";
+
+export interface AgentSuggestionsPayload {
+  readonly items: ReadonlyArray<string>;
+}
+
+/**
+ * In-app link scheme. Agent replies cite Telegram messages with these links
+ * and the renderer turns them into jump targets; nothing outside the app
+ * handles the scheme, so it never leaves the window.
+ */
+export const TELO_LINK_SCHEME = "telo:";
+
+export const teloMessageLink = (chatId: string, messageId: string): string =>
+  `telo://message/${encodeURIComponent(chatId)}/${encodeURIComponent(messageId)}`;
+
+export type TeloLink = {
+  readonly kind: "message";
+  readonly chatId: string;
+  readonly messageId: string;
+};
+
+const TELO_MESSAGE_LINK = /^telo:\/\/message\/([^/\s]+)\/([^/\s]+)$/;
+
+/** Parses an in-app link; null for anything that is not one. */
+export function parseTeloLink(href: string): TeloLink | null {
+  const match = TELO_MESSAGE_LINK.exec(href);
+  if (!match) return null;
+  return {
+    kind: "message",
+    chatId: decodeURIComponent(match[1]!),
+    messageId: decodeURIComponent(match[2]!),
+  };
+}
 
 /**
  * Explicit context scope for an agent run: the user picks exactly which

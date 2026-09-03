@@ -36,6 +36,7 @@ function gatewayCapturing(
   const gateway: AgentGateway & {
     seen?: { prompt: string; history: unknown };
   } = {
+    suggest: async () => [],
     async *stream(input) {
       gateway.seen = { prompt: input.prompt, history: input.history };
       for (const output of outputs) yield output as never;

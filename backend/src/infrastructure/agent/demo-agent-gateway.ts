@@ -6,13 +6,13 @@ import {
   AGENT_ACTION_TRANSLATE,
   AGENT_INPUT_CLOSE,
   AGENT_INPUT_OPEN,
-  agentCitationMarker,
 } from "../../domain/agent/agent-actions";
 import type { AgentGateway, AgentOutput } from "../../domain/agent/agent-ports";
 
 const TONE_PATTERN = /\[\[telo-tone:([^\]]+)\]\]/;
-// Message payload lines are `id: <id> | <sender>: <body>`; the id is cited.
-const MESSAGE_ID_PATTERN = /^id: (\S+) \| /gm;
+// Message payload lines are `ref: <link> | <sender>: <body>`; the link is
+// what a reply pastes back to cite the message.
+const MESSAGE_REF_PATTERN = /^ref: (\S+) \| ([^:]+): /gm;
 
 function payloadOf(prompt: string): string {
   const start = prompt.indexOf(AGENT_INPUT_OPEN);
@@ -21,8 +21,13 @@ function payloadOf(prompt: string): string {
   return prompt.slice(start + AGENT_INPUT_OPEN.length, end).trim();
 }
 
-function messageIdsOf(prompt: string): ReadonlyArray<string> {
-  return [...prompt.matchAll(MESSAGE_ID_PATTERN)].map((match) => match[1]);
+function messageRefsOf(
+  prompt: string,
+): ReadonlyArray<{ readonly link: string; readonly sender: string }> {
+  return [...prompt.matchAll(MESSAGE_REF_PATTERN)].map((match) => ({
+    link: match[1]!,
+    sender: match[2]!,
+  }));
 }
 
 function buildDemoReply(prompt: string): string {
@@ -41,14 +46,22 @@ function buildDemoReply(prompt: string): string {
     prompt.includes(AGENT_ACTION_SUMMARIZE) ||
     prompt.includes(AGENT_ACTION_EXTRACT)
   ) {
-    const ids = messageIdsOf(prompt);
+    const refs = messageRefsOf(prompt);
+    // One cited point per message, mentioning its author the way the
+    // reference instruction asks, so the panel exercises links and mentions.
     return [
-      `Demo summary of ${ids.length} messages.`,
-      ...ids.map((id) => agentCitationMarker(id)),
+      `Demo summary of ${refs.length} messages.`,
+      ...refs.map((ref) => `- @${ref.sender} weighed in. ${ref.link}`),
     ].join("\n");
   }
   return `Demo agent response: ${prompt.slice(0, 80)}`;
 }
+
+export const DEMO_SUGGESTIONS: ReadonlyArray<string> = [
+  "What should I reply?",
+  "Who is waiting on me?",
+  "Turn this into a checklist",
+];
 
 /**
  * Deterministic, network-free gateway for the demo workspace (e2e and local
@@ -67,5 +80,11 @@ export class DemoAgentGateway implements AgentGateway {
     for (let index = 0; index < reply.length; index += size) {
       yield { type: "text", delta: reply.slice(index, index + size) };
     }
+  }
+
+  async suggest(
+    input: Parameters<AgentGateway["suggest"]>[0],
+  ): Promise<ReadonlyArray<string>> {
+    return DEMO_SUGGESTIONS.slice(0, input.limit);
   }
 }

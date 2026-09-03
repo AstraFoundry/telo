@@ -80,4 +80,15 @@ export interface AgentGateway {
     readonly context: UiContextSnapshot;
     readonly configuration: AgentConfiguration;
   }): AsyncIterable<AgentOutput>;
+  /**
+   * Proposes up to `limit` short follow-up prompts for a finished exchange.
+   * Decorative: a gateway that cannot suggest resolves to an empty list and
+   * must never throw for a run that already succeeded.
+   */
+  suggest(input: {
+    readonly prompt: string;
+    readonly reply: string;
+    readonly configuration: AgentConfiguration;
+    readonly limit: number;
+  }): Promise<ReadonlyArray<string>>;
 }

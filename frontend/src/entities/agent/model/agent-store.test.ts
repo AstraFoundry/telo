@@ -7,7 +7,10 @@ import type {
   UiContextSnapshot,
   UserPreferencesDto,
 } from "../../../../../contracts/src/ipc";
-import { AGENT_OAUTH_PROVIDERS } from "../../../../../contracts/src/ipc";
+import {
+  AGENT_OAUTH_PROVIDERS,
+  AGENT_SUGGESTIONS_EVENT_NAME,
+} from "../../../../../contracts/src/ipc";
 import { copy } from "../../../shared/config/copy";
 import { installTeloApiMock } from "../../../shared/test/mock-telo";
 
@@ -23,7 +26,6 @@ function resetAgentStore(): void {
     threadId: null,
     configuration: null,
     notificationsEnabled: false,
-    runChatId: null,
   });
 }
 
@@ -148,21 +150,54 @@ describe("agent-store accept()", () => {
     expect(state.messages).toEqual([]);
   });
 
-  it("appends an assistant error message on RUN_ERROR", () => {
+  it("flags the failure on RUN_ERROR without putting the message in the transcript", () => {
+    useAgentStore.setState({
+      messages: [{ id: "user-1", from: "user", body: "Hi" }],
+    });
     useAgentStore.getState().accept({
       type: EventType.RUN_ERROR,
-      message: "Provider unavailable",
+      message: "Please wait 11 seconds before repeating the action.",
     } as AGUIEvent);
 
     const state = useAgentStore.getState();
     expect(state.running).toBe(false);
     expect(state.activity).toBeNull();
-    expect(state.messages).toHaveLength(1);
-    expect(state.messages[0]).toMatchObject({
-      from: "assistant",
-      body: "Provider unavailable",
-      error: true,
-    });
+    expect(state.runFailed).toBe(true);
+    expect(state.messages).toEqual([
+      { id: "user-1", from: "user", body: "Hi" },
+    ]);
+  });
+
+  it("drops the empty assistant shell but keeps partial text on RUN_ERROR", () => {
+    const { accept } = useAgentStore.getState();
+    accept({
+      type: EventType.TEXT_MESSAGE_START,
+      messageId: "msg-1",
+      role: "assistant",
+    } as AGUIEvent);
+    accept({
+      type: EventType.RUN_ERROR,
+      message: "Provider unavailable",
+    } as AGUIEvent);
+    expect(useAgentStore.getState().messages).toEqual([]);
+
+    accept({
+      type: EventType.TEXT_MESSAGE_START,
+      messageId: "msg-2",
+      role: "assistant",
+    } as AGUIEvent);
+    accept({
+      type: EventType.TEXT_MESSAGE_CONTENT,
+      messageId: "msg-2",
+      delta: "Partial",
+    } as AGUIEvent);
+    accept({
+      type: EventType.RUN_ERROR,
+      message: "Provider unavailable",
+    } as AGUIEvent);
+    expect(useAgentStore.getState().messages).toEqual([
+      { id: "msg-2", from: "assistant", body: "Partial" },
+    ]);
   });
 
   it("ignores unrelated event types", () => {
@@ -690,7 +725,6 @@ describe("agent-store runChatAction()", () => {
     });
     const state = useAgentStore.getState();
     expect(state.running).toBe(true);
-    expect(state.runChatId).toBe("design");
     // The transcript shows the action label, never the machine prompt.
     expect(state.messages[0]).toMatchObject({
       from: "user",
@@ -748,36 +782,194 @@ describe("agent-store runChatAction()", () => {
     expect(telo.agent.runChatSummary).not.toHaveBeenCalled();
     expect(useAgentStore.getState().messages).toEqual([]);
   });
+});
 
-  it("tags the streamed assistant message with the chat until the run ends", async () => {
+describe("agent-store suggestions", () => {
+  beforeEach(() => {
+    resetAgentStore();
+    useAgentStore.setState({ running: false, suggestions: [] });
+  });
+
+  const suggestionsEvent = {
+    type: EventType.CUSTOM,
+    name: AGENT_SUGGESTIONS_EVENT_NAME,
+    value: { items: ["And then?", "Who owns it?"] },
+  } as AGUIEvent;
+  const context: UiContextSnapshot = {
+    activeChat: null,
+    visibleChats: [],
+    visibleMessages: [],
+    components: [],
+  };
+
+  it("stores the follow-ups that trail a finished run", () => {
+    useAgentStore.getState().accept(suggestionsEvent);
+
+    expect(useAgentStore.getState().suggestions).toEqual([
+      "And then?",
+      "Who owns it?",
+    ]);
+  });
+
+  it("ignores follow-ups that arrive once a new run is already in flight", () => {
+    useAgentStore.setState({ running: true });
+
+    useAgentStore.getState().accept(suggestionsEvent);
+
+    expect(useAgentStore.getState().suggestions).toEqual([]);
+  });
+
+  it("clears the follow-ups when a run starts or the thread changes", async () => {
     const telo = installTeloApiMock();
-    telo.agent.runChatSummary.mockResolvedValue(undefined);
+    telo.agent.run.mockResolvedValue(undefined);
+    telo.agent.listThreads.mockResolvedValue({
+      threads: [],
+      activeThreadId: "thread-1",
+    });
+    telo.agent.createThread.mockResolvedValue(
+      threadDto({ threadId: "thread-2", messages: [] }),
+    );
+    useAgentStore.setState({ threadId: "thread-1" });
+    useAgentStore.getState().accept(suggestionsEvent);
+
+    await useAgentStore.getState().run("Go on", context, { scope: "folder" });
+    expect(useAgentStore.getState().suggestions).toEqual([]);
+
+    useAgentStore.setState({ running: false });
+    useAgentStore.getState().accept(suggestionsEvent);
+    await useAgentStore.getState().startNewThread();
+    expect(useAgentStore.getState().suggestions).toEqual([]);
+  });
+});
+
+describe("agent-store attachments and retry", () => {
+  beforeEach(() => {
+    resetAgentStore();
+    useAgentStore.setState({
+      running: false,
+      runFailed: false,
+      lastRun: null,
+      attachments: [],
+    });
+  });
+
+  const card = (messageId: string, chatId = "design") => ({
+    chatId,
+    chatTitle: chatId === "design" ? "Telo Design" : "Ops",
+    messageId,
+    senderName: "Lev",
+    body: `Body ${messageId}`,
+  });
+  const context: UiContextSnapshot = {
+    activeChat: null,
+    visibleChats: [],
+    visibleMessages: [],
+    components: [],
+  };
+
+  it("attachMessages() appends new cards and ignores duplicates", () => {
+    const { attachMessages } = useAgentStore.getState();
+    attachMessages([card("m1"), card("m2")]);
+    attachMessages([card("m2"), card("m3")]);
+
+    expect(
+      useAgentStore.getState().attachments.map((item) => item.messageId),
+    ).toEqual(["m1", "m2", "m3"]);
+  });
+
+  it("attachMessages() replaces cards from another chat", () => {
+    const { attachMessages } = useAgentStore.getState();
+    attachMessages([card("m1")]);
+    attachMessages([card("o1", "ops")]);
+
+    expect(useAgentStore.getState().attachments).toEqual([card("o1", "ops")]);
+  });
+
+  it("detachMessage() and clearAttachments() remove cards", () => {
+    const state = useAgentStore.getState();
+    state.attachMessages([card("m1"), card("m2")]);
+    state.detachMessage("m1");
+    expect(useAgentStore.getState().attachments).toEqual([card("m2")]);
+
+    state.clearAttachments();
+    expect(useAgentStore.getState().attachments).toEqual([]);
+  });
+
+  it("run() consumes the cards and remembers the inputs for a retry", async () => {
+    const telo = installTeloApiMock();
+    telo.agent.run.mockResolvedValue(undefined);
     telo.agent.listThreads.mockResolvedValue({
       threads: [],
       activeThreadId: "thread-1",
     });
     useAgentStore.setState({ threadId: "thread-1" });
-
-    await useAgentStore.getState().runChatAction("summary", scope, context);
-    const { accept } = useAgentStore.getState();
-    accept({
-      type: EventType.TEXT_MESSAGE_START,
-      messageId: "a-1",
-      role: "assistant",
-    } as AGUIEvent);
-
-    expect(useAgentStore.getState().messages.at(-1)).toMatchObject({
-      id: "a-1",
-      from: "assistant",
+    useAgentStore.getState().attachMessages([card("m1")]);
+    const scope = {
+      scope: "selected" as const,
       chatId: "design",
+      messageIds: ["m1"],
+    };
+
+    await useAgentStore.getState().run("Summarize these", context, scope);
+
+    const state = useAgentStore.getState();
+    expect(state.attachments).toEqual([]);
+    expect(state.runFailed).toBe(false);
+    expect(state.lastRun).toEqual({
+      kind: "prompt",
+      prompt: "Summarize these",
+      context,
+      scope,
     });
+  });
 
-    accept({
-      type: EventType.RUN_FINISHED,
-      threadId: "thread-1",
-      runId: "run-1",
+  it("retryLastRun() re-sends the failed prompt once", async () => {
+    const telo = installTeloApiMock();
+    telo.agent.run.mockResolvedValue(undefined);
+    telo.agent.listThreads.mockResolvedValue({
+      threads: [],
+      activeThreadId: "thread-1",
+    });
+    useAgentStore.setState({ threadId: "thread-1" });
+    const scope = { scope: "unread" as const, chatId: "design" };
+
+    await useAgentStore.getState().run("What did I miss?", context, scope);
+    useAgentStore.getState().accept({
+      type: EventType.RUN_ERROR,
+      message: "Provider unavailable",
     } as AGUIEvent);
+    expect(useAgentStore.getState().runFailed).toBe(true);
 
-    expect(useAgentStore.getState().runChatId).toBeNull();
+    await useAgentStore.getState().retryLastRun();
+
+    expect(telo.agent.run).toHaveBeenCalledTimes(2);
+    expect(telo.agent.run).toHaveBeenLastCalledWith(
+      expect.objectContaining({ prompt: "What did I miss?", scope }),
+    );
+    const state = useAgentStore.getState();
+    expect(state.runFailed).toBe(false);
+    // The question shows once, not once per attempt.
+    expect(
+      state.messages.filter((message) => message.from === "user"),
+    ).toHaveLength(1);
+  });
+
+  it("retryLastRun() is a no-op without a previous run or while running", async () => {
+    const telo = installTeloApiMock();
+
+    await useAgentStore.getState().retryLastRun();
+    expect(telo.agent.run).not.toHaveBeenCalled();
+
+    useAgentStore.setState({
+      running: true,
+      lastRun: {
+        kind: "prompt",
+        prompt: "Hi",
+        context,
+        scope: { scope: "folder", folderId: null },
+      },
+    });
+    await useAgentStore.getState().retryLastRun();
+    expect(telo.agent.run).not.toHaveBeenCalled();
   });
 });

@@ -1,29 +1,12 @@
 import type { ChatMemberDto } from "../../../../../contracts/src/ipc";
+import { filterMentionItems, type MentionItem } from "shared/lib/mention-query";
 
-export interface MentionQuery {
-  /** UTF-16 offset of the triggering `@`. */
-  readonly start: number;
-  /** Text after `@` up to the caret; empty while the user just typed `@`. */
-  readonly query: string;
-}
+export { mentionQueryAtCaret } from "shared/lib/mention-query";
+export type { MentionQuery } from "shared/lib/mention-query";
 
-/**
- * Returns the in-progress `@mention` at `caret` when the `@` starts a token
- * (start of string or after whitespace) and the query is username characters.
- * Completed mentions (followed by a space) and mid-word `@` do not match.
- */
-export function mentionQueryAtCaret(
-  body: string,
-  caret: number,
-): MentionQuery | null {
-  if (caret < 0 || caret > body.length) return null;
-  const before = body.slice(0, caret);
-  const at = before.lastIndexOf("@");
-  if (at < 0) return null;
-  if (at > 0 && !/\s/.test(before[at - 1] ?? "")) return null;
-  const query = before.slice(at + 1);
-  if (!/^[A-Za-z0-9_]*$/.test(query)) return null;
-  return { start: at, query };
+/** A group member as a mention-picker row; keeps the member for the insert. */
+export interface MemberMentionItem extends MentionItem {
+  readonly member: ChatMemberDto;
 }
 
 /**
@@ -33,15 +16,22 @@ export function mentionQueryAtCaret(
 export function filterMentionMembers(
   members: ReadonlyArray<ChatMemberDto>,
   query: string,
-): ChatMemberDto[] {
-  const needle = query.toLocaleLowerCase();
-  return members.filter((member) => {
-    if (!member.username) return false;
-    return (
-      member.username.toLocaleLowerCase().startsWith(needle) ||
-      member.displayName.toLocaleLowerCase().includes(needle)
-    );
-  });
+): MemberMentionItem[] {
+  const items = members.flatMap((member) =>
+    member.username
+      ? [
+          {
+            id: member.id,
+            label: member.displayName,
+            description: `@${member.username}`,
+            avatarUrl: member.avatarDataUrl,
+            avatarPending: member.avatarPending,
+            member,
+          },
+        ]
+      : [],
+  );
+  return filterMentionItems(items, query);
 }
 
 /** The inserted token plus a trailing space; the mention entity covers only `@username`. */

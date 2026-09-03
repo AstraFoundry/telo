@@ -13,6 +13,8 @@ export type {
   MessageKeyboardLabels,
   MessageKeyboardProps,
 } from "./message-keyboard";
+export { MentionAutocomplete, mentionOptionId } from "./mention-autocomplete";
+export type { MentionAutocompleteProps } from "./mention-autocomplete";
 export { PressableBlock } from "./pressable-block";
 export type { PressableBlockProps } from "./pressable-block";
 export { ProgressRing } from "./progress-ring";

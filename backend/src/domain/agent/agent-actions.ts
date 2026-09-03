@@ -14,6 +14,20 @@ export const AGENT_ACTION_EXTRACT = "[[telo-action:extract]]";
 export const AGENT_INPUT_OPEN = "[[telo-input]]";
 export const AGENT_INPUT_CLOSE = "[[/telo-input]]";
 
-/** Citation marker referencing a real message id in the agent's reply. */
-export const agentCitationMarker = (messageId: string): string =>
-  `[[telo-cite:${messageId}]]`;
+/**
+ * Payload line of one scoped message. The `ref:` is the message's in-app
+ * link (`teloMessageLink`), which the model pastes back to cite the message;
+ * the renderer turns the link into a jump target, so a citation is
+ * self-describing wherever the reply is shown, including reloaded threads.
+ */
+export const agentPayloadLine = (
+  reference: string,
+  senderName: string,
+  body: string,
+): string => `ref: ${reference} | ${senderName}: ${body}`;
+
+/** Prompt-side contract for the citation and mention conventions. */
+export const AGENT_REFERENCE_INSTRUCTION = [
+  "Cite the source message of every point by pasting its ref link (telo://message/…) at the end of the sentence, as a bare link.",
+  "Refer to people as @Name, spelled exactly as in the payload.",
+].join(" ");
