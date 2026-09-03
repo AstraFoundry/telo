@@ -116,12 +116,14 @@ async function renderSidebar({
   folders = [],
   activeFolderId = null,
   activeChatId = null,
+  loading = false,
 }: {
   prefs?: Partial<UserPreferencesDto>;
   chats?: ChatDto[];
   folders?: ChatFolderDto[];
   activeFolderId?: number | null;
   activeChatId?: string | null;
+  loading?: boolean;
 } = {}) {
   const telo = installTeloApiMock();
   telo.preferences.get.mockResolvedValue(preferences(prefs));
@@ -132,7 +134,7 @@ async function renderSidebar({
     activeFolderId,
     messages: [],
     activeChatId,
-    loading: false,
+    loading,
   });
   const { ConversationSidebar } = await import("./conversation-sidebar");
   const onOpenSettings = vi.fn();
@@ -191,6 +193,25 @@ describe("ConversationSidebar", () => {
     await user.click(screen.getByRole("button", { name: /Ada Byron/ }));
 
     expect(onSelectChat).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows chat-list skeletons instead of the empty state while the first page loads", async () => {
+    await renderSidebar({ chats: [], loading: true });
+
+    expect(
+      screen.getByRole("status", { name: copy.loadingChatList }),
+    ).toBeTruthy();
+    // An empty result and a pending one must not read identically.
+    expect(screen.queryByText(copy.noChats)).toBeNull();
+  });
+
+  it("keeps the empty state once the first page settles empty", async () => {
+    await renderSidebar({ chats: [], loading: false });
+
+    expect(screen.getByText(copy.noChats)).toBeTruthy();
+    expect(
+      screen.queryByRole("status", { name: copy.loadingChatList }),
+    ).toBeNull();
   });
 
   it("shows the empty-search message when the server finds nothing", async () => {

@@ -149,6 +149,21 @@
   }
 }
 
+/* Skeleton sweep: a surface-coloured band thins the bar as it passes, the way
+   tdesktop's `Ui::SkeletonAnimation` drops its gradient alpha 0.5 → 0.2 in the
+   middle rather than adding a white sheen. Skewed like Telegram Web K's
+   `.skeleton-base`, and held at rest for the last 60% of the cycle so the
+   surface is calm between passes instead of continuously shimmering. */
+@keyframes telo-skeleton-sweep {
+  from {
+    transform: translateX(-125%) skewX(-45deg);
+  }
+  40%,
+  to {
+    transform: translateX(125%) skewX(-45deg);
+  }
+}
+
 /* Theme toggle: circular reveal from the last pointer. No page blur. */
 ::view-transition-old(root) {
   animation: none;

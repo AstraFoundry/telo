@@ -154,6 +154,20 @@ describe("ChatProfilePanel", () => {
     ).toBeTruthy();
   });
 
+  it("holds the panel's own shape while shared media and pins are in flight", async () => {
+    // Neither request settles, so the panel stays in its loading branch.
+    // `Promise.race([])` never settles and needs no executor callback.
+    telo.workspace.listSharedMedia.mockReturnValue(Promise.race([]));
+    telo.workspace.listPinnedMessages.mockReturnValue(Promise.race([]));
+    render(<ChatProfilePanel />);
+
+    expect(
+      screen.getByRole("status", { name: copy.loadingChatInfo }),
+    ).toBeTruthy();
+    // A spinner is what this replaced; the shape must not regress to one.
+    expect(screen.queryByRole("status", { name: copy.loading })).toBeNull();
+  });
+
   it("shows the identity card for a message author with no dialog", async () => {
     telo.workspace.getPeerProfile.mockResolvedValue({
       id: "peer-mina",

@@ -31,6 +31,8 @@ import {
   ContextMenuTrigger,
   LoadIndicator,
   MessageTyping,
+  Skeleton,
+  SkeletonGroup,
 } from "shared/ui";
 
 // "system" defers to the locale's hour12 default, while 12h/24h pin it
@@ -240,6 +242,53 @@ function MessageSearchResultRow({
   );
 }
 
+/**
+ * Bar widths per skeleton row. Fixed rather than random: Telegram Web K seeds
+ * its own widths from the row index (`loadingDialogSkeleton.tsx:6-11`) exactly
+ * so they stay put across re-renders — `Math.random()` in a render makes the
+ * bars twitch on every scroll tick.
+ */
+const CHAT_SKELETON_ROWS = [
+  { title: "w-32", preview: "w-44" },
+  { title: "w-24", preview: "w-32" },
+  { title: "w-36", preview: "w-52" },
+  { title: "w-28", preview: "w-40" },
+  { title: "w-32", preview: "w-28" },
+  { title: "w-24", preview: "w-48" },
+  { title: "w-36", preview: "w-36" },
+  { title: "w-28", preview: "w-44" },
+] as const;
+
+/**
+ * The chat list's own geometry while the first page is in flight. A spinner
+ * would be the smaller change, but the list is about to be a stack of rows of
+ * a known shape, and until now this surface showed the "No chats found" empty
+ * state during the very first load — an empty result and a pending one read
+ * identically, which is the worse of the two bugs a spinner would leave.
+ */
+function ChatListSkeleton() {
+  return (
+    <SkeletonGroup label={copy.loadingChatList}>
+      {CHAT_SKELETON_ROWS.map((row, index) => (
+        <div
+          key={index}
+          className="mb-0.5 flex items-center gap-2 px-2.5 py-2"
+          // Matches ChatListRow: 8px block padding around a 40px avatar.
+        >
+          <Skeleton circle className="size-10 shrink-0" />
+          <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+            <div className="flex items-center gap-2">
+              <Skeleton className={`h-3.5 ${row.title}`} />
+              <Skeleton className="ml-auto h-3 w-8" />
+            </div>
+            <Skeleton className={`h-3 ${row.preview}`} />
+          </div>
+        </div>
+      ))}
+    </SkeletonGroup>
+  );
+}
+
 export function ConversationSidebar({
   onOpenSettings,
   onSelectChat,
@@ -251,6 +300,7 @@ export function ConversationSidebar({
   const activeChatId = useChatStore((state) => state.activeChatId);
   const select = useChatStore((state) => state.select);
   const chatCursor = useChatStore((state) => state.chatCursor);
+  const loadingChatList = useChatStore((state) => state.loading);
   const loadingMoreChats = useChatStore((state) => state.loadingMoreChats);
   const loadMoreChats = useChatStore((state) => state.loadMoreChats);
   const query = useChatStore((state) => state.searchQuery);
@@ -446,9 +496,13 @@ export function ConversationSidebar({
               />
             ))}
             {!visible.length ? (
-              <div className="grid h-full place-items-center px-3 text-center text-sm text-muted-foreground">
-                {copy.noChats}
-              </div>
+              loadingChatList ? (
+                <ChatListSkeleton />
+              ) : (
+                <div className="grid h-full place-items-center px-3 text-center text-sm text-muted-foreground">
+                  {copy.noChats}
+                </div>
+              )
             ) : null}
             {chatCursor && visible.length ? (
               <div ref={endSentinelRef} className="h-px" />
