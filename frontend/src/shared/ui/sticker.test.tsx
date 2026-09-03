@@ -22,7 +22,13 @@ function stubMatchMedia(reducedMotion: boolean): void {
 }
 
 function sticker(partial: Partial<MessageStickerDto> = {}): MessageStickerDto {
-  return { emoji: "🐱", format: "static", setName: "CatPack", ...partial };
+  return {
+    emoji: "🐱",
+    format: "static",
+    setName: "CatPack",
+    outlinePath: null,
+    ...partial,
+  };
 }
 
 async function renderSticker(
@@ -54,16 +60,39 @@ describe("Sticker", () => {
     vi.restoreAllMocks();
   });
 
-  it("holds the emoji in the sticker's own box until the document lands", async () => {
-    const { container } = await renderSticker({ src: null });
+  it("draws the sticker's own outline in its box until the document lands", async () => {
+    const { container } = await renderSticker({
+      src: null,
+      sticker: sticker({ outlinePath: "M64,64L448,64L448,448L64,448z" }),
+    });
 
-    expect(screen.getByRole("img", { name: "🐱" }).textContent).toBe("🐱");
+    const outline = screen.getByRole("img", { name: "🐱" });
+    expect(outline.tagName.toLowerCase()).toBe("svg");
+    // The path is authored in the document's pixel space, so the viewBox has
+    // to be the document's size or the silhouette lands off-centre.
+    expect(outline.getAttribute("viewBox")).toBe("0 0 512 512");
+    expect(outline.querySelector("path")?.getAttribute("d")).toBe(
+      "M64,64L448,64L448,448L64,448z",
+    );
+    // The alt emoji is a different picture in the right box; it never stands
+    // in for the sticker.
+    expect(outline.textContent).toBe("");
     expect(container.querySelector("img")).toBeNull();
     // The box is reserved up front so the row does not jump when the
     // document arrives.
     const box = container.querySelector<HTMLElement>('[data-slot="sticker"]');
     expect(box?.style.width).toBe("180px");
     expect(box?.style.height).toBe("180px");
+  });
+
+  it("falls back to a skeleton when Telegram sent no vector thumbnail", async () => {
+    const { container } = await renderSticker({ src: null });
+
+    expect(container.querySelector("svg")).toBeNull();
+    expect(screen.queryByRole("img")).toBeNull();
+    // Same reserved box either way.
+    const box = container.querySelector<HTMLElement>('[data-slot="sticker"]');
+    expect(box?.style.width).toBe("180px");
   });
 
   it("scales a non-square sticker down to the longest side", async () => {

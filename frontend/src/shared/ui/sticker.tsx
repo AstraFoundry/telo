@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { MessageStickerDto } from "../../../../contracts/src/ipc";
 
 import { cn } from "@/shared/lib/cn";
+import { Skeleton } from "./skeleton";
 
 /**
  * Telegram caps a sticker at half the message column and never lets it grow
@@ -13,6 +14,11 @@ import { cn } from "@/shared/lib/cn";
  * Telegram-Android draws.
  */
 const STICKER_MAX_PX = 180;
+/**
+ * Telegram authors stickers at 512px, and encodes the vector thumbnail's path
+ * in that space. Only used when a message omits the document's dimensions.
+ */
+const STICKER_OUTLINE_SIZE = 512;
 
 export interface StickerProps {
   readonly sticker: MessageStickerDto;
@@ -89,15 +95,12 @@ export function Sticker({
   if (!src) {
     return (
       <StickerBox box={box} className={className}>
-        {/* Telegram paints the alt emoji in the same slot until the document
-            is on disk, so the row keeps its height and nothing jumps. */}
-        <span
-          role="img"
-          aria-label={name}
-          className="grid size-full place-items-center text-5xl leading-none select-none"
-        >
-          {sticker.emoji}
-        </span>
+        <StickerPlaceholder
+          outlinePath={sticker.outlinePath}
+          name={name}
+          width={width}
+          height={height}
+        />
       </StickerBox>
     );
   }
@@ -162,6 +165,53 @@ function StickerBox({
     >
       {children}
     </div>
+  );
+}
+
+/**
+ * What stands in the sticker's slot until the document is on disk.
+ *
+ * Not the alt emoji, which is what this used to draw: Telegram ships the
+ * sticker's own outline inside the message as a vector thumbnail, and both
+ * reference clients paint that (`history_view_sticker.cpp:422-448`,
+ * `wrappers/sticker.ts:284-326`) precisely because it is the correct shape at
+ * zero cost — an emoji glyph is a different picture in the right box, which
+ * reads as the sticker having already loaded wrong.
+ *
+ * Telegram Web K deliberately ships this silhouette static (its animated
+ * gradient is commented out at `sticker.ts:288-322`); the sweep here is the
+ * shared skeleton one, and only the fallback carries it, because a shape that
+ * is already correct does not need to advertise that it is provisional.
+ */
+function StickerPlaceholder({
+  outlinePath,
+  name,
+  width,
+  height,
+}: {
+  readonly outlinePath: string | null;
+  readonly name: string;
+  readonly width: number | null;
+  readonly height: number | null;
+}) {
+  if (!outlinePath) {
+    // No vector thumbnail: there is no shape to draw, so the placeholder falls
+    // back to the generic one rather than inventing a silhouette.
+    return <Skeleton rounded className="size-full" />;
+  }
+  return (
+    <svg
+      // The path's coordinates are in the document's own pixel space, so the
+      // viewBox is the document's size and the box does the scaling. Telegram
+      // stickers are authored at 512px, which is the fallback when the
+      // message carries no dimensions.
+      viewBox={`0 0 ${width ?? STICKER_OUTLINE_SIZE} ${height ?? STICKER_OUTLINE_SIZE}`}
+      role="img"
+      aria-label={name}
+      className="size-full fill-foreground/[0.08] dark:fill-foreground/[0.12]"
+    >
+      <path d={outlinePath} />
+    </svg>
   );
 }
 

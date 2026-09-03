@@ -334,6 +334,7 @@ describe("TelegramWorkspaceService", () => {
             format: "static" as const,
             width: 512,
             height: 512,
+            outlinePath: null,
           },
         ],
         installed: true,

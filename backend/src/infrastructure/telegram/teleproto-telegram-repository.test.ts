@@ -518,6 +518,8 @@ function fakeStickerDocument(
     mimeType: string;
     emoji?: string;
     dimensions?: { w: number; h: number };
+    /** PhotoPathSize bytes; a set may ship stickers without one. */
+    outlineBytes?: Uint8Array;
   },
 ) {
   const attributes: object[] = [];
@@ -529,8 +531,14 @@ function fakeStickerDocument(
     mimeType: options.mimeType,
     size: BigInt(2048),
     attributes,
+    thumbs: options.outlineBytes
+      ? [{ type: "j", bytes: options.outlineBytes }]
+      : [],
   };
 }
+
+/** Decodes to "MA10z" — see sticker-outline.test.ts. */
+const STICKER_OUTLINE_BYTES = Uint8Array.from([192, 10]);
 
 const stickerSetHeader = {
   id: BigInt(9),
@@ -2086,6 +2094,7 @@ describe("TelegramClientCoordinator", () => {
         mimeType: "image/webp",
         emoji: "😀",
         dimensions: { w: 512, h: 512 },
+        outlineBytes: STICKER_OUTLINE_BYTES,
       }),
       fakeStickerDocument(502, { mimeType: "application/x-tgsticker" }),
       fakeStickerDocument(503, {
@@ -2126,6 +2135,9 @@ describe("TelegramClientCoordinator", () => {
             format: "static",
             width: 512,
             height: 512,
+            // The set's vector thumbnail is decoded main-side, so the picker
+            // can draw the silhouette before any document downloads.
+            outlinePath: "MA10z",
           },
           {
             id: "sticker/502",
@@ -2133,6 +2145,7 @@ describe("TelegramClientCoordinator", () => {
             format: "animated",
             width: null,
             height: null,
+            outlinePath: null,
           },
           {
             id: "sticker/503",
@@ -2140,6 +2153,7 @@ describe("TelegramClientCoordinator", () => {
             format: "video",
             width: 384,
             height: 384,
+            outlinePath: null,
           },
         ],
       },
@@ -2194,6 +2208,7 @@ describe("TelegramClientCoordinator", () => {
               format: "static",
               width: null,
               height: null,
+              outlinePath: null,
             },
           ],
         },
@@ -2353,6 +2368,7 @@ describe("TelegramClientCoordinator", () => {
           format: "static",
           width: 512,
           height: 512,
+          outlinePath: null,
         },
       ],
     });

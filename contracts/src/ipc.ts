@@ -195,14 +195,24 @@ export type StickerFormat = "static" | "animated" | "video";
  */
 export interface MessageStickerDto {
   /**
-   * Emoji the sticker stands for. It is the accessible name and the
-   * placeholder shown until the document is on disk, which is what Telegram
-   * draws in the same slot.
+   * Emoji the sticker stands for. It is the accessible name; it is not the
+   * placeholder — see `outlinePath`.
    */
   readonly emoji: string | null;
   readonly format: StickerFormat;
   /** Short name of the set the sticker belongs to; null when it has none. */
   readonly setName: string | null;
+  /**
+   * SVG path of the sticker's own silhouette, decoded main-side from the
+   * document's vector thumbnail (Telegram `PhotoPathSize`, `type: "j"`). It
+   * arrives with the message, so it is what both reference clients paint
+   * until the document itself is on disk. Null when Telegram sent no vector
+   * thumbnail, which is when the renderer falls back to a skeleton.
+   *
+   * Coordinates are in the document's own pixel space: draw it in a viewBox
+   * of `width` × `height`.
+   */
+  readonly outlinePath: string | null;
 }
 
 /**
@@ -216,6 +226,8 @@ export interface StickerItemDto {
   readonly format: StickerFormat;
   readonly width: number | null;
   readonly height: number | null;
+  /** Silhouette to draw until the document lands; see `MessageStickerDto`. */
+  readonly outlinePath: string | null;
 }
 
 /** A sticker set, the unit Telegram's picker and set sheet group stickers by. */

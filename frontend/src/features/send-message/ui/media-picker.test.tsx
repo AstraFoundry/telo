@@ -33,6 +33,7 @@ const SET: StickerSetDto = {
       format: "static",
       width: 512,
       height: 512,
+      outlinePath: null,
     },
     {
       id: "sticker/2",
@@ -40,6 +41,7 @@ const SET: StickerSetDto = {
       format: "animated",
       width: 512,
       height: 512,
+      outlinePath: null,
     },
   ],
 };

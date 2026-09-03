@@ -1565,6 +1565,7 @@ describe("chat-store", () => {
       format: "static" as const,
       width: 512,
       height: 512,
+      outlinePath: null,
     };
     telo.workspace.getCustomEmoji.mockResolvedValue([item]);
 
@@ -1604,6 +1605,7 @@ describe("chat-store", () => {
       format: "static",
       width: 512,
       height: 512,
+      outlinePath: null,
     });
 
     expect(telo.workspace.sendSticker).toHaveBeenCalledWith(
@@ -1624,6 +1626,7 @@ describe("chat-store", () => {
       format: "animated",
       width: 512,
       height: 512,
+      outlinePath: null,
     });
 
     // Same rule as a failed text send: the bubble stays, marked failed, so

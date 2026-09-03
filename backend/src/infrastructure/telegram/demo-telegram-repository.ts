@@ -192,6 +192,10 @@ function demoMembers(
 // photo in the avatar cache.
 const DEMO_ACCOUNT_PEER_ID = "saved";
 
+// Stands in for Telegram's decoded vector thumbnail, so the demo workspace
+// exercises the silhouette placeholder the live adapter derives per document.
+const DEMO_STICKER_OUTLINE_PATH = "M64,64L448,64L448,448L64,448z";
+
 // Pinned message ids per chat, most recently pinned first (Telegram's pinned
 // order). Kept separate from the message fixtures so the profile panel's
 // pinned section and its click-to-jump have deterministic content.
@@ -494,7 +498,12 @@ const INITIAL_MESSAGES: Record<string, ReadonlyArray<MessageDto>> = {
         height: 512,
         duration: null,
         spoiler: false,
-        sticker: { emoji: "👋", format: "static", setName: "TeloPack" },
+        sticker: {
+          emoji: "👋",
+          format: "static",
+          setName: "TeloPack",
+          outlinePath: DEMO_STICKER_OUTLINE_PATH,
+        },
       },
       groupedId: null,
       sentAt: "2026-08-26T10:25:00.000Z",
@@ -519,7 +528,12 @@ const INITIAL_MESSAGES: Record<string, ReadonlyArray<MessageDto>> = {
         height: 512,
         duration: null,
         spoiler: false,
-        sticker: { emoji: "🎉", format: "animated", setName: "TeloPack" },
+        sticker: {
+          emoji: "🎉",
+          format: "animated",
+          setName: "TeloPack",
+          outlinePath: DEMO_STICKER_OUTLINE_PATH,
+        },
       },
       groupedId: null,
       sentAt: "2026-08-26T10:26:00.000Z",
@@ -544,7 +558,12 @@ const INITIAL_MESSAGES: Record<string, ReadonlyArray<MessageDto>> = {
         height: 512,
         duration: 1,
         spoiler: false,
-        sticker: { emoji: "🔥", format: "video", setName: "TeloPack" },
+        sticker: {
+          emoji: "🔥",
+          format: "video",
+          setName: "TeloPack",
+          outlinePath: DEMO_STICKER_OUTLINE_PATH,
+        },
       },
       groupedId: null,
       sentAt: "2026-08-26T10:27:00.000Z",
@@ -615,7 +634,14 @@ function demoSticker(
   // Telegram ships every sticker at 512×512; only a video one has a duration.
   const side = 512;
   return {
-    item: { id, emoji, format, width: side, height: side },
+    item: {
+      id,
+      emoji,
+      format,
+      width: side,
+      height: side,
+      outlinePath: DEMO_STICKER_OUTLINE_PATH,
+    },
     media: {
       id,
       kind: "sticker",
@@ -626,7 +652,12 @@ function demoSticker(
       height: side,
       duration: format === "video" ? 1 : null,
       spoiler: false,
-      sticker: { emoji, format, setName: DEMO_STICKER_SET_SHORT_NAME },
+      sticker: {
+        emoji,
+        format,
+        setName: DEMO_STICKER_SET_SHORT_NAME,
+        outlinePath: DEMO_STICKER_OUTLINE_PATH,
+      },
     },
   };
 }

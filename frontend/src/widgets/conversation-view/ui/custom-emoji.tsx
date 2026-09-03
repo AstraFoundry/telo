@@ -48,7 +48,12 @@ export function CustomEmoji({
   return (
     <span className="inline-block align-text-bottom">
       <Sticker
-        sticker={{ emoji: item.emoji, format: item.format, setName: null }}
+        sticker={{
+          emoji: item.emoji,
+          format: item.format,
+          setName: null,
+          outlinePath: item.outlinePath,
+        }}
         width={item.width}
         height={item.height}
         src={download?.state === "ready" ? download.url : null}
