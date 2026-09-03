@@ -32,6 +32,28 @@ test("global search finds a message and jumps to it in its chat", async ({
   await expect(match).toHaveAttribute("data-highlighted", "true");
 });
 
+test("opened results land in the focused search history", async ({
+  window,
+}) => {
+  await waitForDemoWorkspace(window);
+
+  // Opening a result records it; searching alone never does.
+  await window.getByLabel("Search chats").fill("retry flow");
+  await window
+    .getByRole("navigation", { name: "Chats" })
+    .getByRole("button", { name: /The retry flow needs a failed state/ })
+    .click();
+
+  await window.getByLabel("Search chats").fill("");
+  await window.getByLabel("Search chats").click();
+
+  const chats = window.getByRole("navigation", { name: "Chats" });
+  await expect(chats.getByText("Recent")).toBeVisible();
+  await expect(
+    chats.getByRole("button", { name: /Telo Design/ }),
+  ).toBeVisible();
+});
+
 test("in-chat search navigates matches and clears on Escape", async ({
   window,
 }) => {

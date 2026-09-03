@@ -17,6 +17,7 @@ export interface UserPreferencesSnapshot {
   readonly sidebarWidth: number;
   readonly agentPanelWidth: number;
   readonly recentEmojis: ReadonlyArray<string>;
+  readonly recentSearches: ReadonlyArray<string>;
   readonly messageTemplates: ReadonlyArray<MessageTemplateDto>;
   readonly reduceMotion: boolean;
   readonly loopStickers: boolean;
@@ -39,6 +40,8 @@ export const AGENT_PANEL_WIDTH_MIN = 280;
 export const AGENT_PANEL_WIDTH_MAX = 600;
 
 export const RECENT_EMOJIS_MAX = 24;
+/** Telegram Web K's recent-search cap (`appUsersManager.ts:277-293`). */
+export const RECENT_SEARCHES_MAX = 20;
 
 export const MESSAGE_TEMPLATES_MAX = 50;
 export const MESSAGE_TEMPLATE_TITLE_MAX = 80;
@@ -88,6 +91,7 @@ export class UserPreferences {
         AGENT_PANEL_WIDTH_DEFAULT,
       ),
       recentEmojis: normalizeRecentEmojis(input.recentEmojis),
+      recentSearches: normalizeRecentSearches(input.recentSearches),
       messageTemplates: normalizeMessageTemplates(input.messageTemplates),
       reduceMotion: normalizeBoolean(input.reduceMotion, false),
       loopStickers: normalizeBoolean(input.loopStickers, true),
@@ -114,6 +118,7 @@ export class UserPreferences {
       sidebarWidth: SIDEBAR_WIDTH_DEFAULT,
       agentPanelWidth: AGENT_PANEL_WIDTH_DEFAULT,
       recentEmojis: [],
+      recentSearches: [],
       messageTemplates: [],
       reduceMotion: false,
       loopStickers: true,
@@ -181,6 +186,20 @@ function normalizeRecentEmojis(value: unknown): ReadonlyArray<string> {
     if (glyphs.length >= RECENT_EMOJIS_MAX) break;
   }
   return glyphs;
+}
+
+// Same contract as the emoji list: persisted files may predate the
+// preference or carry non-string entries, so only unique non-empty chat ids
+// survive, capped at Web K's twenty.
+function normalizeRecentSearches(value: unknown): ReadonlyArray<string> {
+  if (!Array.isArray(value)) return [];
+  const ids: string[] = [];
+  for (const entry of value) {
+    if (typeof entry !== "string" || entry.length === 0) continue;
+    if (!ids.includes(entry)) ids.push(entry);
+    if (ids.length >= RECENT_SEARCHES_MAX) break;
+  }
+  return ids;
 }
 
 // Persisted files may predate the preference or carry malformed entries;

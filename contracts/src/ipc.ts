@@ -873,6 +873,12 @@ export interface UserPreferencesDto {
   readonly agentPanelWidth: number;
   /** Recently picked composer emoji glyphs, most recent first. */
   readonly recentEmojis: ReadonlyArray<string>;
+  /**
+   * Chat ids of recently opened search results, most recent first. Search
+   * history is local to this device — both reference clients persist it
+   * locally per account (web-k caps at 20), never synced server-side.
+   */
+  readonly recentSearches: ReadonlyArray<string>;
   /** Quick replies the composer can insert into a draft. */
   readonly messageTemplates: ReadonlyArray<MessageTemplateDto>;
   /**
@@ -905,6 +911,7 @@ export interface UpdateUserPreferencesInput {
   readonly sidebarWidth?: number;
   readonly agentPanelWidth?: number;
   readonly recentEmojis?: ReadonlyArray<string>;
+  readonly recentSearches?: ReadonlyArray<string>;
   readonly messageTemplates?: ReadonlyArray<MessageTemplateDto>;
   readonly reduceMotion?: boolean;
   readonly loopStickers?: boolean;

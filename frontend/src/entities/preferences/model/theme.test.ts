@@ -34,6 +34,7 @@ function preferences(
     sidebarWidth: 280,
     agentPanelWidth: 380,
     recentEmojis: [],
+    recentSearches: [],
     messageTemplates: [],
     demoWorkspace: false,
     theme: "system",

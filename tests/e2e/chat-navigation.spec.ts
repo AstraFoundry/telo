@@ -67,10 +67,18 @@ test("filters the chat list from the search field", async ({ window }) => {
   await expect(chats.getByText("No chats found")).toBeVisible();
 
   await window.getByLabel("Search chats").fill("");
+  // Focused but empty shows the search history in place of the list; the
+  // demo account has none yet.
+  await expect(
+    chats.getByText("Your recent searches will appear here"),
+  ).toBeVisible();
+
+  // Leaving the field returns the chat list.
+  await window.getByRole("heading", { name: "Saved Messages" }).click();
   await expect(
     chats.getByRole("button", { name: /Telo Design/ }),
   ).toBeVisible();
   await expect(
-    chats.getByRole("button", { name: /Saved Messages/ }),
+    chats.getByRole("button", { name: /Product Notes/ }),
   ).toBeVisible();
 });

@@ -6,8 +6,9 @@ import {
   ArrowLeft,
   PushPin,
   PushPinSlash,
+  X,
 } from "@phosphor-icons/react";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 
 import type {
   ChatDto,
@@ -16,9 +17,13 @@ import type {
 } from "../../../../../contracts/src/ipc";
 import { ARCHIVE_FOLDER_ID } from "../../../../../contracts/src/ipc";
 import { chatsForFolder, folderUnread, useChatStore } from "entities/chat";
-import { useTimeFormat } from "entities/preferences";
+import { useRecentSearches, useTimeFormat } from "entities/preferences";
 import { AccountMenu } from "features/account-menu";
 import { ChatSearch } from "features/chat-search";
+import {
+  pushRecentSearch,
+  removeRecentSearch,
+} from "features/chat-search/model/recent-searches";
 import { AnimatePresence } from "motion/react";
 
 import { copy } from "shared/config/copy";
@@ -27,6 +32,8 @@ import { useEdgeSentinel } from "shared/lib/use-edge-sentinel";
 import {
   Avatar,
   Button,
+  CenterMorphModal,
+  CenterMorphModalContent,
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
@@ -251,6 +258,130 @@ function MessageSearchResultRow({
 }
 
 /**
+ * The search-history surface: the whole list area swaps to recent searches
+ * while the field is focused and empty. Both reference clients swap the
+ * entire chat list for a search overlay on focus (never a section above the
+ * normal list) and hide it again on blur or on the first result opened —
+ * this mirrors that, reusing the chat row's geometry so the swap reads as
+ * the same surface in a different mode. Focus-and-type is a tens-per-day
+ * interaction, so per the animation gate the swap is instant, matching the
+ * existing search-results swap.
+ */
+function SearchHistory({
+  chats,
+  recentSearches,
+  timeFormat,
+  onOpen,
+  onRemove,
+  onClearAll,
+}: {
+  readonly chats: ReadonlyArray<ChatDto>;
+  readonly recentSearches: ReadonlyArray<string>;
+  readonly timeFormat: TimeFormatPreference;
+  onOpen(chatId: string): void;
+  onRemove(chatId: string): void;
+  onClearAll(): void;
+}) {
+  const chatsById = new Map(chats.map((chat) => [chat.id, chat]));
+  // A pruned chat (deleted, left) stays out of the history render; it leaves
+  // the persisted list on the next push, the way web-k drops deleted peers.
+  const entries = recentSearches
+    .map((id) => chatsById.get(id) ?? null)
+    .filter((chat): chat is ChatDto => chat !== null);
+
+  return (
+    <div className="flex h-full min-h-0 flex-col">
+      {entries.length ? (
+        <>
+          <div className="flex items-center justify-between px-2.5 pb-1 pt-2">
+            <span className="text-xs font-medium text-muted-foreground">
+              {copy.recentSearches}
+            </span>
+            {/* tdesktop's RecentsController puts the same "Clear" link on the
+                section header (`dialogs_suggestions.cpp`). */}
+            <button
+              type="button"
+              onClick={onClearAll}
+              className="rounded text-xs font-medium text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+            >
+              {copy.clearSearchHistory}
+            </button>
+          </div>
+          {entries.map((chat) => (
+            <RecentSearchRow
+              key={chat.id}
+              chat={chat}
+              timeFormat={timeFormat}
+              onSelect={() => onOpen(chat.id)}
+              onRemove={() => onRemove(chat.id)}
+            />
+          ))}
+        </>
+      ) : (
+        <div className="grid h-full place-items-center px-3 text-center text-sm text-muted-foreground">
+          {copy.noRecentSearches}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * One history entry: the chat row's own shape, with removal through its
+ * context menu — tdesktop's per-item removal lives on the right-click menu,
+ * not on an inline X.
+ */
+function RecentSearchRow({
+  chat,
+  timeFormat,
+  onSelect,
+  onRemove,
+}: {
+  readonly chat: ChatDto;
+  readonly timeFormat: TimeFormatPreference;
+  onSelect(): void;
+  onRemove(): void;
+}) {
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger>
+        <Button
+          variant="ghost"
+          pressScale={1}
+          onClick={onSelect}
+          className="mb-0.5 h-auto w-full justify-start rounded-xl px-2.5 py-2 text-left"
+        >
+          <Avatar
+            src={chat.avatarDataUrl}
+            pending={chat.avatarPending}
+            className="size-10"
+          />
+          <span className="min-w-0 flex-1">
+            <span className="flex items-center gap-2">
+              <span className="min-w-0 flex-1 truncate text-sm font-semibold">
+                {chat.title}
+              </span>
+              <time className="text-[11px] font-normal text-muted-foreground tabular-nums">
+                {shortTime(chat.updatedAt, timeFormat)}
+              </time>
+            </span>
+            <span className="mt-0.5 block truncate text-xs font-normal text-muted-foreground">
+              {chat.preview}
+            </span>
+          </span>
+        </Button>
+      </ContextMenuTrigger>
+      <ContextMenuContent ariaLabel={copy.recentSearches}>
+        <ContextMenuItem onSelect={onRemove}>
+          <X aria-hidden="true" className="size-4" />
+          {copy.removeFromHistory}
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
+  );
+}
+
+/**
  * The pinned row at the top of the All list that opens the Archive.
  *
  * Telegram Web K's `ArchiveDialog` and tdesktop's `Data::Folder` row share
@@ -415,6 +546,15 @@ export function ConversationSidebar({
   const requestJumpToMessage = useChatStore(
     (state) => state.requestJumpToMessage,
   );
+  const { value: recentSearches, select: selectRecentSearches } =
+    useRecentSearches();
+  // Focus drives the history surface: both clients show it the moment the
+  // field is focused, even before the first keystroke, and hide it again on
+  // blur — except when focus moved into the list itself, so a history row
+  // stays clickable instead of vanishing under the pointer.
+  const [searchFocused, setSearchFocused] = useState(false);
+  const [clearHistoryOpen, setClearHistoryOpen] = useState(false);
+
   const animateChatIds = useChatStore((state) => state.animateChatIds);
   const connectionState = useChatStore((state) => state.connectionState);
   const { value: timeFormat } = useTimeFormat();
@@ -476,6 +616,12 @@ export function ConversationSidebar({
     return map;
   }, [chats, globalSearchResults]);
 
+  // Focused-but-empty search swaps the whole area under the field — folder
+  // tabs included — for the search history, the way both clients swap their
+  // chat list for the search overlay. The first keystroke drops back to the
+  // searching branch, which is why this is a mode, not a separate surface.
+  const historyMode = searchFocused && !searching;
+
   return (
     <aside className="flex min-w-0 flex-col" aria-label={copy.chats}>
       <header className="flex h-14 items-center px-3 [app-region:drag]">
@@ -491,9 +637,26 @@ export function ConversationSidebar({
         </strong>
       </header>
       <div className="px-3 pb-2">
-        <ChatSearch value={query} onChange={setSearchQuery} />
+        <ChatSearch
+          value={query}
+          onChange={setSearchQuery}
+          onFocus={() => setSearchFocused(true)}
+          onBlur={(event) => {
+            // Focus moving into the list — a history row, the tab strip — is
+            // the reader continuing to act, not leaving the search, and the
+            // history must not vanish under the pointer.
+            const next = event.relatedTarget;
+            if (
+              next instanceof Node &&
+              event.currentTarget.closest("aside")?.contains(next)
+            ) {
+              return;
+            }
+            setSearchFocused(false);
+          }}
+        />
       </div>
-      {folders.length && !searching ? (
+      {folders.length && !searching && !historyMode ? (
         <div
           role="tablist"
           aria-label={copy.chatFolders}
@@ -526,7 +689,26 @@ export function ConversationSidebar({
         className="min-h-0 flex-1 overflow-y-auto px-2 pb-2"
         aria-label={copy.chats}
       >
-        {searching ? (
+        {historyMode ? (
+          <SearchHistory
+            chats={chats}
+            recentSearches={recentSearches}
+            timeFormat={timeFormat}
+            onOpen={(chatId) => {
+              // Opening a result is what records it — both clients push on
+              // the row's click, never on typing — and it closes the search
+              // surface behind it.
+              selectRecentSearches(pushRecentSearch(recentSearches, chatId));
+              void select(chatId);
+              setSearchFocused(false);
+              onSelectChat();
+            }}
+            onRemove={(chatId) =>
+              selectRecentSearches(removeRecentSearch(recentSearches, chatId))
+            }
+            onClearAll={() => setClearHistoryOpen(true)}
+          />
+        ) : searching ? (
           globalSearchResults ? (
             <>
               {globalSearchResults.chats.length ? (
@@ -541,6 +723,9 @@ export function ConversationSidebar({
                       active={activeChatId === chat.id}
                       timeFormat={timeFormat}
                       onSelect={() => {
+                        selectRecentSearches(
+                          pushRecentSearch(recentSearches, chat.id),
+                        );
                         void select(chat.id);
                         onSelectChat();
                       }}
@@ -560,6 +745,9 @@ export function ConversationSidebar({
                       chat={chatsById.get(message.chatId) ?? null}
                       timeFormat={timeFormat}
                       onSelect={() => {
+                        selectRecentSearches(
+                          pushRecentSearch(recentSearches, message.chatId),
+                        );
                         void requestJumpToMessage(message.chatId, message.id);
                         onSelectChat();
                       }}
@@ -645,6 +833,34 @@ export function ConversationSidebar({
       <footer className="border-t">
         <AccountMenu onOpenSettings={onOpenSettings} />
       </footer>
+      <CenterMorphModal
+        open={clearHistoryOpen}
+        onOpenChange={setClearHistoryOpen}
+      >
+        <CenterMorphModalContent
+          ariaLabel={copy.clearSearchHistoryAction}
+          closeButtonLabel={copy.closeDialog}
+        >
+          <div className="flex max-w-sm flex-col gap-4 p-5">
+            {/* web-k asks the same question before wiping the list
+                ('Search.Confirm.ClearHistory'), with the action styled as
+                destructive. */}
+            <p className="text-sm">{copy.clearSearchHistoryConfirm}</p>
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="primary"
+                onClick={() => {
+                  selectRecentSearches([]);
+                  setClearHistoryOpen(false);
+                }}
+                className="bg-destructive text-primary-foreground hover:bg-destructive/90"
+              >
+                {copy.clearSearchHistoryAction}
+              </Button>
+            </div>
+          </div>
+        </CenterMorphModalContent>
+      </CenterMorphModal>
     </aside>
   );
 }

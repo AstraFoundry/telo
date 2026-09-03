@@ -79,6 +79,7 @@ function preferences(partial: Partial<UserPreferencesDto> = {}) {
     sidebarWidth: 280,
     agentPanelWidth: 380,
     recentEmojis: [],
+    recentSearches: [],
     messageTemplates: [],
     reduceMotion: false,
     loopStickers: true,
@@ -127,6 +128,7 @@ async function renderSidebar({
 } = {}) {
   const telo = installTeloApiMock();
   telo.preferences.get.mockResolvedValue(preferences(prefs));
+  telo.preferences.update.mockResolvedValue(preferences(prefs));
   const { useChatStore } = await import("../../../entities/chat");
   useChatStore.setState({
     chats,
@@ -203,6 +205,121 @@ describe("ConversationSidebar", () => {
     ).toBeTruthy();
     // An empty result and a pending one must not read identically.
     expect(screen.queryByText(copy.noChats)).toBeNull();
+  });
+
+  it("swaps the list for search history while the field is focused and empty", async () => {
+    await renderSidebar({
+      prefs: { recentSearches: ["chat-2"] },
+      chats: [
+        chat({ id: "chat-1", title: "Ada Byron" }),
+        chat({ id: "chat-2", title: "Mina Loy" }),
+      ],
+    });
+    const user = userEvent.setup();
+    const list = screen.getByRole("navigation", { name: copy.chats });
+
+    await user.click(screen.getByRole("textbox", { name: copy.searchChats }));
+
+    // The whole area under the field becomes the history: recent rows and
+    // the section header, with the chat list and folder tabs gone.
+    expect(screen.getByText(copy.recentSearches)).toBeTruthy();
+    expect(within(list).getByRole("button", { name: /Mina Loy/ })).toBeTruthy();
+    expect(
+      within(list).queryByRole("button", { name: /Ada Byron/ }),
+    ).toBeNull();
+  });
+
+  it("returns to the chat list when focus leaves the search surface", async () => {
+    await renderSidebar({
+      prefs: { recentSearches: ["chat-2"] },
+      chats: [
+        chat({ id: "chat-1", title: "Ada Byron" }),
+        chat({ id: "chat-2", title: "Mina Loy" }),
+      ],
+    });
+    const user = userEvent.setup();
+    const field = screen.getByRole("textbox", { name: copy.searchChats });
+    const list = screen.getByRole("navigation", { name: copy.chats });
+
+    await user.click(field);
+    expect(screen.getByText(copy.recentSearches)).toBeTruthy();
+
+    // Blurring to nowhere — the reader left the search entirely.
+    fireEvent.blur(field, { relatedTarget: null });
+    expect(screen.queryByText(copy.recentSearches)).toBeNull();
+    expect(
+      within(list).getByRole("button", { name: /Ada Byron/ }),
+    ).toBeTruthy();
+  });
+
+  it("opens a history row, records it at the front, and closes the surface", async () => {
+    const { useChatStore, telo } = await renderSidebar({
+      prefs: { recentSearches: ["chat-2", "chat-1"] },
+      chats: [
+        chat({ id: "chat-1", title: "Ada Byron" }),
+        chat({ id: "chat-2", title: "Mina Loy" }),
+      ],
+    });
+    telo.workspace.listMessagePage.mockResolvedValue({
+      items: [],
+      nextCursor: null,
+    });
+    const user = userEvent.setup();
+    const list = screen.getByRole("navigation", { name: copy.chats });
+
+    await user.click(screen.getByRole("textbox", { name: copy.searchChats }));
+    await user.click(within(list).getByRole("button", { name: /Mina Loy/ }));
+
+    expect(useChatStore.getState().activeChatId).toBe("chat-2");
+    // History is written on selection, never on focusing or typing.
+    expect(useChatStore.getState().searchQuery).toBe("");
+  });
+
+  it("records a search result the reader opened", async () => {
+    const { useChatStore } = await renderSidebar({
+      chats: [
+        chat({ id: "chat-1", title: "Ada Byron" }),
+        chat({ id: "chat-2", title: "Mina Loy" }),
+      ],
+    });
+    const user = userEvent.setup();
+
+    await user.type(
+      screen.getByRole("textbox", { name: copy.searchChats }),
+      "mina",
+    );
+    act(() => {
+      useChatStore.setState({
+        globalSearchResults: {
+          chats: [chat({ id: "chat-2", title: "Mina Loy" })],
+          messages: [],
+        },
+      });
+    });
+    await user.click(screen.getByRole("button", { name: /Mina Loy/ }));
+
+    expect(useChatStore.getState().activeChatId).toBe("chat-2");
+  });
+
+  it("clears the whole history behind a danger confirmation", async () => {
+    await renderSidebar({
+      prefs: { recentSearches: ["chat-2"] },
+      chats: [chat({ id: "chat-2", title: "Mina Loy" })],
+    });
+    const user = userEvent.setup();
+    const list = screen.getByRole("navigation", { name: copy.chats });
+
+    await user.click(screen.getByRole("textbox", { name: copy.searchChats }));
+    await user.click(
+      screen.getByRole("button", { name: copy.clearSearchHistory }),
+    );
+    expect(screen.getByText(copy.clearSearchHistoryConfirm)).toBeTruthy();
+    await user.click(
+      screen.getByRole("button", { name: copy.clearSearchHistoryAction }),
+    );
+
+    expect(within(list).queryByRole("button", { name: /Mina Loy/ })).toBeNull();
+    expect(screen.getByText(copy.noRecentSearches)).toBeTruthy();
   });
 
   it("keeps the empty state once the first page settles empty", async () => {

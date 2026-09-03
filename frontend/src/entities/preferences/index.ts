@@ -22,6 +22,7 @@ export {
   useNotificationSenderName,
   useNotificationsEnabled,
   useRecentEmojis,
+  useRecentSearches,
   useReduceMotion,
   useSendWithEnter,
   useSidebarWidth,
