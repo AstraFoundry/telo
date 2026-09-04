@@ -127,6 +127,12 @@ export type {
 } from "@components/agents/message-rich-text";
 export { PromptInput } from "@components/agents/prompt-input";
 export { StreamingResponse } from "@components/agents/streaming-response";
+export { CodeBlock } from "@components/agents/code-block";
+export type {
+  CodeBlockProps,
+  CodeBlockStatus,
+} from "@components/agents/code-block";
+export type { AgentCodeLanguage } from "@components/agents/agent-code";
 export { AgentActivity } from "@components/agents/agent-activity";
 export type { AgentActivityItem } from "@components/agents/agent-activity";
 export { AgentDisclosure } from "@components/agents/agent-disclosure";

@@ -84,14 +84,16 @@ export function CodeBlock({
       if (typeof viewport.scrollTo === "function") {
         viewport.scrollTo({
           top: viewport.scrollHeight,
-          behavior: reduce ? "auto" : "smooth",
+          // The target grows on every streamed code delta. Repeated smooth
+          // scrolls restart the native animation and visibly lag behind.
+          behavior: "auto",
         });
       } else {
         viewport.scrollTop = viewport.scrollHeight;
       }
     });
     return () => cancelAnimationFrame(frame);
-  });
+  }, [code, streaming]);
 
   const handleCopy = useCallback(async () => {
     if (onCopy) await onCopy();

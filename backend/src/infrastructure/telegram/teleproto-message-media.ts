@@ -97,10 +97,18 @@ export function mapMessageMedia(
     mimeType,
     size: finiteNumber(file?.size),
     // Teleproto's File.width/height/duration call `_fromAttr([Cls, Cls])`,
-    // which does `attr instanceof [Cls, Cls]` and throws TypeError.
-    width: fileMetric(file, "width") ?? attributeMetric(message.document, "w"),
+    // which does `attr instanceof [Cls, Cls]` and throws TypeError, and a
+    // photo carries no document attributes at all — its dimensions live on
+    // the PhotoSize entries (telegram-tt `getPhotoFullDimensions`, tdesktop's
+    // PhotoData), so the chain falls through file → document → photo sizes.
+    width:
+      fileMetric(file, "width") ??
+      attributeMetric(message.document, "w") ??
+      photoMetric(message.photo, "w"),
     height:
-      fileMetric(file, "height") ?? attributeMetric(message.document, "h"),
+      fileMetric(file, "height") ??
+      attributeMetric(message.document, "h") ??
+      photoMetric(message.photo, "h"),
     duration:
       fileMetric(file, "duration") ??
       attributeMetric(message.document, "duration"),
@@ -184,6 +192,35 @@ function attributeMetric(document: unknown, key: string): number | null {
     if (value !== null) return value;
   }
   return null;
+}
+
+/**
+ * A photo's display dimensions from its `sizes` entries. `PhotoSize`,
+ * `PhotoCachedSize` and `PhotoSizeProgressive` carry `w`/`h`; the stripped
+ * placeholder and the empty size do not. The largest entry by area is the
+ * display size — every size is proportional, but taking the largest keeps the
+ * choice identical to what the reference clients lay out against.
+ */
+function photoMetric(photo: unknown, key: "w" | "h"): number | null {
+  if (typeof photo !== "object" || photo === null || !("sizes" in photo)) {
+    return null;
+  }
+  const sizes = photo.sizes;
+  if (!Array.isArray(sizes)) return null;
+  let bestArea = 0;
+  let best: { readonly w: number; readonly h: number } | null = null;
+  for (const entry of sizes) {
+    if (typeof entry !== "object" || entry === null) continue;
+    if (!("w" in entry) || !("h" in entry)) continue;
+    const w = finiteNumber(entry.w);
+    const h = finiteNumber(entry.h);
+    if (w === null || h === null || w === 0 || h === 0) continue;
+    if (w * h > bestArea) {
+      bestArea = w * h;
+      best = { w, h };
+    }
+  }
+  return best ? best[key] : null;
 }
 
 // Telegram keeps the emoji a sticker stands for and the set it came from on

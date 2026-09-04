@@ -20,6 +20,7 @@ import type {
   MessageSearchPageDto,
   MessageSearchPageInput,
   PeerProfileDto,
+  SetMessageReactionInput,
   StickerItemDto,
   StickerSetDto,
   TelegramAccountDto,
@@ -465,6 +466,14 @@ export class TelegramAccountCoordinator implements TelegramRepository {
     buttonId: string,
   ): Promise<BotCallbackAnswerDto> {
     return this.delegate().answerBotCallback(chatId, messageId, buttonId);
+  }
+
+  setMessageReaction(input: SetMessageReactionInput): Promise<void> {
+    return this.delegate().setMessageReaction(input);
+  }
+
+  listAvailableReactions(chatId: string): Promise<ReadonlyArray<string>> {
+    return this.delegate().listAvailableReactions(chatId);
   }
 
   private delegate(): TelegramAccountClient {

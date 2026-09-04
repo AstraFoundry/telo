@@ -2654,7 +2654,9 @@ describe("TelegramClientCoordinator", () => {
     const coordinator = await connectedCoordinator();
     // The fake reads this when the request runs, and the second call flips it
     // to prove the installed marker is read from Telegram, not assumed.
-    let installedDate: number | undefined = undefined;
+    // Null, not undefined: the wire's unset flag deserializes to null, and
+    // the installed marker must read as not-installed for it.
+    let installedDate: number | null = null;
     FakeTelegramClient.invokeBehavior = async (request) => {
       if (!(request instanceof fake.FakeGetStickerSet)) {
         throw new Error("Expected a messages.GetStickerSet request");

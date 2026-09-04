@@ -18,10 +18,12 @@ import type {
   MessageMediaDto,
   MessagePageDto,
   MessagePageInput,
+  MessageReactionDto,
   MessageReplyToDto,
   MessageSearchPageDto,
   MessageSearchPageInput,
   PeerProfileDto,
+  SetMessageReactionInput,
   StickerFormat,
   StickerItemDto,
   StickerSetDto,
@@ -232,6 +234,21 @@ const INITIAL_PINNED_MESSAGE_IDS: Record<string, ReadonlyArray<string>> = {
   design: ["design-6", "design-1"],
 };
 
+// What the demo picker offers, standing in for
+// `messages.getAvailableReactions`. Telegram's own list is far longer and
+// per-chat; these are the glyphs the fixtures react with plus a few
+// neighbours, so the picker has more than one row's worth to choose from.
+const DEMO_AVAILABLE_REACTIONS: ReadonlyArray<string> = [
+  "👍",
+  "👎",
+  "❤️",
+  "🔥",
+  "🎉",
+  "😁",
+  "🤔",
+  "😢",
+];
+
 const INITIAL_MESSAGES: Record<string, ReadonlyArray<MessageDto>> = {
   saved: [
     {
@@ -263,6 +280,12 @@ const INITIAL_MESSAGES: Record<string, ReadonlyArray<MessageDto>> = {
       sentAt: "2026-08-27T14:12:00.000Z",
       outgoing: false,
       status: "read",
+      // One bucket this account picked and one it did not, so the chip row,
+      // its chosen highlight, and the toggle path all have demo data.
+      reactions: [
+        { emoji: "👍", count: 2, chosen: true },
+        { emoji: "🎉", count: 1, chosen: false },
+      ],
     },
     {
       id: "design-2",
@@ -1603,6 +1626,39 @@ export class DemoTelegramRepository implements TelegramRepository {
     return answer;
   }
 
+  async setMessageReaction(input: SetMessageReactionInput): Promise<void> {
+    const { message, messages } = this.findMessage(
+      input.chatId,
+      input.messageId,
+    );
+    const reactions = reactionsAfterSet(message.reactions ?? [], input.emoji);
+    // A message nobody reacts to carries no buckets: the field settles back
+    // to undefined, the shape the transcript reads as "no chip row".
+    const reacted: MessageDto = {
+      ...message,
+      reactions: reactions.length > 0 ? reactions : undefined,
+    };
+    this.messages.set(
+      input.chatId,
+      messages.map((entry) => (entry.id === reacted.id ? reacted : entry)),
+    );
+    // Telegram publishes reaction changes as their own update, not as a
+    // message edit, so a chip repaint never redraws the bubble.
+    this.emit({
+      type: "message-reactions",
+      chatId: input.chatId,
+      messageId: input.messageId,
+      reactions,
+    });
+  }
+
+  async listAvailableReactions(chatId: string): Promise<ReadonlyArray<string>> {
+    // Telegram's set is per-chat; the demo workspace offers the same glyphs
+    // everywhere, but an unknown chat still fails like every other read.
+    this.requireChat(chatId);
+    return DEMO_AVAILABLE_REACTIONS;
+  }
+
   async setChatPinned(chatId: string, pinned: boolean): Promise<void> {
     this.updateChat(chatId, (chat) => ({ ...chat, pinned }));
   }
@@ -1697,6 +1753,34 @@ export class DemoTelegramRepository implements TelegramRepository {
   private emit(event: TelegramWorkspaceEvent): void {
     for (const listener of this.listeners) listener(event);
   }
+}
+
+// The account's reaction on a message after `messages.sendReaction`. Outside
+// premium multi-reactions Telegram holds one reaction per account per
+// message, so the account's own bucket is the single `chosen` one: setting an
+// emoji lets that bucket go (decremented when other people reacted with the
+// same glyph, dropped when nobody else did) and takes up the new one. A null
+// emoji only lets go. Bucket order survives, so chips never reshuffle under a
+// reader mid-toggle.
+function reactionsAfterSet(
+  reactions: ReadonlyArray<MessageReactionDto>,
+  emoji: string | null,
+): ReadonlyArray<MessageReactionDto> {
+  const released = reactions.flatMap((bucket) => {
+    if (!bucket.chosen) return [bucket];
+    return bucket.count > 1
+      ? [{ ...bucket, count: bucket.count - 1, chosen: false }]
+      : [];
+  });
+  if (emoji === null) return released;
+  if (!released.some((bucket) => bucket.emoji === emoji)) {
+    return [...released, { emoji, count: 1, chosen: true }];
+  }
+  return released.map((bucket) =>
+    bucket.emoji === emoji
+      ? { ...bucket, count: bucket.count + 1, chosen: true }
+      : bucket,
+  );
 }
 
 // Cache names derive from the media id plus the original extension, so the

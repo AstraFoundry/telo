@@ -64,6 +64,13 @@ describe("parseReply", () => {
     expect(parsed.text).toBe("See https://example.com and telo://unknown/x.");
   });
 
+  it("treats malformed percent encoding as text instead of throwing", () => {
+    expect(parseReply("Keep telo://message/%/1 visible.")).toMatchObject({
+      citations: [],
+      text: "Keep telo://message/%/1 visible.",
+    });
+  });
+
   it("drops legacy citation markers", () => {
     expect(parseReply("Ship it [[telo-cite:m-2]] tomorrow.").text).toBe(
       "Ship it  tomorrow.",

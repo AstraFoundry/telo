@@ -18,6 +18,7 @@ import type {
   MessageSearchPageDto,
   MessageSearchPageInput,
   PeerProfileDto,
+  SetMessageReactionInput,
   StickerItemDto,
   StickerSetDto,
   TelegramWorkspaceEvent,
@@ -156,6 +157,18 @@ export interface TelegramRepository {
     messageId: string,
     buttonId: string,
   ): Promise<BotCallbackAnswerDto>;
+  /**
+   * Replaces the account's reaction on a message; `emoji: null` clears it.
+   * Telegram's `messages.sendReaction` is a whole-set write, not a delta, so
+   * a toggle is expressed by sending the new state (or nothing).
+   */
+  setMessageReaction(input: SetMessageReactionInput): Promise<void>;
+  /**
+   * Emoji the picker may offer for this chat, in Telegram's own order.
+   * Reaction sets are per-chat on the wire, which is why the chat is named
+   * even where an adapter answers the account-wide list.
+   */
+  listAvailableReactions(chatId: string): Promise<ReadonlyArray<string>>;
   /**
    * Ends the current session: disconnects the client and clears the stored
    * session. A no-op for the demo workspace; the demo reset is owned by the

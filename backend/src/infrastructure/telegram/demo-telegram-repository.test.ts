@@ -543,6 +543,157 @@ describe("DemoTelegramRepository", () => {
     await expect(repository.forwardMessage(input)).rejects.toThrow(error);
   });
 
+  // design-1 ships two seeded buckets: "👍" ×2 chosen by this account and
+  // "🎉" ×1 from someone else.
+  it("adds the account's reaction to a message it had not reacted to", async () => {
+    const repository = new DemoTelegramRepository();
+
+    await repository.setMessageReaction({
+      chatId: "design",
+      messageId: "design-2",
+      emoji: "🔥",
+    });
+
+    const messages = await listMessages(repository, "design");
+    expect(
+      messages.find((message) => message.id === "design-2")?.reactions,
+    ).toEqual([{ emoji: "🔥", count: 1, chosen: true }]);
+  });
+
+  it("increments an existing bucket and marks it chosen", async () => {
+    const repository = new DemoTelegramRepository();
+
+    await repository.setMessageReaction({
+      chatId: "design",
+      messageId: "design-1",
+      emoji: "🎉",
+    });
+
+    const messages = await listMessages(repository, "design");
+    expect(
+      messages.find((message) => message.id === "design-1")?.reactions,
+    ).toEqual([
+      { emoji: "👍", count: 1, chosen: false },
+      { emoji: "🎉", count: 2, chosen: true },
+    ]);
+  });
+
+  it("clears the account's bucket when the same emoji is toggled off", async () => {
+    const repository = new DemoTelegramRepository();
+
+    await repository.setMessageReaction({
+      chatId: "design",
+      messageId: "design-1",
+      emoji: null,
+    });
+
+    const messages = await listMessages(repository, "design");
+    // Other people's "👍" survives with a decremented count; the chip row
+    // keeps "🎉" untouched.
+    expect(
+      messages.find((message) => message.id === "design-1")?.reactions,
+    ).toEqual([
+      { emoji: "👍", count: 1, chosen: false },
+      { emoji: "🎉", count: 1, chosen: false },
+    ]);
+  });
+
+  it("drops the account's bucket entirely when nobody else reacted with it", async () => {
+    const repository = new DemoTelegramRepository();
+    await repository.setMessageReaction({
+      chatId: "design",
+      messageId: "design-2",
+      emoji: "🔥",
+    });
+
+    await repository.setMessageReaction({
+      chatId: "design",
+      messageId: "design-2",
+      emoji: null,
+    });
+
+    const messages = await listMessages(repository, "design");
+    // No reaction left means no buckets: the field is undefined, the shape
+    // the transcript reads as "no chip row".
+    expect(
+      messages.find((message) => message.id === "design-2")?.reactions,
+    ).toBeUndefined();
+  });
+
+  it("moves the chosen bucket when the account switches emoji", async () => {
+    const repository = new DemoTelegramRepository();
+
+    await repository.setMessageReaction({
+      chatId: "design",
+      messageId: "design-1",
+      emoji: "❤️",
+    });
+
+    const messages = await listMessages(repository, "design");
+    const reactions =
+      messages.find((message) => message.id === "design-1")?.reactions ?? [];
+    expect(reactions).toEqual([
+      { emoji: "👍", count: 1, chosen: false },
+      { emoji: "🎉", count: 1, chosen: false },
+      { emoji: "❤️", count: 1, chosen: true },
+    ]);
+    // One reaction per account: two chosen buckets would be premium shape.
+    expect(reactions.filter((bucket) => bucket.chosen)).toHaveLength(1);
+  });
+
+  it("publishes the new buckets to subscribers as a reactions event", async () => {
+    const repository = new DemoTelegramRepository();
+    const events: unknown[] = [];
+    repository.subscribe((event) => events.push(event));
+
+    await repository.setMessageReaction({
+      chatId: "design",
+      messageId: "design-1",
+      emoji: "🔥",
+    });
+
+    expect(events).toEqual([
+      {
+        type: "message-reactions",
+        chatId: "design",
+        messageId: "design-1",
+        reactions: [
+          { emoji: "👍", count: 1, chosen: false },
+          { emoji: "🎉", count: 1, chosen: false },
+          { emoji: "🔥", count: 1, chosen: true },
+        ],
+      },
+    ]);
+  });
+
+  it.each([
+    [
+      { chatId: "missing", messageId: "design-1", emoji: "👍" },
+      "Unknown chat missing",
+    ],
+    [
+      { chatId: "design", messageId: "missing", emoji: "👍" },
+      "Unknown message missing",
+    ],
+  ])(
+    "rejects setMessageReaction for unknown targets %j",
+    async (input, error) => {
+      const repository = new DemoTelegramRepository();
+      await expect(repository.setMessageReaction(input)).rejects.toThrow(error);
+    },
+  );
+
+  it("offers a fixed demo emoji list and rejects an unknown chat", async () => {
+    const repository = new DemoTelegramRepository();
+
+    const available = await repository.listAvailableReactions("design");
+    expect(available).toContain("👍");
+    expect(available.length).toBeGreaterThan(1);
+    await expect(repository.listAvailableReactions("missing")).rejects.toThrow(
+      "Unknown chat missing",
+    );
+  });
+
   it("lists shared media as the photo/video/file slice of the history", async () => {
     const repository = new DemoTelegramRepository();
 

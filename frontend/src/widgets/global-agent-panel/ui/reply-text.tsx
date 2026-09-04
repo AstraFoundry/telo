@@ -47,7 +47,7 @@ export function ReplyText({ segments, targets }: ReplyTextProps) {
  * `telo://` handler turns the click into a jump, so the mark needs no
  * handler of its own and stays a link for keyboard and screen-reader users.
  */
-function CitationMark({ index, href }: { index: number; href: string }) {
+export function CitationMark({ index, href }: { index: number; href: string }) {
   return (
     <Tooltip
       content={copy.agentScrollToMessage}
@@ -71,7 +71,7 @@ function CitationMark({ index, href }: { index: number; href: string }) {
  * `@Name` as a chip with the peer's photo. Unknown names stay text with the
  * `@`, so a reply about someone outside the workspace still reads correctly.
  */
-function MentionChip({
+export function MentionChip({
   name,
   target,
 }: {

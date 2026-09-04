@@ -14,6 +14,24 @@ const TONE_PATTERN = /\[\[telo-tone:([^\]]+)\]\]/;
 // what a reply pastes back to cite the message.
 const MESSAGE_REF_PATTERN = /^ref: (\S+) \| ([^:]+): /gm;
 
+export const DEMO_MARKDOWN_PROMPT = "Show the Markdown demo.";
+export const DEMO_MARKDOWN_REPLY = [
+  "## Markdown preview",
+  "",
+  "**Streaming is ready.**",
+  "",
+  "- First item",
+  "- Second item",
+  "",
+  "> Safe blockquote",
+  "",
+  "```typescript",
+  "const ready = true;",
+  "```",
+  "",
+  "[Open the documentation](https://example.com/docs)",
+].join("\n");
+
 function payloadOf(prompt: string): string {
   const start = prompt.indexOf(AGENT_INPUT_OPEN);
   const end = prompt.indexOf(AGENT_INPUT_CLOSE);
@@ -32,6 +50,7 @@ function messageRefsOf(
 
 function buildDemoReply(prompt: string): string {
   const payload = payloadOf(prompt);
+  if (prompt.includes(DEMO_MARKDOWN_PROMPT)) return DEMO_MARKDOWN_REPLY;
   if (prompt.includes(AGENT_ACTION_TRANSLATE)) {
     return `Demo translation: ${payload}`;
   }

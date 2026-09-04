@@ -16,7 +16,7 @@ The interfaces layer adapts the application layer to the outside world. In Telo 
 
 - **IPC handlers** — receive the invoke payload, call an application service, return its DTO.
 - **Preload bridge methods** — the renderer-facing surface of each capability.
-- **Event push** — `webContents.send` streams for agent events (AG-UI), Telegram auth state, and typed Telegram workspace updates (new/edited/deleted/read messages plus synchronization failures).
+- **Event push** — `webContents.send` streams for agent events (AG-UI), Telegram auth state, and typed Telegram workspace updates (new/edited/deleted/read messages, message reaction changes, plus synchronization failures).
 - **Input validation** — validate the shape at the boundary; application and domain code re-validate.
 
 ## Rules

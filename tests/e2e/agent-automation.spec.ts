@@ -10,15 +10,16 @@ import {
 
 // Demo workspace contracts these specs lean on:
 // - The Telo Design chat's counterpart auto-replies "Looks good — shipping
-//   it." 1.4s after any non-silent send (DemoTelegramRepository), so a rule
+//   it." after any non-silent send (DemoTelegramRepository; ~1.4s in an
+//   interactive demo session, ~3s under TELO_E2E=1), so a rule
 //   on the keyword "shipping" fires exactly once per counterpart reply.
 // - The demo agent gateway answers every automation run with
 //   "Demo agent response: <prompt start>", so drafts and sends are asserted
 //   against that deterministic prefix.
 // - Outgoing messages never trigger rules (the anti-loop boundary), but an
 //   auto-send automation message is itself a non-silent send, so the
-//   counterpart replies again ~1.4s later: the auto-send spec disables the
-//   rule inside that window and proves the chain stopped at one hop.
+//   counterpart replies again on the same delay: the auto-send spec disables
+//   the rule inside that window and proves the chain stopped at one hop.
 
 const DESIGN_REPLY = "Looks good — shipping it.";
 const DEMO_RESPONSE = /Demo agent response:/;
@@ -135,7 +136,7 @@ test("parks a matched reply as a composer draft", async ({ window }) => {
   await composer(window).fill("Ship the automation build.");
   await composer(window).press("Enter");
   // The composer of the active chat is authoritative, so a remote draft
-  // never clobbers it: the counterpart's reply (due in 1.4s) and the rule's
+  // never clobbers it: the counterpart's reply (due in ~3s under TELO_E2E) and the rule's
   // draft must land while another chat is active for the draft to seed the
   // composer when Telo Design is reopened.
   await chatsNav(window)
@@ -175,7 +176,7 @@ test("auto-sends one reply, then stops once the rule is disabled", async ({
   await composer(window).press("Enter");
 
   // The counterpart's reply is the rule's trigger. The automation's own send
-  // re-arms the counterpart for ~1.4s later, so the rule must be disabled
+  // re-arms the counterpart one reply-delay later (~3s under TELO_E2E), so the rule must be disabled
   // inside that window; the round trip through settings fits comfortably.
   await expect(
     transcript(window).getByText(DESIGN_REPLY).first(), // the quote in the automation bubble matches too

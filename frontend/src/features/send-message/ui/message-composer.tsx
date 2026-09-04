@@ -150,19 +150,26 @@ export function MessageComposer({ disabled, onSend }: MessageComposerProps) {
   // Nested dragenter/dragleave pairs (tray, textarea, buttons) must not
   // flicker the drop highlight, so depth is counted rather than toggled.
   const dragDepth = useRef(0);
+  // Entering edit mode must also hand the caret to the field; the text is
+  // written during render, so the layout effect below does the DOM work once
+  // the prefilled body is committed. The previous target lives in a ref that
+  // only the effect touches — refs must not move during render.
+  const effectPreviousTarget = useRef<ComposerTarget | null>(null);
 
   // Attachments mirror the attach button's disabled state: the picker, drag
   // and drop, and paste all share one gate.
   const attachmentsBlocked =
     disabled || uploadId !== null || composerTarget?.mode === "edit";
 
-  // Edit mode prefills the input with the original body; leaving edit mode
-  // (cancel or send) clears it again. Switching chats swaps the text for that
-  // chat's own draft (typed locally or synced from another Telegram client)
-  // instead of leaking the previous chat's unsent text. Reply mode never
-  // touches typed text. Both transitions are resolved together, during
-  // render, so a chat switch and an edit start landing in the same commit
-  // don't race to overwrite each other's textarea value.
+  // Edit mode prefills the input with the original body and takes focus with
+  // the caret behind it. Leaving edit mode — cancel through the global Escape
+  // or a finished edit — restores the chat's own unsent draft, because an
+  // edit borrows the field rather than consuming the draft. Switching chats
+  // swaps the text for that chat's draft (typed locally or synced from
+  // another Telegram client) instead of leaking the previous chat's unsent
+  // text. Reply mode never touches typed text. Both transitions are resolved
+  // together, during render, so a chat switch and an edit start landing in
+  // the same commit don't race to overwrite each other's textarea value.
   const [previousTarget, setPreviousTarget] = useState<ComposerTarget | null>(
     null,
   );
@@ -170,6 +177,11 @@ export function MessageComposer({ disabled, onSend }: MessageComposerProps) {
   const targetChanged = composerTarget !== previousTarget;
   const chatChanged = activeChatId !== previousChatId;
   if (targetChanged || chatChanged) {
+    // The chat's own unsent text, restored whenever the field stops belonging
+    // to an edit or starts belonging to another chat.
+    const chatDraft = activeChatId
+      ? (useChatStore.getState().drafts[activeChatId] ?? "")
+      : "";
     if (targetChanged) setPreviousTarget(composerTarget);
     if (chatChanged) setPreviousChatId(activeChatId);
     if (composerTarget?.mode === "edit") {
@@ -180,14 +192,10 @@ export function MessageComposer({ disabled, onSend }: MessageComposerProps) {
       !composerTarget &&
       previousTarget?.mode === "edit"
     ) {
-      setValue("");
+      setValue(chatDraft);
       setEntities([]);
     } else if (chatChanged) {
-      setValue(
-        activeChatId
-          ? (useChatStore.getState().drafts[activeChatId] ?? "")
-          : "",
-      );
+      setValue(chatDraft);
       setEntities([]);
     }
   }
@@ -264,6 +272,25 @@ export function MessageComposer({ disabled, onSend }: MessageComposerProps) {
     pendingCaret.current = null;
     pending.textarea.setSelectionRange(pending.caret, pending.caret);
   });
+  // Edit mode focuses the field with the caret behind the prefilled text, the
+  // way Telegram's own clients open an edit: the reader types straight away
+  // instead of clicking into the field first. This runs after the render that
+  // wrote the value, so `textarea.value` is already the message body, and
+  // only on the transition into edit mode — an unrelated re-render of an
+  // edit already under way must not steal the caret the user moved.
+  useLayoutEffect(() => {
+    const enteredEdit =
+      composerTarget?.mode === "edit" &&
+      effectPreviousTarget.current !== composerTarget;
+    effectPreviousTarget.current = composerTarget;
+    if (!enteredEdit) return;
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    const caret = textarea.value.length;
+    textarea.focus({ preventScroll: true });
+    textarea.setSelectionRange(caret, caret);
+    setSelection({ start: caret, end: caret });
+  }, [composerTarget]);
 
   // Mirror the selection into a ref (post-render only) so the unmount cleanup
   // can revoke every outstanding object URL without re-subscribing per file.

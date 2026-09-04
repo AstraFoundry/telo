@@ -365,6 +365,20 @@ export interface MessageWebPageMediaDto {
 
 export type MessageMediaDto = MessageFileMediaDto | MessageWebPageMediaDto;
 
+/**
+ * One emoji bucket of a message's reactions (Telegram `ReactionCount`).
+ *
+ * `chosen` is Telegram's `chosenOrder`, reduced to the only question a chip
+ * asks: did this account pick this emoji. Custom-emoji and paid reactions
+ * (`ReactionCustomEmoji`, `ReactionPaid`) carry a document rather than a
+ * glyph and are not mapped; a message that only carries those reports none.
+ */
+export interface MessageReactionDto {
+  readonly emoji: string;
+  readonly count: number;
+  readonly chosen: boolean;
+}
+
 export interface MessageDto {
   readonly id: string;
   readonly chatId: string;
@@ -419,6 +433,11 @@ export interface MessageDto {
    * Null/absent for every message without one, which is almost all of them.
    */
   readonly keyboard?: MessageKeyboardDto | null;
+  /**
+   * Reaction buckets in Telegram's own order, most-reacted first. Absent on
+   * an optimistic placeholder and on any message nobody has reacted to.
+   */
+  readonly reactions?: ReadonlyArray<MessageReactionDto>;
 }
 
 export interface MessagePageInput {
@@ -497,6 +516,17 @@ export type TelegramWorkspaceEvent =
       readonly chatId: string;
       readonly maxMessageId: string;
       readonly direction: "inbox" | "outbox";
+    }
+  | {
+      /**
+       * A message's reaction buckets changed, either from this account's own
+       * `sendReaction` or from someone else reacting
+       * (`Api.UpdateMessageReactions`).
+       */
+      readonly type: "message-reactions";
+      readonly chatId: string;
+      readonly messageId: string;
+      readonly reactions: ReadonlyArray<MessageReactionDto>;
     }
   | {
       /**
@@ -610,6 +640,19 @@ export interface DeleteMessageInput {
   readonly chatId: string;
   readonly messageId: string;
   readonly scope?: DeleteMessageScope;
+}
+
+/**
+ * The account's reaction on one message after the call, not a delta:
+ * Telegram's `messages.sendReaction` replaces the whole set this account
+ * holds on a message, and `null` clears it. Telegram's own clients hold one
+ * emoji per message outside premium multi-reactions, which is the shape the
+ * renderer toggles against.
+ */
+export interface SetMessageReactionInput {
+  readonly chatId: string;
+  readonly messageId: string;
+  readonly emoji: string | null;
 }
 
 export interface ForwardMessageInput {
@@ -1039,11 +1082,15 @@ const TELO_MESSAGE_LINK = /^telo:\/\/message\/([^/\s]+)\/([^/\s]+)$/;
 export function parseTeloLink(href: string): TeloLink | null {
   const match = TELO_MESSAGE_LINK.exec(href);
   if (!match) return null;
-  return {
-    kind: "message",
-    chatId: decodeURIComponent(match[1]!),
-    messageId: decodeURIComponent(match[2]!),
-  };
+  try {
+    return {
+      kind: "message",
+      chatId: decodeURIComponent(match[1]!),
+      messageId: decodeURIComponent(match[2]!),
+    };
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -1400,6 +1447,17 @@ export interface TeloDesktopApi {
     editMessage(input: EditMessageInput): Promise<void>;
     deleteMessage(input: DeleteMessageInput): Promise<void>;
     forwardMessage(input: ForwardMessageInput): Promise<void>;
+    /**
+     * Sets (or clears, with a null emoji) this account's reaction on a
+     * message.
+     */
+    setMessageReaction(input: SetMessageReactionInput): Promise<void>;
+    /**
+     * Emoji this chat allows as reactions, in Telegram's own order
+     * (`messages.getAvailableReactions`, inactive entries dropped). The
+     * picker renders exactly this list.
+     */
+    listAvailableReactions(chatId: string): Promise<ReadonlyArray<string>>;
     setChatPinned(chatId: string, pinned: boolean): Promise<void>;
     setChatMuted(chatId: string, muted: boolean): Promise<void>;
     setChatRead(chatId: string, read: boolean): Promise<void>;

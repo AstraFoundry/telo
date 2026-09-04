@@ -2,7 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import { AgentConfiguration } from "../../domain/agent/agent-configuration";
 import type { AgentGateway, AgentOutput } from "../../domain/agent/agent-ports";
-import { DemoAgentGateway } from "./demo-agent-gateway";
+import {
+  DEMO_MARKDOWN_PROMPT,
+  DEMO_MARKDOWN_REPLY,
+  DemoAgentGateway,
+} from "./demo-agent-gateway";
 
 function streamInput(prompt: string): Parameters<AgentGateway["stream"]>[0] {
   return {
@@ -103,6 +107,10 @@ describe("DemoAgentGateway", () => {
       limit: 2,
     });
     expect(items).toEqual(["What should I reply?", "Who is waiting on me?"]);
+  });
+
+  it("streams the rich Markdown fixture without changing its source", async () => {
+    expect(await collect(DEMO_MARKDOWN_PROMPT)).toBe(DEMO_MARKDOWN_REPLY);
   });
 
   it("answers anything else with the generic response", async () => {

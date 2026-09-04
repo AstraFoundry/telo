@@ -30,6 +30,7 @@ import type {
   SaveTriggerRuleInput,
   SendMessageInput,
   SendMediaInput,
+  SetMessageReactionInput,
   TelegramLoginInput,
   UpdateKeywordFolderInput,
   UpdateUserPreferencesInput,
@@ -188,6 +189,14 @@ export function registerIpc(container: ApplicationContainer): void {
     channels.botCallbackAnswer,
     (_event, chatId: string, messageId: string, buttonId: string) =>
       container.messageActions.answerBotCallback(chatId, messageId, buttonId),
+  );
+  ipcMain.handle(
+    channels.messageReactionSet,
+    (_event, input: SetMessageReactionInput) =>
+      container.messageActions.setMessageReaction(input),
+  );
+  ipcMain.handle(channels.messageReactionsAvailable, (_event, chatId: string) =>
+    container.messageActions.listAvailableReactions(chatId),
   );
   ipcMain.handle(
     channels.chatPinSet,

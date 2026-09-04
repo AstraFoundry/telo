@@ -14,6 +14,7 @@ import type {
   MessageEntityDto,
   MessageMediaDto,
   MessageMediaKind,
+  MessageReactionDto,
   MessageReplyToDto,
   StickerItemDto,
   StickerSetDto,
@@ -162,6 +163,57 @@ function replySnapshot(
   };
 }
 
+/** Buckets after a toggle, plus the reaction the account then holds. */
+interface ReactionToggle {
+  readonly reactions: ReadonlyArray<MessageReactionDto>;
+  /** Matches SetMessageReactionInput: the state after the call, null clears. */
+  readonly emoji: string | null;
+}
+
+// Telegram gives a non-premium account one reaction per message, so picking
+// an emoji moves the vote rather than adding a second one: the previously
+// chosen bucket loses a count and disappears at zero, and the picked bucket
+// gains one (appended when the emoji is new, since bucket order is the
+// server's most-reacted-first order). Picking the chosen emoji again clears
+// the vote, which is what the reaction chips toggle on.
+function toggleReactionBuckets(
+  current: ReadonlyArray<MessageReactionDto> | undefined,
+  emoji: string,
+): ReactionToggle {
+  const buckets = current ?? [];
+  const clearing = buckets.some(
+    (bucket) => bucket.chosen && bucket.emoji === emoji,
+  );
+  const moved = buckets.flatMap((bucket) => {
+    if (bucket.chosen) {
+      const count = bucket.count - 1;
+      return count > 0 ? [{ ...bucket, count, chosen: false }] : [];
+    }
+    if (!clearing && bucket.emoji === emoji) {
+      return [{ ...bucket, count: bucket.count + 1, chosen: true }];
+    }
+    return [bucket];
+  });
+  const added =
+    !clearing && !buckets.some((bucket) => bucket.emoji === emoji)
+      ? [{ emoji, count: 1, chosen: true }]
+      : [];
+  return {
+    reactions: [...moved, ...added],
+    emoji: clearing ? null : emoji,
+  };
+}
+
+function patchReactions(
+  messages: ReadonlyArray<MessageDto>,
+  messageId: string,
+  reactions: ReadonlyArray<MessageReactionDto> | undefined,
+): ReadonlyArray<MessageDto> {
+  return messages.map((message) =>
+    message.id === messageId ? { ...message, reactions } : message,
+  );
+}
+
 function mediaKindFor(file: File): MessageMediaKind {
   if (file.type.startsWith("image/")) return "photo";
   if (file.type.startsWith("video/")) return "video";
@@ -306,6 +358,13 @@ interface ChatState {
    */
   stickerSetsError: string | null;
   loadStickerSets(): Promise<void>;
+  /**
+   * Emoji the active chat allows as reactions, in Telegram's order. Empty
+   * until the first picker of that chat loads them, and emptied again on a
+   * chat switch: the allowed set is a per-chat setting.
+   */
+  availableReactions: ReadonlyArray<string>;
+  loadAvailableReactions(): Promise<void>;
   notificationsEnabled: boolean;
   notificationSenderName: boolean;
   notificationPreview: boolean;
@@ -368,6 +427,12 @@ interface ChatState {
   startEdit(message: MessageDto): void;
   cancelComposerTarget(): void;
   deleteMessage(messageId: string, scope?: DeleteMessageScope): Promise<void>;
+  /**
+   * Sets the account's reaction on a message, or clears it when `emoji` is
+   * already the chosen one — Telegram's one-reaction-per-account shape. The
+   * buckets flip optimistically; a failed IPC restores them and rethrows.
+   */
+  toggleReaction(messageId: string, emoji: string): Promise<void>;
   /** Selection-mode message ids, in the order the user picked them. */
   selectedMessageIds: ReadonlyArray<string>;
   /** Enters selection mode with the given message selected. */
@@ -547,6 +612,10 @@ const inFlightCustomEmoji = new Set<string>();
 // emoji ids above: it is request bookkeeping, and a second reveal must not
 // start a second listing.
 let loadingStickerSets = false;
+// The chat whose available reactions are held (or on their way). Same reason
+// as the flag above: reopening a reaction picker reads what was fetched the
+// first time, and only a chat switch makes the list stale.
+let availableReactionsChatId: string | null = null;
 
 export const useChatStore = create<ChatState>((set, get) => ({
   chats: [],
@@ -567,6 +636,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   customEmoji: {},
   stickerSets: null,
   stickerSetsError: null,
+  availableReactions: [],
   notificationsEnabled: false,
   notificationSenderName: true,
   notificationPreview: true,
@@ -619,6 +689,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
           ? await window.telo.workspace.listMessagePage(activeChatId)
           : { items: [], nextCursor: null };
       if (request !== selectionRequest) return;
+      // The landing chat may differ from the one that was open, so the
+      // allowed reaction set is dropped with the rest of the per-chat state.
+      availableReactionsChatId = null;
       set((state) => ({
         chats,
         activeChatId,
@@ -635,6 +708,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         countMutedChats: preferences.countMutedChats,
         animateInMessageIds: [],
         animateChatIds: [],
+        availableReactions: [],
       }));
       // Folder unread walks every dialog and Telegram flood-waits that RPC.
       // Keep it off the first-paint path so the chat list can appear.
@@ -686,6 +760,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
     // Switching chats ends any in-chat search: its matches, highlight, and
     // pending debounce all belong to the previous conversation.
     resetChatSearch();
+    // Which emoji a chat allows is a chat setting, so the previous list is
+    // dropped here and the next picker of this conversation reloads it.
+    availableReactionsChatId = null;
     // A pending reply/edit references a message of the previous chat; it must
     // not leak into the newly selected conversation. The same goes for a
     // multi-selection, which is scoped to the transcript it was made in.
@@ -701,6 +778,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       jumpTarget: null,
       selectedMessageIds: [],
       animateInMessageIds: [],
+      availableReactions: [],
     });
     try {
       const page = await window.telo.workspace.listMessagePage(chatId);
@@ -766,7 +844,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
         ),
         composerTarget: null,
       }));
-      clearDraftState(chatId);
+      // An edit borrows the composer: the chat's unsent draft survives it,
+      // and the composer restores that text when edit mode ends.
       return;
     }
     const clientId = crypto.randomUUID();
@@ -865,6 +944,26 @@ export const useChatStore = create<ChatState>((set, get) => ({
       set({ stickerSetsError: errorMessage(error) });
     } finally {
       loadingStickerSets = false;
+    }
+  },
+  async loadAvailableReactions() {
+    const chatId = get().activeChatId;
+    if (!chatId) return;
+    // One listing per chat, like the sticker sets above: every reaction
+    // picker in a conversation renders the same allowed set, so a reopen
+    // reads what the first one fetched.
+    if (availableReactionsChatId === chatId) return;
+    availableReactionsChatId = chatId;
+    try {
+      const emojis = await window.telo.workspace.listAvailableReactions(chatId);
+      // A chat switch mid-request already emptied the list for the new
+      // conversation; the late answer describes the previous one.
+      if (get().activeChatId !== chatId) return;
+      set({ availableReactions: emojis });
+    } catch (error) {
+      // Nothing is held for this chat, so the next picker asks again.
+      availableReactionsChatId = null;
+      throw error;
     }
   },
   async sendSticker(sticker) {
@@ -1091,6 +1190,31 @@ export const useChatStore = create<ChatState>((set, get) => ({
     if (!chatId) return;
     await window.telo.workspace.deleteMessage({ chatId, messageId, scope });
     set((state) => removeMessagesLocally(state, chatId, new Set([messageId])));
+  },
+  async toggleReaction(messageId, emoji) {
+    const chatId = get().activeChatId;
+    if (!chatId) return;
+    const target = get().messages.find((message) => message.id === messageId);
+    if (!target) return;
+    const toggled = toggleReactionBuckets(target.reactions, emoji);
+    // Optimistic like setArchived: the chip flips under the cursor and a
+    // failed IPC puts the buckets the message arrived with back, so the
+    // caller can surface the failure over truthful counts.
+    set((state) => ({
+      messages: patchReactions(state.messages, messageId, toggled.reactions),
+    }));
+    try {
+      await window.telo.workspace.setMessageReaction({
+        chatId,
+        messageId,
+        emoji: toggled.emoji,
+      });
+    } catch (error) {
+      set((state) => ({
+        messages: patchReactions(state.messages, messageId, target.reactions),
+      }));
+      throw error;
+    }
   },
   startSelection(messageId) {
     set({ selectedMessageIds: [messageId] });
@@ -1630,6 +1754,23 @@ export const useChatStore = create<ChatState>((set, get) => ({
         patchChat(state.chats, event.chatId, {
           presence: event.online ? "online" : null,
         }),
+      );
+      return;
+    }
+    if (event.type === "message-reactions") {
+      // Only the open transcript holds messages, so a bucket update for any
+      // other chat has nothing to patch — the same rule message-upsert
+      // follows for its transcript half.
+      set((state) =>
+        state.activeChatId === event.chatId
+          ? {
+              messages: patchReactions(
+                state.messages,
+                event.messageId,
+                event.reactions,
+              ),
+            }
+          : state,
       );
       return;
     }
