@@ -55,7 +55,6 @@ const DEMO_STICKER_SET_SHORT_NAME = "TeloPack";
 const DEMO_STICKER_SET_REFERENCE: StickerSetReferenceDto = {
   kind: "id",
   id: "demo-telopack",
-  accessHash: "1",
 };
 
 // Shared media is the photo/video/file slice of a chat's history; link
@@ -156,6 +155,40 @@ const INITIAL_CHATS: ReadonlyArray<ChatDto> = [
     draftPreview: null,
     typing: false,
     folderId: null,
+  },
+  {
+    id: "mina",
+    title: "Mina",
+    preview: "Ship both with the next build.",
+    updatedAt: "2026-08-23T18:00:00.000Z",
+    unreadCount: 0,
+    lastReadMessageId: "mina-1",
+    muted: false,
+    pinned: false,
+    kind: "direct",
+    initials: "M",
+    avatarDataUrl: null,
+    draftPreview: null,
+    typing: false,
+    presence: "online",
+    folderId: null,
+  },
+  {
+    id: "secret-mina",
+    title: "Mina",
+    preview: "This chat is end-to-end encrypted.",
+    updatedAt: "2026-08-23T17:40:00.000Z",
+    unreadCount: 0,
+    lastReadMessageId: "secret-mina-1",
+    muted: false,
+    pinned: false,
+    kind: "secret",
+    initials: "M",
+    avatarDataUrl: null,
+    draftPreview: null,
+    typing: false,
+    folderId: null,
+    secretState: "ready",
   },
 ];
 
@@ -720,6 +753,38 @@ const INITIAL_MESSAGES: Record<string, ReadonlyArray<MessageDto>> = {
       },
     },
   ],
+  mina: [
+    {
+      id: "mina-1",
+      chatId: "mina",
+      senderName: "Mina",
+      senderId: "demo-mina",
+      senderAvatarUrl: null,
+      body: "Ship both with the next build.",
+      entities: [],
+      media: null,
+      groupedId: null,
+      sentAt: "2026-08-23T18:00:00.000Z",
+      outgoing: false,
+      status: "read",
+    },
+  ],
+  "secret-mina": [
+    {
+      id: "secret-mina-1",
+      chatId: "secret-mina",
+      senderName: "Mina",
+      senderId: "demo-mina",
+      senderAvatarUrl: null,
+      body: "This chat is end-to-end encrypted.",
+      entities: [],
+      media: null,
+      groupedId: null,
+      sentAt: "2026-08-23T17:40:00.000Z",
+      outgoing: false,
+      status: "read",
+    },
+  ],
 };
 
 // What the demo bot answers a press with, keyed by message id and then by
@@ -919,25 +984,48 @@ export class DemoTelegramRepository implements TelegramRepository {
   async listChatPage(input: ChatPageInput): Promise<ChatPageDto> {
     const chats = [...this.chats.values()];
     const start = input.cursor
-      ? chats.findIndex((chat) => chat.id === input.cursor?.chatId) + 1
+      ? chats.findIndex((chat) => chat.id === input.cursor) + 1
       : 0;
     if (input.cursor && start === 0) {
-      throw new Error(`Unknown chat cursor ${input.cursor.chatId}`);
+      throw new Error(`Unknown chat cursor ${input.cursor}`);
     }
     const limit = input.limit ?? chats.length;
     const items = chats.slice(start, start + limit);
     const last = items.at(-1);
     return {
       items,
-      nextCursor:
-        start + items.length < chats.length && last
-          ? {
-              chatId: last.id,
-              topMessageId: this.messages.get(last.id)?.at(-1)?.id ?? "0",
-              updatedAt: last.updatedAt,
-            }
-          : null,
+      nextCursor: start + items.length < chats.length && last ? last.id : null,
     };
+  }
+
+  async createSecretChat(userId: string): Promise<ChatDto> {
+    const existing = [...this.chats.values()].find(
+      (chat) => chat.kind === "secret" && chat.id === `secret-${userId}`,
+    );
+    if (existing) return existing;
+    const peer = this.chats.get(userId);
+    const title = peer?.title ?? DEMO_PEERS[userId]?.displayName ?? userId;
+    const chat: ChatDto = {
+      id: `secret-${userId}`,
+      title,
+      preview: "",
+      updatedAt: new Date().toISOString(),
+      unreadCount: 0,
+      lastReadMessageId: null,
+      muted: false,
+      pinned: false,
+      kind: "secret",
+      initials: title.slice(0, 2).toUpperCase(),
+      avatarDataUrl: peer?.avatarDataUrl ?? null,
+      draftPreview: null,
+      typing: false,
+      folderId: null,
+      secretState: "ready",
+    };
+    this.chats.set(chat.id, chat);
+    this.messages.set(chat.id, []);
+    this.emit({ type: "chat-upsert", chat });
+    return chat;
   }
 
   async listFolders(): Promise<ReadonlyArray<ChatFolderDto>> {

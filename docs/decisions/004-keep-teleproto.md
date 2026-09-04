@@ -73,7 +73,7 @@ This would not be an infrastructure-only rewrite. The domain port and IPC contra
 
 TDLib also inverts the persistence model: it wants a per-account encrypted SQLite tree under userData. That conflicts with "local files, no database" and with the choice not to persist `pts`/`qts`/`seq`. Session formats are incompatible; every signed-in account would have to authenticate again. Release packaging would need platform-specific `libtdjson` for macOS (x64/arm64), Windows (x64; arm64 is not in `prebuilt-tdlib`), and Linux (glibc/musl × x64/arm64), plus asar unpack and Vite externals for `tdl`.
 
-The production Teleproto adapter plus its dedicated tests is on the order of 8k lines; the demo adapter and account coordinator are another several thousand. Replacing that with a TDLib adapter is a second full client mapping, not a find-and-replace. The mapping would get *easier* in places (files, chat order, auth states) and *harder* in others (losing typed TL, fighting MTProto-shaped cursors, shipping native binaries).
+The production Teleproto adapter plus its dedicated tests is on the order of 8k lines; the demo adapter and account coordinator are another several thousand. Replacing that with a TDLib adapter is a second full client mapping, not a find-and-replace. The mapping would get _easier_ in places (files, chat order, auth states) and _harder_ in others (losing typed TL, fighting MTProto-shaped cursors, shipping native binaries).
 
 ## Alternatives considered
 

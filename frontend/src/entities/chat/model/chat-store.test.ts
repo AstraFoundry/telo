@@ -255,11 +255,7 @@ describe("chat-store", () => {
 
   it("loadMoreChats() appends a page once and advances the cursor", async () => {
     const telo = installTeloApiMock();
-    const cursor = {
-      chatId: "a",
-      topMessageId: "1",
-      updatedAt: "2026-01-01T00:00:00.000Z",
-    };
+    const cursor = "a";
     telo.workspace.listChatPage.mockResolvedValue({
       items: [chat("b")],
       nextCursor: null,
@@ -416,11 +412,7 @@ describe("chat-store", () => {
   it("receive() replaces the chat list after a live GetDialogs refresh", () => {
     useChatStore.setState({
       chats: [chat("cached")],
-      chatCursor: {
-        chatId: "cached",
-        topMessageId: "1",
-        updatedAt: "2026-01-01T00:00:00.000Z",
-      },
+      chatCursor: "cached",
     });
     useChatStore.getState().receive({
       type: "chats",
@@ -739,6 +731,27 @@ describe("chat-store", () => {
       "a",
     ]);
     expect(useChatStore.getState().chats[0]?.pinned).toBe(true);
+    expect(useChatStore.getState().animateChatIds).toEqual(["b"]);
+  });
+
+  it("orders chats by TDLib listOrder instead of relocating", async () => {
+    useChatStore.setState({
+      chats: [
+        { ...chat("a"), listOrder: "100" },
+        { ...chat("b"), listOrder: "50" },
+      ],
+      animateChatIds: [],
+    });
+
+    useChatStore.getState().receive({
+      type: "chat-upsert",
+      chat: { ...chat("b"), listOrder: "200", preview: "newest" },
+    });
+
+    expect(useChatStore.getState().chats.map((entry) => entry.id)).toEqual([
+      "b",
+      "a",
+    ]);
     expect(useChatStore.getState().animateChatIds).toEqual(["b"]);
   });
 

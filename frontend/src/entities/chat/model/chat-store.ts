@@ -1363,6 +1363,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
     await window.telo.workspace.setChatPinned(chatId, pinned);
     set((state) => {
       const patched = patchChat(state.chats, chatId, { pinned }).chats;
+      if (chatsHaveListOrder(patched)) {
+        return { chats: patched };
+      }
       const { chats, moved } = relocateChat(patched, chatId, "pin");
       return {
         chats,
@@ -1671,16 +1674,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
       return;
     }
     if (event.type === "chats") {
-      set((state) => ({
-        chats: event.chats,
-        chatCursor: event.nextCursor,
-        drafts: hydrateDrafts(state.drafts, event.chats),
-        folders: withKeywordUnread(
-          state.folders,
-          event.chats,
-          state.countMutedChats,
-        ),
-      }));
+      set((state) => {
+        const chats = orderChatsByListOrder(event.chats);
+        return {
+          chats,
+          chatCursor: event.nextCursor,
+          drafts: hydrateDrafts(state.drafts, chats),
+          folders: withKeywordUnread(
+            state.folders,
+            chats,
+            state.countMutedChats,
+          ),
+        };
+      });
       return;
     }
     if (event.type === "folders") {
@@ -1700,7 +1706,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
     if (event.type === "chat-upsert") {
       set((state) => {
+        const previousIndex = state.chats.findIndex(
+          (chat) => chat.id === event.chat.id,
+        );
         const chats = upsertChat(state.chats, event.chat);
+        const nextIndex = chats.findIndex((chat) => chat.id === event.chat.id);
+        const moved =
+          previousIndex !== -1 &&
+          nextIndex !== -1 &&
+          previousIndex !== nextIndex;
         return {
           chats,
           folders: withKeywordUnread(
@@ -1709,6 +1723,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
             state.countMutedChats,
           ),
           drafts: hydrateDrafts(state.drafts, [event.chat]),
+          animateChatIds: moved
+            ? withIds(state.animateChatIds, [event.chat.id])
+            : state.animateChatIds,
         };
       });
       return;
@@ -1756,7 +1773,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           );
         });
         const promoted =
-          event.cause === "new"
+          event.cause === "new" && !chatsHaveListOrder(chats)
             ? relocateChat(chats, event.message.chatId, "new-message")
             : { chats, moved: false };
         return {
@@ -1841,6 +1858,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
         const patched = patchChat(state.chats, event.chatId, {
           pinned: event.pinned,
         }).chats;
+        if (chatsHaveListOrder(patched)) {
+          return { chats: patched };
+        }
         const { chats, moved } = relocateChat(patched, event.chatId, "pin");
         return {
           chats,
@@ -2004,6 +2024,27 @@ async function runChatSearch(chatId: string, term: string): Promise<void> {
   }
 }
 
+function chatsHaveListOrder(chats: ReadonlyArray<ChatDto>): boolean {
+  return chats.some((chat) => chat.listOrder !== undefined);
+}
+
+// TDLib position.order is an unsigned 64-bit decimal string. Higher values
+// sort first, matching Telegram Desktop's main list.
+function compareTelegramListOrder(left: string, right: string): number {
+  if (left.length !== right.length) return right.length - left.length;
+  if (left === right) return 0;
+  return left < right ? 1 : -1;
+}
+
+function orderChatsByListOrder(
+  chats: ReadonlyArray<ChatDto>,
+): ReadonlyArray<ChatDto> {
+  if (!chatsHaveListOrder(chats)) return chats;
+  return [...chats].sort((left, right) =>
+    compareTelegramListOrder(left.listOrder ?? "0", right.listOrder ?? "0"),
+  );
+}
+
 function patchChat(
   chats: ReadonlyArray<ChatDto>,
   chatId: string,
@@ -2106,8 +2147,11 @@ function upsertChat(
   updated: ChatDto,
 ): ReadonlyArray<ChatDto> {
   const index = chats.findIndex((chat) => chat.id === updated.id);
-  if (index === -1) return [...chats, updated];
-  return chats.map((chat) => (chat.id === updated.id ? updated : chat));
+  const next =
+    index === -1
+      ? [...chats, updated]
+      : chats.map((chat) => (chat.id === updated.id ? updated : chat));
+  return orderChatsByListOrder(next);
 }
 
 function mergeChats(

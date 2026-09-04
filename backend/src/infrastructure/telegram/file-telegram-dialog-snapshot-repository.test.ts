@@ -49,11 +49,7 @@ describe("FileTelegramDialogSnapshotRepository", () => {
       version: 1,
       chats: [chat("a")],
       folders: [{ id: 2, title: "Work", unreadCount: 3 }],
-      nextCursor: {
-        chatId: "a",
-        topMessageId: "9",
-        updatedAt: "2026-01-01T00:00:00.000Z",
-      },
+      nextCursor: "a",
     });
 
     expect((await stat(filePath)).mode & 0o777).toBe(0o600);
@@ -133,11 +129,7 @@ describe("dialogSnapshotPage", () => {
       ),
     ).toEqual({
       items: [chats[0], chats[1]],
-      nextCursor: {
-        chatId: "b",
-        topMessageId: "9",
-        updatedAt: "2026-01-01T00:00:00.000Z",
-      },
+      nextCursor: "b",
     });
   });
 });

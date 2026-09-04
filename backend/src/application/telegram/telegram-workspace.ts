@@ -1,4 +1,5 @@
 import type {
+  ChatDto,
   ChatFolderDto,
   ChatMemberDto,
   ChatPageDto,
@@ -103,6 +104,11 @@ export class TelegramWorkspaceService {
       ...page,
       items: page.items.map((chat) => keywords.annotate(chat)),
     };
+  }
+
+  createSecretChat(userId: string): Promise<ChatDto> {
+    if (!userId.trim()) throw new Error("User id is required");
+    return this.repository.createSecretChat(userId.trim());
   }
 
   async listFolders(): Promise<ReadonlyArray<ChatFolderDto>> {
@@ -223,9 +229,8 @@ export class TelegramWorkspaceService {
       return this.repository.getStickerSet({ kind: "short-name", shortName });
     }
     const id = reference.id.trim();
-    const accessHash = reference.accessHash.trim();
-    if (!id || !accessHash) throw new Error("Sticker set id is required");
-    return this.repository.getStickerSet({ kind: "id", id, accessHash });
+    if (!id) throw new Error("Sticker set id is required");
+    return this.repository.getStickerSet({ kind: "id", id });
   }
 
   setStickerSetInstalled(shortName: string, installed: boolean): Promise<void> {
@@ -341,11 +346,7 @@ export class TelegramWorkspaceService {
 function validateChatCursor(
   cursor: NonNullable<ChatPageInput["cursor"]>,
 ): void {
-  if (!cursor.chatId.trim()) throw new Error("Chat cursor id is required");
-  validateMessageId(cursor.topMessageId);
-  if (Number.isNaN(Date.parse(cursor.updatedAt))) {
-    throw new Error("Chat cursor timestamp is invalid");
-  }
+  if (!cursor.trim()) throw new Error("Chat cursor is required");
 }
 
 function validateMessageId(value: string): void {

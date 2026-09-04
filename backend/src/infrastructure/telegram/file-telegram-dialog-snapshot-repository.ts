@@ -100,9 +100,7 @@ export function dialogSnapshotPage(
           : snapshot.nextCursor,
     };
   }
-  const index = snapshot.chats.findIndex(
-    (chat) => chat.id === input.cursor?.chatId,
-  );
+  const index = snapshot.chats.findIndex((chat) => chat.id === input.cursor);
   const start = index >= 0 ? index + 1 : snapshot.chats.length;
   const items = snapshot.chats.slice(start, start + limit);
   const last = items.at(-1);
@@ -132,11 +130,7 @@ function persistedAvatarUrl(url: string | null): string | null {
 }
 
 function cursorOf(chat: ChatDto): ChatPageCursorDto {
-  return {
-    chatId: chat.id,
-    topMessageId: chat.lastReadMessageId ?? chat.id,
-    updatedAt: chat.updatedAt,
-  };
+  return chat.id;
 }
 
 function isMissingFile(error: unknown): boolean {

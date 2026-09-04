@@ -52,7 +52,7 @@ Prove Telo’s toolchain can ship TDLib before touching mappers.
 - Main-process probe: create a client, handle `authorizationStateWaitTdlibParameters`, log ready. No mapper yet.
 - Release-matrix smoke: packaged app on macOS (arm64/x64 as the runner provides), Windows x64, Ubuntu x64. Win arm64 is unsupported by `prebuilt-tdlib` — document the hole.
 
-### Exit
+### Wave 0 exit
 
 `pnpm package` artifact launches and loads `tdjson` on those three OS. Size and cold-start numbers recorded in [`ablation.md`](../telegram/ablation.md) (create with this wave).
 
@@ -78,10 +78,10 @@ Make IPC library-agnostic so the TDLib adapter is not forced through MTProto off
 
 ### Application
 
-- [telegram-workspace.ts](../../backend/src/application/telegram/telegram-workspace.ts) must not validate cursor *shape* beyond non-empty string.
+- [telegram-workspace.ts](../../backend/src/application/telegram/telegram-workspace.ts) must not validate cursor _shape_ beyond non-empty string.
 - Sticker-set validation must not require `accessHash`.
 
-### Exit
+### Wave 1 exit
 
 `make check` green. No TDLib mapper yet.
 
@@ -109,7 +109,7 @@ TDLib drives login through `updateAuthorizationState`. Map onto existing `Telegr
 
 One `database_directory` per account: `userData/tdlib/<accountId>/`. Park = `close` the client, do not delete the directory. Logout deletes the directory. Matches current coordinator semantics (one connected account).
 
-### Exit
+### Wave 2 exit
 
 Flag-on process completes phone login against a throwaway account. Onboarding e2e (`login-error.spec.ts`) still uses the e2e build without Telegram credentials.
 
@@ -142,7 +142,7 @@ TDLib SQLite is the snapshot. Do not write `dialogs-<id>.json` on the TDLib back
 
 Record: sidebar time-to-paint after kill-9; chat-list top-N vs Telegram Desktop on the same account; missed/duplicate upserts after airplane mode.
 
-### Exit
+### Wave 3 exit
 
 Flag-on: restart shows the same ordered list without a full network walk. Demo e2e unchanged.
 
@@ -152,24 +152,24 @@ Flag-on: restart shows the same ordered list without a full network walk. Demo e
 
 Depends on: Wave 3.
 
-### Port methods
+### Wave 4 port methods
 
-| Port | TDLib |
-| --- | --- |
-| `listMessagePage` | `getChatHistory` (`from_message_id` = opaque/numeric id) |
-| `sendMessage` | `sendMessage` + `inputMessageText`; `clientId` ↔ `message.sending_id` |
-| `editMessage` | `editMessageText` |
-| `deleteMessage` | `deleteMessages` (`revoke` from `scope`) |
-| `forwardMessage` | `forwardMessages` (`dropAuthor` = `hideSender`) |
-| `setTyping` / `saveDraft` | `sendChatAction` / `setChatDraftMessage` |
-| `setChatPinned` / `Muted` / `Read` / `Archived` | `toggleChatIsPinned`, `setChatNotificationSettings`, `toggleChatIsMarkedAsUnread` / `viewMessages`, `addChatToList` archive |
-| subscribe | `updateNewMessage`, `updateMessageSendSucceeded` / `Failed`, `updateMessageContent`, `updateDeleteMessages`, `updateChatReadInbox` / `Outbox`, `updateUserStatus`, `updateChatAction` |
+| Port                                            | TDLib                                                                                                                                                                                 |
+| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `listMessagePage`                               | `getChatHistory` (`from_message_id` = opaque/numeric id)                                                                                                                              |
+| `sendMessage`                                   | `sendMessage` + `inputMessageText`; `clientId` ↔ `message.sending_id`                                                                                                                 |
+| `editMessage`                                   | `editMessageText`                                                                                                                                                                     |
+| `deleteMessage`                                 | `deleteMessages` (`revoke` from `scope`)                                                                                                                                              |
+| `forwardMessage`                                | `forwardMessages` (`dropAuthor` = `hideSender`)                                                                                                                                       |
+| `setTyping` / `saveDraft`                       | `sendChatAction` / `setChatDraftMessage`                                                                                                                                              |
+| `setChatPinned` / `Muted` / `Read` / `Archived` | `toggleChatIsPinned`, `setChatNotificationSettings`, `toggleChatIsMarkedAsUnread` / `viewMessages`, `addChatToList` archive                                                           |
+| subscribe                                       | `updateNewMessage`, `updateMessageSendSucceeded` / `Failed`, `updateMessageContent`, `updateDeleteMessages`, `updateChatReadInbox` / `Outbox`, `updateUserStatus`, `updateChatAction` |
 
 Optimistic send: keep Telo `clientId` / `sending|sent|failed`. Map `updateMessageSendSucceeded` onto the same bubble.
 
 Serial mapping queue stays (current Teleproto adapter already serializes expensive mapping). TDLib already orders updates; the queue is for Telo DTO conversion only.
 
-### Exit
+### Wave 4 exit
 
 Demo messaging e2e green. Live: send/edit/delete/reply/forward between two test accounts.
 
@@ -179,22 +179,22 @@ Demo messaging e2e green. Live: send/edit/delete/reply/forward between two test 
 
 Depends on: Wave 4.
 
-### Port methods
+### Wave 5 port methods
 
-| Port | TDLib |
-| --- | --- |
-| `downloadMedia` / `cancel` / `resolveMediaFile` | `downloadFile` / `cancelDownloadFile`; serve completed path through `telo-media:` |
-| `sendMedia` / `cancelMediaUpload` | `sendMessageAlbum` / `sendMessage` + `inputFileLocal`; progress from `updateFile` |
+| Port                                                            | TDLib                                                                                                                                                                     |
+| --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `downloadMedia` / `cancel` / `resolveMediaFile`                 | `downloadFile` / `cancelDownloadFile`; serve completed path through `telo-media:`                                                                                         |
+| `sendMedia` / `cancelMediaUpload`                               | `sendMessageAlbum` / `sendMessage` + `inputFileLocal`; progress from `updateFile`                                                                                         |
 | sticker catalog / send / fave / reorder / search / custom emoji | `getInstalledStickerSets`, `getStickers`, `searchStickers`, `addFavoriteSticker`, `reorderInstalledStickerSets`, `getCustomEmojiReactionStickers` / `getCustomEmojiFiles` |
-| `searchGlobal` / `searchMessages` | `searchMessages` / `searchChatMessages` |
-| `listSharedMedia` / `listPinnedMessages` | `searchChatMessages` with `searchMessagesFilter*` / `getChatPinnedMessage` |
-| `listChatMembers` / `getPeerProfile` | `getSupergroupMembers` / `getUser` / `getUserFullInfo` |
-| `setMessageReaction` / `listAvailableReactions` | `setMessageReactions` / `getMessageAvailableReactions` |
-| `answerBotCallback` | `getCallbackQueryAnswer` |
+| `searchGlobal` / `searchMessages`                               | `searchMessages` / `searchChatMessages`                                                                                                                                   |
+| `listSharedMedia` / `listPinnedMessages`                        | `searchChatMessages` with `searchMessagesFilter*` / `getChatPinnedMessage`                                                                                                |
+| `listChatMembers` / `getPeerProfile`                            | `getSupergroupMembers` / `getUser` / `getUserFullInfo`                                                                                                                    |
+| `setMessageReaction` / `listAvailableReactions`                 | `setMessageReactions` / `getMessageAvailableReactions`                                                                                                                    |
+| `answerBotCallback`                                             | `getCallbackQueryAnswer`                                                                                                                                                  |
 
 Keep [media-cache.ts](../../backend/src/infrastructure/telegram/media-cache.ts) LRU as a serving layer in front of TDLib local files, or point `telo-media:` at TDLib’s local file path if it already lives under userData. Do not copy large buffers across IPC.
 
-### Exit
+### Wave 5 exit
 
 Existing Playwright: `media-send`, `media-viewer`, `stickers`, `search`, `message-interaction` (reactions). Live: photo album + sticker send.
 
@@ -217,7 +217,7 @@ Depends on: Wave 3 (list) and Wave 4 (history). Can start UI copy against demo f
 - Accept/pending states from `updateSecretChat`
 - Demo fixtures: one secret chat so Playwright does not need two real devices
 
-### Exit
+### Wave 6 exit
 
 Demo: secret chat visible, send text, lock visible. Live: create secret chat to a second device running official Telegram, both sides see E2EE messages; kill Telo, secret history still on that machine only.
 
@@ -248,13 +248,13 @@ Two test accounts. Nightly or `make test-live`. Scenarios: ordered chat list vs 
 
 ### L4 Ablation ([docs/telegram/ablation.md](../telegram/ablation.md))
 
-| Id | Compare | Metric |
-| --- | --- | --- |
-| A0 | packaged Teleproto vs TDLib | artifact size, launch, `tdjson` load |
-| A1 | `use_message_database` on vs off | restart paint, disk bytes |
-| A2 | Teleproto vs TDLib same port calls | missed upserts, list order, flood waits |
-| A3 | file pipeline | download/upload fail/cancel |
-| A4 | three accounts park/restore | no leaked live client |
+| Id  | Compare                            | Metric                                  |
+| --- | ---------------------------------- | --------------------------------------- |
+| A0  | packaged Teleproto vs TDLib        | artifact size, launch, `tdjson` load    |
+| A1  | `use_message_database` on vs off   | restart paint, disk bytes               |
+| A2  | Teleproto vs TDLib same port calls | missed upserts, list order, flood waits |
+| A3  | file pipeline                      | download/upload fail/cancel             |
+| A4  | three accounts park/restore        | no leaked live client                   |
 
 Go/no-go after A0 (Wave 0) and A2 (Wave 3–4).
 

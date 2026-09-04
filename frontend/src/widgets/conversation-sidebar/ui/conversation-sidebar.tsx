@@ -4,6 +4,7 @@ import {
   BellSlash,
   Checks,
   ArrowLeft,
+  Lock,
   PushPin,
   PushPinSlash,
   X,
@@ -24,6 +25,7 @@ import {
   pushRecentSearch,
   removeRecentSearch,
 } from "features/chat-search/model/recent-searches";
+import { StartSecretChatMenuItem } from "features/start-secret-chat";
 import { AnimatePresence } from "motion/react";
 
 import { copy } from "shared/config/copy";
@@ -150,6 +152,12 @@ function ChatListRow({
           />
           <span className="min-w-0 flex-1">
             <span className="flex items-center gap-2">
+              {chat.kind === "secret" ? (
+                <Lock
+                  aria-label={copy.secretChat}
+                  className="size-3.5 shrink-0 text-muted-foreground"
+                />
+              ) : null}
               <span className="min-w-0 flex-1 truncate text-sm font-semibold">
                 {chat.title}
               </span>
@@ -209,6 +217,9 @@ function ChatListRow({
           <Archive aria-hidden="true" className="size-4" />
           {archived ? copy.unarchiveChat : copy.archiveChat}
         </ContextMenuItem>
+        {chat.kind === "direct" ? (
+          <StartSecretChatMenuItem userId={chat.id} />
+        ) : null}
       </ContextMenuContent>
     </ContextMenu>
   );
