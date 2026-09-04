@@ -30,6 +30,8 @@ export interface TelegramRepository {
   subscribe(listener: (event: TelegramWorkspaceEvent) => void): () => void;
   getCurrentUser(): Promise<CurrentUserDto>;
   listChatPage(input: ChatPageInput): Promise<ChatPageDto>;
+  /** Starts a device-local E2EE secret chat with the given user. */
+  createSecretChat(userId: string): Promise<ChatDto>;
   /**
    * Lists the chat folders (custom folders plus the Archive when it holds
    * chats) with server-computed unread counts.
@@ -196,6 +198,16 @@ export interface TelegramUploadFile {
 export interface TelegramSessionRepository {
   get(): Promise<string>;
   save(session: string): Promise<void>;
+  clear(): Promise<void>;
+}
+
+/**
+ * Per-account TDLib database directory plus a `safeStorage`-derived
+ * encryption key. Park leaves the directory; logout deletes it.
+ */
+export interface TelegramAccountDatabase {
+  readonly directory: string;
+  encryptionKey(): Promise<string>;
   clear(): Promise<void>;
 }
 

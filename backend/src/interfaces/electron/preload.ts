@@ -17,6 +17,8 @@ const api: TeloDesktopApi = {
   workspace: {
     getCurrentUser: () => ipcRenderer.invoke(channels.currentUserGet),
     listChatPage: (input) => ipcRenderer.invoke(channels.chatPageList, input),
+    createSecretChat: (userId) =>
+      ipcRenderer.invoke(channels.secretChatCreate, userId),
     listFolders: () => ipcRenderer.invoke(channels.folderList),
     createKeywordFolder: (input) =>
       ipcRenderer.invoke(channels.keywordFolderCreate, input),

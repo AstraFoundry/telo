@@ -1,15 +1,19 @@
-# Teleproto capability baseline
+# Telegram capability baseline
 
-Telo is a third-party Telegram client. The Teleproto request surface is therefore the upstream capability baseline, not a list of optional implementation details.
+Telo is a third-party Telegram client. The production kernel is TDLib in the Electron main process ([`../decisions/005-tdlib-client-kernel.md`](../decisions/005-tdlib-client-kernel.md)). The renderer never imports `tdl` or `td_api`.
 
-[`teleproto-capability-matrix.json`](teleproto-capability-matrix.json) classifies every Teleproto request namespace and records the current status of product-level client capabilities:
+[`tdlib-capability-matrix.json`](tdlib-capability-matrix.json) classifies product workflows against TDLib methods:
 
 - `covered` — implemented and supported by repository evidence;
-- `planned` — supported by Teleproto but not yet implemented as a Telo workflow;
-- `not-applicable` — a transport or experimental/server-operations API that is intentionally outside the desktop client's scope.
+- `planned` — a Telo workflow not yet implemented;
+- `not-applicable` — out of product scope (calls, Stories, Mini Apps, Stars, wallets).
 
-`pnpm teleproto:check` runs as part of `make check`. It verifies the installed Teleproto version, fingerprints all request classes (currently 825), requires a policy decision for every namespace, and validates every capability's cited API and evidence path. A Teleproto upgrade or API-surface change fails the check until the matrix is explicitly reviewed.
+`pnpm telegram:check` runs as part of `make check`. It fingerprints the installed `prebuilt-tdlib` version and commit, and requires every `covered` capability to cite existing evidence files.
 
-The matrix is a planning and audit baseline. `covered` does not mean every low-level request in that namespace has a dedicated UI; it means the named product capability has an implemented client workflow. New workflows must update this matrix and the relevant product documentation in the same change.
+The matrix is a planning and audit baseline. `covered` means the named product capability has an implemented client workflow. New workflows must update this matrix and the relevant product documentation in the same change.
 
-The production kernel is TDLib in the Electron main process ([`../decisions/005-tdlib-client-kernel.md`](../decisions/005-tdlib-client-kernel.md)). This Teleproto matrix remains the audit of the current adapter until the TDLib adapter and a `td_api` baseline replace it. `pnpm teleproto:check` stays in `make check` until that cutover.
+Related:
+
+- [`ablation.md`](ablation.md) — packaging, SQLite, sync, media, and multi-account measurements
+- [`baseline.md`](baseline.md) — daily-client checklist vs Telegram Desktop
+- [`../todo/tdlib-migration.md`](../todo/tdlib-migration.md) — execution ledger

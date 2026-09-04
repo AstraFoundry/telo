@@ -63,7 +63,7 @@ function intersectAll(): void {
 }
 
 function chatCursor(chatId: string) {
-  return { chatId, topMessageId: "m1", updatedAt: "2026-01-01T10:00:00.000Z" };
+  return chatId;
 }
 
 function preferences(partial: Partial<UserPreferencesDto> = {}) {
@@ -848,5 +848,13 @@ describe("ConversationSidebar", () => {
     expect(rows[0]?.textContent).toContain("Mina Loy");
     expect(rows[0]?.getAttribute("data-promote")).toBe("true");
     expect(rows[1]?.getAttribute("data-promote")).toBeNull();
+  });
+
+  it("marks a secret chat row with a lock", async () => {
+    await renderSidebar({
+      chats: [chat({ id: "secret-mina", title: "Mina", kind: "secret" })],
+    });
+
+    expect(screen.getByLabelText(copy.secretChat)).toBeTruthy();
   });
 });

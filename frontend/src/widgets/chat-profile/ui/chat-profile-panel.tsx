@@ -74,6 +74,7 @@ function isFileMedia(media: MessageDto["media"]): media is MessageFileMediaDto {
 // The header's subtitle line reports only what ChatDto knows: presence for
 // direct chats, otherwise the conversation kind.
 function subtitle(chat: ChatDto): string | null {
+  if (chat.kind === "secret") return copy.secretChatDeviceLocal;
   if (chat.presence === "online") return copy.online;
   if (chat.kind === "group") return copy.chatKindGroup;
   if (chat.kind === "channel") return copy.chatKindChannel;

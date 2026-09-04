@@ -1,0 +1,64 @@
+{
+  "_": "message",
+  "id": 42,
+  "sender_id": { "_": "messageSenderUser", "user_id": 7 },
+  "chat_id": 11,
+  "is_outgoing": false,
+  "is_pinned": false,
+  "can_be_saved": true,
+  "is_channel_post": false,
+  "can_be_edited": false,
+  "can_be_forwarded": true,
+  "can_be_replied_with_paid_media": false,
+  "can_be_deleted_only_for_self": false,
+  "can_be_deleted_for_all_users": true,
+  "can_get_added_reactions": true,
+  "can_get_statistics": false,
+  "can_get_message_thread": false,
+  "can_get_read_date": false,
+  "can_get_viewers": false,
+  "can_get_media_timestamp_links": false,
+  "can_report_reactions": false,
+  "has_timestamped_media": false,
+  "is_from_offline": false,
+  "reply_to": null,
+  "media_album_id": "0",
+  "restriction_reason": "",
+  "content": {
+    "_": "messageText",
+    "text": {
+      "_": "formattedText",
+      "text": "Hello **Ada**",
+      "entities": [
+        {
+          "_": "textEntity",
+          "offset": 6,
+          "length": 5,
+          "type": { "_": "textEntityTypeBold" }
+        }
+      ]
+    }
+  },
+  "date": 1700000000,
+  "edit_date": 0,
+  "interaction_info": {
+    "_": "messageInteractionInfo",
+    "view_count": 0,
+    "forward_count": 0,
+    "reply_info": null,
+    "reactions": {
+      "_": "messageReactions",
+      "reactions": [
+        {
+          "_": "messageReaction",
+          "type": { "_": "reactionTypeEmoji", "emoji": "👍" },
+          "total_count": 2,
+          "is_chosen": true,
+          "used_custom_emoji_ids": []
+        }
+      ],
+      "are_tags": false,
+      "paid_reactions": []
+    }
+  }
+}

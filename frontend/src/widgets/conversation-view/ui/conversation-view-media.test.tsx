@@ -117,7 +117,7 @@ function videoSticker(id: string): NonNullable<MessageDto["media"]> {
     sticker: {
       emoji: "🐱",
       format: "video",
-      setReference: { kind: "id", id: "9", accessHash: "99" },
+      setReference: { kind: "id", id: "9" },
       outlinePath: null,
     },
   };
@@ -387,7 +387,7 @@ describe("ConversationView media", () => {
       id: "9",
       title: "Cat Pack",
       shortName: "CatPack",
-      reference: { kind: "id", id: "9", accessHash: "99" },
+      reference: { kind: "id", id: "9" },
       installed: false,
       stickers: [],
     });
@@ -400,7 +400,6 @@ describe("ConversationView media", () => {
       expect(telo.workspace.getStickerSet).toHaveBeenCalledWith({
         kind: "id",
         id: "9",
-        accessHash: "99",
       });
     });
     expect(

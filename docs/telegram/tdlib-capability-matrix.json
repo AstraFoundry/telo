@@ -1,0 +1,153 @@
+{
+  "tdlibVersion": "1.8.67",
+  "prebuiltTdlib": "0.1008067.0",
+  "tdlibCommit": "d1085f9cebc5a62379991ae1652673954f229c1f",
+  "capabilities": [
+    {
+      "id": "auth",
+      "workflow": "Phone, 2FA, restore, logout, three accounts",
+      "methods": [
+        "setTdlibParameters",
+        "setAuthenticationPhoneNumber",
+        "checkAuthenticationCode",
+        "checkAuthenticationPassword",
+        "getMe",
+        "logOut"
+      ],
+      "evidence": [
+        "backend/src/infrastructure/telegram/tdlib-telegram-repository.ts"
+      ],
+      "state": "covered"
+    },
+    {
+      "id": "chat-list",
+      "workflow": "Chat list order, pin, mute, archive, folders, unread, Saved Messages, restart from SQLite",
+      "methods": [
+        "loadChats",
+        "getChats",
+        "getChat",
+        "toggleChatIsPinned",
+        "setChatNotificationSettings",
+        "toggleChatIsMarkedAsUnread",
+        "addChatToList",
+        "updateChatFolders"
+      ],
+      "evidence": [
+        "backend/src/infrastructure/telegram/tdlib-telegram-repository.ts",
+        "backend/src/infrastructure/telegram/tdlib-mappers.ts"
+      ],
+      "state": "covered"
+    },
+    {
+      "id": "history",
+      "workflow": "Page older, live new/edit/delete, reply, forward, silent send",
+      "methods": [
+        "getChatHistory",
+        "sendMessage",
+        "editMessageText",
+        "deleteMessages",
+        "forwardMessages"
+      ],
+      "evidence": [
+        "backend/src/infrastructure/telegram/tdlib-telegram-repository.ts"
+      ],
+      "state": "covered"
+    },
+    {
+      "id": "composer",
+      "workflow": "Entities, media album, stickers, drafts, typing",
+      "methods": [
+        "sendMessage",
+        "sendMessageAlbum",
+        "sendChatAction",
+        "setChatDraftMessage",
+        "getStickers"
+      ],
+      "evidence": [
+        "backend/src/infrastructure/telegram/tdlib-telegram-repository.ts"
+      ],
+      "state": "covered"
+    },
+    {
+      "id": "search",
+      "workflow": "Global and in-chat search",
+      "methods": ["searchMessages", "searchChatMessages", "searchChats"],
+      "evidence": [
+        "backend/src/infrastructure/telegram/tdlib-telegram-repository.ts"
+      ],
+      "state": "covered"
+    },
+    {
+      "id": "media",
+      "workflow": "Progress/cancel, telo-media, cache cap",
+      "methods": ["downloadFile", "cancelDownloadFile"],
+      "evidence": [
+        "backend/src/infrastructure/telegram/tdlib-telegram-repository.ts",
+        "backend/src/infrastructure/telegram/media-cache.ts"
+      ],
+      "state": "covered"
+    },
+    {
+      "id": "presence",
+      "workflow": "Presence, typing, read receipts",
+      "methods": ["viewMessages", "sendChatAction", "getUser"],
+      "evidence": [
+        "backend/src/infrastructure/telegram/tdlib-telegram-repository.ts"
+      ],
+      "state": "covered"
+    },
+    {
+      "id": "reactions-bots",
+      "workflow": "Reactions and bot callback",
+      "methods": [
+        "setMessageReactions",
+        "getMessageAvailableReactions",
+        "getCallbackQueryAnswer"
+      ],
+      "evidence": [
+        "backend/src/infrastructure/telegram/tdlib-telegram-repository.ts"
+      ],
+      "state": "covered"
+    },
+    {
+      "id": "reconnect",
+      "workflow": "Offline → synchronizing → connected, no dup/miss",
+      "methods": ["updateConnectionState"],
+      "evidence": [
+        "backend/src/infrastructure/telegram/tdlib-telegram-repository.ts"
+      ],
+      "state": "covered"
+    },
+    {
+      "id": "secret-chats",
+      "workflow": "Create, device-local history, lock UI",
+      "methods": ["createNewSecretChat", "createSecretChat"],
+      "evidence": [
+        "backend/src/infrastructure/telegram/tdlib-telegram-repository.ts",
+        "frontend/src/features/start-secret-chat/ui/start-secret-chat-dialog.tsx"
+      ],
+      "state": "covered"
+    },
+    {
+      "id": "voip-calls",
+      "workflow": "One-to-one and group calls",
+      "methods": [],
+      "evidence": [],
+      "state": "not-applicable"
+    },
+    {
+      "id": "stories",
+      "workflow": "Stories",
+      "methods": [],
+      "evidence": [],
+      "state": "not-applicable"
+    },
+    {
+      "id": "mini-apps",
+      "workflow": "Bots Mini Apps, Stars, wallets",
+      "methods": [],
+      "evidence": [],
+      "state": "not-applicable"
+    }
+  ]
+}

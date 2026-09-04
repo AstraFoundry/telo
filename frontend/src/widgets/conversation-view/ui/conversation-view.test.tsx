@@ -526,6 +526,20 @@ describe("ConversationView", () => {
     expect(screen.getByText(copy.online)).toBeTruthy();
   });
 
+  it("shows the secret-chat lock line in the header", async () => {
+    await renderView({
+      chats: [
+        chat({
+          id: "chat-1",
+          title: "Mina",
+          kind: "secret",
+        }),
+      ],
+    });
+
+    expect(screen.getByText(copy.secretChatDeviceLocal)).toBeTruthy();
+  });
+
   it("pins and unpins the active chat from the header", async () => {
     const { telo, useChatStore } = await renderView();
 

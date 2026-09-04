@@ -21,7 +21,7 @@ import {
 
 /**
  * Stubbed per-account coordinator: session-file existence stands in for a
- * restorable Teleproto session, and logins complete only when the test
+ * restorable TDLib database, and logins complete only when the test
  * calls `completeLogin`. State changes are pushed through the same
  * callback the real coordinator gets.
  */
@@ -37,6 +37,7 @@ class StubAccountClient {
 
   constructor(
     private readonly sessionFile: string,
+    private readonly snapshotFile: string,
     private readonly onState: (state: TelegramAuthState) => void,
     readonly user: CurrentUserDto,
   ) {}
@@ -84,6 +85,17 @@ class StubAccountClient {
 
   async getCurrentUser(): Promise<CurrentUserDto> {
     return this.user;
+  }
+
+  async listChatPage(): Promise<{
+    items: ChatDto[];
+    nextCursor: null;
+  }> {
+    const snapshots = new FileTelegramDialogSnapshotRepository(
+      this.snapshotFile,
+    );
+    const snapshot = await snapshots.get();
+    return { items: snapshot?.chats ?? [], nextCursor: null };
   }
 
   completeLogin(): void {
@@ -169,6 +181,8 @@ async function createHarness(options?: {
     profile: path.join(directory, `telegram-${accountId}.profile`),
     snapshot: path.join(directory, `dialogs-${accountId}.json`),
     mediaCacheDirectory: path.join(directory, "media-cache", accountId),
+    tdlibDirectory: path.join(directory, "tdlib", accountId),
+    tdlibKey: path.join(directory, `tdlib-${accountId}.key`),
   });
   const legacyPaths = {
     session: path.join(directory, "telegram.session"),
@@ -186,13 +200,18 @@ async function createHarness(options?: {
     demoWorkspace: options?.demoWorkspace,
     createAccountId: () => ids.shift() ?? `new-${(generated += 1)}`,
     createCoordinator: (accountId, onState) => {
-      const client = new StubAccountClient(paths(accountId).session, onState, {
-        id: `user-${accountId}`,
-        displayName: `User ${accountId}`,
-        username: accountId,
-        initials: "U",
-        avatarDataUrl: null,
-      });
+      const client = new StubAccountClient(
+        paths(accountId).session,
+        paths(accountId).snapshot,
+        onState,
+        {
+          id: `user-${accountId}`,
+          displayName: `User ${accountId}`,
+          username: accountId,
+          initials: "U",
+          avatarDataUrl: null,
+        },
+      );
       clients.set(accountId, client);
       return client as unknown as TelegramAccountClient;
     },
@@ -239,7 +258,7 @@ async function waitForAccounts(
 }
 
 describe("TelegramAccountCoordinator", () => {
-  it("migrates the legacy single account on first boot", async () => {
+  it("discards leftover GramJS session files instead of importing them", async () => {
     const harness = await createHarness({ accountIds: ["acc-1"] });
     await writeFile(harness.legacyPaths.session, "legacy-session");
     await writeFile(harness.legacyPaths.profile, "legacy-profile");
@@ -247,35 +266,12 @@ describe("TelegramAccountCoordinator", () => {
 
     await harness.coordinator.initialize();
 
-    // The registry points at the per-account copies; the legacy files are
-    // deleted only after that write landed.
-    expect(await harness.registry.get()).toMatchObject({
-      activeAccountId: "acc-1",
-      accounts: [{ id: "acc-1" }],
-    });
-    await expect(
-      readFile(harness.paths("acc-1").session, "utf8"),
-    ).resolves.toBe("legacy-session");
-    await expect(
-      readFile(harness.paths("acc-1").profile, "utf8"),
-    ).resolves.toBe("legacy-profile");
+    expect(harness.states).toEqual([]);
+    expect(harness.coordinator.getAuthState()).toEqual({ status: "idle" });
+    await expect(harness.coordinator.listAccounts()).resolves.toEqual([]);
     expect(await fileExists(harness.legacyPaths.session)).toBe(false);
     expect(await fileExists(harness.legacyPaths.profile)).toBe(false);
     expect(await fileExists(harness.legacyPaths.snapshot)).toBe(false);
-
-    // The migrated account restores straight away.
-    expect(harness.states).toEqual([
-      { status: "restoring" },
-      { status: "ready" },
-    ]);
-    // …and its registry identity refreshes from CurrentUserDto once ready.
-    await vi.waitFor(async () => {
-      expect((await harness.coordinator.listAccounts())[0]).toMatchObject({
-        id: "acc-1",
-        displayName: "User acc-1",
-        active: true,
-      });
-    });
   });
 
   it("starts empty when there is no registry and no legacy session", async () => {

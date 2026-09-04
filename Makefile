@@ -1,4 +1,4 @@
-.PHONY: install dev reset check test test-e2e lint format docs build package help
+.PHONY: install dev reset check test test-e2e test-live lint format docs build package tdlib-smoke help
 
 install: ## Install dependencies and the Electron binary
 	@pnpm install --frozen-lockfile
@@ -21,6 +21,12 @@ test: ## Run unit and integration tests
 
 test-e2e: ## Run Electron end-to-end tests
 	@pnpm test:e2e
+
+test-live: ## Secret-gated live Telegram E2E (not PR CI); requires TELO_LIVE_E2E=1
+	@pnpm test:live
+
+tdlib-smoke: ## Packaged libtdjson load probe (L2); run after make package
+	@pnpm tdlib:smoke
 
 lint: ## Run ESLint
 	@pnpm lint

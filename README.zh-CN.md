@@ -34,7 +34,7 @@ Telo 从架构根基上严格遵循隐私与零信任安全规范：所有凭据
 
 ### ⚡ 纯 TypeScript MTProto 客户端内核
 
-- **轻量高效**：基于 `teleproto` 实现纯 TypeScript 的 Telegram MTProto 有线协议，无需引入庞大的 C++ 原生动态库或复杂的 TDLib 编译工具链。
+- **轻量高效**：主进程使用 TDLib（`tdl` + `prebuilt-tdlib`）。渲染进程不导入 `tdl` / `td_api`。打包产物会解压 `libtdjson`。Windows arm64 不受支持。已有 Teleproto 会话无法导入，需重新登录。
 - **顺畅登录流程**：标准手机号登录，支持短信 / Telegram 应用内验证码，以及两步验证云密码（2FA）。
 - **零登录演示模式（Demo Workspace）**：使用 `make dev DEMO=1` 启动即可体验完整界面与智能体，无需登录。界面上没有演示入口按钮。
 

@@ -59,6 +59,22 @@ export function installTeloApiMock(): TeloApiMock {
     workspace: {
       getCurrentUser: vi.fn(),
       listChatPage: vi.fn(async () => ({ items: [], nextCursor: null })),
+      createSecretChat: vi.fn(async (userId: string) => ({
+        id: `secret-${userId}`,
+        title: "Secret",
+        preview: "",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+        unreadCount: 0,
+        lastReadMessageId: null,
+        muted: false,
+        pinned: false,
+        kind: "secret" as const,
+        initials: "S",
+        avatarDataUrl: null,
+        draftPreview: null,
+        typing: false,
+        secretState: "pending" as const,
+      })),
       listFolders: vi.fn(async () => []),
       createKeywordFolder: vi.fn(async () => ({
         id: -1,

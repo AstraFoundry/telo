@@ -6,11 +6,11 @@
   "description": "Telegram desktop client with a workspace-aware agent.",
   "main": "out/main/index.js",
   "scripts": {
-    "postinstall": "install-electron",
+    "postinstall": "install-electron && electron-rebuild -f -w tdl",
     "dev": "install-electron && electron-vite dev",
     "build": "electron-vite build",
-    "package": "pnpm build && electron-builder --dir",
-    "release": "pnpm build && electron-builder --publish never",
+    "package": "pnpm build && node scripts/stage-tdlib-native.mjs && electron-builder --dir",
+    "release": "pnpm build && node scripts/stage-tdlib-native.mjs && electron-builder --publish never",
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --max-warnings=0",
     "format": "prettier --write .",
@@ -18,20 +18,49 @@
     "test": "vitest run --coverage",
     "test:unit": "vitest run",
     "test:e2e": "electron-vite build --mode e2e && playwright test",
-    "teleproto:check": "node scripts/check-teleproto-capabilities.mjs",
+    "test:live": "electron-vite build && playwright test -c tests/live/playwright.config.ts",
+    "telegram:check": "node scripts/check-telegram-capabilities.mjs",
+    "tdlib:smoke": "node scripts/tdlib-smoke.mjs",
     "docs:check": "markdownlint-cli2 'README*.md' 'docs/**/*.md'",
-    "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm teleproto:check && pnpm docs:check && pnpm test:e2e"
+    "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm telegram:check && pnpm docs:check && pnpm test:e2e"
   },
   "build": {
     "appId": "dev.telo.desktop",
     "productName": "Telo",
     "asar": true,
+    "asarUnpack": [
+      "**/node_modules/tdl/**",
+      "**/node_modules/prebuilt-tdlib/**",
+      "**/node_modules/@prebuilt-tdlib/**",
+      "**/node_modules/.pnpm/tdl@*/**",
+      "**/node_modules/.pnpm/prebuilt-tdlib@*/**",
+      "**/node_modules/.pnpm/debug@*/**",
+      "**/node_modules/.pnpm/ms@*/**",
+      "**/node_modules/.pnpm/node-gyp-build@*/**",
+      "**/node_modules/.pnpm/node-addon-api@*/**"
+    ],
+    "npmRebuild": true,
     "directories": {
       "output": "release"
     },
+    "extraResources": [
+      {
+        "from": "build/tdlib-native",
+        "to": "tdlib-native"
+      }
+    ],
     "files": [
       "out/**/*",
-      "package.json"
+      "package.json",
+      "node_modules/tdl/**",
+      "node_modules/prebuilt-tdlib/**",
+      "node_modules/@prebuilt-tdlib/**",
+      "node_modules/.pnpm/tdl@*/**",
+      "node_modules/.pnpm/prebuilt-tdlib@*/**",
+      "node_modules/.pnpm/debug@*/**",
+      "node_modules/.pnpm/ms@*/**",
+      "node_modules/.pnpm/node-gyp-build@*/**",
+      "node_modules/.pnpm/node-addon-api@*/**"
     ],
     "mac": {
       "category": "public.app-category.social-networking",
@@ -68,6 +97,7 @@
     "@ai-sdk/xai": "^4.0.53",
     "@base-ui/react": "^1.7.0",
     "@phosphor-icons/react": "^2.1.10",
+    "@prebuilt-tdlib/types": "0.1008067.0",
     "@shikijs/langs": "4.4.3",
     "@shikijs/themes": "4.4.3",
     "ai": "^7.0.83",
@@ -76,6 +106,7 @@
     "libphonenumber-js": "^1.13.12",
     "lottie-web": "^5.13.0",
     "motion": "^13.1.1",
+    "prebuilt-tdlib": "0.1008067.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "remark-gfm": "^4.0.1",
@@ -83,12 +114,13 @@
     "shiki": "^4.4.3",
     "streamdown": "2.6.0",
     "tailwind-merge": "^3.6.0",
-    "teleproto": "^1.229.0",
+    "tdl": "8.1.0",
     "unified": "^11.0.5",
     "zod": "^4.4.3",
     "zustand": "^5.0.15"
   },
   "devDependencies": {
+    "@electron/rebuild": "4.2.0",
     "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.62.1",
     "@tailwindcss/vite": "^4.3.3",

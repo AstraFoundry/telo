@@ -34,7 +34,7 @@
 
 ### ⚡ 純粋な TypeScript による MTProto クライアント
 
-- **軽量かつ高速**：Telegram MTProto プロトコルを純粋な TypeScript で実装した `teleproto` を採用。肥大化した C++ ネイティブバイナリや TDLib のビルド依存関係は一切不要です。
+- **軽量かつ高速**：Electron メインプロセスで TDLib（`tdl` + `prebuilt-tdlib`）を実行します。レンダラーは `tdl` / `td_api` を import しません。パッケージは `libtdjson` を asar の外に展開します。Windows arm64 は未対応です。既存の Teleproto セッションはインポートできないため、再ログインが必要です。
 - **スムーズな認証フロー**：SMS / Telegram アプリ内コード送信および 2 段階認証（2FA クラウドパスワード）に完全対応。
 - **ログイン不要のデモモード（Demo Workspace）**：`make dev DEMO=1` で起動すると、ログインなしで UI とエージェントを体験できます。アプリ内にデモ用ボタンはありません。
 

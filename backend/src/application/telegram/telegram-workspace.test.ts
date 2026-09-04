@@ -15,6 +15,22 @@ function repository(): TelegramRepository {
   return {
     subscribe: vi.fn(() => () => {}),
     listChatPage: vi.fn(async () => ({ items: [], nextCursor: null })),
+    createSecretChat: vi.fn(async (userId: string) => ({
+      id: `secret-${userId}`,
+      title: "Secret",
+      preview: "",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+      unreadCount: 0,
+      lastReadMessageId: null,
+      muted: false,
+      pinned: false,
+      kind: "secret" as const,
+      initials: "S",
+      avatarDataUrl: null,
+      draftPreview: null,
+      typing: false,
+      secretState: "pending" as const,
+    })),
     listFolders: vi.fn(async () => []),
     listMessagePage: vi.fn(async () => ({ items: [], nextCursor: null })),
     listSharedMedia: vi.fn(async () => ({ items: [], nextCursor: null })),
@@ -450,13 +466,11 @@ describe("TelegramWorkspaceService", () => {
     await service.getStickerSet({
       kind: "id",
       id: " 9 ",
-      accessHash: " 99 ",
     });
 
     expect(port.getStickerSet).toHaveBeenCalledWith({
       kind: "id",
       id: "9",
-      accessHash: "99",
     });
   });
 

@@ -19,6 +19,7 @@ import {
   Trash,
   WarningCircle,
   X,
+  Lock,
 } from "@phosphor-icons/react";
 import { AnimatePresence, motion, useReducedMotionConfig } from "motion/react";
 import {
@@ -1792,7 +1793,12 @@ export function ConversationView() {
           <h1 className="truncate text-base font-semibold">
             {activeChat?.title ?? ""}
           </h1>
-          {activeChat?.typing ? (
+          {activeChat?.kind === "secret" ? (
+            <span className="flex items-center gap-1 text-xs text-muted-foreground">
+              <Lock aria-hidden="true" className="size-3" />
+              {copy.secretChatDeviceLocal}
+            </span>
+          ) : activeChat?.typing ? (
             <span className="block text-xs text-muted-foreground">
               <ChatTypingIndicator />
             </span>

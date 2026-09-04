@@ -149,6 +149,9 @@ export function ConnectionStepContent({
       <StatefulButton type="submit" state={form.busy ? "loading" : "idle"}>
         {compact ? copy.connect : copy.continue}
       </StatefulButton>
+      <p className="text-sm text-muted-foreground">
+        {copy.engineChangedSignIn}
+      </p>
     </form>
   );
 }

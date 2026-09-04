@@ -40,12 +40,11 @@ import { FileAgentThreadRepository } from "../../infrastructure/agent/file-agent
 import { FileUserPreferencesRepository } from "../../infrastructure/preferences/file-user-preferences-repository";
 import { FileKeywordFolderRepository } from "../../infrastructure/keyword-folder/file-keyword-folder-repository";
 import { DemoKeywordFolderRepository } from "../../infrastructure/keyword-folder/demo-keyword-folder-repository";
-import { FileTelegramSessionRepository } from "../../infrastructure/telegram/file-telegram-session-repository";
 import { FileTelegramConnectionProfileRepository } from "../../infrastructure/telegram/file-telegram-connection-profile-repository";
-import { FileTelegramDialogSnapshotRepository } from "../../infrastructure/telegram/file-telegram-dialog-snapshot-repository";
 import { FileTelegramAccountRegistry } from "../../infrastructure/telegram/file-telegram-account-registry";
 import { TelegramAccountCoordinator } from "../../infrastructure/telegram/telegram-account-coordinator";
-import { TelegramClientCoordinator } from "../../infrastructure/telegram/teleproto-telegram-repository";
+import { TdlibClientCoordinator } from "../../infrastructure/telegram/tdlib-telegram-repository";
+import { FileTelegramAccountDatabase } from "../../infrastructure/telegram/file-telegram-account-database";
 import {
   clearMediaCache,
   mediaCacheUsageBytes,
@@ -162,16 +161,16 @@ export function createContainer(
   const applicationCredentials =
     Number.isInteger(apiId) && apiId > 0 && apiHash ? { apiId, apiHash } : null;
   const mediaCacheDirectory = path.join(dataDirectory, "media-cache");
-  // Multi-account, tdesktop-style: every signed-in account owns a session,
-  // profile, dialog snapshot, and media-cache directory keyed by its
-  // registry id; the account coordinator attaches the active one. The
-  // legacy single files stay named in legacyPaths so first boot can adopt
-  // them into the initial account instead of logging the user out.
+  // Multi-account, tdesktop-style: every signed-in account owns a TDLib
+  // directory, profile, and media-cache directory keyed by its registry id.
+  // Leftover GramJS session files cannot be imported; users sign in again.
   const accountPaths = (accountId: string) => ({
     session: path.join(dataDirectory, `telegram-${accountId}.session`),
     profile: path.join(dataDirectory, `telegram-${accountId}.profile`),
     snapshot: path.join(dataDirectory, `dialogs-${accountId}.json`),
     mediaCacheDirectory: path.join(mediaCacheDirectory, accountId),
+    tdlibDirectory: path.join(dataDirectory, "tdlib", accountId),
+    tdlibKey: path.join(dataDirectory, `tdlib-${accountId}.key`),
   });
   const telegram = new TelegramAccountCoordinator({
     registry: new FileTelegramAccountRegistry(
@@ -185,22 +184,28 @@ export function createContainer(
     },
     createCoordinator: (accountId, onAccountState) => {
       const paths = accountPaths(accountId);
-      return new TelegramClientCoordinator(
-        new FileTelegramSessionRepository(paths.session, encrypt, decrypt),
-        new FileTelegramConnectionProfileRepository(
+      return new TdlibClientCoordinator({
+        database: new FileTelegramAccountDatabase(
+          paths.tdlibDirectory,
+          paths.tdlibKey,
+          encrypt,
+          decrypt,
+        ),
+        profiles: new FileTelegramConnectionProfileRepository(
           paths.profile,
           encrypt,
           decrypt,
         ),
         applicationCredentials,
-        onAccountState,
-        paths.mediaCacheDirectory,
-        new FileTelegramDialogSnapshotRepository(paths.snapshot),
-        // Read per eviction, not captured: raising or lowering the ceiling
-        // in settings governs the very next download.
-        async () =>
+        onState: onAccountState,
+        mediaCacheDirectory: paths.mediaCacheDirectory,
+        mediaCacheLimitBytes: async () =>
           (await preferences.get()).snapshot().mediaCacheLimitMb * 1024 ** 2,
-      );
+        resolveTdjson: () => ({
+          isPackaged: app.isPackaged,
+          resourcesPath: process.resourcesPath,
+        }),
+      });
     },
     onState: onAuthState,
     demoWorkspace: process.env.TELO_DEMO_WORKSPACE === "1",

@@ -53,6 +53,9 @@ export function registerIpc(container: ApplicationContainer): void {
   ipcMain.handle(channels.chatPageList, (_event, input?: ChatPageInput) =>
     container.workspace.listChatPage(input),
   );
+  ipcMain.handle(channels.secretChatCreate, (_event, userId: string) =>
+    container.workspace.createSecretChat(userId),
+  );
   ipcMain.handle(channels.folderList, () => container.workspace.listFolders());
   ipcMain.handle(
     channels.keywordFolderCreate,

@@ -116,9 +116,9 @@ Rejected (gate): chat-row / folder-tab springs (100+/day nav; `pressScale={1}` s
 
 产品首先是完整 Telegram 客户端。这三项不靠在 Teleproto 上自研 Postbox 补齐，见 [`../decisions/005-tdlib-client-kernel.md`](../decisions/005-tdlib-client-kernel.md)。打包 `libtdjson` 过不了就停，不先改 mapper。
 
-- [ ] 每账号加密的 TDLib 消息库（重启后侧栏和最近会话不是空的 `GetDialogs`）
-- [ ] 会话列表顺序与 Telegram Desktop 对齐（主列表 / 文件夹 / Archive 用库给出的 position，renderer 不自己排序）
-- [ ] Secret Chats：`ChatKind` 增加 `"secret"`，创建立即、设备本地历史、侧栏锁标；依赖 TDLib `use_secret_chats`
+- [x] 每账号加密的 TDLib 消息库（重启后侧栏和最近会话不是空的 `GetDialogs`）
+- [x] 会话列表顺序与 Telegram Desktop 对齐（主列表 / 文件夹 / Archive 用库给出的 position，renderer 不自己排序）
+- [x] Secret Chats：`ChatKind` 增加 `"secret"`，创建立即、设备本地历史、侧栏锁标；依赖 TDLib `use_secret_chats`
 
 ## Wave 7 — 默认不做
 

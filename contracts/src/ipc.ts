@@ -1,6 +1,6 @@
 import type { AGUIEvent } from "@ag-ui/core";
 
-export type ChatKind = "direct" | "group" | "channel" | "saved";
+export type ChatKind = "direct" | "group" | "channel" | "saved" | "secret";
 
 export interface ChatDto {
   readonly id: string;
@@ -51,6 +51,15 @@ export interface ChatDto {
    * keyword folders. Ids are negative so they never collide with Telegram's.
    */
   readonly keywordFolderIds?: ReadonlyArray<number>;
+  /**
+   * TDLib `chatPosition.order` (uint64 decimal string). Higher sorts first.
+   * Absent on demo fixtures that keep array order.
+   */
+  readonly listOrder?: string;
+  /**
+   * Secret-chat handshake. Absent on every non-secret chat.
+   */
+  readonly secretState?: "pending" | "ready" | "closed";
 }
 
 /** Reserved Telegram folder id for the Archive. */
@@ -87,11 +96,11 @@ export interface UpdateKeywordFolderInput extends KeywordFolderInput {
   readonly id: number;
 }
 
-export interface ChatPageCursorDto {
-  readonly chatId: string;
-  readonly topMessageId: string;
-  readonly updatedAt: string;
-}
+/**
+ * Opaque chat-list pagination token. Adapters encode their own offset;
+ * the renderer round-trips the string and never reads fields from it.
+ */
+export type ChatPageCursorDto = string;
 
 export interface ChatPageInput {
   readonly limit?: number;
@@ -272,7 +281,6 @@ export type StickerSetReferenceDto =
   | {
       readonly kind: "id";
       readonly id: string;
-      readonly accessHash: string;
     }
   | {
       readonly kind: "short-name";
@@ -1369,6 +1377,10 @@ export interface TeloDesktopApi {
   readonly workspace: {
     getCurrentUser(): Promise<CurrentUserDto>;
     listChatPage(input?: ChatPageInput): Promise<ChatPageDto>;
+    /**
+     * Starts a device-local end-to-end encrypted secret chat with `userId`.
+     */
+    createSecretChat(userId: string): Promise<ChatDto>;
     /**
      * Lists the chat folders (custom folders plus the Archive when it holds
      * chats, plus local keyword folders) with server-computed unread counts.

@@ -9,7 +9,7 @@ make build
 make package
 ```
 
-The compiled app is written to `out/`; unpacked or installer artifacts are written to `release/`.
+The compiled app is written to `out/`; unpacked or installer artifacts are written to `release/`. Native `tdl` stays asar-unpacked. `libtdjson` is copied to `resources/tdlib-native` at pack time so the packaged process does not load it from pnpm's asar `node_modules`. Windows arm64 is unsupported. After packaging, `make tdlib-smoke` probes `authorizationStateWaitPhoneNumber` without a phone login. Tag releases run the same smoke on macOS, Windows x64, and Ubuntu.
 
 ## CI
 

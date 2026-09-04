@@ -91,8 +91,19 @@ describe("DemoTelegramRepository", () => {
 
   it("returns deterministic demo chats", async () => {
     const chats = await listChats(new DemoTelegramRepository());
-    expect(chats).toHaveLength(5);
+    expect(chats).toHaveLength(7);
     expect(chats[0]?.pinned).toBe(true);
+    expect(chats.some((chat) => chat.kind === "secret")).toBe(true);
+  });
+
+  it("creates a secret chat for a direct peer", async () => {
+    const repository = new DemoTelegramRepository();
+    const created = await repository.createSecretChat("mina");
+    expect(created).toMatchObject({
+      id: "secret-mina",
+      kind: "secret",
+      secretState: "ready",
+    });
   });
 
   it("lists a Work folder and the Archive with per-folder unread counts", async () => {
@@ -109,6 +120,8 @@ describe("DemoTelegramRepository", () => {
       2,
       2,
       ARCHIVE_FOLDER_ID,
+      null,
+      null,
       null,
     ]);
   });
@@ -172,13 +185,23 @@ describe("DemoTelegramRepository", () => {
       limit: 1,
       cursor: fourth.nextCursor,
     });
+    const sixth = await repository.listChatPage({
+      limit: 1,
+      cursor: fifth.nextCursor,
+    });
+    const seventh = await repository.listChatPage({
+      limit: 1,
+      cursor: sixth.nextCursor,
+    });
 
     expect(first.items.map((chat) => chat.id)).toEqual(["saved"]);
     expect(second.items.map((chat) => chat.id)).toEqual(["design"]);
     expect(third.items.map((chat) => chat.id)).toEqual(["product"]);
     expect(fourth.items.map((chat) => chat.id)).toEqual(["offsite"]);
     expect(fifth.items.map((chat) => chat.id)).toEqual(["telobot"]);
-    expect(fifth.nextCursor).toBeNull();
+    expect(sixth.items.map((chat) => chat.id)).toEqual(["mina"]);
+    expect(seventh.items.map((chat) => chat.id)).toEqual(["secret-mina"]);
+    expect(seventh.nextCursor).toBeNull();
   });
 
   it("returns a snapshot that does not leak internal chat state", async () => {
@@ -1047,7 +1070,7 @@ describe("DemoTelegramRepository", () => {
 
     await repository.logout();
 
-    await expect(listChats(repository)).resolves.toHaveLength(5);
+    await expect(listChats(repository)).resolves.toHaveLength(7);
     await expect(repository.getCurrentUser()).resolves.toMatchObject({
       id: "demo-user",
     });
@@ -1298,7 +1321,7 @@ describe("DemoTelegramRepository", () => {
         sticker: {
           emoji: "🎉",
           format: "animated",
-          setReference: { kind: "id", id: "demo-telopack", accessHash: "1" },
+          setReference: { kind: "id", id: "demo-telopack" },
         },
       },
     });
@@ -1375,7 +1398,6 @@ describe("DemoTelegramRepository", () => {
     const set = await repository.getStickerSet({
       kind: "id",
       id: "demo-telopack",
-      accessHash: "1",
     });
 
     expect(set).toMatchObject({
