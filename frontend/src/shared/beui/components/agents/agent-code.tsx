@@ -1,7 +1,8 @@
 "use client";
 
 import { type CSSProperties, Fragment, useEffect, useState } from "react";
-import { createHighlighter, type Highlighter } from "shiki";
+import { createHighlighterCore } from "shiki/core";
+import { createJavaScriptRegexEngine } from "shiki/engine/javascript";
 import { cn } from "@/shared/lib/cn";
 
 export type AgentCodeLanguage =
@@ -30,14 +31,27 @@ export interface AgentCodeLineProps {
 
 const LIGHT_THEME = "github-light-high-contrast";
 const DARK_THEME = "github-dark-high-contrast";
-let agentCodeHighlighter: Promise<Highlighter> | null = null;
+let agentCodeHighlighter: ReturnType<typeof createHighlighterCore> | null =
+  null;
 const tokenCache = new Map<string, AgentCodeTokenLines>();
 
 function getAgentCodeHighlighter() {
   if (!agentCodeHighlighter) {
-    agentCodeHighlighter = createHighlighter({
-      themes: [LIGHT_THEME, DARK_THEME],
-      langs: ["bash", "diff", "json", "tsx", "typescript"],
+    agentCodeHighlighter = createHighlighterCore({
+      engine: createJavaScriptRegexEngine(),
+      themes: [
+        import("@shikijs/themes/github-light-high-contrast"),
+        import("@shikijs/themes/github-dark-high-contrast"),
+      ],
+      langs: [
+        import("@shikijs/langs/bash"),
+        import("@shikijs/langs/diff"),
+        import("@shikijs/langs/json"),
+        import("@shikijs/langs/javascript"),
+        import("@shikijs/langs/jsx"),
+        import("@shikijs/langs/typescript"),
+        import("@shikijs/langs/tsx"),
+      ],
     });
   }
   return agentCodeHighlighter;

@@ -30,6 +30,9 @@ test("shows the attachment tray after attaching a photo and clears it on remove"
     name: "Remove attachment: photo.png",
   });
   await expect(remove).toBeVisible();
+  const preview = remove.locator("xpath=..").locator("img");
+  await expect(preview).toHaveAttribute("src", /^blob:/);
+  await expect(preview).toHaveJSProperty("naturalWidth", 1);
 
   await remove.click();
   await expect(
@@ -47,9 +50,14 @@ test("sends a photo with a caption and shows the completed media bubble", async 
   await writeFile(filePath, PNG_BYTES);
 
   await window.locator(FILE_INPUT).setInputFiles(filePath);
-  await expect(
-    window.getByRole("button", { name: "Remove attachment: photo.png" }),
-  ).toBeVisible();
+  const staged = window.getByRole("button", {
+    name: "Remove attachment: photo.png",
+  });
+  await expect(staged).toBeVisible();
+  await expect(staged.locator("xpath=..").locator("img")).toHaveJSProperty(
+    "naturalWidth",
+    1,
+  );
 
   const caption = "Photo from the e2e media journey.";
   const composer = window.getByLabel("Write a message…");

@@ -47,6 +47,8 @@ function repository(): TelegramRepository {
       text: "Saved",
       alert: true,
     })),
+    setMessageReaction: vi.fn(async () => undefined),
+    listAvailableReactions: vi.fn(async () => ["👍", "🎉"]),
     setChatPinned: vi.fn(async () => undefined),
     setChatMuted: vi.fn(async () => undefined),
     setChatRead: vi.fn(async () => undefined),
@@ -199,4 +201,62 @@ describe("MessageActionsService", () => {
       expect(port.answerBotCallback).not.toHaveBeenCalled();
     },
   );
+
+  it("sets a reaction with the trimmed emoji", async () => {
+    const port = repository();
+    const service = new MessageActionsService(port);
+
+    await service.setMessageReaction({
+      chatId: "chat",
+      messageId: "message",
+      emoji: " 👍 ",
+    });
+
+    expect(port.setMessageReaction).toHaveBeenCalledWith({
+      chatId: "chat",
+      messageId: "message",
+      emoji: "👍",
+    });
+  });
+
+  it("clears a reaction with a null emoji", async () => {
+    const port = repository();
+    const service = new MessageActionsService(port);
+    const input = { chatId: "chat", messageId: "message", emoji: null };
+
+    await service.setMessageReaction(input);
+
+    expect(port.setMessageReaction).toHaveBeenCalledWith(input);
+  });
+
+  it.each([
+    [{ chatId: " ", messageId: "message", emoji: "👍" }, "Chat id"],
+    [{ chatId: "chat", messageId: " ", emoji: "👍" }, "Message id"],
+    [{ chatId: "chat", messageId: "message", emoji: " " }, "Reaction emoji"],
+  ])("rejects invalid reaction input %j", (input, error) => {
+    const port = repository();
+    const service = new MessageActionsService(port);
+
+    expect(() => service.setMessageReaction(input)).toThrow(error);
+    expect(port.setMessageReaction).not.toHaveBeenCalled();
+  });
+
+  it("lists the chat's available reactions through the port", async () => {
+    const port = repository();
+    const service = new MessageActionsService(port);
+
+    await expect(service.listAvailableReactions("chat")).resolves.toEqual([
+      "👍",
+      "🎉",
+    ]);
+    expect(port.listAvailableReactions).toHaveBeenCalledWith("chat");
+  });
+
+  it("rejects an available-reactions lookup without a chat", () => {
+    const port = repository();
+    const service = new MessageActionsService(port);
+
+    expect(() => service.listAvailableReactions(" ")).toThrow("Chat id");
+    expect(port.listAvailableReactions).not.toHaveBeenCalled();
+  });
 });

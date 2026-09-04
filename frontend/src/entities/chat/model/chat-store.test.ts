@@ -1851,6 +1851,178 @@ describe("chat-store", () => {
     });
     unsubscribe();
   });
+
+  it("toggleReaction() inserts a chosen bucket before the IPC settles", async () => {
+    const telo = installTeloApiMock();
+    let resolveIpc: () => void = () => {};
+    telo.workspace.setMessageReaction.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveIpc = resolve;
+        }),
+    );
+    useChatStore.setState({
+      activeChatId: "a",
+      messages: [
+        {
+          ...message("m1", "a"),
+          reactions: [{ emoji: "❤", count: 2, chosen: false }],
+        },
+      ],
+    });
+
+    const pending = useChatStore.getState().toggleReaction("m1", "👍");
+
+    // The chip appears at once, appended after the buckets Telegram already
+    // ordered, and the account now holds that emoji.
+    expect(useChatStore.getState().messages[0]?.reactions).toEqual([
+      { emoji: "❤", count: 2, chosen: false },
+      { emoji: "👍", count: 1, chosen: true },
+    ]);
+
+    resolveIpc();
+    await pending;
+    expect(telo.workspace.setMessageReaction).toHaveBeenCalledTimes(1);
+    expect(telo.workspace.setMessageReaction).toHaveBeenCalledWith({
+      chatId: "a",
+      messageId: "m1",
+      emoji: "👍",
+    });
+  });
+
+  it("toggleReaction() clears the chosen emoji and drops its bucket", async () => {
+    const telo = installTeloApiMock();
+    useChatStore.setState({
+      activeChatId: "a",
+      messages: [
+        {
+          ...message("m1", "a"),
+          reactions: [
+            { emoji: "👍", count: 1, chosen: true },
+            { emoji: "❤", count: 4, chosen: false },
+          ],
+        },
+      ],
+    });
+
+    await useChatStore.getState().toggleReaction("m1", "👍");
+
+    expect(useChatStore.getState().messages[0]?.reactions).toEqual([
+      { emoji: "❤", count: 4, chosen: false },
+    ]);
+    expect(telo.workspace.setMessageReaction).toHaveBeenCalledWith({
+      chatId: "a",
+      messageId: "m1",
+      emoji: null,
+    });
+  });
+
+  it("toggleReaction() moves the vote instead of holding two reactions", async () => {
+    const telo = installTeloApiMock();
+    useChatStore.setState({
+      activeChatId: "a",
+      messages: [
+        {
+          ...message("m1", "a"),
+          reactions: [
+            { emoji: "👍", count: 2, chosen: true },
+            { emoji: "❤", count: 4, chosen: false },
+          ],
+        },
+      ],
+    });
+
+    await useChatStore.getState().toggleReaction("m1", "❤");
+
+    expect(useChatStore.getState().messages[0]?.reactions).toEqual([
+      { emoji: "👍", count: 1, chosen: false },
+      { emoji: "❤", count: 5, chosen: true },
+    ]);
+    expect(telo.workspace.setMessageReaction).toHaveBeenCalledWith({
+      chatId: "a",
+      messageId: "m1",
+      emoji: "❤",
+    });
+  });
+
+  it("toggleReaction() restores the buckets when the IPC fails", async () => {
+    const telo = installTeloApiMock();
+    telo.workspace.setMessageReaction.mockRejectedValue(
+      new Error("REACTION_INVALID"),
+    );
+    useChatStore.setState({
+      activeChatId: "a",
+      messages: [
+        {
+          ...message("m1", "a"),
+          reactions: [{ emoji: "👍", count: 1, chosen: true }],
+        },
+      ],
+    });
+
+    await expect(
+      useChatStore.getState().toggleReaction("m1", "❤"),
+    ).rejects.toThrow("REACTION_INVALID");
+    expect(useChatStore.getState().messages[0]?.reactions).toEqual([
+      { emoji: "👍", count: 1, chosen: true },
+    ]);
+  });
+
+  it("receive() patches reaction buckets for the active chat only", () => {
+    useChatStore.setState({
+      activeChatId: "a",
+      messages: [message("m1", "a")],
+    });
+
+    useChatStore.getState().receive({
+      type: "message-reactions",
+      chatId: "a",
+      messageId: "m1",
+      reactions: [{ emoji: "🔥", count: 3, chosen: true }],
+    });
+
+    expect(useChatStore.getState().messages[0]?.reactions).toEqual([
+      { emoji: "🔥", count: 3, chosen: true },
+    ]);
+
+    useChatStore.getState().receive({
+      type: "message-reactions",
+      chatId: "b",
+      messageId: "m1",
+      reactions: [],
+    });
+
+    expect(useChatStore.getState().messages[0]?.reactions).toEqual([
+      { emoji: "🔥", count: 3, chosen: true },
+    ]);
+  });
+
+  it("loadAvailableReactions() asks once per chat and again after a switch", async () => {
+    const telo = installTeloApiMock();
+    telo.workspace.listAvailableReactions.mockResolvedValue(["👍", "❤"]);
+
+    await useChatStore.getState().select("reactions-a");
+    await useChatStore.getState().loadAvailableReactions();
+    await useChatStore.getState().loadAvailableReactions();
+
+    expect(telo.workspace.listAvailableReactions).toHaveBeenCalledTimes(1);
+    expect(telo.workspace.listAvailableReactions).toHaveBeenCalledWith(
+      "reactions-a",
+    );
+    expect(useChatStore.getState().availableReactions).toEqual(["👍", "❤"]);
+
+    // The allowed set belongs to the conversation, so the next chat starts
+    // empty and loads its own.
+    await useChatStore.getState().select("reactions-b");
+    expect(useChatStore.getState().availableReactions).toEqual([]);
+
+    await useChatStore.getState().loadAvailableReactions();
+
+    expect(telo.workspace.listAvailableReactions).toHaveBeenCalledTimes(2);
+    expect(telo.workspace.listAvailableReactions).toHaveBeenLastCalledWith(
+      "reactions-b",
+    );
+  });
 });
 
 describe("folder views", () => {

@@ -2,10 +2,11 @@ import { demoTest as test, expect, waitForDemoWorkspace } from "./fixtures";
 
 // The demo repository (backend/src/infrastructure/telegram/demo-telegram-repository.ts)
 // schedules a simulated typing pulse ~500ms after an outgoing send into a
-// chat with a configured auto-reply, followed by the reply itself ~1400ms
-// later. These specs exercise the Wave 1 sync spine end to end: optimistic
-// delivery, the typing indicator, drafts surviving a chat switch, and
-// reply-quote jump-to-message.
+// chat with a configured auto-reply, followed by the reply itself — ~1400ms
+// later in an interactive demo session, ~3000ms under `TELO_E2E=1`, where the
+// automation spec needs the wider reply window. These specs exercise the
+// Wave 1 sync spine end to end: optimistic delivery, the typing indicator,
+// drafts surviving a chat switch, and reply-quote jump-to-message.
 
 test("shows the recipient typing, then the auto-reply lands and the indicator clears", async ({
   window,
@@ -31,8 +32,10 @@ test("shows the recipient typing, then the auto-reply lands and the indicator cl
   await expect(window.getByText("Typing…").first()).toBeVisible({
     timeout: 2_000,
   });
+  // The reply deadline is a ceiling, not a speed assertion: under TELO_E2E
+  // the counterpart replies at ~3s, so the allowance must clear it.
   await expect(conversation).toContainText("Looks good — shipping it.", {
-    timeout: 3_000,
+    timeout: 5_000,
   });
   await expect(window.getByText("Typing…")).toHaveCount(0);
 });

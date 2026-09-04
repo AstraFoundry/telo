@@ -81,7 +81,7 @@ export interface MessageScrollerProps extends ComponentPropsWithRef<"div"> {
   followOutput?: boolean;
   /** Distance from the end that still counts as following the output. */
   followThreshold?: number;
-  /** Smoothly follow growing content. */
+  /** Smooth explicit navigation. Growing content always follows immediately. */
   smooth?: boolean;
   /** Reports when the reader leaves or returns to the live edge. */
   onFollowChange?: (following: boolean) => void;
@@ -130,9 +130,11 @@ export function MessageScroller({
   const viewportRef = useRef<HTMLElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const followingRef = useRef(followOutput);
+  const previousFollowOutputRef = useRef(followOutput);
   const programmaticScrollRef = useRef(false);
   const scrollTimerRef = useRef<number | undefined>(undefined);
   const frameRef = useRef<number | undefined>(undefined);
+  const followFrameRef = useRef<number | undefined>(undefined);
   const railFrameRef = useRef<number | undefined>(undefined);
   const railIdRef = useRef(new WeakMap<HTMLElement, string>());
   const railIdCounterRef = useRef(0);
@@ -300,17 +302,24 @@ export function MessageScroller({
 
   const leaveLiveEdge = useCallback(() => {
     programmaticScrollRef.current = false;
-  }, []);
+    setFollowing(false);
+  }, [setFollowing]);
 
   useLayoutEffect(() => {
+    const resumed = !previousFollowOutputRef.current && followOutput;
+    previousFollowOutputRef.current = followOutput;
     followingRef.current = followOutput;
     if (!followOutput) return;
 
+    if (resumed) {
+      scrollToEnd(reduce || !smooth ? "auto" : "smooth");
+      return;
+    }
     frameRef.current = requestAnimationFrame(() => scrollToEnd("auto"));
     return () => {
       if (frameRef.current) cancelAnimationFrame(frameRef.current);
     };
-  }, [followOutput, scrollToEnd]);
+  }, [followOutput, reduce, scrollToEnd, smooth]);
 
   useEffect(() => {
     const content = contentRef.current;
@@ -319,12 +328,19 @@ export function MessageScroller({
     const observer = new ResizeObserver(() => {
       scheduleRailSync();
       if (!followOutput || !followingRef.current) return;
-      scrollToEnd(reduce || !smooth ? "auto" : "smooth");
+      // Native smooth scrolling restarts whenever its target changes. Streamed
+      // content can resize many times per second, so keep the live edge locked
+      // with one immediate update per frame instead.
+      if (followFrameRef.current !== undefined) return;
+      followFrameRef.current = requestAnimationFrame(() => {
+        followFrameRef.current = undefined;
+        if (followingRef.current) scrollToEnd("auto");
+      });
     });
     observer.observe(content);
 
     return () => observer.disconnect();
-  }, [followOutput, reduce, scheduleRailSync, scrollToEnd, smooth]);
+  }, [followOutput, scheduleRailSync, scrollToEnd]);
 
   useEffect(() => {
     if (navigation !== "rail") {
@@ -366,6 +382,8 @@ export function MessageScroller({
     () => () => {
       if (scrollTimerRef.current) window.clearTimeout(scrollTimerRef.current);
       if (frameRef.current) cancelAnimationFrame(frameRef.current);
+      if (followFrameRef.current !== undefined)
+        cancelAnimationFrame(followFrameRef.current);
       if (railFrameRef.current) cancelAnimationFrame(railFrameRef.current);
     },
     [],

@@ -363,6 +363,7 @@ export function MessageRichText({
   entities,
   revealSpoilerLabel,
   renderCustomEmoji,
+  trailing,
   compact = false,
   className,
 }: {
@@ -375,6 +376,14 @@ export function MessageRichText({
    * fallback when the document is unavailable.
    */
   renderCustomEmoji?: (documentId: string, fallback: ReactNode) => ReactNode;
+  /**
+   * Rendered as the last node of the text flow, so a float placed here lands
+   * on the last line of the message instead of on a row of its own. Telegram
+   * puts the timestamp there (Telegram Web A floats `.MessageMeta` right
+   * inside `.text-content`; Telegram Web K reserves the same space with an
+   * invisible inline copy of `.time`).
+   */
+  trailing?: ReactNode;
   compact?: boolean;
   className?: string;
 }) {
@@ -421,6 +430,7 @@ export function MessageRichText({
         buildEntityTree(body, entities),
         revealSpoilerLabel,
       )}
+      {trailing}
       {hasSpoiler && !revealed ? (
         <SpoilerCover
           mode="text"

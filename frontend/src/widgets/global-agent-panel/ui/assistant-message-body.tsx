@@ -1,13 +1,16 @@
 import { useMemo } from "react";
 
 import type { AgentMessage } from "entities/agent";
-import { parseReply } from "entities/agent";
 import type { MentionTarget } from "entities/chat";
 import { StreamingResponse } from "shared/ui";
 
-import { useSmoothReveal } from "../lib/use-smooth-stream";
-import { revealSegments, withoutTrailingLink } from "../model/reveal-segments";
-import { ReplyText } from "./reply-text";
+import { useFrameCoalescedValue } from "../lib/use-frame-coalesced-value";
+import {
+  collectReplyCitations,
+  replyMarkdownPlainText,
+  withoutTrailingTeloLink,
+} from "../model/reply-markdown";
+import { AgentMarkdown } from "./agent-markdown";
 
 interface AssistantMessageBodyProps {
   readonly message: AgentMessage;
@@ -18,10 +21,9 @@ interface AssistantMessageBodyProps {
 }
 
 /**
- * An assistant reply rendered as prose with inline citation marks and
- * mention chips. The copy action gets the plain text without links. While
- * streaming, the text is revealed evenly rather than in the provider's
- * chunks; marks and chips surface at the point the reveal reaches them.
+ * A streamed Markdown reply with inline citation marks and mention chips.
+ * Parsing incomplete syntax is delegated to Streamdown; app-specific links
+ * are transformed only after Markdown parsing so code remains literal.
  */
 export function AssistantMessageBody({
   message,
@@ -33,21 +35,31 @@ export function AssistantMessageBody({
     () => [...mentionTargets.values()].map((target) => target.name),
     [mentionTargets],
   );
-  const parsed = useMemo(
-    () => parseReply(withoutTrailingLink(message.body, streaming), names),
-    [message.body, streaming, names],
+  const incomingBody = useMemo(
+    () => withoutTrailingTeloLink(message.body, streaming),
+    [message.body, streaming],
   );
-  const shown = useSmoothReveal(parsed.text.length, streaming);
-  const segments = streaming
-    ? revealSegments(parsed.segments, shown)
-    : parsed.segments;
+  const body = useFrameCoalescedValue(incomingBody, streaming);
+  const citations = useMemo(() => collectReplyCitations(body), [body]);
+  // Completion actions are hidden while streaming, so their plain-text value
+  // does not need a second full Markdown parse for every incoming frame.
+  const copyText = useMemo(
+    () => (streaming ? undefined : replyMarkdownPlainText(body)),
+    [body, streaming],
+  );
   return (
     <StreamingResponse
       status={streaming ? "streaming" : "complete"}
-      copyText={parsed.text}
+      copyText={copyText}
       showActions={!running}
     >
-      <ReplyText segments={segments} targets={mentionTargets} />
+      <AgentMarkdown
+        body={body}
+        streaming={streaming}
+        citations={citations}
+        mentionTargets={mentionTargets}
+        mentionNames={names}
+      />
     </StreamingResponse>
   );
 }

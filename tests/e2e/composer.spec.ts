@@ -33,6 +33,9 @@ test("attaches a pasted screenshot with a generated name and sends it", async ({
     name: /Remove attachment: screenshot-\d+\.png/,
   });
   await expect(staged).toBeVisible();
+  const preview = staged.locator("xpath=..").locator("img");
+  await expect(preview).toHaveAttribute("src", /^blob:/);
+  await expect(preview).toHaveJSProperty("naturalWidth", 1);
 
   await composer.press("Enter");
 
@@ -74,9 +77,10 @@ test("sends without sound from the send menu and no auto-reply arrives", async (
   await expect(conversation.getByText("A silent hello.")).toBeVisible();
   await expect(composer).toHaveValue("");
 
-  // The demo auto-reply lands 1.4s after a normal send; a silent send must
-  // leave the counterpart quiet.
-  await window.waitForTimeout(2200);
+  // The demo auto-reply lands one reply-delay after a normal send (~3s under
+  // TELO_E2E); a silent send must leave the counterpart quiet, and the wait
+  // has to outlast that delay or the check would see nothing either way.
+  await window.waitForTimeout(3_400);
   await expect(conversation.getByText(AUTO_REPLY)).toHaveCount(1);
 });
 

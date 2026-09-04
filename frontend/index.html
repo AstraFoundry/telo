@@ -4,9 +4,10 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="light dark" />
+    <!-- blob: is required for composer attachment thumbs (URL.createObjectURL), matching Telegram Web A's img-src / media-src. telo-media: is downloaded chat media. -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https: telo-media:; media-src 'self' telo-media:; connect-src 'self' http: https: ws: wss: telo-media:"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https: telo-media:; media-src 'self' blob: telo-media:; connect-src 'self' http: https: ws: wss: telo-media:"
     />
     <title>Telo</title>
     <style>

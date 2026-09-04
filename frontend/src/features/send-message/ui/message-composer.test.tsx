@@ -238,6 +238,36 @@ describe("MessageComposer", () => {
     expect((textarea as HTMLTextAreaElement).value).toBe("");
   });
 
+  it("focuses the input with the caret behind the prefilled body on edit", async () => {
+    const { useChatStore, textarea } = await renderComposer(true);
+    useChatStore.setState({
+      activeChatId: "a",
+      messages: [message("m1", "a")],
+    });
+
+    act(() => useChatStore.getState().startEdit(message("m1", "a")));
+
+    const field = textarea as HTMLTextAreaElement;
+    expect(document.activeElement).toBe(field);
+    expect(field.selectionStart).toBe(field.value.length);
+    expect(field.selectionEnd).toBe(field.value.length);
+  });
+
+  it("restores the chat draft when an edit is cancelled", async () => {
+    const { useChatStore, textarea } = await renderComposer(true);
+    useChatStore.setState({
+      activeChatId: "a",
+      messages: [message("m1", "a")],
+      drafts: { a: "half typed" },
+    });
+    act(() => useChatStore.getState().startEdit(message("m1", "a")));
+    expect((textarea as HTMLTextAreaElement).value).toBe("Message m1");
+
+    act(() => useChatStore.getState().cancelComposerTarget());
+
+    expect((textarea as HTMLTextAreaElement).value).toBe("half typed");
+  });
+
   it("submitting in edit mode edits through the store and clears the bar", async () => {
     // The composer's onSend is the store's send action here, so editing
     // routes through the store like it does in the conversation view.
@@ -299,6 +329,8 @@ describe("MessageComposer", () => {
         name: `${copy.removeAttachment}: photo.png`,
       }),
     ).toBeTruthy();
+    const preview = document.querySelector("img[src='blob:preview']");
+    expect(preview).toBeTruthy();
 
     fireEvent.click(
       screen.getByRole("button", {
@@ -306,7 +338,11 @@ describe("MessageComposer", () => {
       }),
     );
 
-    expect(screen.queryByText("notes.txt")).toBeNull();
+    // The tray's exit animation keeps the removed item mounted for a beat;
+    // the assertion waits it out instead of racing it.
+    await waitFor(() => {
+      expect(screen.queryByText("notes.txt")).toBeNull();
+    });
     expect(
       screen.getByRole("button", {
         name: `${copy.removeAttachment}: photo.png`,

@@ -8,7 +8,7 @@ import {
   PushPinSlash,
   X,
 } from "@phosphor-icons/react";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
 import type {
   ChatDto,
@@ -28,6 +28,7 @@ import { AnimatePresence } from "motion/react";
 
 import { copy } from "shared/config/copy";
 import { useEdgeSentinel } from "shared/lib/use-edge-sentinel";
+import { scrollFadeMask, useScrollFade } from "shared/lib/use-scroll-fade";
 
 import {
   Avatar,
@@ -554,6 +555,12 @@ export function ConversationSidebar({
   // stays clickable instead of vanishing under the pointer.
   const [searchFocused, setSearchFocused] = useState(false);
   const [clearHistoryOpen, setClearHistoryOpen] = useState(false);
+  // The folder strip is a short horizontal scroller: it never shows a
+  // scrollbar (the same rule the agent suggestion pills follow), and a fade
+  // mask — not a track — is the only hint that more tabs exist.
+  const folderRailRef = useRef<HTMLDivElement>(null);
+  const folderEdges = useScrollFade(folderRailRef, "horizontal");
+  const folderMask = scrollFadeMask(folderEdges, "horizontal");
 
   const animateChatIds = useChatStore((state) => state.animateChatIds);
   const connectionState = useChatStore((state) => state.connectionState);
@@ -660,7 +667,12 @@ export function ConversationSidebar({
         <div
           role="tablist"
           aria-label={copy.chatFolders}
-          className="flex items-center gap-1 overflow-x-auto px-3 pb-2"
+          ref={folderRailRef}
+          style={{
+            maskImage: folderMask,
+            WebkitMaskImage: folderMask,
+          }}
+          className="flex items-center gap-1 overflow-x-auto px-3 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         >
           <FolderTab
             label={copy.allChats}

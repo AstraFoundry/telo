@@ -29,6 +29,8 @@ export const channels = {
   messageDelete: "workspace:delete-message",
   messageForward: "workspace:forward-message",
   botCallbackAnswer: "workspace:answer-bot-callback",
+  messageReactionSet: "workspace:set-message-reaction",
+  messageReactionsAvailable: "workspace:list-available-reactions",
   chatPinSet: "workspace:set-chat-pinned",
   chatMuteSet: "workspace:set-chat-muted",
   chatReadSet: "workspace:set-chat-read",

@@ -1739,6 +1739,127 @@ describe("ConversationView Wave 4 message interaction", () => {
     ).toBeTruthy();
   });
 
+  it("marks a sent message with one check and a read message with two", async () => {
+    const { useChatStore } = await renderView({
+      messages: [
+        message({
+          id: "m1",
+          body: "Outgoing",
+          outgoing: true,
+          status: "sent",
+        }),
+      ],
+    });
+
+    const sent = screen.getByText("Outgoing").closest("article");
+    expect(
+      sent?.querySelector("[data-delivery]")?.getAttribute("data-delivery"),
+    ).toBe("check");
+    expect(sent?.querySelector('[data-delivery="double-check"]')).toBeNull();
+
+    act(() => {
+      useChatStore.setState({
+        messages: [
+          message({
+            id: "m1",
+            body: "Outgoing",
+            outgoing: true,
+            status: "read",
+          }),
+        ],
+      });
+    });
+
+    const read = screen.getByText("Outgoing").closest("article");
+    expect(read?.querySelector('[data-delivery="double-check"]')).toBeTruthy();
+    expect(screen.getByRole("img", { name: copy.messageRead })).toBeTruthy();
+  });
+
+  it("reserves the overlay meta's space in the text flow, never over it", async () => {
+    await renderView({
+      messages: [
+        message({ id: "m1", outgoing: true, senderName: "You", senderId: "" }),
+        message({
+          id: "m2",
+          keyboard: { rows: [[{ id: "b1", text: "Pick", kind: "callback" }]] },
+        }),
+      ],
+    });
+
+    const article = (id: string) =>
+      document.getElementById(`conversation-message-${id}`);
+    // A text bubble carries the spacer inside the text flow and the overlay
+    // meta outside it, so the message's text content stays exactly its body.
+    const texted = article("m1");
+    const body = texted?.querySelector("[class*=pre-wrap]");
+    expect(
+      body?.querySelector('[data-slot="message-meta-spacer"]'),
+    ).toBeTruthy();
+    expect(body?.textContent).toBe("Message body");
+    expect(
+      texted?.querySelector(
+        '[data-slot="message-bubble-content"] > div > [data-slot="message-meta"]',
+      ),
+    ).toBeTruthy();
+
+    // A bubble that continues into an inline keyboard cannot anchor the meta
+    // to the text's last line, so it keeps the footer row instead.
+    const keyed = article("m2");
+    expect(
+      keyed?.querySelector('[data-slot="message-meta-spacer"]'),
+    ).toBeNull();
+    expect(
+      keyed?.querySelector(
+        '[data-slot="message-footer"] [data-slot="message-meta"]',
+      ),
+    ).toBeTruthy();
+  });
+  it("groups a run by one author: tight gap, one header, grouped corners", async () => {
+    await renderView({
+      messages: [
+        message({ id: "m1", sentAt: "2026-01-01T10:00:00.000Z" }),
+        message({ id: "m2", sentAt: "2026-01-01T10:01:00.000Z" }),
+        message({
+          id: "m3",
+          outgoing: true,
+          senderName: "You",
+          senderId: "",
+          sentAt: "2026-01-01T10:02:00.000Z",
+        }),
+      ],
+    });
+
+    // The sender is named once per run, on its first row.
+    expect(
+      document.querySelectorAll('[data-slot="message-header"]'),
+    ).toHaveLength(1);
+
+    const bubble = (id: string) =>
+      document
+        .getElementById(`conversation-message-${id}`)
+        ?.querySelector('[data-slot="message-bubble-content"]');
+    // The run's first bubble keeps its full top corner on the avatar side;
+    // the interior one rounds it down to the grouped small radius. The run's
+    // last row keeps its full bottom corner, because that is where the
+    // author photo anchors.
+    expect(bubble("m1")?.className).not.toContain(
+      "rounded-tl-[var(--message-bubble-radius-grouped)]",
+    );
+    expect(bubble("m2")?.className).toContain(
+      "rounded-tl-[var(--message-bubble-radius-grouped)]",
+    );
+    expect(bubble("m2")?.className).not.toContain(
+      "rounded-bl-[var(--message-bubble-radius-grouped)]",
+    );
+
+    // Consecutive same-author rows share the tight run gap; the outgoing
+    // author switch adds the wider group gap.
+    const row = (id: string) =>
+      document.getElementById(`conversation-message-${id}`);
+    expect(row("m2")?.className ?? "").not.toContain("message-group-gap");
+    expect(row("m3")?.className ?? "").toContain("message-group-gap");
+  });
+
   it("shows Typing text instead of dots when the user prefers reduced motion", async () => {
     stubMatchMedia(false, true);
     await renderView({

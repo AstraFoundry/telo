@@ -4,9 +4,11 @@ import {
   ArrowDown,
   ArrowFatLineRight,
   ArrowSquareOut,
+  Check,
   CheckCircle,
   Checks,
   CircleNotch,
+  Clock,
   Copy,
   DownloadSimple,
   MagicWand,
@@ -30,6 +32,7 @@ import {
   type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
+  type Ref,
 } from "react";
 
 import type {
@@ -52,6 +55,7 @@ import {
 import { useTelegramStore } from "entities/telegram";
 import { AddToAgentButton } from "features/add-to-agent";
 import { InChatSearchBar } from "features/chat-search";
+import { ReactionBar, ReactionPicker } from "features/react-to-message";
 import { MessageComposer } from "features/send-message";
 import { AgentToggle } from "features/toggle-agent";
 import { ChatProfileToggle } from "features/toggle-chat-profile";
@@ -94,6 +98,7 @@ import {
 } from "shared/ui";
 import type { MediaViewerItem, MediaViewerOrigin } from "shared/ui";
 
+import { deliveryGlyphKind, type DeliveryGlyphKind } from "./delivery-status";
 import { DeleteMessageDialog } from "./delete-message-dialog";
 import { ForwardPickerDialog } from "./forward-picker-dialog";
 import { ForwardSelectedDialog } from "./forward-selected-dialog";
@@ -168,27 +173,50 @@ function dayKey(value: string): string {
   return new Date(value).toDateString();
 }
 
-// Desktop hover rail: the highest-frequency bubble actions as an absolute
-// overlay, so it never shifts layout. It appears on hover (precise pointers
+// Desktop hover rail: the highest-frequency bubble actions, hung off the
+// bubble's outer bottom corner instead of laid over it — tdesktop reserves a
+// 56px gutter beside every bubble (`msgMargin`) so hover actions never cover
+// content, and Telegram Web A's `.quick-reaction` is a 28px disc at the
+// bubble's edge. Here the 28px disc is the visual while the button around it
+// keeps the full 40px pointer target. It appears on hover (precise pointers
 // only) and focus-within with at most a 100ms opacity fade — no springs. The
 // right-click context menu stays the full action list.
 function MessageHoverRail({
   message,
   agentActionsAvailable,
+  clearBubblePadding,
+  onFailure,
 }: {
   message: MessageDto;
   agentActionsAvailable: boolean;
+  /**
+   * Anchored inside a bubble: the positioning context ends one padding inset
+   * short of the bubble's edge, so the rail steps out by that inset first.
+   * A bare sticker carries no padding to clear.
+   */
+  clearBubblePadding: boolean;
+  onFailure(detail: string): void;
 }) {
   const startReply = useChatStore((state) => state.startReply);
   const runMessageAction = useChatStore((state) => state.runMessageAction);
   const messageAction = useChatStore((state) => state.messageAction);
   const [aiOpen, setAiOpen] = useState(false);
 
+  const side = message.outgoing
+    ? `${
+        clearBubblePadding
+          ? "right-[calc(100%+var(--message-bubble-padding-x))]"
+          : "right-full"
+      } mr-1`
+    : `${
+        clearBubblePadding
+          ? "left-[calc(100%+var(--message-bubble-padding-x))]"
+          : "left-full"
+      } ml-1`;
+
   return (
     <div
-      className={`pointer-events-none absolute -top-3 z-10 flex items-center gap-0.5 rounded-xl border border-border bg-popover p-0.5 opacity-0 shadow-md transition-opacity duration-100 group-focus-within/message:pointer-events-auto group-focus-within/message:opacity-100 pointer-fine:group-hover/message:pointer-events-auto pointer-fine:group-hover/message:opacity-100 motion-reduce:transition-none ${
-        message.outgoing ? "right-0" : "left-0"
-      }`}
+      className={`pointer-events-none absolute bottom-0 z-10 flex items-center opacity-0 transition-opacity duration-100 group-focus-within/message:pointer-events-auto group-focus-within/message:opacity-100 pointer-fine:group-hover/message:pointer-events-auto pointer-fine:group-hover/message:opacity-100 motion-reduce:transition-none ${side}`}
     >
       {message.status !== "failed" ? (
         <Tooltip content={copy.reply}>
@@ -196,12 +224,17 @@ function MessageHoverRail({
             size="icon"
             variant="ghost"
             aria-label={copy.reply}
-            className="size-10"
+            className="size-10 rounded-full hover:bg-transparent"
             onClick={() => startReply(message)}
           >
-            <ArrowBendUpLeft aria-hidden="true" className="size-4" />
+            <span className="grid size-7 place-items-center rounded-full border border-border bg-popover shadow-sm">
+              <ArrowBendUpLeft aria-hidden="true" className="size-3.5" />
+            </span>
           </Button>
         </Tooltip>
+      ) : null}
+      {message.status === "sent" || message.status === "read" ? (
+        <ReactionPicker message={message} onFailure={onFailure} />
       ) : null}
       {agentActionsAvailable ? (
         <MorphPopover open={aiOpen} onOpenChange={setAiOpen}>
@@ -210,9 +243,11 @@ function MessageHoverRail({
               size="icon"
               variant="ghost"
               aria-label={copy.aiActions}
-              className="size-10"
+              className="size-10 rounded-full hover:bg-transparent"
             >
-              <MagicWand aria-hidden="true" className="size-4" />
+              <span className="grid size-7 place-items-center rounded-full border border-border bg-popover shadow-sm">
+                <MagicWand aria-hidden="true" className="size-3.5" />
+              </span>
             </Button>
           </MorphPopoverTrigger>
           <MorphPopoverContent
@@ -283,44 +318,89 @@ function ChatTypingIndicator({ className }: { className?: string }) {
 }
 
 function deliveryLabel(status: MessageDto["status"]): string {
-  if (status === "failed") return copy.messageSendFailed;
-  if (status === "sending") return copy.messageSending;
-  if (status === "read") return copy.messageRead;
-  return copy.messageSent;
+  switch (status) {
+    case "sending":
+      return copy.messageSending;
+    case "sent":
+      return copy.messageSent;
+    case "read":
+      return copy.messageRead;
+    case "failed":
+      return copy.messageSendFailed;
+  }
 }
+
+// Telegram's four-glyph alphabet, one per delivery state: a clock while the
+// message is in flight, one check on the server's acknowledgement, two once
+// the recipient read it, and a filled warning on failure. The clock is
+// static — sending is a dozens-of-times-a-day interaction, the tier where a
+// spinner is a repeated attention tax rather than information.
+const DELIVERY_GLYPHS: Record<DeliveryGlyphKind, ReactNode> = {
+  clock: <Clock className="size-3.5" />,
+  check: <Check className="size-3.5" />,
+  "double-check": <Checks className="size-3.5" />,
+  error: <WarningCircle weight="fill" className="size-3.5 text-destructive" />,
+};
 
 function DeliveryGlyph({ status }: { status: MessageDto["status"] }) {
   const reduce = useReducedMotionConfig() ?? false;
-  const glyph =
-    status === "failed" ? (
-      <WarningCircle weight="fill" className="size-3.5 text-destructive" />
-    ) : status === "sending" ? (
-      <CircleNotch
-        className={`size-3.5 ${reduce ? "" : "motion-safe:animate-spin"}`}
-      />
-    ) : (
-      <Checks
-        className="size-3.5"
-        weight={status === "read" ? "bold" : "regular"}
-      />
-    );
+  const kind = deliveryGlyphKind(status);
 
   return (
     <span className="relative inline-flex size-4 shrink-0 items-center justify-center">
       <AnimatePresence initial={false} mode="sync">
         <motion.span
-          key={status}
+          key={kind}
           role="img"
           aria-label={deliveryLabel(status)}
+          data-delivery={kind}
           className="absolute inset-0 grid place-items-center"
           initial={reduce ? false : { opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={reduce ? undefined : { opacity: 0 }}
           transition={reduce ? { duration: 0 } : DELIVERY_CROSSFADE}
         >
-          {glyph}
+          {DELIVERY_GLYPHS[kind]}
         </motion.span>
       </AnimatePresence>
+    </span>
+  );
+}
+
+// Time, the edited marker and the delivery state. Telegram keeps this trio on
+// the last line of the message text without growing the bubble a row:
+// Telegram Web K reserves the space with an invisible inline copy of `.time`
+// and paints the real one absolutely; the copy here is a text-free spacer
+// instead, because the transcript's text nodes must stay exactly the message
+// body (tests and ATs read them). The spacer floats inside the text run, the
+// overlay variant of this component sits at the bubble's bottom-right, and
+// `ConversationMessage` measures one into the other's width. A media-only or
+// bubbleless row has no text run to ride and keeps the footer row.
+function MessageMeta({
+  message,
+  timeFormat,
+  overlay = false,
+  metaRef,
+}: {
+  message: MessageDto;
+  timeFormat: TimeFormatPreference;
+  overlay?: boolean;
+  /** Overlay measurement source: the transcript reads this span's width. */
+  metaRef?: Ref<HTMLSpanElement>;
+}) {
+  return (
+    <span
+      ref={metaRef}
+      data-slot="message-meta"
+      className={
+        overlay
+          ? "absolute bottom-0 right-0 inline-flex items-center gap-1 text-[length:var(--message-meta-font-size)] leading-none tabular-nums text-foreground/60"
+          : "inline-flex items-center gap-1 tabular-nums"
+      }
+    >
+      {message.editedAt ? <span>{copy.edited}</span> : null}
+      <time>{time(message.sentAt, timeFormat)}</time>
+      {message.outgoing ? <DeliveryGlyph status={message.status} /> : null}
     </span>
   );
 }
@@ -492,15 +572,27 @@ function ForwardedAttribution({ forward }: { forward: MessageForwardDto }) {
 function MessageAuthorAvatar({
   message,
   visible,
+  footerHeight,
 }: {
   message: MessageDto;
   visible: boolean;
+  /**
+   * True when the row still draws a timestamp footer under the bubble, so
+   * the slot has to lift past it to sit at the bubble's own bottom edge.
+   */
+  footerHeight: boolean;
 }) {
   const currentUser = useTelegramStore((state) => state.currentUser);
   const settled = useChatStore((state) => state.peerAvatars[message.senderId]);
   const openForPeer = useChatProfileStore((state) => state.openForPeer);
 
-  if (!visible) return <MessageAvatar placeholder className="self-end" />;
+  if (!visible)
+    return (
+      <MessageAvatar
+        placeholder
+        className={`size-[var(--message-avatar-size)] self-end ${footerHeight ? "mb-[1.625rem]" : ""}`}
+      />
+    );
 
   const outgoing = message.outgoing;
   // A local placeholder Telegram has not acknowledged yet carries no peer id,
@@ -527,17 +619,21 @@ function MessageAuthorAvatar({
   );
 
   return (
-    // Telegram seats the photo at the bubble's bottom edge, but the row's
-    // bottom is the timestamp footer, so the slot lifts past it: MessageFooter
-    // is min-h-5 (20px) under MessageContent's gap-1.5 (6px).
+    // Telegram seats the photo at the bubble's bottom edge. A row whose meta
+    // rides the last text line ends at the bubble, so the slot sits flush; a
+    // media row still has a footer under it (MessageFooter min-h-5 plus
+    // MessageContent's gap), so the slot lifts past that.
     // overflow-visible keeps the pressable's ::before hit area from being
     // clipped to the disc; the inner Avatar still clips the photo.
-    <MessageAvatar className="mb-[1.625rem] self-end overflow-visible">
+    <MessageAvatar
+      className={`size-[var(--message-avatar-size)] self-end overflow-visible ${footerHeight ? "mb-[1.625rem]" : ""}`}
+    >
       {peerId ? (
         <PressableBlock
           aria-label={copy.openProfile}
-          // The disc stays at Telegram's 28px, so the pointer target is padded
-          // out to the desktop 40px floor with the usual ::before expansion.
+          // The disc stays at Telegram's own msgPhotoSize, so the pointer
+          // target is padded out to the desktop 40px floor with the usual
+          // ::before expansion.
           className="relative size-full rounded-full before:absolute before:-inset-2 before:content-['']"
           onClick={() => openForPeer(peerId)}
         >
@@ -552,6 +648,8 @@ function MessageAuthorAvatar({
 
 function ConversationMessage({
   message,
+  className,
+  groupStart,
   showAvatar,
   timeFormat,
   loopStickers,
@@ -562,6 +660,14 @@ function ConversationMessage({
   onOpenStickerSet,
 }: {
   message: MessageDto;
+  /** Row-level spacing the transcript computes from the run boundaries. */
+  className?: string;
+  /** First row of a run by one author, which owns the sender name. */
+  groupStart: boolean;
+  /**
+   * Last row of that run: it carries the author photo, so it is also the row
+   * whose bottom corner on the avatar side gets the full radius.
+   */
   showAvatar: boolean;
   timeFormat: TimeFormatPreference;
   loopStickers: boolean;
@@ -603,9 +709,10 @@ function ConversationMessage({
   // Byte progress is reserved for downloads the user explicitly started;
   // scroll-into-view preloads stay quiet placeholders.
   const [explicitDownload, setExplicitDownload] = useState(false);
-  const [actionError, setActionError] = useState<{ detail: string } | null>(
-    null,
-  );
+  const [actionError, setActionError] = useState<{
+    title: string;
+    detail: string;
+  } | null>(null);
   // The selection is snapshotted when the menu opens, not at render time: the
   // portal keeps its items mounted while closed, so render-time reads go stale.
   const [selection, setSelection] = useState("");
@@ -634,6 +741,7 @@ function ConversationMessage({
       await action();
     } catch (error) {
       setActionError({
+        title: copy.mediaActionFailed,
         detail: error instanceof Error ? error.message : "",
       });
     }
@@ -698,6 +806,48 @@ function ConversationMessage({
     !message.replyTo &&
     !message.forwardedFrom;
 
+  // The meta rides the last line of the text (see `MessageMeta`); a row with
+  // no text run — media without a caption, a bare sticker — has nothing to
+  // ride and keeps the footer row, and so does a row whose bubble continues
+  // past the text into an inline keyboard (the overlay anchors to the last
+  // block's bottom-right, which must be the text's).
+  const metaInText = Boolean(message.body) && !bubbleless && !message.keyboard;
+
+  // The text-free spacer at the end of the text run reserves the overlay
+  // meta's width on the last line; the overlay itself lives outside the text
+  // flow, so the transcript's text nodes stay exactly the message body. The
+  // width is measured from the rendered meta and republished when anything
+  // that changes that width changes (edited marker, time format, tick state).
+  const bubbleContentRef = useRef<HTMLDivElement | null>(null);
+  const metaRef = useRef<HTMLSpanElement | null>(null);
+  useLayoutEffect(() => {
+    const content = bubbleContentRef.current;
+    const meta = metaRef.current;
+    if (!content || !meta) return;
+    content.style.setProperty("--message-meta-width", `${meta.offsetWidth}px`);
+  }, [metaInText, message.editedAt, message.status, timeFormat]);
+
+  // Telegram rounds only the corners that face open space. Inside a run by
+  // one author the corner on the avatar side stays small — tdesktop
+  // `bubbleRadiusSmall` (6px), Telegram Web K's 5px `is-in`/`is-out` sets —
+  // and only the run's first and last bubble get the full radius there. The
+  // class names are spelled out rather than composed, because Tailwind only
+  // emits utilities it can see in the source.
+  const groupedCorners = [
+    groupStart
+      ? null
+      : message.outgoing
+        ? "rounded-tr-[var(--message-bubble-radius-grouped)]"
+        : "rounded-tl-[var(--message-bubble-radius-grouped)]",
+    showAvatar
+      ? null
+      : message.outgoing
+        ? "rounded-br-[var(--message-bubble-radius-grouped)]"
+        : "rounded-bl-[var(--message-bubble-radius-grouped)]",
+  ]
+    .filter((corner) => corner !== null)
+    .join(" ");
+
   return (
     <Message
       id={`conversation-message-${message.id}`}
@@ -706,12 +856,23 @@ function ConversationMessage({
       // Search/jump highlight: a static background tint, never motion.
       data-highlighted={highlighted ? "true" : undefined}
       data-animate-in={animateIn ? "true" : undefined}
-      className={highlighted ? "rounded-xl bg-primary/10" : undefined}
+      className={[
+        "gap-[var(--message-avatar-gap)]",
+        highlighted ? "rounded-xl bg-primary/10" : null,
+        className,
+      ]
+        .filter((entry) => entry)
+        .join(" ")}
     >
       {message.outgoing ? null : selectionToggle}
-      <MessageAuthorAvatar message={message} visible={showAvatar} />
-      <MessageContent className="relative">
-        {!message.outgoing ? (
+      <MessageAuthorAvatar
+        message={message}
+        visible={showAvatar}
+        footerHeight={!metaInText}
+      />
+      <MessageContent className="relative gap-1">
+        {/* Telegram names the author once per run, on its first row. */}
+        {!message.outgoing && groupStart ? (
           <MessageHeader>{message.senderName}</MessageHeader>
         ) : null}
         <ContextMenu
@@ -721,15 +882,32 @@ function ConversationMessage({
         >
           <ContextMenuTrigger>
             {bubbleless ? (
-              <div data-slot="message-sticker" className="w-fit">
+              <div data-slot="message-sticker" className="relative w-fit">
                 {mediaNode}
+                {/* Selection mode swaps the hover rail for per-row
+                    checkboxes. */}
+                {selecting ? null : (
+                  <MessageHoverRail
+                    message={message}
+                    agentActionsAvailable={agentActionsAvailable}
+                    clearBubblePadding={false}
+                    onFailure={(detail) =>
+                      setActionError({ title: copy.reactionFailed, detail })
+                    }
+                  />
+                )}
               </div>
             ) : (
               <MessageBubble variant={message.outgoing ? "tint" : "soft"}>
                 {/* Font size comes from the --message-font-size variable set
                     on the conversation column; 14px matches text-sm before
-                    the preference resolves. */}
-                <MessageBubbleContent className="text-[length:var(--message-font-size,14px)]">
+                    the preference resolves. The geometry overrides the
+                    registry's roomier defaults with Telegram's own bubble
+                    metrics, which live as tokens in app/styles/index.css. */}
+                <MessageBubbleContent
+                  ref={bubbleContentRef}
+                  className={`max-w-[var(--message-bubble-max-width)] rounded-[var(--message-bubble-radius)] px-[var(--message-bubble-padding-x)] py-[var(--message-bubble-padding-y)] text-[length:var(--message-font-size,14px)] leading-[var(--message-line-height)] ${groupedCorners}`}
+                >
                   {message.forwardedFrom ? (
                     <ForwardedAttribution forward={message.forwardedFrom} />
                   ) : null}
@@ -761,9 +939,47 @@ function ConversationMessage({
                       entities={message.entities}
                       revealSpoilerLabel={copy.revealSpoiler}
                       renderCustomEmoji={renderCustomEmoji}
+                      // flow-root makes the div contain the spacer float: when
+                      // the last line is full the float wraps below and the
+                      // bubble grows a line for it, instead of the overlay
+                      // meta landing back on top of the text (Telegram Web K's
+                      // `.time` behaves the same way when it wraps).
+                      className={metaInText ? "flow-root" : undefined}
+                      trailing={
+                        metaInText ? (
+                          // Text-free spacer: it floats the last line clear of
+                          // the overlay meta without adding anything to the
+                          // message's text content.
+                          <span
+                            aria-hidden
+                            data-slot="message-meta-spacer"
+                            className="float-right ml-[var(--message-meta-gap)] inline-flex h-[var(--message-meta-font-size)] w-[var(--message-meta-width,0px)]"
+                          />
+                        ) : undefined
+                      }
                     />
                   ) : null}
                   {message.keyboard ? <BotKeyboard message={message} /> : null}
+                  {metaInText ? (
+                    <MessageMeta
+                      message={message}
+                      timeFormat={timeFormat}
+                      overlay
+                      metaRef={metaRef}
+                    />
+                  ) : null}
+                  {/* Selection mode swaps the hover rail for per-row
+                      checkboxes. */}
+                  {selecting ? null : (
+                    <MessageHoverRail
+                      message={message}
+                      agentActionsAvailable={agentActionsAvailable}
+                      clearBubblePadding
+                      onFailure={(detail) =>
+                        setActionError({ title: copy.reactionFailed, detail })
+                      }
+                    />
+                  )}
                 </MessageBubbleContent>
               </MessageBubble>
             )}
@@ -899,24 +1115,23 @@ function ConversationMessage({
             </ContextMenuItem>
           </ContextMenuContent>
         </ContextMenu>
-        {/* Selection mode swaps the hover rail for per-row checkboxes. */}
-        {selecting ? null : (
-          <MessageHoverRail
-            message={message}
-            agentActionsAvailable={agentActionsAvailable}
-          />
-        )}
+        <ReactionBar
+          message={message}
+          onFailure={(detail) =>
+            setActionError({ title: copy.reactionFailed, detail })
+          }
+        />
         {actionError ? (
           <p role="alert" className="mt-1 text-xs text-destructive">
-            {copy.mediaActionFailed}
+            {actionError.title}
             {actionError.detail ? `: ${actionError.detail}` : ""}
           </p>
         ) : null}
-        <MessageFooter className="text-foreground/70 tabular-nums">
-          {message.editedAt ? <span>{copy.edited}</span> : null}
-          <time>{time(message.sentAt, timeFormat)}</time>
-          {message.outgoing ? <DeliveryGlyph status={message.status} /> : null}
-        </MessageFooter>
+        {metaInText ? null : (
+          <MessageFooter className="text-foreground/70">
+            <MessageMeta message={message} timeFormat={timeFormat} />
+          </MessageFooter>
+        )}
       </MessageContent>
       {message.outgoing ? selectionToggle : null}
     </Message>
@@ -925,11 +1140,16 @@ function ConversationMessage({
 
 function AlbumMessage({
   messages,
+  className,
+  groupStart,
   showAvatar,
   timeFormat,
   onOpenViewer,
 }: {
   messages: ReadonlyArray<MessageDto>;
+  /** Row-level spacing the transcript computes from the run boundaries. */
+  className?: string;
+  groupStart: boolean;
   showAvatar: boolean;
   timeFormat: TimeFormatPreference;
   onOpenViewer(mediaId: string, trigger: HTMLElement): void;
@@ -970,15 +1190,21 @@ function AlbumMessage({
       animateIn={animateIn}
       data-highlighted={highlighted ? "true" : undefined}
       data-animate-in={animateIn ? "true" : undefined}
-      className={highlighted ? "rounded-xl bg-primary/10" : undefined}
+      className={[
+        "gap-[var(--message-avatar-gap)]",
+        highlighted ? "rounded-xl bg-primary/10" : null,
+        className,
+      ]
+        .filter((entry) => entry)
+        .join(" ")}
     >
-      <MessageAuthorAvatar message={first} visible={showAvatar} />
-      <MessageContent>
-        {!first.outgoing ? (
+      <MessageAuthorAvatar message={first} visible={showAvatar} footerHeight />
+      <MessageContent className="gap-1">
+        {!first.outgoing && groupStart ? (
           <MessageHeader>{first.senderName}</MessageHeader>
         ) : null}
         <MessageBubble variant={first.outgoing ? "tint" : "soft"}>
-          <MessageBubbleContent className="text-[length:var(--message-font-size,14px)]">
+          <MessageBubbleContent className="max-w-[var(--message-bubble-max-width)] rounded-[var(--message-bubble-radius)] px-[var(--message-bubble-padding-x)] py-[var(--message-bubble-padding-y)] text-[length:var(--message-font-size,14px)] leading-[var(--message-line-height)]">
             {first.forwardedFrom ? (
               <ForwardedAttribution forward={first.forwardedFrom} />
             ) : null}
@@ -1012,10 +1238,8 @@ function AlbumMessage({
             {first.keyboard ? <BotKeyboard message={first} /> : null}
           </MessageBubbleContent>
         </MessageBubble>
-        <MessageFooter className="text-foreground/70 tabular-nums">
-          {first.editedAt ? <span>{copy.edited}</span> : null}
-          <time>{time(first.sentAt, timeFormat)}</time>
-          {first.outgoing ? <DeliveryGlyph status={first.status} /> : null}
+        <MessageFooter className="text-foreground/70">
+          <MessageMeta message={first} timeFormat={timeFormat} />
         </MessageFooter>
       </MessageContent>
     </Message>
@@ -1623,7 +1847,7 @@ export function ConversationView() {
           // that cannot reserve its geometry up front — a photo carrying its
           // dimensions already lays out at final size.
           viewportClassName="[overflow-anchor:auto]"
-          contentClassName="mx-auto flex w-full max-w-3xl flex-col gap-3 px-5 py-5"
+          contentClassName="mx-auto flex w-full max-w-3xl flex-col gap-[var(--message-run-gap)] px-5 py-5"
           viewportRef={transcriptRef}
           viewportProps={{
             onWheel: (event) => {
@@ -1710,10 +1934,27 @@ export function ConversationView() {
               !nextFirst ||
               dayKey(nextFirst.sentAt) !== dayKey(first.sentAt) ||
               authorKey(nextFirst) !== authorKey(first);
+            const previousFirst = transcriptUnits[index - 1]?.messages[0];
+            const groupStart =
+              !previousFirst ||
+              dayKey(previousFirst.sentAt) !== dayKey(first.sentAt) ||
+              authorKey(previousFirst) !== authorKey(first);
+            // Telegram's two-valued rhythm: rows inside a run sit at the
+            // list's own 2px gap, and an author switch adds the difference up
+            // to 8px (tdesktop `msgMargin` 6px top + 2px bottom, collapsed to
+            // 2px by `msgMarginTopAttached: 0px` inside a run). A marker
+            // already separates the rows it sits between, so it never stacks
+            // with the group gap.
+            const groupGap =
+              groupStart && !showDayMarker && !showUnreadBoundary
+                ? "mt-[calc(var(--message-group-gap)-var(--message-run-gap))]"
+                : undefined;
             return (
               <Fragment key={unit.key}>
                 {showDayMarker ? (
-                  <MessageMarker>{dayLabel(first.sentAt)}</MessageMarker>
+                  <MessageMarker className="my-[calc(var(--message-day-gap)-var(--message-run-gap))]">
+                    {dayLabel(first.sentAt)}
+                  </MessageMarker>
                 ) : null}
                 {showUnreadBoundary ? (
                   <MessageMarker className="bg-primary/10 font-medium text-primary">
@@ -1723,6 +1964,8 @@ export function ConversationView() {
                 {unit.messages.length === 1 ? (
                   <ConversationMessage
                     message={first}
+                    className={groupGap}
+                    groupStart={groupStart}
                     showAvatar={showAvatar}
                     timeFormat={timeFormat}
                     loopStickers={loopStickers}
@@ -1737,6 +1980,8 @@ export function ConversationView() {
                 ) : (
                   <AlbumMessage
                     messages={unit.messages}
+                    className={groupGap}
+                    groupStart={groupStart}
                     showAvatar={showAvatar}
                     timeFormat={timeFormat}
                     onOpenViewer={openViewer}

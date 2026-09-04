@@ -45,6 +45,7 @@ import type {
   MessageSearchPageDto,
   MessageSearchPageInput,
   PeerProfileDto,
+  SetMessageReactionInput,
   StickerFormat,
   StickerItemDto,
   StickerSetDto,
@@ -86,6 +87,7 @@ import {
   messageGroupedId,
   stickerFormat,
 } from "./teleproto-message-media";
+import { mapMessageReactions } from "./teleproto-message-reactions";
 import { mapBotCallbackAnswer, mapReplyMarkup } from "./teleproto-reply-markup";
 import { stickerOutlineOf } from "./sticker-outline";
 import { countStickersHash } from "./sticker-hash";
@@ -141,6 +143,14 @@ type CachedStickerSets = {
   readonly hash: bigint;
   readonly sets: ReadonlyArray<StickerSetDto>;
   readonly documents: ReadonlyArray<Api.Document>;
+};
+
+// The picker's reaction emoji as this adapter last resolved them. `hash` is
+// the value messages.getAvailableReactions is to be called with, so an
+// unchanged set answers not-modified and these glyphs stand.
+type CachedAvailableReactions = {
+  readonly hash: number;
+  readonly emoji: ReadonlyArray<string>;
 };
 
 const AVATAR_DOWNLOAD_CONCURRENCY = 3;
@@ -263,6 +273,12 @@ export class TelegramClientCoordinator implements TelegramRepository {
     return new DemoTelegramRepository({
       mediaCacheDirectory: this.mediaCacheDirectory || undefined,
       mediaCacheLimitBytes: this.mediaCacheLimitBytes,
+      // The e2e profile stretches the counterpart's reply delay: the
+      // automation spec's contract is that a settings round trip lands inside
+      // the reply window, and 1400ms no longer fits it when the suite runs
+      // several Electron instances in parallel. Interactive demo sessions
+      // keep the snappier default.
+      autoReplyDelayMs: process.env.TELO_E2E === "1" ? 3000 : undefined,
     });
   }
 
@@ -578,6 +594,14 @@ export class TelegramClientCoordinator implements TelegramRepository {
     return this.repository.answerBotCallback(chatId, messageId, buttonId);
   }
 
+  setMessageReaction(input: SetMessageReactionInput): Promise<void> {
+    return this.repository.setMessageReaction(input);
+  }
+
+  listAvailableReactions(chatId: string): Promise<ReadonlyArray<string>> {
+    return this.repository.listAvailableReactions(chatId);
+  }
+
   setChatPinned(chatId: string, pinned: boolean): Promise<void> {
     return this.repository.setChatPinned(chatId, pinned);
   }
@@ -725,6 +749,9 @@ class TeleprotoRepository implements TelegramRepository {
   // that hash with messages.allStickersNotModified, which is the whole point:
   // reopening the picker then costs one request instead of one per set.
   private stickerSets: CachedStickerSets | null = null;
+  // The reaction picker's emoji, cached for the same reason: reopening it
+  // then costs a not-modified answer instead of the full animated set.
+  private availableReactions: CachedAvailableReactions | null = null;
   private readonly mediaUploads = new Map<string, UploadProgress>();
   // Cached dialog filters (custom folders); loaded with the first chat page
   // and refreshed when Telegram reports filter/folder changes.
@@ -758,6 +785,9 @@ class TeleprotoRepository implements TelegramRepository {
   });
   private readonly pinnedMessagesUpdateBuilder = new Raw({
     types: [Api.UpdatePinnedMessages, Api.UpdatePinnedChannelMessages],
+  });
+  private readonly messageReactionsUpdateBuilder = new Raw({
+    types: [Api.UpdateMessageReactions],
   });
   private readonly dialogFilterUpdateBuilder = new Raw({
     types: [
@@ -793,6 +823,11 @@ class TeleprotoRepository implements TelegramRepository {
     update: Api.UpdatePinnedMessages | Api.UpdatePinnedChannelMessages,
   ) => {
     this.updateQueue.enqueue(() => this.handlePinnedMessagesUpdate(update));
+  };
+  private readonly onMessageReactionsUpdate = (
+    update: Api.UpdateMessageReactions,
+  ) => {
+    this.updateQueue.enqueue(() => this.handleMessageReactionsUpdate(update));
   };
   private readonly onFolderUpdate = () => {
     this.updateQueue.enqueue(() => this.handleFolderUpdate());
@@ -844,6 +879,10 @@ class TeleprotoRepository implements TelegramRepository {
     client.addEventHandler(
       this.onPinnedMessagesUpdate,
       this.pinnedMessagesUpdateBuilder,
+    );
+    client.addEventHandler(
+      this.onMessageReactionsUpdate,
+      this.messageReactionsUpdateBuilder,
     );
     client.addEventHandler(this.onFolderUpdate, this.dialogFilterUpdateBuilder);
     client.addEventHandler(this.onFolderUpdate, this.folderPeersUpdateBuilder);
@@ -1432,7 +1471,9 @@ class TeleprotoRepository implements TelegramRepository {
     return this.stickerSetOf(
       resolved.set,
       stickerDocumentsOf(resolved.documents),
-      resolved.set.installedDate !== undefined,
+      // teleproto materializes an unset flag as null from the wire, so the
+      // marker is a null check, not undefined.
+      resolved.set.installedDate != null,
     );
   }
 
@@ -1841,6 +1882,63 @@ class TeleprotoRepository implements TelegramRepository {
     return mapBotCallbackAnswer(answer);
   }
 
+  async setMessageReaction(input: SetMessageReactionInput): Promise<void> {
+    // sendReaction writes the account's whole reaction set for the message,
+    // so clearing it is an empty list rather than a separate call, and one
+    // emoji replaces the previous one without a remove first. `addToRecent`
+    // is what Telegram's own clients send for a hand-picked reaction: it
+    // promotes the emoji in the picker's recent row.
+    await this.client.invoke(
+      new Api.messages.SendReaction({
+        peer: input.chatId,
+        msgId: telegramMessageId(input.messageId),
+        reaction:
+          input.emoji === null
+            ? []
+            : [new Api.ReactionEmoji({ emoticon: input.emoji })],
+        addToRecent: true,
+      }),
+    );
+  }
+
+  // The picker's emoji, kept beside the hash Telegram is to be asked with
+  // next time. Every picker open calls this and the answer is heavy — each
+  // entry ships five animation documents — so while the account's set is
+  // unchanged Telegram answers that hash with
+  // messages.availableReactionsNotModified and the cached glyphs stand, the
+  // way the installed sticker sets are cached above.
+  //
+  // A chat can narrow the set further (`ChatFull.availableReactions`, i.e.
+  // `Api.ChatReactionsSome`), but that lives behind channels.getFullChannel /
+  // messages.getFullChat and this adapter keeps no full-chat cache, so
+  // honoring it would add a round trip to every picker open. Telegram
+  // rejects a reaction the chat forbids (REACTION_INVALID), so the narrowing
+  // is enforced where it is authoritative instead of guessed at here — which
+  // is why the chat is accepted but unread.
+  async listAvailableReactions(chatId: string): Promise<ReadonlyArray<string>> {
+    void chatId;
+    const cached = this.availableReactions;
+    const available = await this.client.invoke(
+      new Api.messages.GetAvailableReactions({ hash: cached?.hash ?? 0 }),
+    );
+    if (available instanceof Api.messages.AvailableReactionsNotModified) {
+      // Telegram only answers not-modified to a hash this adapter sent, and
+      // it only sends a hash it has a list for.
+      if (!cached) {
+        throw new Error("Telegram reported unchanged reactions without a list");
+      }
+      return cached.emoji;
+    }
+    // `inactive` entries are reactions Telegram has retired: they still map
+    // the buckets of messages that carry them, but no client offers them for
+    // a new reaction. Server order is the order the picker draws.
+    const emoji = available.reactions
+      .filter((entry) => !entry.inactive)
+      .map((entry) => entry.reaction);
+    this.availableReactions = { hash: available.hash, emoji };
+    return emoji;
+  }
+
   // Only a mapped keyboard can be pressed, and only its callback buttons
   // carry a payload. An id that resolves to neither is not a press this
   // client can make: the button may be a url or copy control the renderer
@@ -2109,6 +2207,22 @@ class TeleprotoRepository implements TelegramRepository {
     }
   }
 
+  // Reaction changes arrive as their own update rather than a message edit,
+  // so a chip repaint never redraws the bubble. The update carries the whole
+  // bucket list for the message, which is exactly what the event publishes —
+  // reactions have no delta form on the wire.
+  private async handleMessageReactionsUpdate(
+    update: Api.UpdateMessageReactions,
+  ): Promise<void> {
+    const chatId = await this.client.getPeerId(update.peer);
+    this.emit({
+      type: "message-reactions",
+      chatId,
+      messageId: String(update.msgId),
+      reactions: mapMessageReactions(update.reactions),
+    });
+  }
+
   private async handleDialogPinnedUpdate(
     update: Api.UpdateDialogPinned,
   ): Promise<void> {
@@ -2171,6 +2285,10 @@ class TeleprotoRepository implements TelegramRepository {
     this.client.removeEventHandler(
       this.onPinnedMessagesUpdate,
       this.pinnedMessagesUpdateBuilder,
+    );
+    this.client.removeEventHandler(
+      this.onMessageReactionsUpdate,
+      this.messageReactionsUpdateBuilder,
     );
     this.client.removeEventHandler(
       this.onFolderUpdate,
@@ -2466,6 +2584,7 @@ class TeleprotoRepository implements TelegramRepository {
     if (keyboard) {
       this.cacheCallbackData(`${chatId}:${message.id}`, keyboard.callbackData);
     }
+    const reactions = mapMessageReactions(message.reactions);
     return {
       id: message.id.toString(),
       chatId,
@@ -2490,6 +2609,9 @@ class TeleprotoRepository implements TelegramRepository {
           : null,
       forwardedFrom: await this.resolveForward(message),
       keyboard: keyboard?.keyboard ?? null,
+      // Absent rather than empty on a message nobody reacted to: the field
+      // is optional so the common case adds nothing to the IPC payload.
+      ...(reactions.length > 0 ? { reactions } : {}),
     };
   }
 

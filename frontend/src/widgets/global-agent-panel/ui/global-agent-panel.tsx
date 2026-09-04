@@ -1,7 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { ClockCounterClockwise, Plus, Sparkle, X } from "@phosphor-icons/react";
-import { useReducedMotionConfig } from "motion/react";
 
 import type { ChatMemberDto } from "../../../../../contracts/src/ipc";
 import { parseReply, useAgentStore } from "entities/agent";
@@ -71,8 +70,6 @@ export function GlobalAgentPanel({ onOpenSettings }: GlobalAgentPanelProps) {
   const activeFolderId = useChatStore((state) => state.activeFolderId);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [followingLiveEdge, setFollowingLiveEdge] = useState(true);
-  const viewportRef = useRef<HTMLElement | null>(null);
-  const reduceMotion = useReducedMotionConfig() ?? false;
 
   useEffect(() => {
     void loadThreads();
@@ -181,14 +178,8 @@ export function GlobalAgentPanel({ onOpenSettings }: GlobalAgentPanelProps) {
   ]);
 
   const jumpToLatest = useCallback(() => {
-    const viewport = viewportRef.current;
-    if (!viewport) return;
     setFollowingLiveEdge(true);
-    viewport.scrollTo({
-      top: viewport.scrollHeight,
-      behavior: reduceMotion ? "auto" : "smooth",
-    });
-  }, [reduceMotion]);
+  }, []);
 
   return (
     <AnimatedSidebarProvider
@@ -311,7 +302,7 @@ export function GlobalAgentPanel({ onOpenSettings }: GlobalAgentPanelProps) {
               <MessageScroller
                 label={copy.agentConversation}
                 busy={running}
-                viewportRef={viewportRef}
+                followOutput={followingLiveEdge}
                 onFollowChange={setFollowingLiveEdge}
                 className="min-h-0 flex-1"
                 // Bottom padding keeps the last reply clear of the floating

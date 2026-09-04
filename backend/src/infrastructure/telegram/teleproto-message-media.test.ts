@@ -36,6 +36,52 @@ describe("teleproto message media", () => {
     expect(messageGroupedId(message)).toBe("9001");
   });
 
+  it("reads a photo's dimensions from its largest size entry", () => {
+    // A real photo message carries no document and its File view throws on
+    // metric access, so the dimensions must come from the PhotoSize entries.
+    const message = {
+      id: 43,
+      photo: {
+        sizes: [
+          { type: "i", bytes: [1, 2, 3] },
+          { type: "s", w: 90, h: 120 },
+          { type: "y", w: 960, h: 1280 },
+          { type: "m", w: 240, h: 320 },
+        ],
+      },
+      file: {
+        mimeType: "image/jpeg",
+        size: { toString: () => "2048" },
+        get width(): never {
+          throw new TypeError("teleproto _fromAttr is broken");
+        },
+        get height(): never {
+          throw new TypeError("teleproto _fromAttr is broken");
+        },
+      },
+    };
+
+    expect(mapMessageMedia(message)).toMatchObject({
+      kind: "photo",
+      width: 960,
+      height: 1280,
+    });
+  });
+
+  it("reports no dimensions for a photo with only stripped thumbnails", () => {
+    const message = {
+      id: 44,
+      photo: { sizes: [{ type: "i", bytes: [1, 2, 3] }] },
+      file: { mimeType: "image/jpeg" },
+    };
+
+    expect(mapMessageMedia(message)).toMatchObject({
+      kind: "photo",
+      width: null,
+      height: null,
+    });
+  });
+
   it.each([
     ["videoNote", "video-note"],
     ["voice", "voice"],

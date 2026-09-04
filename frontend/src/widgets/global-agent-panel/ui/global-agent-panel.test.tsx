@@ -228,9 +228,13 @@ describe("GlobalAgentPanel", () => {
 
     render(<GlobalAgentPanel onOpenSettings={vi.fn()} />);
 
-    // The reveal is smoothed, so the full text lands a few frames later.
     expect(
-      await screen.findByText("Partial answer", {}, { timeout: 4000 }),
+      await screen.findByText(
+        (_, element) =>
+          element?.tagName === "P" && element.textContent === "Partial answer",
+        {},
+        { timeout: 4000 },
+      ),
     ).toBeTruthy();
     expect(screen.queryByRole("status")).toBeNull();
   });
@@ -563,39 +567,6 @@ describe("GlobalAgentPanel suggestions and citations", () => {
         .getByRole("link", { name: "Scroll to message 2" })
         .getAttribute("href"),
     ).toBe("telo://message/design/design-5");
-  });
-
-  it("renders @Name as a chip with the peer's photo for known people", () => {
-    useAgentStore.setState({
-      configuration: configuration(),
-      messages: [
-        {
-          id: "a-1",
-          from: "assistant",
-          body: "@Lev agreed, @Stranger did not.",
-        },
-      ],
-    });
-    useChatStore.setState({
-      chats: [chat({ id: "design", title: "Telo Design" })],
-      messages: [
-        { ...message("design-4"), senderAvatarUrl: "telo-media://lev" },
-      ],
-      activeChatId: "design",
-    });
-
-    render(<GlobalAgentPanel onOpenSettings={vi.fn()} />);
-
-    const conversation = screen.getByRole("region", {
-      name: "Agent conversation",
-    });
-    const chip = conversation.querySelector("span.rounded-md");
-    expect(chip?.textContent).toBe("@Lev");
-    expect(chip?.querySelector("img")?.getAttribute("src")).toBe(
-      "telo-media://lev",
-    );
-    // Unknown names stay plain text.
-    expect(conversation.textContent).toContain("@Stranger did not.");
   });
 
   it("offers the model's follow-ups as pills and runs the picked one", async () => {

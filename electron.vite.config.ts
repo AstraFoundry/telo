@@ -100,17 +100,40 @@ export default defineConfig(({ mode }) => {
         },
       },
       resolve: {
-        alias: {
-          "@": path.join(root, "frontend/src"),
-          app: path.join(root, "frontend/src/app"),
-          pages: path.join(root, "frontend/src/pages"),
-          widgets: path.join(root, "frontend/src/widgets"),
-          features: path.join(root, "frontend/src/features"),
-          entities: path.join(root, "frontend/src/entities"),
-          shared: path.join(root, "frontend/src/shared"),
-          "@components": path.join(root, "frontend/src/shared/beui/components"),
-          "@beui-lib": path.join(root, "frontend/src/shared/beui/lib"),
-        },
+        alias: [
+          { find: "@", replacement: path.join(root, "frontend/src") },
+          { find: "app", replacement: path.join(root, "frontend/src/app") },
+          {
+            find: "pages",
+            replacement: path.join(root, "frontend/src/pages"),
+          },
+          {
+            find: "widgets",
+            replacement: path.join(root, "frontend/src/widgets"),
+          },
+          {
+            find: "features",
+            replacement: path.join(root, "frontend/src/features"),
+          },
+          {
+            // Keep the FSD alias from capturing the npm `entities` package
+            // used by parse5 (for example `entities/escape`).
+            find: /^entities\/(agent|chat|preferences|telegram)(\/.*)?$/,
+            replacement: path.join(root, "frontend/src/entities/$1$2"),
+          },
+          {
+            find: "shared",
+            replacement: path.join(root, "frontend/src/shared"),
+          },
+          {
+            find: "@components",
+            replacement: path.join(root, "frontend/src/shared/beui/components"),
+          },
+          {
+            find: "@beui-lib",
+            replacement: path.join(root, "frontend/src/shared/beui/lib"),
+          },
+        ],
       },
       plugins: [react(), tailwindcss()],
     },

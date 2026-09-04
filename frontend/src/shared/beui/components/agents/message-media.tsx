@@ -320,10 +320,12 @@ function VisualMedia({
         maxWidth: box.maxWidth,
       }
     : undefined;
-  // Without dimensions there is nothing to reserve; the frame falls back to a
-  // bounded placeholder and the transcript's scroll anchoring absorbs the
+  // Without dimensions the frame still owes a media-shaped box: a 4:3 card
+  // with a floor on the width, rather than collapsing to the bubble's minimum
+  // width and stretching into a vertical strip. Scroll anchoring absorbs the
   // difference when the real size arrives.
-  const unsizedFrame = !tile && !box ? "max-h-96 min-h-40 w-full" : undefined;
+  const unsizedFrame =
+    !tile && !box ? "aspect-[4/3] max-h-96 w-full min-w-64" : undefined;
 
   // The cover is a layer over the media, not a blur on it: Telegram hides a
   // spoilered photo behind its own blurred stripped thumbnail with the dot

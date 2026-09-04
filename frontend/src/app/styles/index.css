@@ -1,4 +1,7 @@
 @import "tailwindcss";
+@import "streamdown/styles.css";
+
+@source "../../../../node_modules/streamdown/dist/*.js";
 
 @custom-variant dark (&:where(.dark, .dark *));
 
@@ -53,9 +56,49 @@
      soft ambient) so elevation reads on the shell background. */
   --shadow-column:
     0 1px 2px oklch(0 0 0 / 0.05), 0 8px 24px oklch(0 0 0 / 0.07);
+
+  /* Message bubble metrics, ported from Telegram's own desktop client so the
+     transcript keeps its density instead of the airy defaults of a generic
+     chat surface. Sources (tdesktop Telegram/SourceFiles/ui/chat/chat.style):
+     msgPadding margins(11px, 8px, 11px, 8px), bubbleRadiusLarge 16px,
+     bubbleRadiusSmall = roundRadiusLarge 6px (desktop-app/lib_ui
+     ui/basic.style), msgMaxWidth 430px, msgPhotoSize 33px with a 40px
+     msgPhotoSkip column (7px gap), and msgMargin margins(16px, 6px, 56px,
+     2px) with msgMarginTopAttached 0 — which is what makes consecutive
+     bubbles by one author sit 2px apart and an author switch 8px apart.
+     Line height 1.3125 and the 7px meta lead-in come from Telegram Web K
+     (--messages-line-height) and Web A (.MessageMeta margin-left). */
+  --message-bubble-padding-x: 11px;
+  --message-bubble-padding-y: 8px;
+  --message-bubble-radius: 16px;
+  --message-bubble-radius-grouped: 6px;
+  --message-bubble-max-width: 430px;
+  --message-line-height: 1.3125;
+  --message-meta-gap: 7px;
+  --message-run-gap: 2px;
+  --message-group-gap: 8px;
+  --message-day-gap: 16px;
+  --message-avatar-size: 33px;
+  --message-avatar-gap: 7px;
+  --message-meta-font-size: 11px;
+
+  /* Reaction chips match the hover rail's 28px disc (telegram-tt ships 30px;
+     this surface deliberately aligns to its own rail instead). */
+  --message-reaction-height: 28px;
+  --message-reaction-emoji-size: 18px;
+  --message-reaction-gap: 6px;
+
+  /* Scrollbar: a slim alpha thumb, no track, no border — Apple's overlay
+     convention and Telegram Web K's `scrollbar-color: … transparent`. These
+     author rules also replace the bordered legacy scrollbar Chromium draws
+     when the OS forces scrollbars always-on (mouse attached on macOS). */
+  --scrollbar-thumb: oklch(0 0 0 / 0.16);
+  --scrollbar-thumb-hover: oklch(0 0 0 / 0.28);
 }
 
 .dark {
+  --scrollbar-thumb: oklch(1 0 0 / 0.18);
+  --scrollbar-thumb-hover: oklch(1 0 0 / 0.3);
   --background: oklch(0.17 0.014 250);
   --foreground: oklch(0.94 0.006 250);
   --card: oklch(0.2 0.014 250);
@@ -81,6 +124,26 @@
 @layer base {
   * {
     border-color: var(--border);
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) transparent;
+  }
+
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    border-radius: 8px;
+    background: var(--scrollbar-thumb);
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--scrollbar-thumb-hover);
   }
 
   html {
