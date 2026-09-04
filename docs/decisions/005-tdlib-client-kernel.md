@@ -72,6 +72,7 @@ Rejected. Two MTProto sessions split updates and double flood risk. A temporary 
 ## References
 
 - [`../todo/gaps.md`](../todo/gaps.md) — secret chats and client-kernel persistence are in scope; VoIP/Stories/Mini Apps stay Wave 7.
+- [`../todo/tdlib-migration.md`](../todo/tdlib-migration.md) — packaging gate, adapter waves, verification pyramid, cutover.
 - [`../project/architecture.md`](../project/architecture.md) — main-process Telegram; IPC DTOs.
 - [`001-electron-ipc-boundary.md`](001-electron-ipc-boundary.md) — secrets stay in main.
 - [tdlib/td](https://github.com/tdlib/td) / [TDLib getting started](https://core.telegram.org/tdlib/getting-started)
