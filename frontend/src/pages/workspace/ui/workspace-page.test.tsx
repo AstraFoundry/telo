@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -156,6 +156,29 @@ describe("WorkspacePage", () => {
       name: copy.resizeAgentPanel,
     });
     expect(separator.getAttribute("aria-valuenow")).toBe("380");
+  });
+
+  it("keeps one animated shell mounted for every right-side panel", () => {
+    const { container } = renderPage();
+    const shell = container.querySelector<HTMLElement>('[data-slot="sidebar"]');
+
+    expect(shell).not.toBeNull();
+    expect(shell?.dataset.state).toBe("collapsed");
+
+    act(() => useAgentStore.getState().openPanel());
+    expect(container.querySelector('[data-slot="sidebar"]')).toBe(shell);
+    expect(shell?.dataset.state).toBe("expanded");
+    expect(shell?.getAttribute("aria-label")).toBe(copy.agent);
+
+    act(() => useChatProfileStore.getState().openPanel());
+    expect(container.querySelector('[data-slot="sidebar"]')).toBe(shell);
+    expect(shell?.dataset.state).toBe("expanded");
+    expect(shell?.getAttribute("aria-label")).toBe(copy.chatProfile);
+
+    act(() => useChatProfileStore.getState().closePanel());
+    expect(container.querySelector('[data-slot="sidebar"]')).toBe(shell);
+    expect(shell?.dataset.state).toBe("collapsed");
+    expect(shell?.hasAttribute("inert")).toBe(true);
   });
 
   it("collapses to a list ↔ conversation column at the narrow breakpoint", async () => {

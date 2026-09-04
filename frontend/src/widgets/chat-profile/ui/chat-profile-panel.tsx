@@ -9,11 +9,9 @@ import type {
   TimeFormatPreference,
 } from "../../../../../contracts/src/ipc";
 import { useChatProfileStore, useChatStore } from "entities/chat";
-import { RIGHT_PANEL_WIDTH_CSS, useTimeFormat } from "entities/preferences";
+import { useTimeFormat } from "entities/preferences";
 import { copy } from "shared/config/copy";
 import {
-  AnimatedSidebar,
-  AnimatedSidebarProvider,
   Avatar,
   Button,
   MediaViewer,
@@ -315,7 +313,6 @@ function PinnedRow({
 
 export function ChatProfilePanel() {
   const open = useChatProfileStore((state) => state.open);
-  const openPanel = useChatProfileStore((state) => state.openPanel);
   const closePanel = useChatProfileStore((state) => state.closePanel);
   const peerId = useChatProfileStore((state) => state.peerId);
   const chats = useChatStore((state) => state.chats);
@@ -594,170 +591,138 @@ export function ChatProfilePanel() {
           : copy.chatProfile;
 
   return (
-    <AnimatedSidebarProvider
-      open={open}
-      openMobile={open}
-      onOpenChange={(nextOpen) => {
-        if (nextOpen === open) return;
-        if (nextOpen) openPanel();
-        else closePanel();
-      }}
-      onOpenMobileChange={(nextOpen) => {
-        if (nextOpen === open) return;
-        if (nextOpen) openPanel();
-        else closePanel();
-      }}
-      style={{ "--sidebar-width": RIGHT_PANEL_WIDTH_CSS }}
-    >
-      <AnimatedSidebar
-        side="right"
-        collapsible="offcanvas"
-        ariaLabel={copy.chatProfile}
-        aria-hidden={!open}
-        inert={!open}
-        className="overflow-hidden"
-        // Same shell as the agent panel: the central card's shadow carries
-        // the separation, so the vendored border is overridden here.
-        panelClassName="border-l-0 bg-transparent"
-      >
-        <header className="flex h-14 shrink-0 items-center gap-1 border-b px-3">
-          {stack.length > 1 ? (
-            <Button
-              size="icon"
-              variant="ghost"
-              aria-label={copy.back}
-              className="size-10"
-              onClick={goBack}
-            >
-              <ArrowLeft />
-            </Button>
-          ) : null}
-          {/* deslop-ignore-next-line 12 */}
-          <h2 className="min-w-0 flex-1 truncate text-base font-semibold">
-            {title}
-          </h2>
-          <Tooltip content={copy.closeChatProfile}>
-            <Button
-              size="icon"
-              variant="ghost"
-              aria-label={copy.closeChatProfile}
-              className="size-10"
-              onClick={closePanel}
-            >
-              <X />
-            </Button>
-          </Tooltip>
-        </header>
-        <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
-          {loadError ? (
+    <div className="flex h-full min-h-0 w-full flex-col">
+      <header className="flex h-14 shrink-0 items-center gap-1 border-b px-3">
+        {stack.length > 1 ? (
+          <Button
+            size="icon"
+            variant="ghost"
+            aria-label={copy.back}
+            className="size-10"
+            onClick={goBack}
+          >
+            <ArrowLeft />
+          </Button>
+        ) : null}
+        {/* deslop-ignore-next-line 12 */}
+        <h2 className="min-w-0 flex-1 truncate text-base font-semibold">
+          {title}
+        </h2>
+        <Tooltip content={copy.closeChatProfile}>
+          <Button
+            size="icon"
+            variant="ghost"
+            aria-label={copy.closeChatProfile}
+            className="size-10"
+            onClick={closePanel}
+          >
+            <X />
+          </Button>
+        </Tooltip>
+      </header>
+      <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
+        {loadError ? (
+          <p role="alert" className="px-4 py-3 text-sm text-destructive">
+            {copy.failed}: {loadError}
+          </p>
+        ) : null}
+        {!chat ? (
+          !peerId ? null : peerCard.error ? (
             <p role="alert" className="px-4 py-3 text-sm text-destructive">
-              {copy.failed}: {loadError}
+              {copy.failed}: {peerCard.error}
             </p>
-          ) : null}
-          {!chat ? (
-            !peerId ? null : peerCard.error ? (
-              <p role="alert" className="px-4 py-3 text-sm text-destructive">
-                {copy.failed}: {peerCard.error}
-              </p>
-            ) : peerCard.profile === null ? (
-              <ProfileSkeleton />
-            ) : (
-              <PeerCard profile={peerCard.profile} />
-            )
-          ) : sharedMedia === null || pinned === null ? (
-            loadError ? null : (
-              <ProfileSkeleton />
-            )
-          ) : current.view === "shared-media" ? (
-            <div className="flex flex-col gap-4 px-4 py-4">
-              {renderGrid(visualNewestFirst)}
-              {renderFiles(fileMedia)}
-            </div>
-          ) : current.view === "pinned" ? (
-            <div className="flex flex-col px-2 py-2">
-              {renderPinnedRows(pinned)}
-            </div>
+          ) : peerCard.profile === null ? (
+            <ProfileSkeleton />
           ) : (
-            <div className="flex flex-col gap-2 px-2 py-4">
-              <ProfileIdentity
-                avatarDataUrl={chat.avatarDataUrl}
-                avatarPending={chat.avatarPending}
-                title={chat.title}
-                status={subtitle(chat)}
-              />
-              {visualNewestFirst.length || fileMedia.length ? (
-                <section aria-label={copy.sharedMedia}>
-                  <SectionHeader
-                    label={copy.sharedMedia}
-                    count={visualNewestFirst.length + fileMedia.length}
-                    onOpen={() => navigate("shared-media")}
-                  />
-                  <div className="px-2">
-                    {renderGrid(
-                      visualNewestFirst.slice(0, SHARED_MEDIA_PREVIEW),
-                    )}
-                  </div>
-                </section>
-              ) : null}
-              {pinned.length ? (
-                <section aria-label={copy.pinnedMessages}>
-                  <SectionHeader
-                    label={copy.pinnedMessages}
-                    count={pinned.length}
-                    onOpen={() => navigate("pinned")}
-                  />
-                  {renderPinnedRows(pinned.slice(0, PINNED_PREVIEW))}
-                </section>
-              ) : null}
-            </div>
-          )}
-        </div>
-        <MediaViewer
-          item={
-            viewerCurrent
-              ? {
-                  ...viewerCurrent,
-                  url:
-                    viewerDownload?.state === "ready"
-                      ? viewerDownload.url
-                      : null,
-                }
-              : null
-          }
-          index={viewerIndex}
-          count={viewerItems.length}
-          origin={viewer?.origin ?? null}
-          labels={{
-            viewer: copy.mediaViewer,
-            close: copy.closeViewer,
-            previous: copy.previousMedia,
-            next: copy.nextMedia,
-            saveAs: copy.saveMediaAs,
-            open: copy.openMedia,
-            loading: copy.loading,
-          }}
-          error={
-            viewerError
-              ? `${copy.mediaActionFailed}${viewerError.detail ? `: ${viewerError.detail}` : ""}`
-              : null
-          }
-          onClose={() => setViewer(null)}
-          onNavigate={(next) => {
-            const target = viewerItems[next];
-            if (target) setViewer({ mediaId: target.id, origin: null });
-          }}
-          onSaveAs={(target) =>
-            void runViewerAction(() =>
-              window.telo.workspace.saveMediaAs(target.id, target.fileName),
-            )
-          }
-          onOpen={(target) =>
-            void runViewerAction(() =>
-              window.telo.workspace.openMedia(target.id),
-            )
-          }
-        />
-      </AnimatedSidebar>
-    </AnimatedSidebarProvider>
+            <PeerCard profile={peerCard.profile} />
+          )
+        ) : sharedMedia === null || pinned === null ? (
+          loadError ? null : (
+            <ProfileSkeleton />
+          )
+        ) : current.view === "shared-media" ? (
+          <div className="flex flex-col gap-4 px-4 py-4">
+            {renderGrid(visualNewestFirst)}
+            {renderFiles(fileMedia)}
+          </div>
+        ) : current.view === "pinned" ? (
+          <div className="flex flex-col px-2 py-2">
+            {renderPinnedRows(pinned)}
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2 px-2 py-4">
+            <ProfileIdentity
+              avatarDataUrl={chat.avatarDataUrl}
+              avatarPending={chat.avatarPending}
+              title={chat.title}
+              status={subtitle(chat)}
+            />
+            {visualNewestFirst.length || fileMedia.length ? (
+              <section aria-label={copy.sharedMedia}>
+                <SectionHeader
+                  label={copy.sharedMedia}
+                  count={visualNewestFirst.length + fileMedia.length}
+                  onOpen={() => navigate("shared-media")}
+                />
+                <div className="px-2">
+                  {renderGrid(visualNewestFirst.slice(0, SHARED_MEDIA_PREVIEW))}
+                </div>
+              </section>
+            ) : null}
+            {pinned.length ? (
+              <section aria-label={copy.pinnedMessages}>
+                <SectionHeader
+                  label={copy.pinnedMessages}
+                  count={pinned.length}
+                  onOpen={() => navigate("pinned")}
+                />
+                {renderPinnedRows(pinned.slice(0, PINNED_PREVIEW))}
+              </section>
+            ) : null}
+          </div>
+        )}
+      </div>
+      <MediaViewer
+        item={
+          viewerCurrent
+            ? {
+                ...viewerCurrent,
+                url:
+                  viewerDownload?.state === "ready" ? viewerDownload.url : null,
+              }
+            : null
+        }
+        index={viewerIndex}
+        count={viewerItems.length}
+        origin={viewer?.origin ?? null}
+        labels={{
+          viewer: copy.mediaViewer,
+          close: copy.closeViewer,
+          previous: copy.previousMedia,
+          next: copy.nextMedia,
+          saveAs: copy.saveMediaAs,
+          open: copy.openMedia,
+          loading: copy.loading,
+        }}
+        error={
+          viewerError
+            ? `${copy.mediaActionFailed}${viewerError.detail ? `: ${viewerError.detail}` : ""}`
+            : null
+        }
+        onClose={() => setViewer(null)}
+        onNavigate={(next) => {
+          const target = viewerItems[next];
+          if (target) setViewer({ mediaId: target.id, origin: null });
+        }}
+        onSaveAs={(target) =>
+          void runViewerAction(() =>
+            window.telo.workspace.saveMediaAs(target.id, target.fileName),
+          )
+        }
+        onOpen={(target) =>
+          void runViewerAction(() => window.telo.workspace.openMedia(target.id))
+        }
+      />
+    </div>
   );
 }
