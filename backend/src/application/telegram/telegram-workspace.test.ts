@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 
-import type { ChatDto, MessageDto } from "../../../../contracts/src/ipc";
+import type {
+  ChatDto,
+  MessageDto,
+  StickerSetReferenceDto,
+} from "../../../../contracts/src/ipc";
 import { KeywordFolder } from "../../domain/keyword-folder/keyword-folder";
 import type { KeywordFolderRepository } from "../../domain/keyword-folder/keyword-folder-ports";
 import type { TelegramRepository } from "../../domain/telegram/telegram-ports";
@@ -26,6 +30,16 @@ function repository(): TelegramRepository {
       phone: null,
     })),
     listStickerSets: vi.fn(async () => []),
+    getStickerCatalog: vi.fn(async () => ({
+      recent: [],
+      favorites: [],
+      sets: [],
+    })),
+    reorderStickerSets: vi.fn(async () => undefined),
+    setStickerFavorite: vi.fn(async () => undefined),
+    removeRecentSticker: vi.fn(async () => undefined),
+    clearRecentStickers: vi.fn(async () => undefined),
+    searchStickers: vi.fn(async () => []),
     sendSticker: vi.fn(async (chatId: string) => ({
       id: "sticker-message",
       chatId,
@@ -40,10 +54,12 @@ function repository(): TelegramRepository {
       outgoing: true,
       status: "sent" as const,
     })),
-    getStickerSet: vi.fn(async (shortName: string) => ({
+    getStickerSet: vi.fn(async (reference: StickerSetReferenceDto) => ({
       id: "sticker-set",
       title: "Telo Pack",
-      shortName,
+      shortName:
+        reference.kind === "short-name" ? reference.shortName : "telofaces",
+      reference,
       stickers: [],
       installed: false,
     })),
@@ -331,6 +347,7 @@ describe("TelegramWorkspaceService", () => {
         id: "set-1",
         title: "Telo Faces",
         shortName: "telofaces",
+        reference: { kind: "short-name" as const, shortName: "telofaces" },
         stickers: [
           {
             id: "sticker/12345",
@@ -348,6 +365,49 @@ describe("TelegramWorkspaceService", () => {
     const service = new TelegramWorkspaceService(port);
 
     await expect(service.listStickerSets()).resolves.toEqual(sets);
+  });
+
+  it("reads and mutates account-level sticker catalog state", async () => {
+    const port = repository();
+    const service = new TelegramWorkspaceService(port);
+
+    await expect(service.getStickerCatalog()).resolves.toEqual({
+      recent: [],
+      favorites: [],
+      sets: [],
+    });
+    await service.setStickerFavorite("sticker/1", true);
+    await service.removeRecentSticker("sticker/1");
+    await service.clearRecentStickers();
+
+    expect(port.setStickerFavorite).toHaveBeenCalledWith("sticker/1", true);
+    expect(port.removeRecentSticker).toHaveBeenCalledWith("sticker/1");
+    expect(port.clearRecentStickers).toHaveBeenCalledOnce();
+  });
+
+  it("validates and forwards the complete sticker-set order", async () => {
+    const port = repository();
+    const service = new TelegramWorkspaceService(port);
+
+    await service.reorderStickerSets(["2", "1"]);
+    expect(port.reorderStickerSets).toHaveBeenCalledWith(["2", "1"]);
+    expect(() => service.reorderStickerSets([])).toThrow(
+      "Sticker set order is required",
+    );
+    expect(() => service.reorderStickerSets(["1", "1"])).toThrow(
+      "Sticker set order contains duplicates",
+    );
+  });
+
+  it("normalizes sticker search before forwarding it", async () => {
+    const port = repository();
+    const service = new TelegramWorkspaceService(port);
+
+    await service.searchStickers("  party  ");
+    expect(port.searchStickers).toHaveBeenCalledWith("party");
+    expect(() => service.searchStickers("  ")).toThrow(
+      "Sticker search query is required",
+    );
   });
 
   it("sends a sticker through the port", async () => {
@@ -375,11 +435,29 @@ describe("TelegramWorkspaceService", () => {
     const port = repository();
     const service = new TelegramWorkspaceService(port);
 
-    await expect(service.getStickerSet("telofaces")).resolves.toMatchObject({
+    const reference = { kind: "short-name" as const, shortName: "telofaces" };
+    await expect(service.getStickerSet(reference)).resolves.toMatchObject({
       shortName: "telofaces",
       installed: false,
     });
-    expect(port.getStickerSet).toHaveBeenCalledWith("telofaces");
+    expect(port.getStickerSet).toHaveBeenCalledWith(reference);
+  });
+
+  it("normalizes an id-based sticker set reference before forwarding it", async () => {
+    const port = repository();
+    const service = new TelegramWorkspaceService(port);
+
+    await service.getStickerSet({
+      kind: "id",
+      id: " 9 ",
+      accessHash: " 99 ",
+    });
+
+    expect(port.getStickerSet).toHaveBeenCalledWith({
+      kind: "id",
+      id: "9",
+      accessHash: "99",
+    });
   });
 
   it.each([true, false])(
@@ -402,9 +480,9 @@ describe("TelegramWorkspaceService", () => {
     const port = repository();
     const service = new TelegramWorkspaceService(port);
 
-    expect(() => service.getStickerSet(" ")).toThrow(
-      "Sticker set name is required",
-    );
+    expect(() =>
+      service.getStickerSet({ kind: "short-name", shortName: " " }),
+    ).toThrow("Sticker set name is required");
     expect(() => service.setStickerSetInstalled(" ", true)).toThrow(
       "Sticker set name is required",
     );

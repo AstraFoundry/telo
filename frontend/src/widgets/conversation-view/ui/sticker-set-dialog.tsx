@@ -3,8 +3,15 @@ import { useEffect, useState } from "react";
 import type {
   StickerItemDto,
   StickerSetDto,
+  StickerSetReferenceDto,
 } from "../../../../../contracts/src/ipc";
 import { useChatStore } from "entities/chat";
+import {
+  StickerGridCell,
+  StickerHoldPreview,
+  StickerPreviewDialog,
+  StickerPreviewGesture,
+} from "features/send-message";
 import { copy } from "shared/config/copy";
 import {
   Button,
@@ -12,7 +19,6 @@ import {
   CenterMorphModalContent,
   Skeleton,
   SkeletonGroup,
-  Sticker,
 } from "shared/ui";
 
 /** The sheet's grid cell, matching the composer picker's measure. */
@@ -20,17 +26,23 @@ const CELL_PX = 72;
 const STICKER_PX = 64;
 
 interface StickerSetDialogProps {
-  /** Short name of the set to show; null closes the sheet. */
-  shortName: string | null;
+  /** Telegram set reference carried by the received sticker. */
+  reference: StickerSetReferenceDto | null;
   onClose(): void;
 }
 
 function SetSticker({
   sticker,
+  favorite,
   onPick,
+  onPreview,
+  onToggleFavorite,
 }: {
   readonly sticker: StickerItemDto;
+  readonly favorite: boolean;
   onPick(sticker: StickerItemDto): void;
+  onPreview(sticker: StickerItemDto): void;
+  onToggleFavorite(sticker: StickerItemDto, favorite: boolean): void;
 }) {
   const download = useChatStore(
     (state) => state.mediaDownloads[sticker.id] ?? null,
@@ -43,30 +55,22 @@ function SetSticker({
   }, [needsDownload, downloadMedia, sticker.id]);
 
   return (
-    <Button
-      size="icon"
-      variant="ghost"
-      aria-label={sticker.emoji ?? copy.sticker}
-      className="rounded-lg p-1"
-      style={{ width: CELL_PX, height: CELL_PX }}
-      onClick={() => onPick(sticker)}
-    >
-      <Sticker
-        sticker={{
-          emoji: sticker.emoji,
-          format: sticker.format,
-          setName: null,
-          outlinePath: sticker.outlinePath,
-        }}
-        width={sticker.width}
-        height={sticker.height}
-        src={download?.state === "ready" ? download.url : null}
-        label={copy.sticker}
-        playLabel={copy.playSticker}
-        maxSize={STICKER_PX}
-        still
-      />
-    </Button>
+    <StickerGridCell
+      sticker={sticker}
+      src={download?.state === "ready" ? download.url : null}
+      favorite={favorite}
+      labels={{
+        sticker: copy.sticker,
+        playSticker: copy.playSticker,
+        previewSticker: copy.previewSticker,
+        addFavorite: copy.addFavoriteSticker,
+        removeFavorite: copy.removeFavoriteSticker,
+        removeRecent: copy.removeRecentSticker,
+      }}
+      onPick={onPick}
+      onPreview={onPreview}
+      onToggleFavorite={onToggleFavorite}
+    />
   );
 }
 
@@ -76,29 +80,44 @@ function SetSticker({
  * not be installed, which is the point of the action.
  */
 export function StickerSetDialog({
-  shortName,
+  reference,
   onClose,
 }: StickerSetDialogProps) {
   const sendSticker = useChatStore((state) => state.sendSticker);
+  const favoriteStickers = useChatStore((state) => state.favoriteStickers);
+  const setStickerFavorite = useChatStore((state) => state.setStickerFavorite);
+  const setStickerSetInstalled = useChatStore(
+    (state) => state.setStickerSetInstalled,
+  );
   const [set, setSet] = useState<StickerSetDto | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [preview, setPreview] = useState<StickerItemDto | null>(null);
+  const [heldPreview, setHeldPreview] = useState<StickerItemDto | null>(null);
+  const favoriteIds = new Set(favoriteStickers.map((sticker) => sticker.id));
+  const previewDownload = useChatStore((state) =>
+    preview ? (state.mediaDownloads[preview.id] ?? null) : null,
+  );
+  const heldPreviewDownload = useChatStore((state) =>
+    heldPreview ? (state.mediaDownloads[heldPreview.id] ?? null) : null,
+  );
 
   // Each open refetches: the set may have been installed or removed since,
   // and the sheet is rare enough that a stale cache would cost more than the
   // round trip saves.
+  const referenceKey = reference ? JSON.stringify(reference) : null;
   const [openFor, setOpenFor] = useState<string | null>(null);
-  if (shortName !== openFor) {
-    setOpenFor(shortName);
+  if (referenceKey !== openFor) {
+    setOpenFor(referenceKey);
     setSet(null);
     setLoadError(null);
     setBusy(false);
   }
 
   useEffect(() => {
-    if (!shortName) return;
+    if (!reference) return;
     let cancelled = false;
-    void window.telo.workspace.getStickerSet(shortName).then(
+    void window.telo.workspace.getStickerSet(reference).then(
       (next) => {
         if (!cancelled) setSet(next);
       },
@@ -110,16 +129,13 @@ export function StickerSetDialog({
     return () => {
       cancelled = true;
     };
-  }, [shortName]);
+  }, [reference, referenceKey]);
 
   const toggleInstalled = async () => {
     if (!set) return;
     setBusy(true);
     try {
-      await window.telo.workspace.setStickerSetInstalled(
-        set.shortName,
-        !set.installed,
-      );
+      await setStickerSetInstalled(set, !set.installed);
       setSet({ ...set, installed: !set.installed });
     } catch (error) {
       setLoadError(error instanceof Error ? error.message : String(error));
@@ -133,9 +149,21 @@ export function StickerSetDialog({
     onClose();
   };
 
+  const toggleFavorite = async (sticker: StickerItemDto, favorite: boolean) => {
+    setBusy(true);
+    setLoadError(null);
+    try {
+      await setStickerFavorite(sticker, favorite);
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <CenterMorphModal
-      open={shortName !== null}
+      open={reference !== null}
       onOpenChange={(open) => {
         if (!open) onClose();
       }}
@@ -178,15 +206,25 @@ export function StickerSetDialog({
           ) : (
             <>
               <div className="min-h-0 flex-1 overflow-y-auto px-1.5">
-                <div className="flex flex-wrap gap-0.5">
-                  {set.stickers.map((sticker) => (
-                    <SetSticker
-                      key={sticker.id}
-                      sticker={sticker}
-                      onPick={pick}
-                    />
-                  ))}
-                </div>
+                <StickerPreviewGesture
+                  stickers={set.stickers}
+                  onPreview={setHeldPreview}
+                >
+                  <div className="flex flex-wrap gap-0.5">
+                    {set.stickers.map((sticker) => (
+                      <SetSticker
+                        key={sticker.id}
+                        sticker={sticker}
+                        favorite={favoriteIds.has(sticker.id)}
+                        onPick={pick}
+                        onPreview={setPreview}
+                        onToggleFavorite={(item, favorite) =>
+                          void toggleFavorite(item, favorite)
+                        }
+                      />
+                    ))}
+                  </div>
+                </StickerPreviewGesture>
               </div>
               <div className="px-2.5 pt-3">
                 <Button
@@ -202,6 +240,43 @@ export function StickerSetDialog({
           )}
         </div>
       </CenterMorphModalContent>
+      <StickerPreviewDialog
+        sticker={preview}
+        src={previewDownload?.state === "ready" ? previewDownload.url : null}
+        favorite={preview ? favoriteIds.has(preview.id) : false}
+        busy={busy}
+        error={loadError}
+        labels={{
+          preview: copy.previewSticker,
+          sticker: copy.sticker,
+          playSticker: copy.playSticker,
+          send: copy.sendSticker,
+          addFavorite: copy.addFavoriteSticker,
+          removeFavorite: copy.removeFavoriteSticker,
+          close: copy.closeDialog,
+        }}
+        onClose={() => {
+          setPreview(null);
+          setLoadError(null);
+        }}
+        onSend={(sticker) => {
+          setPreview(null);
+          pick(sticker);
+        }}
+        onToggleFavorite={(sticker, favorite) =>
+          void toggleFavorite(sticker, favorite)
+        }
+      />
+      <StickerHoldPreview
+        sticker={heldPreview}
+        src={
+          heldPreviewDownload?.state === "ready"
+            ? heldPreviewDownload.url
+            : null
+        }
+        label={copy.sticker}
+        playLabel={copy.playSticker}
+      />
     </CenterMorphModal>
   );
 }

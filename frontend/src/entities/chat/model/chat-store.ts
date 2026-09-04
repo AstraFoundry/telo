@@ -18,6 +18,7 @@ import type {
   MessageReplyToDto,
   StickerItemDto,
   StickerSetDto,
+  StickerSetSummaryDto,
   TelegramWorkspaceEvent,
   UiContextSnapshot,
 } from "../../../../../contracts/src/ipc";
@@ -351,13 +352,20 @@ interface ChatState {
    * the composer's popover: holding them in the store is what keeps reopening
    * it from refetching every installed set.
    */
-  stickerSets: ReadonlyArray<StickerSetDto> | null;
+  stickerSets: ReadonlyArray<StickerSetSummaryDto> | null;
+  recentStickers: ReadonlyArray<StickerItemDto>;
+  favoriteStickers: ReadonlyArray<StickerItemDto>;
   /**
    * Why the sets could not be loaded. Set once and left alone, so a failed
    * load reads as failed instead of retrying on every reveal.
    */
   stickerSetsError: string | null;
   loadStickerSets(): Promise<void>;
+  reorderStickerSets(setIds: ReadonlyArray<string>): Promise<void>;
+  setStickerFavorite(sticker: StickerItemDto, favorite: boolean): Promise<void>;
+  removeRecentSticker(stickerId: string): Promise<void>;
+  clearRecentStickers(): Promise<void>;
+  setStickerSetInstalled(set: StickerSetDto, installed: boolean): Promise<void>;
   /**
    * Emoji the active chat allows as reactions, in Telegram's order. Empty
    * until the first picker of that chat loads them, and emptied again on a
@@ -635,6 +643,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
   peerAvatars: {},
   customEmoji: {},
   stickerSets: null,
+  recentStickers: [],
+  favoriteStickers: [],
   stickerSetsError: null,
   availableReactions: [],
   notificationsEnabled: false,
@@ -938,13 +948,87 @@ export const useChatStore = create<ChatState>((set, get) => ({
     if (loadingStickerSets) return;
     loadingStickerSets = true;
     try {
-      const stickerSets = await window.telo.workspace.listStickerSets();
-      set({ stickerSets });
+      const catalog = await window.telo.workspace.getStickerCatalog();
+      set({
+        stickerSets: catalog.sets,
+        recentStickers: catalog.recent,
+        favoriteStickers: catalog.favorites,
+      });
     } catch (error) {
       set({ stickerSetsError: errorMessage(error) });
     } finally {
       loadingStickerSets = false;
     }
+  },
+  async reorderStickerSets(setIds) {
+    const previous = get().stickerSets;
+    if (!previous) return;
+    const byId = new Map(previous.map((set) => [set.id, set]));
+    const reordered = setIds.flatMap((id) => byId.get(id) ?? []);
+    if (reordered.length !== previous.length) {
+      throw new Error("Sticker set order must contain every installed set");
+    }
+    set({ stickerSets: reordered });
+    try {
+      await window.telo.workspace.reorderStickerSets(setIds);
+    } catch (error) {
+      set({ stickerSets: previous });
+      throw error;
+    }
+  },
+  async setStickerFavorite(sticker, favorite) {
+    const previous = get().favoriteStickers;
+    const next = favorite
+      ? [sticker, ...previous.filter((item) => item.id !== sticker.id)]
+      : previous.filter((item) => item.id !== sticker.id);
+    set({ favoriteStickers: next });
+    try {
+      await window.telo.workspace.setStickerFavorite(sticker.id, favorite);
+    } catch (error) {
+      set({ favoriteStickers: previous });
+      throw error;
+    }
+  },
+  async removeRecentSticker(stickerId) {
+    const previous = get().recentStickers;
+    set({
+      recentStickers: previous.filter((sticker) => sticker.id !== stickerId),
+    });
+    try {
+      await window.telo.workspace.removeRecentSticker(stickerId);
+    } catch (error) {
+      set({ recentStickers: previous });
+      throw error;
+    }
+  },
+  async clearRecentStickers() {
+    const previous = get().recentStickers;
+    set({ recentStickers: [] });
+    try {
+      await window.telo.workspace.clearRecentStickers();
+    } catch (error) {
+      set({ recentStickers: previous });
+      throw error;
+    }
+  },
+  async setStickerSetInstalled(stickerSet, installed) {
+    await window.telo.workspace.setStickerSetInstalled(
+      stickerSet.shortName,
+      installed,
+    );
+    set((state) => ({
+      stickerSetsError: null,
+      stickerSets: installed
+        ? [
+            { ...stickerSet, installed: true },
+            ...(state.stickerSets ?? []).filter(
+              (entry) => entry.id !== stickerSet.id,
+            ),
+          ]
+        : (state.stickerSets ?? []).filter(
+            (entry) => entry.id !== stickerSet.id,
+          ),
+    }));
   },
   async loadAvailableReactions() {
     const chatId = get().activeChatId;
@@ -994,7 +1078,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         sticker: {
           emoji: sticker.emoji,
           format: sticker.format,
-          setName: null,
+          setReference: null,
           outlinePath: sticker.outlinePath,
         },
       },
@@ -1019,6 +1103,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
           state.messages.filter((entry) => entry.id !== clientId),
           message,
         ),
+        recentStickers: [
+          sticker,
+          ...state.recentStickers.filter((item) => item.id !== sticker.id),
+        ],
       }));
     } catch {
       // Same as a failed text send: the bubble stays as `failed` in the
@@ -1538,6 +1626,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
     });
   },
   receive(event) {
+    if (event.type === "sticker-catalog-changed") {
+      const hadCatalog =
+        get().stickerSets !== null || get().stickerSetsError !== null;
+      set({
+        stickerSets: null,
+        recentStickers: [],
+        favoriteStickers: [],
+        stickerSetsError: null,
+      });
+      if (hadCatalog) void get().loadStickerSets();
+      return;
+    }
     if (event.type === "media-download") {
       set((state) => ({
         mediaDownloads: {

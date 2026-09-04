@@ -25,8 +25,10 @@ import type {
   PeerProfileDto,
   SetMessageReactionInput,
   StickerFormat,
+  StickerCatalogDto,
   StickerItemDto,
   StickerSetDto,
+  StickerSetReferenceDto,
   TelegramWorkspaceEvent,
 } from "../../../../contracts/src/ipc";
 import { ARCHIVE_FOLDER_ID } from "../../../../contracts/src/ipc";
@@ -49,6 +51,12 @@ import {
 // folder tabs, per-folder unread badges, and the Archive deterministically.
 const DEMO_WORK_FOLDER_ID = 2;
 const DEMO_WORK_FOLDER_TITLE = "Work";
+const DEMO_STICKER_SET_SHORT_NAME = "TeloPack";
+const DEMO_STICKER_SET_REFERENCE: StickerSetReferenceDto = {
+  kind: "id",
+  id: "demo-telopack",
+  accessHash: "1",
+};
 
 // Shared media is the photo/video/file slice of a chat's history; link
 // previews and non-visual documents (audio, stickers, …) stay out.
@@ -558,7 +566,7 @@ const INITIAL_MESSAGES: Record<string, ReadonlyArray<MessageDto>> = {
         sticker: {
           emoji: "👋",
           format: "static",
-          setName: "TeloPack",
+          setReference: DEMO_STICKER_SET_REFERENCE,
           outlinePath: DEMO_STICKER_OUTLINE_PATH,
         },
       },
@@ -588,7 +596,7 @@ const INITIAL_MESSAGES: Record<string, ReadonlyArray<MessageDto>> = {
         sticker: {
           emoji: "🎉",
           format: "animated",
-          setName: "TeloPack",
+          setReference: DEMO_STICKER_SET_REFERENCE,
           outlinePath: DEMO_STICKER_OUTLINE_PATH,
         },
       },
@@ -618,7 +626,7 @@ const INITIAL_MESSAGES: Record<string, ReadonlyArray<MessageDto>> = {
         sticker: {
           emoji: "🔥",
           format: "video",
-          setName: "TeloPack",
+          setReference: DEMO_STICKER_SET_REFERENCE,
           outlinePath: DEMO_STICKER_OUTLINE_PATH,
         },
       },
@@ -743,8 +751,6 @@ const DEMO_BOT_CALLBACK_ANSWERS: Record<
 // Lottie and video render paths. Every entry carries the message media a send
 // attaches and a download synthesizes, so a set sticker travels the same
 // pipeline as one that arrived on a message.
-const DEMO_STICKER_SET_SHORT_NAME = "TeloPack";
-
 interface DemoSticker {
   readonly item: StickerItemDto;
   readonly media: MessageMediaDto;
@@ -766,6 +772,7 @@ const DEMO_STICKER_SET: StickerSetDto = {
   id: "demo-telopack",
   title: "Telo Pack",
   shortName: DEMO_STICKER_SET_SHORT_NAME,
+  reference: DEMO_STICKER_SET_REFERENCE,
   stickers: DEMO_STICKERS.map((sticker) => sticker.item),
   // The starting installed state; the set sheet's add/remove toggle flips it
   // per repository instance, and the picker's list follows.
@@ -803,7 +810,7 @@ function demoSticker(
       sticker: {
         emoji,
         format,
-        setName: DEMO_STICKER_SET_SHORT_NAME,
+        setReference: DEMO_STICKER_SET_REFERENCE,
         outlinePath: DEMO_STICKER_OUTLINE_PATH,
       },
     },
@@ -882,6 +889,8 @@ export class DemoTelegramRepository implements TelegramRepository {
    * across calls the way an account-level install does.
    */
   private stickerSetInstalled = DEMO_STICKER_SET.installed;
+  private recentStickerIds: string[] = ["sticker/2", "sticker/1"];
+  private favoriteStickerIds: string[] = ["sticker/1"];
 
   constructor(options: DemoTelegramRepositoryOptions = {}) {
     this.typingDelayMs = options.typingDelayMs ?? 500;
@@ -1392,10 +1401,75 @@ export class DemoTelegramRepository implements TelegramRepository {
     return set.installed ? [set] : [];
   }
 
-  // The sheet a received sticker opens reads its set by short name, whether or
-  // not the account has it installed.
-  async getStickerSet(shortName: string): Promise<StickerSetDto> {
-    this.requireStickerSet(shortName);
+  async getStickerCatalog(): Promise<StickerCatalogDto> {
+    const item = (id: string) =>
+      DEMO_STICKERS.find((entry) => entry.item.id === id)?.item;
+    return {
+      recent: this.recentStickerIds.flatMap((id) => item(id) ?? []),
+      favorites: this.favoriteStickerIds.flatMap((id) => item(id) ?? []),
+      sets: await this.listStickerSets(),
+    };
+  }
+
+  async reorderStickerSets(setIds: ReadonlyArray<string>): Promise<void> {
+    const installed = await this.listStickerSets();
+    if (
+      setIds.length !== installed.length ||
+      setIds.some((id, index) => id !== installed[index]?.id)
+    ) {
+      throw new Error("Sticker set order must contain every installed set");
+    }
+    this.emit({ type: "sticker-catalog-changed" });
+  }
+
+  async setStickerFavorite(
+    stickerId: string,
+    favorite: boolean,
+  ): Promise<void> {
+    this.requireSticker(stickerId);
+    this.favoriteStickerIds = favorite
+      ? [stickerId, ...this.favoriteStickerIds.filter((id) => id !== stickerId)]
+      : this.favoriteStickerIds.filter((id) => id !== stickerId);
+    this.emit({ type: "sticker-catalog-changed" });
+  }
+
+  async removeRecentSticker(stickerId: string): Promise<void> {
+    this.requireSticker(stickerId);
+    this.recentStickerIds = this.recentStickerIds.filter(
+      (id) => id !== stickerId,
+    );
+    this.emit({ type: "sticker-catalog-changed" });
+  }
+
+  async clearRecentStickers(): Promise<void> {
+    this.recentStickerIds = [];
+    this.emit({ type: "sticker-catalog-changed" });
+  }
+
+  async searchStickers(query: string): Promise<ReadonlyArray<StickerItemDto>> {
+    const normalized = query.trim().toLocaleLowerCase();
+    const keywords: Record<string, ReadonlyArray<string>> = {
+      "sticker/1": ["wave", "hello", "hi"],
+      "sticker/2": ["party", "celebrate", "confetti"],
+      "sticker/3": ["fire", "hot", "flame"],
+    };
+    return DEMO_STICKERS.filter(
+      (entry) =>
+        entry.item.emoji?.includes(query) ||
+        keywords[entry.item.id]?.some((word) => word.includes(normalized)),
+    ).map((entry) => entry.item);
+  }
+
+  async getStickerSet(
+    reference: StickerSetReferenceDto,
+  ): Promise<StickerSetDto> {
+    if (
+      (reference.kind === "short-name" &&
+        reference.shortName !== DEMO_STICKER_SET_SHORT_NAME) ||
+      (reference.kind === "id" && reference.id !== DEMO_STICKER_SET.id)
+    ) {
+      throw new Error("Sticker set not found");
+    }
     return { ...DEMO_STICKER_SET, installed: this.stickerSetInstalled };
   }
 
@@ -1405,6 +1479,7 @@ export class DemoTelegramRepository implements TelegramRepository {
   ): Promise<void> {
     this.requireStickerSet(shortName);
     this.stickerSetInstalled = installed;
+    this.emit({ type: "sticker-catalog-changed" });
   }
 
   // A custom-emoji entity names a bare document id. The demo's stickers are
@@ -1427,12 +1502,17 @@ export class DemoTelegramRepository implements TelegramRepository {
     }
   }
 
+  private requireSticker(stickerId: string): DemoSticker {
+    const sticker = DEMO_STICKERS.find((entry) => entry.item.id === stickerId);
+    if (!sticker) throw new Error(`Unknown sticker ${stickerId}`);
+    return sticker;
+  }
+
   // Sending a set sticker is an ordinary outgoing message carrying the
   // sticker's media, so the transcript renders it exactly like a received one.
   async sendSticker(chatId: string, stickerId: string): Promise<MessageDto> {
     this.requireChat(chatId);
-    const sticker = DEMO_STICKERS.find((entry) => entry.item.id === stickerId);
-    if (!sticker) throw new Error(`Unknown sticker ${stickerId}`);
+    const sticker = this.requireSticker(stickerId);
     const message: MessageDto = {
       id: crypto.randomUUID(),
       chatId,
@@ -1449,6 +1529,10 @@ export class DemoTelegramRepository implements TelegramRepository {
     };
     const current = this.messages.get(chatId) ?? [];
     this.messages.set(chatId, [...current, message]);
+    this.recentStickerIds = [
+      stickerId,
+      ...this.recentStickerIds.filter((id) => id !== stickerId),
+    ];
     // A sticker has no body, so Telegram previews the dialog by its emoji.
     this.updateChat(chatId, (chat) => ({
       ...chat,

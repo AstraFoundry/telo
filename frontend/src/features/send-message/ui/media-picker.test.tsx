@@ -1,8 +1,11 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { StickerSetDto } from "../../../../../contracts/src/ipc";
+import type {
+  StickerCatalogDto,
+  StickerSetDto,
+} from "../../../../../contracts/src/ipc";
 import { copy } from "../../../shared/config/copy";
 import { installTeloApiMock } from "../../../shared/test/mock-telo";
 
@@ -25,6 +28,7 @@ const SET: StickerSetDto = {
   id: "1",
   title: "Telo Pack",
   shortName: "TeloPack",
+  reference: { kind: "short-name", shortName: "TeloPack" },
   installed: true,
   stickers: [
     {
@@ -45,6 +49,14 @@ const SET: StickerSetDto = {
     },
   ],
 };
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((complete) => {
+    resolve = complete;
+  });
+  return { promise, resolve };
+}
 
 function renderPicker(overrides?: {
   onPickEmoji?: (glyph: string) => void;
@@ -77,7 +89,12 @@ describe("MediaPicker", () => {
     // dynamic import shares the graph reset no test here resets, so the same
     // module instance is just mutated back.
     const { useChatStore } = await import("../../../entities/chat");
-    useChatStore.setState({ stickerSets: null, stickerSetsError: null });
+    useChatStore.setState({
+      stickerSets: null,
+      recentStickers: [],
+      favoriteStickers: [],
+      stickerSetsError: null,
+    });
   });
 
   it("puts emoji and stickers behind one composer button", async () => {
@@ -104,7 +121,12 @@ describe("MediaPicker", () => {
   it("loads the sets when the sticker tab is first shown, not on open", async () => {
     const user = userEvent.setup();
     const telo = installTeloApiMock();
-    telo.workspace.listStickerSets.mockResolvedValue([SET]);
+    telo.workspace.getStickerCatalog.mockResolvedValue({
+      recent: [],
+      favorites: [],
+      sets: [SET],
+    });
+    telo.workspace.getStickerSet.mockResolvedValue(SET);
     const onPickSticker = vi.fn();
 
     renderPicker({ onPickSticker });
@@ -112,11 +134,15 @@ describe("MediaPicker", () => {
     await user.click(screen.getByRole("button", { name: copy.mediaPicker }));
 
     // Emoji is the landing section, so opening the panel costs no round trip.
-    expect(telo.workspace.listStickerSets).not.toHaveBeenCalled();
+    expect(telo.workspace.getStickerCatalog).not.toHaveBeenCalled();
 
     await user.click(screen.getByRole("button", { name: copy.stickerPicker }));
 
     const cell = await screen.findByRole("button", { name: "👋" });
+    expect(telo.workspace.getStickerSet).toHaveBeenCalledWith(SET.reference);
+    const packTab = screen.getByRole("button", { name: SET.title });
+    expect(packTab.textContent).not.toContain("👋");
+    expect(packTab.querySelector('[data-slot="sticker"]')).toBeTruthy();
     // Each cell pulls its own document through the shared media pipeline.
     await waitFor(() => {
       expect(telo.workspace.downloadMedia).toHaveBeenCalledWith("sticker/1");
@@ -127,10 +153,75 @@ describe("MediaPicker", () => {
     expect(onPickSticker).toHaveBeenCalledWith(SET.stickers[0]);
   });
 
+  it("reserves the complete sticker panel while the catalog loads", async () => {
+    const user = userEvent.setup();
+    const telo = installTeloApiMock();
+    const catalog = deferred<StickerCatalogDto>();
+    telo.workspace.getStickerCatalog.mockReturnValue(catalog.promise);
+
+    renderPicker();
+
+    await user.click(screen.getByRole("button", { name: copy.mediaPicker }));
+    await user.click(screen.getByRole("button", { name: copy.stickerPicker }));
+
+    const skeleton = screen.getByRole("status", {
+      name: copy.loadingStickerSet,
+    });
+    expect(screen.queryByText(copy.loading)).toBeNull();
+    expect(
+      skeleton.querySelectorAll('[data-slot="sticker-grid-skeleton"]'),
+    ).toHaveLength(12);
+    expect(
+      skeleton.querySelectorAll(
+        '[data-slot="sticker-pack-thumbnail-skeleton"]',
+      ),
+    ).toHaveLength(5);
+
+    catalog.resolve({ recent: [], favorites: [], sets: [] });
+    expect(await screen.findByText(copy.noStickerSets)).toBeTruthy();
+  });
+
+  it("uses geometry-matched skeletons while a sticker pack resolves", async () => {
+    const user = userEvent.setup();
+    const telo = installTeloApiMock();
+    telo.workspace.getStickerCatalog.mockResolvedValue({
+      recent: [],
+      favorites: [],
+      sets: [SET],
+    });
+    const stickerSet = deferred<StickerSetDto>();
+    telo.workspace.getStickerSet.mockReturnValue(stickerSet.promise);
+
+    renderPicker();
+
+    await user.click(screen.getByRole("button", { name: copy.mediaPicker }));
+    await user.click(screen.getByRole("button", { name: copy.stickerPicker }));
+
+    const packTab = await screen.findByRole("button", { name: SET.title });
+    const skeleton = screen.getByRole("status", {
+      name: copy.loadingStickerSet,
+    });
+    expect(screen.queryByText(copy.loading)).toBeNull();
+    expect(
+      skeleton.querySelectorAll('[data-slot="sticker-grid-skeleton"]'),
+    ).toHaveLength(12);
+    expect(
+      packTab.querySelector('[data-slot="sticker-pack-thumbnail-skeleton"]'),
+    ).toBeTruthy();
+
+    stickerSet.resolve(SET);
+    expect(await screen.findByRole("button", { name: "👋" })).toBeTruthy();
+  });
+
   it("keeps a section's loaded state when the user tabs away and back", async () => {
     const user = userEvent.setup();
     const telo = installTeloApiMock();
-    telo.workspace.listStickerSets.mockResolvedValue([SET]);
+    telo.workspace.getStickerCatalog.mockResolvedValue({
+      recent: [],
+      favorites: [],
+      sets: [SET],
+    });
+    telo.workspace.getStickerSet.mockResolvedValue(SET);
 
     renderPicker();
 
@@ -143,18 +234,123 @@ describe("MediaPicker", () => {
 
     expect(await screen.findByRole("button", { name: "👋" })).toBeTruthy();
     // Switching sections is not a reload: the sets were fetched once.
-    expect(telo.workspace.listStickerSets).toHaveBeenCalledTimes(1);
+    expect(telo.workspace.getStickerCatalog).toHaveBeenCalledTimes(1);
   });
 
   it("says so when the account has no sets instead of showing an empty grid", async () => {
     const user = userEvent.setup();
     const telo = installTeloApiMock();
-    telo.workspace.listStickerSets.mockResolvedValue([]);
+    telo.workspace.getStickerCatalog.mockResolvedValue({
+      recent: [],
+      favorites: [],
+      sets: [],
+    });
 
     renderPicker();
     await user.click(screen.getByRole("button", { name: copy.mediaPicker }));
     await user.click(screen.getByRole("button", { name: copy.stickerPicker }));
 
     expect(await screen.findByText(copy.noStickerSets)).toBeTruthy();
+  });
+
+  it("opens a sticker preview from its secondary-action menu", async () => {
+    const user = userEvent.setup();
+    const telo = installTeloApiMock();
+    telo.workspace.getStickerCatalog.mockResolvedValue({
+      recent: [SET.stickers[0]!],
+      favorites: [],
+      sets: [SET],
+    });
+    const onPickSticker = vi.fn();
+    renderPicker({ onPickSticker });
+
+    await user.click(screen.getByRole("button", { name: copy.mediaPicker }));
+    await user.click(screen.getByRole("button", { name: copy.stickerPicker }));
+    const sticker = await screen.findByRole("button", { name: "👋" });
+    fireEvent.contextMenu(sticker);
+    await user.click(
+      await screen.findByRole("menuitem", { name: copy.previewSticker }),
+    );
+
+    const preview = await screen.findByRole("dialog", {
+      name: copy.previewSticker,
+    });
+    expect(preview).toBeTruthy();
+    await user.click(
+      screen.getByRole("button", { name: copy.addFavoriteSticker }),
+    );
+    await waitFor(() => {
+      expect(telo.workspace.setStickerFavorite).toHaveBeenCalledWith(
+        "sticker/1",
+        true,
+      );
+    });
+    await user.click(screen.getByRole("button", { name: copy.sendSticker }));
+    expect(onPickSticker).toHaveBeenCalledWith(SET.stickers[0]);
+  });
+
+  it("reorders installed packs and persists their complete id order", async () => {
+    const user = userEvent.setup();
+    const telo = installTeloApiMock();
+    const second: StickerSetDto = {
+      ...SET,
+      id: "2",
+      title: "Second Pack",
+      shortName: "SecondPack",
+      stickers: [{ ...SET.stickers[0]!, id: "sticker/3", emoji: "🐙" }],
+    };
+    telo.workspace.getStickerCatalog.mockResolvedValue({
+      recent: [],
+      favorites: [],
+      sets: [SET, second],
+    });
+    renderPicker();
+
+    await user.click(screen.getByRole("button", { name: copy.mediaPicker }));
+    await user.click(screen.getByRole("button", { name: copy.stickerPicker }));
+    await user.click(
+      await screen.findByRole("button", { name: copy.manageStickerSets }),
+    );
+    await user.click(
+      screen.getByRole("button", {
+        name: `${copy.moveStickerSetDown}: ${SET.title}`,
+      }),
+    );
+
+    await waitFor(() => {
+      expect(telo.workspace.reorderStickerSets).toHaveBeenCalledWith([
+        "2",
+        "1",
+      ]);
+    });
+  });
+
+  it("searches Telegram stickers and keeps result actions available", async () => {
+    const user = userEvent.setup();
+    const telo = installTeloApiMock();
+    const result = { ...SET.stickers[1]!, id: "sticker/remote" };
+    telo.workspace.getStickerCatalog.mockResolvedValue({
+      recent: [],
+      favorites: [],
+      sets: [SET],
+    });
+    telo.workspace.searchStickers.mockResolvedValue([result]);
+    renderPicker();
+
+    await user.click(screen.getByRole("button", { name: copy.mediaPicker }));
+    await user.click(screen.getByRole("button", { name: copy.stickerPicker }));
+    await user.type(
+      await screen.findByRole("textbox", { name: copy.searchStickers }),
+      "party",
+    );
+
+    await waitFor(() => {
+      expect(telo.workspace.searchStickers).toHaveBeenCalledWith("party");
+    });
+    const sticker = await screen.findByRole("button", { name: "🎉" });
+    fireEvent.contextMenu(sticker);
+    expect(
+      await screen.findByRole("menuitem", { name: copy.previewSticker }),
+    ).toBeTruthy();
   });
 });

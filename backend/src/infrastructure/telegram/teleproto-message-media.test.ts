@@ -117,7 +117,11 @@ describe("teleproto message media", () => {
       kind: "sticker",
       width: 512,
       height: 512,
-      sticker: { emoji: "🐱", format, setName: "CatPack" },
+      sticker: {
+        emoji: "🐱",
+        format,
+        setReference: { kind: "short-name", shortName: "CatPack" },
+      },
     });
   });
 
@@ -132,7 +136,26 @@ describe("teleproto message media", () => {
       }),
     ).toMatchObject({
       kind: "sticker",
-      sticker: { emoji: null, format: "static", setName: null },
+      sticker: { emoji: null, format: "static", setReference: null },
+    });
+  });
+
+  it("keeps the id and access hash used by received sticker messages", () => {
+    expect(
+      mapMessageMedia({
+        id: 8,
+        sticker: {},
+        document: {
+          attributes: [{ alt: "🐙", stickerset: { id: 9n, accessHash: 99n } }],
+        },
+        file: { name: "sticker.webp", mimeType: "image/webp" },
+      }),
+    ).toMatchObject({
+      kind: "sticker",
+      sticker: {
+        emoji: "🐙",
+        setReference: { kind: "id", id: "9", accessHash: "99" },
+      },
     });
   });
 

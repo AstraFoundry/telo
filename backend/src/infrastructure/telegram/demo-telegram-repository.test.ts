@@ -1295,7 +1295,11 @@ describe("DemoTelegramRepository", () => {
         id: "sticker/2",
         kind: "sticker",
         mimeType: "application/x-tgsticker",
-        sticker: { emoji: "🎉", format: "animated", setName: "TeloPack" },
+        sticker: {
+          emoji: "🎉",
+          format: "animated",
+          setReference: { kind: "id", id: "demo-telopack", accessHash: "1" },
+        },
       },
     });
     expect((await listMessages(repository, "design")).at(-1)).toEqual(sent);
@@ -1311,6 +1315,49 @@ describe("DemoTelegramRepository", () => {
     expect(chat?.preview).toBe("🎉");
   });
 
+  it("keeps recent and favorite sticker views in account state", async () => {
+    const repository = new DemoTelegramRepository();
+
+    await expect(repository.getStickerCatalog()).resolves.toMatchObject({
+      recent: [{ id: "sticker/2" }, { id: "sticker/1" }],
+      favorites: [{ id: "sticker/1" }],
+      sets: [{ id: "demo-telopack" }],
+    });
+
+    await repository.setStickerFavorite("sticker/2", true);
+    await repository.removeRecentSticker("sticker/1");
+    await repository.sendSticker("design", "sticker/3");
+    await expect(repository.getStickerCatalog()).resolves.toMatchObject({
+      recent: [{ id: "sticker/3" }, { id: "sticker/2" }],
+      favorites: [{ id: "sticker/2" }, { id: "sticker/1" }],
+    });
+
+    await repository.clearRecentStickers();
+    expect((await repository.getStickerCatalog()).recent).toEqual([]);
+  });
+
+  it("validates the complete installed sticker-set order", async () => {
+    const repository = new DemoTelegramRepository();
+
+    await expect(
+      repository.reorderStickerSets(["demo-telopack"]),
+    ).resolves.toBeUndefined();
+    await expect(repository.reorderStickerSets([])).rejects.toThrow(
+      "Sticker set order must contain every installed set",
+    );
+  });
+
+  it("searches stickers by emoji and semantic keywords", async () => {
+    const repository = new DemoTelegramRepository();
+
+    await expect(repository.searchStickers("party")).resolves.toMatchObject([
+      { id: "sticker/2", emoji: "🎉" },
+    ]);
+    await expect(repository.searchStickers("👋")).resolves.toMatchObject([
+      { id: "sticker/1", emoji: "👋" },
+    ]);
+  });
+
   it("rejects a sticker send to an unknown chat or for an unknown sticker", async () => {
     const repository = new DemoTelegramRepository();
 
@@ -1322,10 +1369,14 @@ describe("DemoTelegramRepository", () => {
     ).rejects.toThrow("Unknown sticker sticker/404");
   });
 
-  it("reads the set a received sticker opens by short name", async () => {
+  it("reads the set a received sticker opens by Telegram id", async () => {
     const repository = new DemoTelegramRepository();
 
-    const set = await repository.getStickerSet("TeloPack");
+    const set = await repository.getStickerSet({
+      kind: "id",
+      id: "demo-telopack",
+      accessHash: "1",
+    });
 
     expect(set).toMatchObject({
       id: "demo-telopack",
@@ -1343,9 +1394,9 @@ describe("DemoTelegramRepository", () => {
   it("rejects reading or installing an unknown sticker set", async () => {
     const repository = new DemoTelegramRepository();
 
-    await expect(repository.getStickerSet("NoPack")).rejects.toThrow(
-      "Unknown sticker set NoPack",
-    );
+    await expect(
+      repository.getStickerSet({ kind: "short-name", shortName: "NoPack" }),
+    ).rejects.toThrow("Sticker set not found");
     await expect(
       repository.setStickerSetInstalled("NoPack", true),
     ).rejects.toThrow("Unknown sticker set NoPack");
@@ -1358,7 +1409,12 @@ describe("DemoTelegramRepository", () => {
 
     await repository.setStickerSetInstalled("TeloPack", false);
 
-    expect(await repository.getStickerSet("TeloPack")).toMatchObject({
+    expect(
+      await repository.getStickerSet({
+        kind: "short-name",
+        shortName: "TeloPack",
+      }),
+    ).toMatchObject({
       shortName: "TeloPack",
       installed: false,
     });
@@ -1367,7 +1423,12 @@ describe("DemoTelegramRepository", () => {
 
     await repository.setStickerSetInstalled("TeloPack", true);
 
-    expect(await repository.getStickerSet("TeloPack")).toMatchObject({
+    expect(
+      await repository.getStickerSet({
+        kind: "short-name",
+        shortName: "TeloPack",
+      }),
+    ).toMatchObject({
       installed: true,
     });
     const sets = await repository.listStickerSets();

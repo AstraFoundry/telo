@@ -20,7 +20,9 @@ import type {
   PeerProfileDto,
   SetMessageReactionInput,
   StickerItemDto,
+  StickerCatalogDto,
   StickerSetDto,
+  StickerSetReferenceDto,
   TelegramWorkspaceEvent,
 } from "../../../../contracts/src/ipc";
 
@@ -63,13 +65,19 @@ export interface TelegramRepository {
    * them through the same path as the transcript.
    */
   listStickerSets(): Promise<ReadonlyArray<StickerSetDto>>;
+  getStickerCatalog(): Promise<StickerCatalogDto>;
+  reorderStickerSets(setIds: ReadonlyArray<string>): Promise<void>;
+  setStickerFavorite(stickerId: string, favorite: boolean): Promise<void>;
+  removeRecentSticker(stickerId: string): Promise<void>;
+  clearRecentStickers(): Promise<void>;
+  searchStickers(query: string): Promise<ReadonlyArray<StickerItemDto>>;
   /** Sends one sticker from an installed set into a chat. */
   sendSticker(chatId: string, stickerId: string): Promise<MessageDto>;
   /**
    * One set by short name, for the sheet a received sticker opens. Unlike
    * the picker's list this can return a set the account has not installed.
    */
-  getStickerSet(shortName: string): Promise<StickerSetDto>;
+  getStickerSet(reference: StickerSetReferenceDto): Promise<StickerSetDto>;
   /** Adds the set to the account's stickers, or removes it. */
   setStickerSetInstalled(shortName: string, installed: boolean): Promise<void>;
   /**

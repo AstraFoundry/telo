@@ -18,8 +18,9 @@
     "test": "vitest run --coverage",
     "test:unit": "vitest run",
     "test:e2e": "electron-vite build --mode e2e && playwright test",
+    "teleproto:check": "node scripts/check-teleproto-capabilities.mjs",
     "docs:check": "markdownlint-cli2 'README*.md' 'docs/**/*.md'",
-    "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm docs:check && pnpm test:e2e"
+    "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm teleproto:check && pnpm docs:check && pnpm test:e2e"
   },
   "build": {
     "appId": "dev.telo.desktop",

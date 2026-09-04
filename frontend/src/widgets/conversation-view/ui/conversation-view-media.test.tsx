@@ -117,7 +117,7 @@ function videoSticker(id: string): NonNullable<MessageDto["media"]> {
     sticker: {
       emoji: "🐱",
       format: "video",
-      setName: "CatPack",
+      setReference: { kind: "id", id: "9", accessHash: "99" },
       outlinePath: null,
     },
   };
@@ -374,5 +374,37 @@ describe("ConversationView media", () => {
       "\u{1F431}",
     )) as HTMLVideoElement;
     expect(video.loop).toBe(true);
+  });
+
+  it("opens a received sticker's set with its id-based Telegram reference", async () => {
+    const { telo } = await renderView({
+      messages: [message({ id: "m1", media: videoSticker("chat-1/s1") })],
+      mediaDownloads: {
+        "chat-1/s1": readyDownload("telo-media://cache/cat.webm"),
+      },
+    });
+    telo.workspace.getStickerSet.mockResolvedValue({
+      id: "9",
+      title: "Cat Pack",
+      shortName: "CatPack",
+      reference: { kind: "id", id: "9", accessHash: "99" },
+      installed: false,
+      stickers: [],
+    });
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: copy.openStickerSet }),
+    );
+
+    await waitFor(() => {
+      expect(telo.workspace.getStickerSet).toHaveBeenCalledWith({
+        kind: "id",
+        id: "9",
+        accessHash: "99",
+      });
+    });
+    expect(
+      await screen.findByRole("dialog", { name: "Cat Pack" }),
+    ).toBeTruthy();
   });
 });

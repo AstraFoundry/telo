@@ -1,7 +1,7 @@
 import path from "node:path";
 import { mkdir, readdir, stat, writeFile } from "node:fs/promises";
 
-import { Api, helpers, TelegramClient } from "teleproto";
+import { Api, helpers, TelegramClient, utils } from "teleproto";
 import { CustomFile } from "teleproto/client/uploads.js";
 import {
   DeletedMessage,
@@ -47,8 +47,11 @@ import type {
   PeerProfileDto,
   SetMessageReactionInput,
   StickerFormat,
+  StickerCatalogDto,
   StickerItemDto,
   StickerSetDto,
+  StickerSetReferenceDto,
+  StickerSetSummaryDto,
   TelegramAuthState,
   TelegramLoginConfigurationDto,
   TelegramLoginInput,
@@ -135,14 +138,12 @@ type ForwardTarget = {
   readonly messageId: string | null;
 };
 
-// The installed sticker list as this adapter last resolved it. `hash` is the
-// value messages.getAllStickers is to be called with, computed over the same
-// sets the server hashed. `documents` holds what the DTO media ids point at,
-// so a not-modified answer can keep them reachable without refetching a set.
+// Lightweight installed-set navigation as last returned by Telegram. Pack
+// documents are deliberately absent: mature clients resolve only the active
+// pack instead of blocking the picker on every installed pack.
 type CachedStickerSets = {
   readonly hash: bigint;
-  readonly sets: ReadonlyArray<StickerSetDto>;
-  readonly documents: ReadonlyArray<Api.Document>;
+  readonly sets: ReadonlyArray<StickerSetSummaryDto>;
 };
 
 // The picker's reaction emoji as this adapter last resolved them. `hash` is
@@ -484,12 +485,36 @@ export class TelegramClientCoordinator implements TelegramRepository {
     return this.repository.listStickerSets();
   }
 
+  getStickerCatalog(): Promise<StickerCatalogDto> {
+    return this.repository.getStickerCatalog();
+  }
+
+  reorderStickerSets(setIds: ReadonlyArray<string>): Promise<void> {
+    return this.repository.reorderStickerSets(setIds);
+  }
+
+  setStickerFavorite(stickerId: string, favorite: boolean): Promise<void> {
+    return this.repository.setStickerFavorite(stickerId, favorite);
+  }
+
+  removeRecentSticker(stickerId: string): Promise<void> {
+    return this.repository.removeRecentSticker(stickerId);
+  }
+
+  clearRecentStickers(): Promise<void> {
+    return this.repository.clearRecentStickers();
+  }
+
+  searchStickers(query: string): Promise<ReadonlyArray<StickerItemDto>> {
+    return this.repository.searchStickers(query);
+  }
+
   sendSticker(chatId: string, stickerId: string): Promise<MessageDto> {
     return this.repository.sendSticker(chatId, stickerId);
   }
 
-  getStickerSet(shortName: string): Promise<StickerSetDto> {
-    return this.repository.getStickerSet(shortName);
+  getStickerSet(reference: StickerSetReferenceDto): Promise<StickerSetDto> {
+    return this.repository.getStickerSet(reference);
   }
 
   getCustomEmoji(
@@ -802,6 +827,16 @@ class TeleprotoRepository implements TelegramRepository {
   private readonly userStatusUpdateBuilder = new Raw({
     types: [Api.UpdateUserStatus],
   });
+  private readonly stickerCatalogUpdateBuilder = new Raw({
+    types: [
+      Api.UpdateNewStickerSet,
+      Api.UpdateStickerSets,
+      Api.UpdateStickerSetsOrder,
+      Api.UpdateMoveStickerSetToTop,
+      Api.UpdateRecentStickers,
+      Api.UpdateFavedStickers,
+    ],
+  });
   private readonly onUserUpdate = (event: UserUpdateEvent) => {
     this.handleUserUpdate(event);
   };
@@ -831,6 +866,10 @@ class TeleprotoRepository implements TelegramRepository {
   };
   private readonly onFolderUpdate = () => {
     this.updateQueue.enqueue(() => this.handleFolderUpdate());
+  };
+  private readonly onStickerCatalogUpdate = () => {
+    this.stickerSets = null;
+    this.emit({ type: "sticker-catalog-changed" });
   };
   private readonly stopConnectionListener: () => void;
   private cachedDialogs: Array<{
@@ -889,6 +928,10 @@ class TeleprotoRepository implements TelegramRepository {
     client.addEventHandler(
       this.onUserStatusUpdate,
       this.userStatusUpdateBuilder,
+    );
+    client.addEventHandler(
+      this.onStickerCatalogUpdate,
+      this.stickerCatalogUpdateBuilder,
     );
     this.stopConnectionListener = client.updates.on(
       "connectionState",
@@ -1352,16 +1395,27 @@ class TeleprotoRepository implements TelegramRepository {
     return { bio: null, phone: null };
   }
 
-  // The picker draws the account's installed sets, which Telegram answers in
-  // two steps: the set headers, then the documents of each set. The per-set
-  // requests run one after another on purpose — Telegram rate-limits a burst
-  // of them.
-  //
-  // Every reopen of the picker calls this, so the resolved list is cached and
-  // the request carries the hash Telegram's own clients send: while the
-  // account's sets are unchanged the answer is messages.allStickersNotModified
-  // and not a single GetStickerSet runs.
+  // Compatibility path for callers that explicitly request every pack. The
+  // composer catalog below never calls this; it resolves one selected pack.
   async listStickerSets(): Promise<ReadonlyArray<StickerSetDto>> {
+    const summaries = await this.listStickerSetSummaries();
+    const sets: StickerSetDto[] = [];
+    for (const summary of summaries) {
+      try {
+        sets.push(await this.getStickerSet(summary.reference));
+      } catch (error) {
+        console.error(
+          `Telegram sticker set ${summary.shortName} failed`,
+          error,
+        );
+      }
+    }
+    return sets;
+  }
+
+  private async listStickerSetSummaries(): Promise<
+    ReadonlyArray<StickerSetSummaryDto>
+  > {
     const cached = this.stickerSets;
     const installed = await this.client.invoke(
       new Api.messages.GetAllStickers({
@@ -1370,103 +1424,133 @@ class TeleprotoRepository implements TelegramRepository {
       }),
     );
     if (!("sets" in installed)) {
-      // messages.allStickersNotModified: the list still hashes to what was
-      // sent, so the cached DTOs stand as they are. Their sticker documents
-      // are another matter — the media ids in them are only downloadable and
-      // sendable while `stickerDocuments` still holds the document behind
-      // each, and that map is a bounded LRU other sticker traffic (custom
-      // emoji, the set sheet) evicts from. Nothing on this path resolves them
-      // again, so touching them here is what keeps the list usable.
-      if (cached) {
-        for (const document of cached.documents) {
-          this.cacheStickerDocument(
-            `${STICKER_MEDIA_PREFIX}${document.id}`,
-            document,
-          );
-        }
-        return cached.sets;
-      }
-      // Only reachable with the zero hash, which the empty list also hashes
-      // to: an account with no installed sets.
-      return [];
+      return cached?.sets ?? [];
     }
-    const sets: StickerSetDto[] = [];
-    const documents: Api.Document[] = [];
-    let complete = true;
-    for (const set of installed.sets) {
-      const resolved = await this.stickerSet(set);
-      if (!resolved) {
-        complete = false;
-        continue;
-      }
-      sets.push(resolved.set);
-      documents.push(...resolved.documents);
-    }
-    // A list missing a set Telegram refused would otherwise be pinned by a
-    // hash that keeps matching, hiding that set until the account installs or
-    // removes something. Leaving the cache alone costs a full resolve next
-    // time and gives the failed set another chance.
-    if (complete) {
-      this.stickerSets = {
-        hash: countStickersHash(installed.sets),
-        sets,
-        documents,
-      };
-    }
+    const sets = installed.sets.map((set) => this.stickerSetSummaryOf(set));
+    this.stickerSets = {
+      hash: countStickersHash(installed.sets),
+      sets,
+    };
     return sets;
   }
 
-  // One set failing — a pack Telegram pulled, a flood wait on that id — must
-  // not cost the picker every other installed set, so it drops out of the
-  // list instead of rejecting it.
-  private async stickerSet(set: Api.TypeStickerSet): Promise<{
-    readonly set: StickerSetDto;
-    readonly documents: ReadonlyArray<Api.Document>;
-  } | null> {
-    try {
-      const resolved = await this.client.invoke(
-        new Api.messages.GetStickerSet({
-          stickerset: new Api.InputStickerSetID({
-            id: set.id,
-            accessHash: set.accessHash,
-          }),
-          hash: 0,
+  async getStickerCatalog(): Promise<StickerCatalogDto> {
+    const [sets, recentResult, favoriteResult] = await Promise.all([
+      this.listStickerSetSummaries(),
+      this.client.invoke(
+        new Api.messages.GetRecentStickers({
+          attached: false,
+          hash: helpers.returnBigInt(0n),
         }),
-      );
-      if (!("documents" in resolved)) {
-        throw new Error("Telegram returned no documents for the set");
-      }
-      const documents = stickerDocumentsOf(resolved.documents);
-      // GetAllStickers answers with the account's own sets, so every set this
-      // path maps is installed by definition.
-      return { set: this.stickerSetOf(set, documents, true), documents };
-    } catch (error) {
-      console.error(`Telegram sticker set ${set.shortName} failed`, error);
-      return null;
-    }
+      ),
+      this.client.invoke(
+        new Api.messages.GetFavedStickers({ hash: helpers.returnBigInt(0n) }),
+      ),
+    ]);
+    // A zero hash asks for the full vectors. Keeping the guard makes an
+    // unexpected not-modified response harmless without fabricating items.
+    const recent =
+      "stickers" in recentResult
+        ? stickerDocumentsOf(recentResult.stickers).map((document) =>
+            this.stickerItem(document),
+          )
+        : [];
+    const favorites =
+      "stickers" in favoriteResult
+        ? stickerDocumentsOf(favoriteResult.stickers).map((document) =>
+            this.stickerItem(document),
+          )
+        : [];
+    return { recent, favorites, sets };
   }
 
-  // The sheet opens the set behind a received sticker, which the account may
-  // not have installed, so this path reads the installed marker off the set
-  // Telegram answers with instead of assuming it.
-  async getStickerSet(shortName: string): Promise<StickerSetDto> {
+  async reorderStickerSets(setIds: ReadonlyArray<string>): Promise<void> {
+    const installed = await this.listStickerSetSummaries();
+    const currentIds = new Set(installed.map((set) => set.id));
+    if (
+      setIds.length !== installed.length ||
+      setIds.some((id) => !currentIds.has(id))
+    ) {
+      throw new Error("Sticker set order must contain every installed set");
+    }
+    await this.client.invoke(
+      new Api.messages.ReorderStickerSets({
+        order: setIds.map((id) => helpers.returnBigInt(BigInt(id))),
+      }),
+    );
+    this.stickerSets = null;
+    this.emit({ type: "sticker-catalog-changed" });
+  }
+
+  async setStickerFavorite(
+    stickerId: string,
+    favorite: boolean,
+  ): Promise<void> {
+    await this.client.invoke(
+      new Api.messages.FaveSticker({
+        id: utils.getInputDocument(this.stickerDocument(stickerId)),
+        unfave: !favorite,
+      }),
+    );
+    this.emit({ type: "sticker-catalog-changed" });
+  }
+
+  async removeRecentSticker(stickerId: string): Promise<void> {
+    await this.client.invoke(
+      new Api.messages.SaveRecentSticker({
+        attached: false,
+        id: utils.getInputDocument(this.stickerDocument(stickerId)),
+        unsave: true,
+      }),
+    );
+    this.emit({ type: "sticker-catalog-changed" });
+  }
+
+  async clearRecentStickers(): Promise<void> {
+    await this.client.invoke(
+      new Api.messages.ClearRecentStickers({ attached: false }),
+    );
+    this.emit({ type: "sticker-catalog-changed" });
+  }
+
+  async searchStickers(query: string): Promise<ReadonlyArray<StickerItemDto>> {
+    const result = await this.client.invoke(
+      new Api.messages.SearchStickers({
+        q: query,
+        emoticon: query,
+        langCode: [],
+        offset: 0,
+        limit: 80,
+        hash: helpers.returnBigInt(0n),
+      }),
+    );
+    return "stickers" in result
+      ? stickerDocumentsOf(result.stickers).map((document) =>
+          this.stickerItem(document),
+        )
+      : [];
+  }
+
+  async getStickerSet(
+    reference: StickerSetReferenceDto,
+  ): Promise<StickerSetDto> {
     let resolved: Api.messages.TypeStickerSet;
     try {
       resolved = await this.client.invoke(
         new Api.messages.GetStickerSet({
-          stickerset: new Api.InputStickerSetShortName({ shortName }),
+          stickerset: inputStickerSet(reference),
           hash: 0,
         }),
       );
     } catch (error) {
-      throw new Error(`Telegram sticker set ${shortName} was not found`, {
+      throw new Error("Telegram sticker set was not found", {
         cause: error,
       });
     }
     // messages.stickerSetNotModified answers a hash this adapter never sends,
     // so a set without documents is one Telegram did not resolve.
     if (!("documents" in resolved)) {
-      throw new Error(`Telegram sticker set ${shortName} was not found`);
+      throw new Error("Telegram sticker set was not found");
     }
     return this.stickerSetOf(
       resolved.set,
@@ -1499,6 +1583,7 @@ class TeleprotoRepository implements TelegramRepository {
     // change this client made itself: dropping the cache here keeps the claim
     // honest without waiting to be corrected.
     this.stickerSets = null;
+    this.emit({ type: "sticker-catalog-changed" });
   }
 
   // A custom-emoji entity names a bare document id. Those documents are
@@ -1523,8 +1608,8 @@ class TeleprotoRepository implements TelegramRepository {
     );
   }
 
-  // Both sticker paths — the picker's installed list and the sheet's lookup by
-  // short name — end at the same set and documents, so they map here.
+  // Both sticker paths — the picker's selected pack and a set opened from a
+  // received message — end at the same set and documents, so they map here.
   private stickerSetOf(
     set: Api.StickerSet,
     documents: ReadonlyArray<Api.Document>,
@@ -1534,8 +1619,18 @@ class TeleprotoRepository implements TelegramRepository {
       id: set.id.toString(),
       title: set.title,
       shortName: set.shortName,
+      reference: stickerSetReferenceOf(set),
       installed,
       stickers: documents.map((document) => this.stickerItem(document)),
+    };
+  }
+
+  private stickerSetSummaryOf(set: Api.StickerSet): StickerSetSummaryDto {
+    return {
+      id: set.id.toString(),
+      title: set.title,
+      shortName: set.shortName,
+      reference: stickerSetReferenceOf(set),
     };
   }
 
@@ -1559,6 +1654,22 @@ class TeleprotoRepository implements TelegramRepository {
     const sent = await this.client.sendFile(chatId, {
       file: this.stickerDocument(stickerId),
     });
+    // Telegram does not infer the recent list from sendMedia. Its API asks
+    // clients to record a manually chosen sticker after it was used. The send
+    // is already committed at this point, so a secondary-list failure is
+    // reported to diagnostics without turning a delivered message into a
+    // failed composer bubble.
+    try {
+      await this.client.invoke(
+        new Api.messages.SaveRecentSticker({
+          attached: false,
+          id: utils.getInputDocument(this.stickerDocument(stickerId)),
+          unsave: false,
+        }),
+      );
+    } catch (error) {
+      console.error("Telegram recent sticker update failed", error);
+    }
     this.indexMessage(chatId, sent);
     return this.toMessage(chatId, sent);
   }
@@ -2302,6 +2413,10 @@ class TeleprotoRepository implements TelegramRepository {
       this.onUserStatusUpdate,
       this.userStatusUpdateBuilder,
     );
+    this.client.removeEventHandler(
+      this.onStickerCatalogUpdate,
+      this.stickerCatalogUpdateBuilder,
+    );
   }
 
   private emit(event: TelegramWorkspaceEvent): void {
@@ -2771,6 +2886,27 @@ function stickerDocumentsOf(
   return documents.filter(
     (document): document is Api.Document => "mimeType" in document,
   );
+}
+
+function stickerSetReferenceOf(set: Api.StickerSet): StickerSetReferenceDto {
+  return set.accessHash != null
+    ? {
+        kind: "id",
+        id: set.id.toString(),
+        accessHash: set.accessHash.toString(),
+      }
+    : { kind: "short-name", shortName: set.shortName };
+}
+
+function inputStickerSet(
+  reference: StickerSetReferenceDto,
+): Api.TypeInputStickerSet {
+  return reference.kind === "id"
+    ? new Api.InputStickerSetID({
+        id: helpers.returnBigInt(BigInt(reference.id)),
+        accessHash: helpers.returnBigInt(BigInt(reference.accessHash)),
+      })
+    : new Api.InputStickerSetShortName({ shortName: reference.shortName });
 }
 
 // Telegram keeps the emoji a sticker stands for on DocumentAttributeSticker,

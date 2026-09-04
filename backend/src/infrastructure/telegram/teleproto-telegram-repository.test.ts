@@ -294,6 +294,12 @@ const fake = vi.hoisted(() => {
   class FakeInputMessagesFilterPinned {}
   class FakeUpdatePinnedMessages {}
   class FakeUpdatePinnedChannelMessages {}
+  class FakeUpdateNewStickerSet {}
+  class FakeUpdateStickerSets {}
+  class FakeUpdateStickerSetsOrder {}
+  class FakeUpdateMoveStickerSetToTop {}
+  class FakeUpdateRecentStickers {}
+  class FakeUpdateFavedStickers {}
   class FakePeerChannel {
     channelId: unknown;
     constructor(params: { channelId: unknown }) {
@@ -366,6 +372,68 @@ const fake = vi.hoisted(() => {
       this.stickerset = params.stickerset;
     }
   }
+  class FakeGetRecentStickers {
+    attached: unknown;
+    hash: unknown;
+    constructor(params: { attached: unknown; hash: unknown }) {
+      this.attached = params.attached;
+      this.hash = params.hash;
+    }
+  }
+  class FakeGetFavedStickers {
+    hash: unknown;
+    constructor(params: { hash: unknown }) {
+      this.hash = params.hash;
+    }
+  }
+  class FakeReorderStickerSets {
+    order: unknown;
+    constructor(params: { order: unknown }) {
+      this.order = params.order;
+    }
+  }
+  class FakeFaveSticker {
+    id: unknown;
+    unfave: unknown;
+    constructor(params: { id: unknown; unfave: unknown }) {
+      this.id = params.id;
+      this.unfave = params.unfave;
+    }
+  }
+  class FakeSaveRecentSticker {
+    attached: unknown;
+    id: unknown;
+    unsave: unknown;
+    constructor(params: { attached: unknown; id: unknown; unsave: unknown }) {
+      this.attached = params.attached;
+      this.id = params.id;
+      this.unsave = params.unsave;
+    }
+  }
+  class FakeClearRecentStickers {
+    attached: unknown;
+    constructor(params: { attached: unknown }) {
+      this.attached = params.attached;
+    }
+  }
+  class FakeSearchStickers {
+    q: unknown;
+    emoticon: unknown;
+    langCode: unknown;
+    offset: unknown;
+    limit: unknown;
+    hash: unknown;
+    constructor(params: {
+      q: unknown;
+      emoticon: unknown;
+      langCode: unknown;
+      offset: unknown;
+      limit: unknown;
+      hash: unknown;
+    }) {
+      Object.assign(this, params);
+    }
+  }
   // The inline keyboard constructors the message mapper narrows on, plus the
   // request a press sends. Only the fields the adapter reads are modelled.
   class FakeReplyInlineMarkup {
@@ -419,6 +487,12 @@ const fake = vi.hoisted(() => {
     FakeInputMessagesFilterPinned,
     FakeUpdatePinnedMessages,
     FakeUpdatePinnedChannelMessages,
+    FakeUpdateNewStickerSet,
+    FakeUpdateStickerSets,
+    FakeUpdateStickerSetsOrder,
+    FakeUpdateMoveStickerSetToTop,
+    FakeUpdateRecentStickers,
+    FakeUpdateFavedStickers,
     FakePeerChannel,
     FakeGetFullUser,
     FakeGetFullChannel,
@@ -430,6 +504,13 @@ const fake = vi.hoisted(() => {
     FakeInputStickerSetShortName,
     FakeInstallStickerSet,
     FakeUninstallStickerSet,
+    FakeGetRecentStickers,
+    FakeGetFavedStickers,
+    FakeReorderStickerSets,
+    FakeFaveSticker,
+    FakeSaveRecentSticker,
+    FakeClearRecentStickers,
+    FakeSearchStickers,
     FakeReplyInlineMarkup,
     FakeInlineButtonTypeCallback,
     FakeInlineButtonTypeUrl,
@@ -453,6 +534,12 @@ vi.mock("teleproto", () => ({
     InputMessagesFilterPinned: fake.FakeInputMessagesFilterPinned,
     UpdatePinnedMessages: fake.FakeUpdatePinnedMessages,
     UpdatePinnedChannelMessages: fake.FakeUpdatePinnedChannelMessages,
+    UpdateNewStickerSet: fake.FakeUpdateNewStickerSet,
+    UpdateStickerSets: fake.FakeUpdateStickerSets,
+    UpdateStickerSetsOrder: fake.FakeUpdateStickerSetsOrder,
+    UpdateMoveStickerSetToTop: fake.FakeUpdateMoveStickerSetToTop,
+    UpdateRecentStickers: fake.FakeUpdateRecentStickers,
+    UpdateFavedStickers: fake.FakeUpdateFavedStickers,
     PeerChannel: fake.FakePeerChannel,
     MessageMediaDocument: fake.FakeMessageMediaDocument,
     InputStickerSetID: fake.FakeInputStickerSetID,
@@ -469,12 +556,30 @@ vi.mock("teleproto", () => ({
       InstallStickerSet: fake.FakeInstallStickerSet,
       UninstallStickerSet: fake.FakeUninstallStickerSet,
       GetCustomEmojiDocuments: fake.FakeGetCustomEmojiDocuments,
+      GetRecentStickers: fake.FakeGetRecentStickers,
+      GetFavedStickers: fake.FakeGetFavedStickers,
+      ReorderStickerSets: fake.FakeReorderStickerSets,
+      FaveSticker: fake.FakeFaveSticker,
+      SaveRecentSticker: fake.FakeSaveRecentSticker,
+      ClearRecentStickers: fake.FakeClearRecentStickers,
+      SearchStickers: fake.FakeSearchStickers,
       GetBotCallbackAnswer: fake.FakeGetBotCallbackAnswer,
     },
   },
   // teleproto's own returnBigInt normalises into its big-integer type; the
   // identity keeps the value the adapter computed assertable as a bigint.
   helpers: { returnBigInt: (value: unknown) => value },
+  utils: {
+    getInputDocument: (document: {
+      id: unknown;
+      accessHash: unknown;
+      fileReference?: unknown;
+    }) => ({
+      id: document.id,
+      accessHash: document.accessHash,
+      fileReference: document.fileReference ?? new Uint8Array(),
+    }),
+  },
 }));
 vi.mock("teleproto/sessions/index.js", () => ({ StringSession: class {} }));
 
@@ -2336,7 +2441,10 @@ describe("TelegramClientCoordinator", () => {
         id: stickerSetHeader.id,
         accessHash: stickerSetHeader.accessHash,
       });
-      return { documents };
+      return {
+        set: { ...stickerSetHeader, installedDate: 1_700_000_000 },
+        documents,
+      };
     };
 
     await expect(coordinator.listStickerSets()).resolves.toEqual([
@@ -2344,6 +2452,7 @@ describe("TelegramClientCoordinator", () => {
         id: "9",
         title: "Telo Faces",
         shortName: "telofaces",
+        reference: { kind: "id", id: "9", accessHash: "99" },
         // The picker lists what the account already has.
         installed: true,
         stickers: [
@@ -2378,6 +2487,170 @@ describe("TelegramClientCoordinator", () => {
     ]);
   });
 
+  it("maps recent and favorite documents into the sticker catalog", async () => {
+    const coordinator = await connectedCoordinator();
+    const recent = fakeStickerDocument(601, {
+      mimeType: "application/x-tgsticker",
+      emoji: "🎉",
+    });
+    const favorite = fakeStickerDocument(701, {
+      mimeType: "video/webm",
+      emoji: "🔥",
+    });
+    FakeTelegramClient.invokeBehavior = async (request) => {
+      if (request instanceof fake.FakeGetAllStickers) {
+        return { sets: [stickerSetHeader] };
+      }
+      if (request instanceof fake.FakeGetStickerSet) {
+        throw new Error("The catalog must not resolve pack documents");
+      }
+      if (request instanceof fake.FakeGetRecentStickers) {
+        expect(request).toMatchObject({ attached: false, hash: 0n });
+        return { stickers: [recent] };
+      }
+      if (request instanceof fake.FakeGetFavedStickers) {
+        expect(request).toMatchObject({ hash: 0n });
+        return { stickers: [favorite] };
+      }
+      throw new Error("Unexpected sticker catalog request");
+    };
+
+    await expect(coordinator.getStickerCatalog()).resolves.toMatchObject({
+      sets: [
+        {
+          id: "9",
+          title: "Telo Faces",
+          shortName: "telofaces",
+          reference: { kind: "id", id: "9", accessHash: "99" },
+        },
+      ],
+      recent: [{ id: "sticker/601", emoji: "🎉", format: "animated" }],
+      favorites: [{ id: "sticker/701", emoji: "🔥", format: "video" }],
+    });
+  });
+
+  it("searches Telegram's sticker index and maps the returned documents", async () => {
+    const coordinator = await connectedCoordinator();
+    const sticker = fakeStickerDocument(801, {
+      mimeType: "image/webp",
+      emoji: "🎉",
+    });
+    FakeTelegramClient.invokeBehavior = async (request) => {
+      if (request instanceof fake.FakeSearchStickers) {
+        expect(request).toMatchObject({
+          q: "party",
+          emoticon: "party",
+          langCode: [],
+          offset: 0,
+          limit: 80,
+          hash: 0n,
+        });
+        return { stickers: [sticker] };
+      }
+      throw new Error("Unexpected sticker search request");
+    };
+
+    await expect(coordinator.searchStickers("party")).resolves.toMatchObject([
+      { id: "sticker/801", emoji: "🎉", format: "static" },
+    ]);
+  });
+
+  it("invalidates the sticker catalog when Telegram reports a remote change", async () => {
+    const coordinator = await connectedCoordinator();
+    const events: TelegramWorkspaceEvent[] = [];
+    coordinator.subscribe((event) => events.push(event));
+    const client = FakeTelegramClient.instances.at(-1);
+
+    dispatchRawUpdate(client, new fake.FakeUpdateFavedStickers());
+
+    expect(events).toContainEqual({ type: "sticker-catalog-changed" });
+  });
+
+  it("persists installed-set order after validating the complete list", async () => {
+    const coordinator = await connectedCoordinator();
+    const secondSet = {
+      id: BigInt(10),
+      accessHash: BigInt(100),
+      title: "Telo Octo",
+      shortName: "teloocto",
+      hash: 5678,
+    };
+    FakeTelegramClient.invokeBehavior = async (request) => {
+      if (request instanceof fake.FakeGetAllStickers) {
+        return { sets: [stickerSetHeader, secondSet] };
+      }
+      if (request instanceof fake.FakeGetStickerSet) {
+        const id = String((request.stickerset as { id: unknown }).id);
+        return {
+          documents: [
+            fakeStickerDocument(id === "9" ? 501 : 601, {
+              mimeType: "image/webp",
+            }),
+          ],
+        };
+      }
+      if (request instanceof fake.FakeReorderStickerSets) return true;
+      throw new Error("Unexpected reorder request");
+    };
+
+    await coordinator.reorderStickerSets(["10", "9"]);
+
+    const request = FakeTelegramClient.instances
+      .at(-1)
+      ?.invokeCalls.find(
+        (entry) => entry instanceof fake.FakeReorderStickerSets,
+      );
+    expect(request).toMatchObject({ order: [10n, 9n] });
+    await expect(coordinator.reorderStickerSets(["9"])).rejects.toThrow(
+      "Sticker set order must contain every installed set",
+    );
+  });
+
+  it("favorites and removes recent stickers through their cached documents", async () => {
+    const coordinator = await connectedCoordinator();
+    const document = fakeStickerDocument(501, {
+      mimeType: "image/webp",
+      emoji: "😀",
+    });
+    FakeTelegramClient.invokeBehavior = async (request) => {
+      if (request instanceof fake.FakeGetAllStickers) {
+        return { sets: [stickerSetHeader] };
+      }
+      if (request instanceof fake.FakeGetStickerSet) {
+        return {
+          set: { ...stickerSetHeader, installedDate: 1_700_000_000 },
+          documents: [document],
+        };
+      }
+      return true;
+    };
+
+    await coordinator.getStickerSet({
+      kind: "id",
+      id: "9",
+      accessHash: "99",
+    });
+    await coordinator.setStickerFavorite("sticker/501", true);
+    await coordinator.setStickerFavorite("sticker/501", false);
+    await coordinator.removeRecentSticker("sticker/501");
+    await coordinator.clearRecentStickers();
+
+    const requests = FakeTelegramClient.instances.at(-1)?.invokeCalls ?? [];
+    expect(
+      requests
+        .filter((request) => request instanceof fake.FakeFaveSticker)
+        .map((request) => (request as { unfave: boolean }).unfave),
+    ).toEqual([false, true]);
+    expect(
+      requests.find((request) => request instanceof fake.FakeSaveRecentSticker),
+    ).toMatchObject({ attached: false, unsave: true, id: { id: 501n } });
+    expect(
+      requests.find(
+        (request) => request instanceof fake.FakeClearRecentStickers,
+      ),
+    ).toMatchObject({ attached: false });
+  });
+
   it("skips a sticker set Telegram cannot resolve and keeps the rest", async () => {
     const logged = vi.spyOn(console, "error").mockImplementation(() => {});
     try {
@@ -2388,12 +2661,14 @@ describe("TelegramClientCoordinator", () => {
           accessHash: BigInt(11),
           title: "Gone",
           shortName: "gone",
+          hash: 1,
         },
         {
           id: BigInt(2),
           accessHash: BigInt(22),
           title: "Kept",
           shortName: "kept",
+          hash: 2,
         },
       ];
       FakeTelegramClient.invokeBehavior = async (request) => {
@@ -2407,6 +2682,7 @@ describe("TelegramClientCoordinator", () => {
             : "";
         if (requested === "1") throw new Error("STICKERSET_INVALID");
         return {
+          set: { ...sets[1], installedDate: 1_700_000_000 },
           documents: [
             fakeStickerDocument(601, { mimeType: "image/webp", emoji: "👋" }),
           ],
@@ -2418,6 +2694,7 @@ describe("TelegramClientCoordinator", () => {
           id: "2",
           title: "Kept",
           shortName: "kept",
+          reference: { kind: "id", id: "2", accessHash: "22" },
           installed: true,
           stickers: [
             {
@@ -2440,11 +2717,8 @@ describe("TelegramClientCoordinator", () => {
     }
   });
 
-  it("sends the computed list hash and skips the set requests when Telegram answers not-modified", async () => {
+  it("sends the computed list hash and never resolves pack documents for the catalog", async () => {
     const coordinator = await connectedCoordinator();
-    const documents = [
-      fakeStickerDocument(501, { mimeType: "image/webp", emoji: "😀" }),
-    ];
     const listHashes: string[] = [];
     let setRequests = 0;
     let notModified = false;
@@ -2454,27 +2728,30 @@ describe("TelegramClientCoordinator", () => {
         // messages.allStickersNotModified carries no `sets` field at all.
         return notModified ? {} : { sets: [stickerSetHeader] };
       }
-      if (!(request instanceof fake.FakeGetStickerSet)) {
-        throw new Error("Expected a messages.GetStickerSet request");
+      if (
+        request instanceof fake.FakeGetRecentStickers ||
+        request instanceof fake.FakeGetFavedStickers
+      ) {
+        return { stickers: [] };
       }
-      setRequests += 1;
-      return { documents };
+      if (request instanceof fake.FakeGetStickerSet) setRequests += 1;
+      throw new Error("Unexpected sticker catalog request");
     };
 
-    const first = await coordinator.listStickerSets();
+    const first = await coordinator.getStickerCatalog();
     notModified = true;
-    const second = await coordinator.listStickerSets();
+    const second = await coordinator.getStickerCatalog();
 
     // Nothing is cached for the first call, so it sends the zero hash; the
     // second sends what the answered list folds to.
     expect(listHashes).toEqual(["0", "1234"]);
-    // The not-modified answer stands in for the whole list, so not one set is
-    // fetched again.
-    expect(setRequests).toBe(1);
+    // The list only carries pack metadata; neither the first nor cached call
+    // downloads a pack's documents.
+    expect(setRequests).toBe(0);
     expect(second).toEqual(first);
   });
 
-  it("keeps a not-modified list's stickers downloadable after other stickers flood the document cache", async () => {
+  it("reopens a set to restore its documents after other stickers flood the cache", async () => {
     const directory = await mkdtemp(path.join(os.tmpdir(), "telo-notmod-"));
     try {
       const { coordinator } = createCoordinator({
@@ -2492,26 +2769,24 @@ describe("TelegramClientCoordinator", () => {
       const flood = Array.from({ length: 4000 }, (_, index) =>
         fakeStickerDocument(10_000 + index, { mimeType: "image/webp" }),
       );
-      let notModified = false;
       FakeTelegramClient.invokeBehavior = async (request) => {
-        if (request instanceof fake.FakeGetAllStickers) {
-          return notModified ? {} : { sets: [stickerSetHeader] };
-        }
         if (request instanceof fake.FakeGetCustomEmojiDocuments) return flood;
-        return { documents: [document] };
+        return {
+          set: { ...stickerSetHeader, installedDate: 1_700_000_000 },
+          documents: [document],
+        };
       };
       FakeTelegramClient.downloadMediaBehavior = async (_media, params) => {
         await writeFile(params.outputFile, "sticker-bytes");
       };
 
-      await coordinator.listStickerSets();
+      const reference = { kind: "id" as const, id: "9", accessHash: "99" };
+      await coordinator.getStickerSet(reference);
       await coordinator.getCustomEmoji(flood.map((entry) => String(entry.id)));
-      notModified = true;
-      await coordinator.listStickerSets();
+      await coordinator.getStickerSet(reference);
 
-      // Drawing a listed sticker needs the document behind its media id, not
-      // the DTO: the id outlived the flood only because the not-modified path
-      // put that document back instead of trusting the cached DTOs alone.
+      // Drawing a sticker needs the document behind its media id. Reopening
+      // the selected set restores that cache entry after eviction.
       await coordinator.downloadMedia("sticker/501");
       expect(FakeTelegramClient.instances.at(-1)?.downloadMediaCalls).toEqual([
         expect.objectContaining({ document }),
@@ -2523,9 +2798,6 @@ describe("TelegramClientCoordinator", () => {
 
   it("resolves the installed list again after the account installs a set", async () => {
     const coordinator = await connectedCoordinator();
-    const documents = [
-      fakeStickerDocument(501, { mimeType: "image/webp", emoji: "😀" }),
-    ];
     const listHashes: string[] = [];
     let setRequests = 0;
     FakeTelegramClient.invokeBehavior = async (request) => {
@@ -2534,18 +2806,24 @@ describe("TelegramClientCoordinator", () => {
         return { sets: [stickerSetHeader] };
       }
       if (request instanceof fake.FakeInstallStickerSet) return {};
-      setRequests += 1;
-      return { documents };
+      if (request instanceof fake.FakeGetStickerSet) setRequests += 1;
+      if (
+        request instanceof fake.FakeGetRecentStickers ||
+        request instanceof fake.FakeGetFavedStickers
+      ) {
+        return { stickers: [] };
+      }
+      throw new Error("Unexpected sticker catalog request");
     };
 
-    await coordinator.listStickerSets();
+    await coordinator.getStickerCatalog();
     await coordinator.setStickerSetInstalled("teloocto", true);
-    await coordinator.listStickerSets();
+    await coordinator.getStickerCatalog();
 
     // The install falsified the cached list, so the next call asks with the
-    // zero hash again and resolves the sets it is answered with.
+    // zero hash again without resolving the packs themselves.
     expect(listHashes).toEqual(["0", "0"]);
-    expect(setRequests).toBe(2);
+    expect(setRequests).toBe(0);
   });
 
   it("downloads a set sticker from its cached document, not from a message", async () => {
@@ -2565,14 +2843,21 @@ describe("TelegramClientCoordinator", () => {
       FakeTelegramClient.invokeBehavior = async (request) =>
         request instanceof fake.FakeGetAllStickers
           ? { sets: [stickerSetHeader] }
-          : { documents: [document] };
+          : {
+              set: { ...stickerSetHeader, installedDate: 1_700_000_000 },
+              documents: [document],
+            };
       FakeTelegramClient.downloadMediaBehavior = async (_media, params) => {
         await writeFile(params.outputFile, "sticker-bytes");
       };
       const events: unknown[] = [];
       coordinator.subscribe((event) => events.push(event));
 
-      await coordinator.listStickerSets();
+      await coordinator.getStickerSet({
+        kind: "id",
+        id: "9",
+        accessHash: "99",
+      });
       await coordinator.downloadMedia("sticker/501");
 
       // A set sticker has no carrying message, so nothing may be fetched.
@@ -2615,7 +2900,10 @@ describe("TelegramClientCoordinator", () => {
     FakeTelegramClient.invokeBehavior = async (request) =>
       request instanceof fake.FakeGetAllStickers
         ? { sets: [stickerSetHeader] }
-        : { documents: [document] };
+        : {
+            set: { ...stickerSetHeader, installedDate: 1_700_000_000 },
+            documents: [document],
+          };
     FakeTelegramClient.sendFileBehavior = async () => ({
       id: 77,
       message: "",
@@ -2627,7 +2915,11 @@ describe("TelegramClientCoordinator", () => {
       getSender: async () => ({ firstName: "You" }),
     });
 
-    await coordinator.listStickerSets();
+    await coordinator.getStickerSet({
+      kind: "id",
+      id: "9",
+      accessHash: "99",
+    });
 
     await expect(
       coordinator.sendSticker("chat-1", "sticker/501"),
@@ -2640,7 +2932,7 @@ describe("TelegramClientCoordinator", () => {
       media: {
         id: "chat-1/77",
         kind: "sticker",
-        sticker: { emoji: "😀", format: "static", setName: null },
+        sticker: { emoji: "😀", format: "static", setReference: null },
       },
     });
     const call = FakeTelegramClient.instances.at(-1)?.sendFileCalls[0];
@@ -2648,6 +2940,13 @@ describe("TelegramClientCoordinator", () => {
     // Telegram already stores the document, so the send carries it by id
     // instead of uploading the sticker bytes again.
     expect(call?.params.file).toBe(document);
+    expect(
+      FakeTelegramClient.instances
+        .at(-1)
+        ?.invokeCalls.find(
+          (request) => request instanceof fake.FakeSaveRecentSticker,
+        ),
+    ).toMatchObject({ attached: false, unsave: false, id: { id: 501n } });
   });
 
   it("opens a sticker set by short name and reads its installed marker", async () => {
@@ -2684,10 +2983,12 @@ describe("TelegramClientCoordinator", () => {
     };
 
     // A set opened from a received sticker is one the account may not have.
-    await expect(coordinator.getStickerSet("teloocto")).resolves.toEqual({
+    const reference = { kind: "short-name" as const, shortName: "teloocto" };
+    await expect(coordinator.getStickerSet(reference)).resolves.toEqual({
       id: "12",
       title: "Telo Octo",
       shortName: "teloocto",
+      reference: { kind: "id", id: "12", accessHash: "120" },
       installed: false,
       stickers: [
         {
@@ -2702,7 +3003,7 @@ describe("TelegramClientCoordinator", () => {
     });
 
     installedDate = 1_700_000_000;
-    await expect(coordinator.getStickerSet("teloocto")).resolves.toMatchObject({
+    await expect(coordinator.getStickerSet(reference)).resolves.toMatchObject({
       installed: true,
     });
   });
@@ -2729,7 +3030,10 @@ describe("TelegramClientCoordinator", () => {
         await writeFile(params.outputFile, "sticker-bytes");
       };
 
-      await coordinator.getStickerSet("telofaces");
+      await coordinator.getStickerSet({
+        kind: "short-name",
+        shortName: "telofaces",
+      });
       await coordinator.downloadMedia("sticker/702");
 
       // The sheet's stickers ride the picker's document cache, so they need
@@ -2743,15 +3047,15 @@ describe("TelegramClientCoordinator", () => {
     }
   });
 
-  it("rejects a sticker set short name Telegram cannot resolve", async () => {
+  it("rejects a sticker set reference Telegram cannot resolve", async () => {
     const coordinator = await connectedCoordinator();
     FakeTelegramClient.invokeBehavior = async () => {
       throw new Error("STICKERSET_INVALID");
     };
 
-    await expect(coordinator.getStickerSet("gone")).rejects.toThrow(
-      "Telegram sticker set gone was not found",
-    );
+    await expect(
+      coordinator.getStickerSet({ kind: "short-name", shortName: "gone" }),
+    ).rejects.toThrow("Telegram sticker set was not found");
   });
 
   it("installs and uninstalls a sticker set by short name", async () => {

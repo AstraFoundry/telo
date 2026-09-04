@@ -22,7 +22,9 @@ import type {
   PeerProfileDto,
   SetMessageReactionInput,
   StickerItemDto,
+  StickerCatalogDto,
   StickerSetDto,
+  StickerSetReferenceDto,
   TelegramAccountDto,
   TelegramAuthState,
   TelegramLoginConfigurationDto,
@@ -342,12 +344,36 @@ export class TelegramAccountCoordinator implements TelegramRepository {
     return this.delegate().listStickerSets();
   }
 
+  getStickerCatalog(): Promise<StickerCatalogDto> {
+    return this.delegate().getStickerCatalog();
+  }
+
+  reorderStickerSets(setIds: ReadonlyArray<string>): Promise<void> {
+    return this.delegate().reorderStickerSets(setIds);
+  }
+
+  setStickerFavorite(stickerId: string, favorite: boolean): Promise<void> {
+    return this.delegate().setStickerFavorite(stickerId, favorite);
+  }
+
+  removeRecentSticker(stickerId: string): Promise<void> {
+    return this.delegate().removeRecentSticker(stickerId);
+  }
+
+  clearRecentStickers(): Promise<void> {
+    return this.delegate().clearRecentStickers();
+  }
+
+  searchStickers(query: string): Promise<ReadonlyArray<StickerItemDto>> {
+    return this.delegate().searchStickers(query);
+  }
+
   sendSticker(chatId: string, stickerId: string): Promise<MessageDto> {
     return this.delegate().sendSticker(chatId, stickerId);
   }
 
-  getStickerSet(shortName: string): Promise<StickerSetDto> {
-    return this.delegate().getStickerSet(shortName);
+  getStickerSet(reference: StickerSetReferenceDto): Promise<StickerSetDto> {
+    return this.delegate().getStickerSet(reference);
   }
 
   setStickerSetInstalled(shortName: string, installed: boolean): Promise<void> {

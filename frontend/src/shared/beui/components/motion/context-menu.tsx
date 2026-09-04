@@ -200,12 +200,15 @@ export function ContextMenu({
 export interface ContextMenuTriggerProps {
   children: ReactElement<TriggerElementProps>;
   disabled?: boolean;
+  /** Keep right-click/keyboard access but let a parent own touch holding. */
+  touchLongPress?: boolean;
   className?: string;
 }
 
 export function ContextMenuTrigger({
   children,
   disabled = false,
+  touchLongPress = true,
   className,
 }: ContextMenuTriggerProps) {
   const context = useContextMenuContext("ContextMenuTrigger");
@@ -244,7 +247,8 @@ export function ContextMenuTrigger({
     // of the platform for it, so it holds to open too. A mouse has the right
     // button and is left to `onContextMenu`.
     const pressToOpen =
-      event.pointerType === "touch" || event.pointerType === "pen";
+      touchLongPress &&
+      (event.pointerType === "touch" || event.pointerType === "pen");
     if (event.defaultPrevented || disabled || !pressToOpen) return;
 
     // `pointer-coarse:select-none` misses this press on a laptop whose mouse
@@ -500,7 +504,7 @@ export function ContextMenuContent({
       inert={!context.open}
       style={{ left: position.x, top: position.y }}
       className={cn(
-        "fixed z-[100] [filter:drop-shadow(0_18px_28px_rgba(0,0,0,0.2))]",
+        "fixed z-[10000] [filter:drop-shadow(0_18px_28px_rgba(0,0,0,0.2))]",
         context.open ? "pointer-events-auto" : "pointer-events-none",
       )}
     >

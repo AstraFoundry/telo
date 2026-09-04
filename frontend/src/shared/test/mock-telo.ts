@@ -5,6 +5,7 @@ import type {
   SendMediaInput,
   TelegramWorkspaceEvent,
   TeloDesktopApi,
+  StickerSetReferenceDto,
 } from "../../../../contracts/src/ipc";
 
 type MockedFunctions<T> = {
@@ -88,6 +89,16 @@ export function installTeloApiMock(): TeloApiMock {
         phone: null,
       })),
       listStickerSets: vi.fn(async () => []),
+      getStickerCatalog: vi.fn(async () => ({
+        recent: [],
+        favorites: [],
+        sets: [],
+      })),
+      reorderStickerSets: vi.fn(async () => undefined),
+      setStickerFavorite: vi.fn(async () => undefined),
+      removeRecentSticker: vi.fn(async () => undefined),
+      clearRecentStickers: vi.fn(async () => undefined),
+      searchStickers: vi.fn(async () => []),
       sendSticker: vi.fn(async (chatId: string) => ({
         id: "sticker-message",
         chatId,
@@ -102,10 +113,12 @@ export function installTeloApiMock(): TeloApiMock {
         outgoing: true,
         status: "sent" as const,
       })),
-      getStickerSet: vi.fn(async (shortName: string) => ({
+      getStickerSet: vi.fn(async (reference: StickerSetReferenceDto) => ({
         id: "sticker-set",
         title: "Telo Pack",
-        shortName,
+        shortName:
+          reference.kind === "short-name" ? reference.shortName : "TeloPack",
+        reference,
         stickers: [],
         installed: true,
       })),

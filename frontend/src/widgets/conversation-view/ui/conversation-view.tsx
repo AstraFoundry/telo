@@ -40,6 +40,7 @@ import type {
   MessageButtonDto,
   MessageDto,
   MessageForwardDto,
+  StickerSetReferenceDto,
   TimeFormatPreference,
 } from "../../../../../contracts/src/ipc";
 import {
@@ -675,7 +676,7 @@ function ConversationMessage({
   onDelete(message: MessageDto): void;
   onJumpToMessage(messageId: string): void;
   onOpenViewer(mediaId: string, trigger: HTMLElement): void;
-  onOpenStickerSet(shortName: string): void;
+  onOpenStickerSet(reference: StickerSetReferenceDto): void;
 }) {
   const startReply = useChatStore((state) => state.startReply);
   const startEdit = useChatStore((state) => state.startEdit);
@@ -768,8 +769,10 @@ function ConversationMessage({
 
   // A sticker opens its set, the way Telegram does; one with no set has
   // nothing to open and stays a plain image.
-  const stickerSetName =
-    fileMedia?.kind === "sticker" ? (fileMedia.sticker?.setName ?? null) : null;
+  const stickerSetReference =
+    fileMedia?.kind === "sticker"
+      ? (fileMedia.sticker?.setReference ?? null)
+      : null;
 
   const mediaNode = message.media ? (
     <div ref={mediaKey ? preloadRef : undefined}>
@@ -789,8 +792,8 @@ function ConversationMessage({
         onOpen={
           fileMedia && isVisualMedia(fileMedia)
             ? (trigger) => onOpenViewer(fileMedia.id, trigger)
-            : stickerSetName
-              ? () => onOpenStickerSet(stickerSetName)
+            : stickerSetReference
+              ? () => onOpenStickerSet(stickerSetReference)
               : undefined
         }
       />
@@ -1419,7 +1422,8 @@ export function ConversationView() {
   const [selectionDeleteOpen, setSelectionDeleteOpen] = useState(false);
   const [selectionForwardOpen, setSelectionForwardOpen] = useState(false);
   const [viewer, setViewer] = useState<ViewerState | null>(null);
-  const [stickerSetName, setStickerSetName] = useState<string | null>(null);
+  const [stickerSetReference, setStickerSetReference] =
+    useState<StickerSetReferenceDto | null>(null);
   const [historyPagingReadyChatId, setHistoryPagingReadyChatId] = useState<
     string | null
   >(null);
@@ -1975,7 +1979,7 @@ export function ConversationView() {
                       void jumpToMessage(messageId)
                     }
                     onOpenViewer={openViewer}
-                    onOpenStickerSet={setStickerSetName}
+                    onOpenStickerSet={setStickerSetReference}
                   />
                 ) : (
                   <AlbumMessage
@@ -2088,8 +2092,8 @@ export function ConversationView() {
         onClose={() => setForwardSource(null)}
       />
       <StickerSetDialog
-        shortName={stickerSetName}
-        onClose={() => setStickerSetName(null)}
+        reference={stickerSetReference}
+        onClose={() => setStickerSetReference(null)}
       />
       <ForwardSelectedDialog
         open={selectionForwardOpen && selecting}
