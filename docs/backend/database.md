@@ -1,6 +1,6 @@
 # Local persistence
 
-Telo does not use a database or ORM. Infrastructure adapters persist small records under Electron's per-user data directory:
+Telo does not use an application ORM. Agent, preferences, and the account registry stay as small files under Electron's per-user data directory. Telegram client data is different: after ADR [`../decisions/005-tdlib-client-kernel.md`](../decisions/005-tdlib-client-kernel.md) the production adapter stores chats and messages in TDLib's per-account SQLite tree (`tdlib/<accountId>/`), not in `dialogs.json`. The Teleproto-era files below remain accurate until that adapter ships.
 
 - `agent.json`: agent configuration with an encrypted API key and encrypted OAuth tokens, restrictive file mode.
 - `agent-threads.json`: agent conversation transcripts and the active-thread pointer. They hold no secrets, so the file is plain JSON with a restrictive file mode.

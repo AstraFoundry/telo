@@ -2,7 +2,9 @@
 
 ## Status
 
-Accepted.
+Superseded by [`005-tdlib-client-kernel.md`](005-tdlib-client-kernel.md).
+
+The product now requires a complete Telegram client kernel (local message database, authoritative chat-list order, secret chats). Those are TDLib runtime features, not Teleproto protocol features. Keep this record for the evaluation that held while Wave 7 treated them as out of scope.
 
 ## Context
 

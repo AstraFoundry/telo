@@ -12,4 +12,4 @@ Telo is a third-party Telegram client. The Teleproto request surface is therefor
 
 The matrix is a planning and audit baseline. `covered` does not mean every low-level request in that namespace has a dedicated UI; it means the named product capability has an implemented client workflow. New workflows must update this matrix and the relevant product documentation in the same change.
 
-Telo stays on Teleproto. A full migration to [TDLib](https://github.com/tdlib/td) was evaluated and rejected: Teleproto is the wire protocol (and is documented for automation), TDLib is a client runtime; Telo already implements the kernel the protocol library does not ship. See [`../decisions/004-keep-teleproto.md`](../decisions/004-keep-teleproto.md).
+The production kernel is TDLib in the Electron main process ([`../decisions/005-tdlib-client-kernel.md`](../decisions/005-tdlib-client-kernel.md)). This Teleproto matrix remains the audit of the current adapter until the TDLib adapter and a `td_api` baseline replace it. `pnpm teleproto:check` stays in `make check` until that cutover.

@@ -13,7 +13,7 @@
 - [Kimi CLI OAuth](https://github.com/MoonshotAI/kimi-cli/blob/main/src/kimi_cli/auth/oauth.py)
 - [AG-UI protocol](https://docs.ag-ui.com/)
 - [Teleproto](https://github.com/Sanyok12345/Teleproto)
-- [TDLib](https://github.com/tdlib/td) — evaluated and not adopted; see [`../decisions/004-keep-teleproto.md`](../decisions/004-keep-teleproto.md)
+- [TDLib](https://github.com/tdlib/td) — production Telegram client kernel; see [`../decisions/005-tdlib-client-kernel.md`](../decisions/005-tdlib-client-kernel.md)
 - [Telegram update synchronization](https://core.telegram.org/api/updates)
 - [Telegram iOS Postbox chat-list view](https://github.com/TelegramMessenger/Telegram-iOS/blob/master/submodules/Postbox/Sources/ChatListView.swift)
 - [Nicegram iOS (Telegram-iOS fork)](https://github.com/nicegram/Nicegram-iOS)

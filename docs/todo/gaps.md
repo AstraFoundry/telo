@@ -13,7 +13,7 @@
 - [ ] ~~AI Token 经济 / Agent Marketplace~~
 - [ ] ~~通话录音 / 替代通话通道~~
 - [ ] ~~隐藏账号 / 隐藏会话（P0）~~ — 工作区定位可后置，不当第一批
-- [ ] ~~通话、群组通话、屏幕共享、Stories、Secret Chats、论坛 Topics、频道评论、机器人 / Mini Apps~~ — 默认 P2，见 Wave 7
+- [ ] ~~通话、群组通话、屏幕共享、Stories、论坛 Topics、频道评论、机器人 / Mini Apps~~ — 默认 P2，见 Wave 7。Secret Chats 已升为客户端内核
 
 ## Wave 1 — 同步与文本会话正确性
 
@@ -112,12 +112,20 @@ Rejected (gate): chat-row / folder-tab springs (100+/day nav; `pressScale={1}` s
 - [x] 多账号：Telegram 级 3 个即可，不追求无限账号——已实现。产品决策（原先三个待拍板项，现以默认落地）：Agent 只作用于**当前激活账号**（切换账号即换工作区，`agent-audit.jsonl` 的设备边界因此始终清晰）；未读**不**跨账号汇总（切换器中其它账号的角标是上次激活时的快照，非实时数——只有激活账号保持连接，该决策写在 coordinator 注释里）；关键词文件夹与消息模板**按设备**而非按账号共享。实现：`accounts.json` 注册表（0600、原子写）+ `TelegramAccountCoordinator` 委托给按账号的 coordinator；session / profile / dialog 快照 / 媒体缓存全部按账号路径化，旧单账号文件首次启动迁移（先复制再落注册表，已登录用户不会掉线）；已登录时 `beginLogin` 开新账号（上限 3，对齐 tdesktop 免费档）；`setActiveAccount` 停放旧账号、恢复目标账号（restoring → ready）；logout 移除当前账号并回落到下一个或 idle。渲染层：账号菜单首选项上方一排圆形头像（激活带主色 ring、未激活带未读角标）+ 缺省圆形加号开引导式加账号流（可取消、不触碰 auth）；进入 ready 的任何路径都整体重载工作区与账号列表
 - [x] 表情 / 贴纸 / GIF 选择器、格式化、mention — 表情选择器在 Wave 4 已落地；格式化为 `composer-entities.ts` 的 UTF-16 实体运算（`diffEdit` / `shiftEntities` / `toggleFormat` / `insertAt` / `trimOutgoingMessage`，受控 textarea 只报新值，故用前后缀 diff 推出改动区间再迁移实体），六项格式（粗 / 斜 / 下划线 / 删除线 / 等宽 / 剧透）走快捷键与选区右键菜单，输入框顶部没有常驻工具栏——与 Telegram 自己的输入框一致，`SendMessageInput.entities` 端到端（teleproto `mapMessageEntitiesForSend` 只映射用户显式授权的 span，不做自动解析；demo 存回实体）；mention 为 `mention-query.ts`（光标处 `@` 查询 / 成员过滤 / 插入）+ 新 `ChatMemberDto` 与 `listChatMembers` IPC（teleproto `getParticipants`，demo 确定性成员），`MentionAutocomplete` 是 `OptionRow` 组成的 listbox，上下键 + Enter 选中、Esc 关闭。**贴纸 / GIF 暂缓**：contracts / teleproto / demo 均无 sticker / GIF 支持，按「不 ship 死按钮」省略入口（同 Wave 4 反应位的处理）
 
+## 客户端内核 — TDLib
+
+产品首先是完整 Telegram 客户端。这三项不靠在 Teleproto 上自研 Postbox 补齐，见 [`../decisions/005-tdlib-client-kernel.md`](../decisions/005-tdlib-client-kernel.md)。打包 `libtdjson` 过不了就停，不先改 mapper。
+
+- [ ] 每账号加密的 TDLib 消息库（重启后侧栏和最近会话不是空的 `GetDialogs`）
+- [ ] 会话列表顺序与 Telegram Desktop 对齐（主列表 / 文件夹 / Archive 用库给出的 position，renderer 不自己排序）
+- [ ] Secret Chats：`ChatKind` 增加 `"secret"`，创建立即、设备本地历史、侧栏锁标；依赖 TDLib `use_secret_chats`
+
 ## Wave 7 — 默认不做
 
 需要明确产品决策后再开。不要混进前面的波次。
 
 - [ ] 一对一 / 群组通话、屏幕共享
-- [ ] Stories、Secret Chats、论坛 Topics、频道评论
+- [ ] Stories、论坛 Topics、频道评论
 - [ ] 机器人、Mini Apps、Stars
 - [ ] 隐藏账号、隐藏会话
 - [ ] 钱包 / Web3 / 托管
