@@ -9,11 +9,8 @@ import {
   buildWorkspaceContext,
   useChatStore,
 } from "entities/chat";
-import { RIGHT_PANEL_WIDTH_CSS } from "entities/preferences";
 import { copy } from "shared/config/copy";
 import {
-  AnimatedSidebar,
-  AnimatedSidebarProvider,
   Button,
   MentionAutocomplete,
   Message,
@@ -46,7 +43,6 @@ interface GlobalAgentPanelProps {
 export function GlobalAgentPanel({ onOpenSettings }: GlobalAgentPanelProps) {
   const open = useAgentStore((state) => state.open);
   const close = useAgentStore((state) => state.close);
-  const toggle = useAgentStore((state) => state.toggle);
   const messages = useAgentStore((state) => state.messages);
   const running = useAgentStore((state) => state.running);
   const runFailed = useAgentStore((state) => state.runFailed);
@@ -182,227 +178,202 @@ export function GlobalAgentPanel({ onOpenSettings }: GlobalAgentPanelProps) {
   }, []);
 
   return (
-    <AnimatedSidebarProvider
-      open={open}
-      openMobile={open}
-      onOpenChange={(nextOpen) => {
-        if (nextOpen !== open) toggle();
-      }}
-      onOpenMobileChange={(nextOpen) => {
-        if (nextOpen !== open) toggle();
-      }}
-      style={{ "--sidebar-width": RIGHT_PANEL_WIDTH_CSS }}
-    >
-      <AnimatedSidebar
-        side="right"
-        collapsible="offcanvas"
-        ariaLabel={copy.agent}
-        aria-hidden={!open}
-        inert={!open}
-        className="overflow-hidden"
-        // The panel sits directly on the shell background like the left
-        // sidebar; the central card's shadow carries the separation, so the
-        // vendored border-l and card background are overridden here.
-        panelClassName="border-l-0 bg-transparent"
-      >
-        <header className="flex h-14 shrink-0 items-center gap-2 border-b px-3">
-          <Sparkle className="size-5 text-muted-foreground" />
-          {/* deslop-ignore-next-line 12 */}
-          <h2 className="min-w-0 flex-1 text-base font-semibold">
-            {copy.agent}
-          </h2>
-          {/* Session-level controls only; provider configuration stays in
+    <div className="flex h-full min-h-0 w-full flex-col">
+      <header className="flex h-14 shrink-0 items-center gap-2 border-b px-3">
+        <Sparkle className="size-5 text-muted-foreground" />
+        {/* deslop-ignore-next-line 12 */}
+        <h2 className="min-w-0 flex-1 text-base font-semibold">{copy.agent}</h2>
+        {/* Session-level controls only; provider configuration stays in
               Settings. They are disabled mid-run so a thread switch cannot
               reroute the live event stream into another transcript. */}
-          <MorphPopover open={historyOpen} onOpenChange={setHistoryOpen}>
-            <MorphPopoverTrigger>
-              <Button
-                size="icon"
-                variant="ghost"
-                aria-label={copy.agentHistory}
-                disabled={running}
-                className="size-10"
-              >
-                <ClockCounterClockwise />
-              </Button>
-            </MorphPopoverTrigger>
-            <MorphPopoverContent align="end" className="w-64 p-1">
-              {threads.length === 0 ? (
-                <p className="px-3 py-2 text-sm text-muted-foreground">
-                  {copy.agentNoHistory}
-                </p>
-              ) : (
-                <ul className="flex flex-col">
-                  {threads.map((thread) => (
-                    <li key={thread.threadId}>
-                      <Button
-                        variant="ghost"
-                        className="w-full justify-start truncate"
-                        aria-current={
-                          thread.threadId === threadId ? "true" : undefined
-                        }
-                        onClick={() => {
-                          setHistoryOpen(false);
-                          void selectThread(thread.threadId);
-                        }}
-                      >
-                        {thread.title || copy.agentNewThread}
-                      </Button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </MorphPopoverContent>
-          </MorphPopover>
-          <Tooltip content={copy.agentNewThread}>
+        <MorphPopover open={historyOpen} onOpenChange={setHistoryOpen}>
+          <MorphPopoverTrigger>
             <Button
               size="icon"
               variant="ghost"
-              aria-label={copy.agentNewThread}
+              aria-label={copy.agentHistory}
               disabled={running}
               className="size-10"
-              onClick={() => void startNewThread()}
             >
-              <Plus />
+              <ClockCounterClockwise />
             </Button>
-          </Tooltip>
-          <Tooltip content={copy.closeAgent}>
-            <Button
-              size="icon"
-              variant="ghost"
-              aria-label={copy.closeAgent}
-              className="size-10"
-              onClick={close}
-            >
-              <X />
-            </Button>
-          </Tooltip>
-        </header>
-
-        {configuration === null ? (
-          <div className="grid min-h-0 flex-1 place-items-center text-sm text-muted-foreground">
-            {copy.loading}
-          </div>
-        ) : !configuration.hasCredential ? (
-          <div className="grid min-h-0 flex-1 place-items-center px-8">
-            <div className="flex flex-col items-center gap-3 text-center">
-              <Sparkle className="size-8 text-muted-foreground" />
-              <p className="text-sm font-semibold">{copy.agentNotConfigured}</p>
-              <p className="text-sm text-muted-foreground">
-                {copy.agentNotConfiguredBody}
+          </MorphPopoverTrigger>
+          <MorphPopoverContent align="end" className="w-64 p-1">
+            {threads.length === 0 ? (
+              <p className="px-3 py-2 text-sm text-muted-foreground">
+                {copy.agentNoHistory}
               </p>
-              <Button variant="outline" size="sm" onClick={onOpenSettings}>
-                {copy.agentNotConfiguredAction}
-              </Button>
-            </div>
+            ) : (
+              <ul className="flex flex-col">
+                {threads.map((thread) => (
+                  <li key={thread.threadId}>
+                    <Button
+                      variant="ghost"
+                      className="w-full justify-start truncate"
+                      aria-current={
+                        thread.threadId === threadId ? "true" : undefined
+                      }
+                      onClick={() => {
+                        setHistoryOpen(false);
+                        void selectThread(thread.threadId);
+                      }}
+                    >
+                      {thread.title || copy.agentNewThread}
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </MorphPopoverContent>
+        </MorphPopover>
+        <Tooltip content={copy.agentNewThread}>
+          <Button
+            size="icon"
+            variant="ghost"
+            aria-label={copy.agentNewThread}
+            disabled={running}
+            className="size-10"
+            onClick={() => void startNewThread()}
+          >
+            <Plus />
+          </Button>
+        </Tooltip>
+        <Tooltip content={copy.closeAgent}>
+          <Button
+            size="icon"
+            variant="ghost"
+            aria-label={copy.closeAgent}
+            className="size-10"
+            onClick={close}
+          >
+            <X />
+          </Button>
+        </Tooltip>
+      </header>
+
+      {configuration === null ? (
+        <div className="grid min-h-0 flex-1 place-items-center text-sm text-muted-foreground">
+          {copy.loading}
+        </div>
+      ) : !configuration.hasCredential ? (
+        <div className="grid min-h-0 flex-1 place-items-center px-8">
+          <div className="flex flex-col items-center gap-3 text-center">
+            <Sparkle className="size-8 text-muted-foreground" />
+            <p className="text-sm font-semibold">{copy.agentNotConfigured}</p>
+            <p className="text-sm text-muted-foreground">
+              {copy.agentNotConfiguredBody}
+            </p>
+            <Button variant="outline" size="sm" onClick={onOpenSettings}>
+              {copy.agentNotConfiguredAction}
+            </Button>
           </div>
-        ) : (
-          <>
-            <div className="relative flex min-h-0 flex-1 flex-col">
-              <MessageScroller
-                label={copy.agentConversation}
-                busy={running}
-                followOutput={followingLiveEdge}
-                onFollowChange={setFollowingLiveEdge}
-                className="min-h-0 flex-1"
-                // Bottom padding keeps the last reply clear of the floating
-                // pill strip (28px) and its offset.
-                contentClassName="flex flex-col gap-4 px-4 pt-4 pb-14"
-              >
-                {!visibleMessages.length && !awaitingResponse ? (
-                  <div className="grid min-h-48 place-items-center px-8 text-center text-sm text-muted-foreground">
-                    {copy.agentEmpty}
-                  </div>
-                ) : null}
-                {visibleMessages.map((message, index) => {
-                  const streaming =
-                    running && index === visibleMessages.length - 1;
-                  return (
-                    <Message key={message.id} from={message.from}>
-                      <MessageContent>
-                        {message.from === "assistant" ? (
-                          <AssistantMessageBody
-                            message={message}
-                            streaming={streaming}
-                            running={running}
-                            mentionTargets={targetsByName}
-                          />
-                        ) : (
-                          <MessageBubble variant="tint">
-                            <MessageBubbleContent>
-                              <ReplyText
-                                segments={
-                                  parseReply(message.body, [
-                                    ...targetsByName.keys(),
-                                  ]).segments
-                                }
-                                targets={targetsByName}
-                              />
-                            </MessageBubbleContent>
-                          </MessageBubble>
-                        )}
-                      </MessageContent>
-                    </Message>
-                  );
-                })}
-                {awaitingResponse ? (
-                  <Message from="assistant">
+        </div>
+      ) : (
+        <>
+          <div className="relative flex min-h-0 flex-1 flex-col">
+            <MessageScroller
+              label={copy.agentConversation}
+              busy={running}
+              followOutput={followingLiveEdge}
+              onFollowChange={setFollowingLiveEdge}
+              className="min-h-0 flex-1"
+              // Bottom padding keeps the last reply clear of the floating
+              // pill strip (28px) and its offset.
+              contentClassName="flex flex-col gap-4 px-4 pt-4 pb-14"
+            >
+              {!visibleMessages.length && !awaitingResponse ? (
+                <div className="grid min-h-48 place-items-center px-8 text-center text-sm text-muted-foreground">
+                  {copy.agentEmpty}
+                </div>
+              ) : null}
+              {visibleMessages.map((message, index) => {
+                const streaming =
+                  running && index === visibleMessages.length - 1;
+                return (
+                  <Message key={message.id} from={message.from}>
                     <MessageContent>
-                      <ResponseSkeleton activity={activity} />
+                      {message.from === "assistant" ? (
+                        <AssistantMessageBody
+                          message={message}
+                          streaming={streaming}
+                          running={running}
+                          mentionTargets={targetsByName}
+                        />
+                      ) : (
+                        <MessageBubble variant="tint">
+                          <MessageBubbleContent>
+                            <ReplyText
+                              segments={
+                                parseReply(message.body, [
+                                  ...targetsByName.keys(),
+                                ]).segments
+                              }
+                              targets={targetsByName}
+                            />
+                          </MessageBubbleContent>
+                        </MessageBubble>
+                      )}
                     </MessageContent>
                   </Message>
-                ) : null}
-                {runFailed && !running ? (
-                  <Message from="assistant">
-                    <MessageContent>
-                      <RunFailedRow onRetry={() => void retryLastRun()} />
-                    </MessageContent>
-                  </Message>
-                ) : null}
-              </MessageScroller>
-              <SuggestionPills
-                suggestions={suggestions}
-                disabled={running}
-                showJump={!followingLiveEdge}
-                onJump={jumpToLatest}
+                );
+              })}
+              {awaitingResponse ? (
+                <Message from="assistant">
+                  <MessageContent>
+                    <ResponseSkeleton activity={activity} />
+                  </MessageContent>
+                </Message>
+              ) : null}
+              {runFailed && !running ? (
+                <Message from="assistant">
+                  <MessageContent>
+                    <RunFailedRow onRetry={() => void retryLastRun()} />
+                  </MessageContent>
+                </Message>
+              ) : null}
+            </MessageScroller>
+            <SuggestionPills
+              suggestions={suggestions}
+              disabled={running}
+              showJump={!followingLiveEdge}
+              onJump={jumpToLatest}
+            />
+          </div>
+          <div className="relative border-t p-3">
+            <div className="relative">
+              <MentionAutocomplete
+                id={picker.listboxId}
+                items={picker.matches}
+                activeIndex={picker.activeIndex}
+                onHover={picker.setActiveIndex}
+                onPick={picker.pick}
+              />
+              <PromptInput
+                minRows={1}
+                maxRows={6}
+                loading={running}
+                placeholder={copy.askAgent}
+                aria-label={copy.askAgent}
+                value={picker.value}
+                onValueChange={picker.setValue}
+                inputRef={picker.inputRef}
+                {...picker.textareaProps}
+                attachmentPreview={
+                  <AttachedMessageCards
+                    items={attachments}
+                    disabled={running}
+                    onRemove={detachMessage}
+                  />
+                }
+                onSubmit={(prompt) => {
+                  picker.setValue("");
+                  return run(prompt, buildWorkspaceContext(), scopeInput);
+                }}
               />
             </div>
-            <div className="relative border-t p-3">
-              <div className="relative">
-                <MentionAutocomplete
-                  id={picker.listboxId}
-                  items={picker.matches}
-                  activeIndex={picker.activeIndex}
-                  onHover={picker.setActiveIndex}
-                  onPick={picker.pick}
-                />
-                <PromptInput
-                  minRows={1}
-                  maxRows={6}
-                  loading={running}
-                  placeholder={copy.askAgent}
-                  aria-label={copy.askAgent}
-                  value={picker.value}
-                  onValueChange={picker.setValue}
-                  inputRef={picker.inputRef}
-                  {...picker.textareaProps}
-                  attachmentPreview={
-                    <AttachedMessageCards
-                      items={attachments}
-                      disabled={running}
-                      onRemove={detachMessage}
-                    />
-                  }
-                  onSubmit={(prompt) => {
-                    picker.setValue("");
-                    return run(prompt, buildWorkspaceContext(), scopeInput);
-                  }}
-                />
-              </div>
-            </div>
-          </>
-        )}
-      </AnimatedSidebar>
-    </AnimatedSidebarProvider>
+          </div>
+        </>
+      )}
+    </div>
   );
 }

@@ -23,6 +23,7 @@ import { Button } from "shared/ui";
 
 import { useNarrowWorkspace } from "../model/layout";
 import { ColumnResizeHandle } from "./column-resize-handle";
+import { WorkspaceSidePanel } from "./workspace-side-panel";
 
 interface WorkspacePageProps {
   children: ReactNode;
@@ -55,7 +56,10 @@ export function WorkspacePage({
   showBackToChats,
 }: WorkspacePageProps) {
   const agentOpen = useAgentStore((state) => state.open);
+  const openAgentPanel = useAgentStore((state) => state.openPanel);
+  const closeAgentPanel = useAgentStore((state) => state.close);
   const profileOpen = useChatProfileStore((state) => state.open);
+  const closeProfilePanel = useChatProfileStore((state) => state.closePanel);
   const activeChatId = useChatStore((state) => state.activeChatId);
   const narrow = useNarrowWorkspace();
   const { value: sidebarWidth, select: selectSidebarWidth } = useSidebarWidth();
@@ -154,13 +158,26 @@ export function WorkspacePage({
       >
         {children}
       </div>
-      {/* The right column hosts one panel at a time; the mutual exclusion
-          lives in the chat-profile widget's store subscriptions. */}
-      {profileOpen ? (
-        <ChatProfilePanel />
-      ) : (
-        <GlobalAgentPanel onOpenSettings={onOpenAgentSettings} />
-      )}
+      {/* One persistent shell owns the right column's motion. Content can
+          switch without replacing the animated element, so every panel gets
+          the same enter and exit behavior. */}
+      <WorkspaceSidePanel
+        activeId={profileOpen ? "profile" : agentOpen ? "agent" : null}
+        items={[
+          {
+            id: "agent",
+            ariaLabel: copy.agent,
+            content: <GlobalAgentPanel onOpenSettings={onOpenAgentSettings} />,
+          },
+          {
+            id: "profile",
+            ariaLabel: copy.chatProfile,
+            content: <ChatProfilePanel />,
+          },
+        ]}
+        onOpen={openAgentPanel}
+        onClose={profileOpen ? closeProfilePanel : closeAgentPanel}
+      />
       <ColumnResizeHandle
         label={copy.resizeChatList}
         value={sidebarWidth}

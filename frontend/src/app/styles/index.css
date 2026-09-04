@@ -168,6 +168,22 @@
     font-size: 14px;
   }
 
+  /* Electron's Window Controls Overlay publishes the safe title-bar geometry.
+     Keep leading-edge chrome clear of macOS traffic lights and center its
+     content inside the native title-bar height without freezing OS-controlled
+     coordinates. Browsers and native-title-bar platforms retain the 56px bar. */
+  .window-titlebar-safe-leading {
+    padding-inline-start: max(0.75rem, env(titlebar-area-x, 0px));
+  }
+
+  .window-titlebar-safe-content {
+    display: flex;
+    height: env(titlebar-area-height, 3.5rem);
+    min-width: 0;
+    align-items: center;
+    margin-block-start: env(titlebar-area-y, 0px);
+  }
+
   button,
   input,
   textarea,

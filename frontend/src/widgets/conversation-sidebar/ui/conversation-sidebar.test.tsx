@@ -174,7 +174,11 @@ describe("ConversationSidebar", () => {
   it("replaces the app title with connection status, never a transcript banner", async () => {
     const { useChatStore } = await renderSidebar();
 
-    expect(screen.getByText(copy.appName)).toBeTruthy();
+    const title = screen.getByText(copy.appName);
+    expect(title).toBeTruthy();
+    expect(title.closest("header")?.className).toContain(
+      "window-titlebar-safe-leading",
+    );
 
     act(() => useChatStore.setState({ connectionState: "offline" }));
     expect(screen.getByText(copy.connectionOffline)).toBeTruthy();

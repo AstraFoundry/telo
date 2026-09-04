@@ -7,6 +7,7 @@ import { createContainer } from "./container";
 import { channels } from "./channels";
 import { isSafeExternalUrl } from "./external-url";
 import { registerIpc } from "./register-ipc";
+import { windowChromeOptions } from "./window-chrome";
 import { DEMO_MESSAGE_TEMPLATES } from "../../domain/preferences/user-preferences";
 import {
   handleMediaProtocol,
@@ -41,7 +42,7 @@ function createWindow(): void {
     minHeight: 680,
     backgroundColor: "#f7f8fa",
     title: "Telo",
-    titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "default",
+    ...windowChromeOptions(process.platform),
     webPreferences: {
       preload: path.join(__dirname, "../preload/index.js"),
       contextIsolation: true,

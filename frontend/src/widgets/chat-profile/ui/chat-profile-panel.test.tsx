@@ -11,7 +11,6 @@ import type {
 } from "../../../../../contracts/src/ipc";
 import { useAgentStore } from "../../../entities/agent";
 import { useChatProfileStore, useChatStore } from "../../../entities/chat";
-import { RIGHT_PANEL_WIDTH_CSS } from "../../../entities/preferences";
 import { copy } from "../../../shared/config/copy";
 import { installTeloApiMock } from "../../../shared/test/mock-telo";
 
@@ -222,22 +221,6 @@ describe("ChatProfilePanel", () => {
     // The field name is replaced by the confirmation, so the feedback survives
     // without motion and without a toast surface.
     expect(within(row).getByText(copy.copied)).toBeTruthy();
-  });
-
-  it("takes the width of the right column it shares with the agent panel", () => {
-    const { container } = render(<ChatProfilePanel />);
-
-    const styled = container.querySelector<HTMLElement>(
-      '[style*="--sidebar-width"]',
-    );
-    const width = styled?.style.getPropertyValue("--sidebar-width") ?? "";
-
-    // Both panels occupy the same grid track, so the column keeps its size
-    // when the info button swaps what is inside it.
-    expect(width).toBe(RIGHT_PANEL_WIDTH_CSS);
-    // A percentage has no base to resolve against in an `auto` track, which
-    // is what let the column collapse or balloon with its content.
-    expect(width).not.toContain("%");
   });
 
   it("opens the full chat profile when the tapped peer owns a dialog", async () => {

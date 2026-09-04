@@ -23,6 +23,38 @@ function sidebarHandle(window: Page) {
   return window.getByRole("separator", { name: "Resize chat list" });
 }
 
+demoTest(
+  "keeps the chat title outside native window controls",
+  async ({ window }) => {
+    await waitForDemoWorkspace(window);
+    const titleBar = sidebar(window).locator("header");
+    const leadingInset = await titleBar.evaluate((element) =>
+      Number.parseFloat(getComputedStyle(element).paddingInlineStart),
+    );
+    const geometry = await titleBar.evaluate((element) => {
+      const probe = document.createElement("div");
+      probe.style.cssText =
+        "position:fixed;top:env(titlebar-area-y,-1px);left:env(titlebar-area-x,-1px);width:env(titlebar-area-width,-1px);height:env(titlebar-area-height,-1px)";
+      document.body.append(probe);
+      const header = element.getBoundingClientRect();
+      const text = element.querySelector("strong")?.getBoundingClientRect();
+      const overlay = probe.getBoundingClientRect();
+      probe.remove();
+      return { header, text, overlay };
+    });
+
+    expect(leadingInset).toBeGreaterThanOrEqual(12);
+    if (process.platform === "darwin") {
+      expect(leadingInset).toBeGreaterThan(12);
+      const textCenter =
+        (geometry.text?.top ?? 0) + (geometry.text?.height ?? 0) / 2;
+      const nativeTitleBarCenter =
+        geometry.overlay.top + geometry.overlay.height / 2;
+      expect(textCenter).toBeCloseTo(nativeTitleBarCenter, 5);
+    }
+  },
+);
+
 async function dragSidebarBy(window: Page, deltaX: number): Promise<void> {
   const box = await sidebarHandle(window).boundingBox();
   if (!box) throw new Error("sidebar resize handle has no bounding box");

@@ -631,17 +631,19 @@ export function ConversationSidebar({
 
   return (
     <aside className="flex min-w-0 flex-col" aria-label={copy.chats}>
-      <header className="flex h-14 items-center px-3 [app-region:drag]">
-        <strong
-          className="truncate text-base tracking-tight"
-          aria-live="polite"
-        >
-          {connectionState === "offline"
-            ? copy.connectionOffline
-            : connectionState === "synchronizing"
-              ? copy.connectionSynchronizing
-              : copy.appName}
-        </strong>
+      <header className="window-titlebar-safe-leading h-14 pr-3 [app-region:drag]">
+        <div className="window-titlebar-safe-content">
+          <strong
+            className="truncate text-base tracking-tight"
+            aria-live="polite"
+          >
+            {connectionState === "offline"
+              ? copy.connectionOffline
+              : connectionState === "synchronizing"
+                ? copy.connectionSynchronizing
+                : copy.appName}
+          </strong>
+        </div>
       </header>
       <div className="px-3 pb-2">
         <ChatSearch
