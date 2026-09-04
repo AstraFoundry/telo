@@ -15,7 +15,8 @@ Write an ADR when the decision:
 - [`001-electron-ipc-boundary.md`](001-electron-ipc-boundary.md) — privileged services stay behind typed IPC.
 - [`002-byoa-providers.md`](002-byoa-providers.md) — named vendor accounts are the preferred agent path; OpenAI-compatible is the fallback, all through the AI SDK.
 - [`003-agent-automation-safety.md`](003-agent-automation-safety.md) — per-entry delivery modes with a global draft-only default, immediate agent self-configuration, outgoing-message anti-loop, draft-conflict protection, foreground-account-only automation.
-- [`004-keep-teleproto.md`](004-keep-teleproto.md) — keep Teleproto as the MTProto wire protocol; do not migrate the client kernel to TDLib. Teleproto is automation-oriented; Telo owns the missing client runtime.
+- [`004-keep-teleproto.md`](004-keep-teleproto.md) — superseded: kept Teleproto while secret chats and a local Telegram database were out of scope.
+- [`005-tdlib-client-kernel.md`](005-tdlib-client-kernel.md) — TDLib in the Electron main process is the Telegram client kernel; `TelegramRepository` stays the DDD port. Secret chats, chat-list order, and the message database are in scope. VoIP/Stories/Mini Apps are not.
 - [`adr-template.md`](adr-template.md) — template for new ADRs.
 
 ## Naming

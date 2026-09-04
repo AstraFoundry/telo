@@ -17,7 +17,7 @@ flowchart LR
     TD["Telegram Desktop density"]
   end
   subgraph telo [Telo]
-    TP["Teleproto + contracts"]
+    TP["TelegramRepository + TDLib kernel"]
     UI["shared/ui BEUI"]
     Chat["entities/chat"]
   end
