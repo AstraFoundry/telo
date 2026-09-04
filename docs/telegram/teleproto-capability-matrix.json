@@ -1,0 +1,210 @@
+{
+  "teleprotoVersion": "^1.229.0",
+  "requestInventorySha256": "c5c851050c1dc1973e088f52578d6da96d19cec658aa4d37a9569362c41b713d",
+  "namespacePolicy": {
+    "__root__": {
+      "state": "not-applicable",
+      "rationale": "Protocol invocation wrappers are transport internals, not user features."
+    },
+    "account": {
+      "state": "planned",
+      "rationale": "Account preferences, privacy, sessions, and device registration need a product-level audit."
+    },
+    "aicompose": {
+      "state": "not-applicable",
+      "rationale": "Telegram experimental server-side AI composition is not a portable client feature."
+    },
+    "auth": {
+      "state": "covered",
+      "rationale": "Authentication and session restoration are implemented by the account coordinator."
+    },
+    "bots": {
+      "state": "planned",
+      "rationale": "Bot management and business flows require separate client scenarios."
+    },
+    "channels": {
+      "state": "planned",
+      "rationale": "Reading channels works through dialogs; administration needs a separate audit."
+    },
+    "chatlists": {
+      "state": "planned",
+      "rationale": "Telegram-native folders are covered; shared chat lists remain unimplemented."
+    },
+    "communities": {
+      "state": "planned",
+      "rationale": "Community-specific server features need a product decision."
+    },
+    "contacts": {
+      "state": "planned",
+      "rationale": "Contact management is not yet a dedicated workspace workflow."
+    },
+    "ephemeral": {
+      "state": "not-applicable",
+      "rationale": "Experimental ephemeral protocol endpoints are not a stable client commitment."
+    },
+    "folders": {
+      "state": "covered",
+      "rationale": "Dialog folders and archive are exposed in the workspace."
+    },
+    "fragment": {
+      "state": "not-applicable",
+      "rationale": "Fragment marketplace operations are outside this desktop client scope."
+    },
+    "help": {
+      "state": "planned",
+      "rationale": "Update and support metadata need a release-management decision."
+    },
+    "langpack": {
+      "state": "planned",
+      "rationale": "Telegram server language packs are not yet integrated with application localization."
+    },
+    "messages": {
+      "state": "covered",
+      "rationale": "Core dialogs, history, search, sending, editing, forwarding, media, drafts, and pins are implemented."
+    },
+    "payments": {
+      "state": "planned",
+      "rationale": "Payment flows require security and compliance product design."
+    },
+    "phone": {
+      "state": "planned",
+      "rationale": "Calls and phone verification need dedicated desktop workflows."
+    },
+    "photos": {
+      "state": "planned",
+      "rationale": "Avatar retrieval is covered through client helpers; full photo management is not."
+    },
+    "premium": {
+      "state": "planned",
+      "rationale": "Premium-specific purchase and promotion flows are not implemented."
+    },
+    "smsjobs": {
+      "state": "not-applicable",
+      "rationale": "SMS job infrastructure is not a normal Telegram client feature."
+    },
+    "stats": {
+      "state": "planned",
+      "rationale": "Channel and group analytics need a product-level audit."
+    },
+    "stickers": {
+      "state": "covered",
+      "rationale": "Sticker catalog, packs, favorites, recents, search, and sending are implemented."
+    },
+    "stories": {
+      "state": "planned",
+      "rationale": "Story viewing and publishing are not yet implemented."
+    },
+    "updates": {
+      "state": "covered",
+      "rationale": "The live workspace subscribes to and synchronizes Telegram updates."
+    },
+    "upload": {
+      "state": "covered",
+      "rationale": "Composer attachments and cache-backed downloads are implemented."
+    },
+    "users": {
+      "state": "planned",
+      "rationale": "User lookup supports existing chat flows; a complete people-management surface is pending."
+    }
+  },
+  "capabilities": [
+    {
+      "id": "authentication-and-multiple-accounts",
+      "state": "covered",
+      "apis": ["auth.SendCode", "auth.SignIn", "auth.LogOut"],
+      "evidence": [
+        "backend/src/infrastructure/telegram/teleproto-telegram-repository.ts"
+      ]
+    },
+    {
+      "id": "dialogs-history-and-message-actions",
+      "state": "covered",
+      "apis": [
+        "messages.GetDialogs",
+        "messages.GetHistory",
+        "messages.SendMessage",
+        "messages.EditMessage",
+        "messages.ForwardMessages",
+        "messages.DeleteMessages"
+      ],
+      "evidence": [
+        "backend/src/infrastructure/telegram/teleproto-telegram-repository.ts"
+      ]
+    },
+    {
+      "id": "server-search-and-folders",
+      "state": "covered",
+      "apis": [
+        "messages.Search",
+        "messages.SearchGlobal",
+        "messages.GetDialogFilters"
+      ],
+      "evidence": [
+        "backend/src/infrastructure/telegram/teleproto-telegram-repository.ts",
+        "backend/src/infrastructure/telegram/teleproto-folders.ts"
+      ]
+    },
+    {
+      "id": "uploads-downloads-and-media",
+      "state": "covered",
+      "apis": ["messages.SendMedia", "upload.GetFile"],
+      "evidence": [
+        "backend/src/infrastructure/telegram/teleproto-telegram-repository.ts"
+      ]
+    },
+    {
+      "id": "stickers-and-custom-emoji",
+      "state": "covered",
+      "apis": [
+        "messages.GetStickerSet",
+        "messages.SearchStickerSets",
+        "messages.FaveSticker"
+      ],
+      "evidence": [
+        "backend/src/infrastructure/telegram/teleproto-telegram-repository.ts"
+      ]
+    },
+    {
+      "id": "voice-video-notes-and-transcription",
+      "state": "planned",
+      "apis": ["messages.TranscribeAudio", "messages.SendMedia"],
+      "evidence": ["docs/todo/gaps.md"]
+    },
+    {
+      "id": "stories",
+      "state": "planned",
+      "apis": ["stories.GetAllStories", "stories.SendStory"],
+      "evidence": ["docs/telegram/README.md"]
+    },
+    {
+      "id": "voice-and-video-calls",
+      "state": "planned",
+      "apis": ["phone.RequestCall", "phone.AcceptCall"],
+      "evidence": ["docs/telegram/README.md"]
+    },
+    {
+      "id": "privacy-security-and-sessions",
+      "state": "planned",
+      "apis": ["account.GetPrivacy", "account.GetAuthorizations"],
+      "evidence": ["docs/telegram/README.md"]
+    },
+    {
+      "id": "contacts-and-people-management",
+      "state": "planned",
+      "apis": ["contacts.GetContacts", "contacts.AddContact"],
+      "evidence": ["docs/telegram/README.md"]
+    },
+    {
+      "id": "channel-and-group-administration",
+      "state": "planned",
+      "apis": ["channels.EditAdmin", "channels.EditBanned"],
+      "evidence": ["docs/telegram/README.md"]
+    },
+    {
+      "id": "payments",
+      "state": "planned",
+      "apis": ["payments.GetPaymentForm", "payments.SendPaymentForm"],
+      "evidence": ["docs/telegram/README.md"]
+    }
+  ]
+}

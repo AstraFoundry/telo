@@ -75,6 +75,10 @@ describe("chat-store", () => {
       scrollPositions: {},
       peerAvatars: {},
       customEmoji: {},
+      stickerSets: null,
+      recentStickers: [],
+      favoriteStickers: [],
+      stickerSetsError: null,
       notificationsEnabled: false,
       notificationSenderName: true,
       notificationPreview: true,
@@ -1672,15 +1676,18 @@ describe("chat-store", () => {
 
   it("loadStickerSets() asks once and serves every reopen from state", async () => {
     const telo = installTeloApiMock();
-    telo.workspace.listStickerSets.mockResolvedValue([
-      {
-        id: "1",
-        title: "Telo Pack",
-        shortName: "TeloPack",
-        stickers: [],
-        installed: true,
-      },
-    ]);
+    telo.workspace.getStickerCatalog.mockResolvedValue({
+      recent: [],
+      favorites: [],
+      sets: [
+        {
+          id: "1",
+          title: "Telo Pack",
+          shortName: "TeloPack",
+          reference: { kind: "short-name", shortName: "TeloPack" },
+        },
+      ],
+    });
     useChatStore.setState({ stickerSets: null, stickerSetsError: null });
 
     await useChatStore.getState().loadStickerSets();
@@ -1689,19 +1696,117 @@ describe("chat-store", () => {
     expect(useChatStore.getState().stickerSets).toHaveLength(1);
     // The picker unmounts with the composer's popover; the store is what
     // keeps reopening it from refetching.
-    expect(telo.workspace.listStickerSets).toHaveBeenCalledTimes(1);
+    expect(telo.workspace.getStickerCatalog).toHaveBeenCalledTimes(1);
   });
 
   it("loadStickerSets() settles a failure instead of retrying per reveal", async () => {
     const telo = installTeloApiMock();
-    telo.workspace.listStickerSets.mockRejectedValue(new Error("offline"));
+    telo.workspace.getStickerCatalog.mockRejectedValue(new Error("offline"));
     useChatStore.setState({ stickerSets: null, stickerSetsError: null });
 
     await useChatStore.getState().loadStickerSets();
     await useChatStore.getState().loadStickerSets();
 
     expect(useChatStore.getState().stickerSetsError).toBe("offline");
-    expect(telo.workspace.listStickerSets).toHaveBeenCalledTimes(1);
+    expect(telo.workspace.getStickerCatalog).toHaveBeenCalledTimes(1);
+  });
+
+  it("optimistically updates sticker favorites, recents, and set order", async () => {
+    const telo = installTeloApiMock();
+    const sticker = {
+      id: "sticker/1",
+      emoji: "👋",
+      format: "static" as const,
+      width: 512,
+      height: 512,
+      outlinePath: null,
+    };
+    const first = {
+      id: "1",
+      title: "First",
+      shortName: "first",
+      reference: { kind: "short-name" as const, shortName: "first" },
+    };
+    const second = {
+      ...first,
+      id: "2",
+      title: "Second",
+      shortName: "second",
+      reference: { kind: "short-name" as const, shortName: "second" },
+    };
+    useChatStore.setState({
+      stickerSets: [first, second],
+      recentStickers: [sticker],
+      favoriteStickers: [],
+    });
+
+    await useChatStore.getState().setStickerFavorite(sticker, true);
+    await useChatStore.getState().removeRecentSticker(sticker.id);
+    await useChatStore.getState().reorderStickerSets(["2", "1"]);
+
+    expect(useChatStore.getState().favoriteStickers).toEqual([sticker]);
+    expect(useChatStore.getState().recentStickers).toEqual([]);
+    expect(useChatStore.getState().stickerSets?.map((set) => set.id)).toEqual([
+      "2",
+      "1",
+    ]);
+    expect(telo.workspace.setStickerFavorite).toHaveBeenCalledWith(
+      sticker.id,
+      true,
+    );
+    expect(telo.workspace.removeRecentSticker).toHaveBeenCalledWith(sticker.id);
+    expect(telo.workspace.reorderStickerSets).toHaveBeenCalledWith(["2", "1"]);
+  });
+
+  it("rolls sticker catalog state back when a server mutation fails", async () => {
+    const telo = installTeloApiMock();
+    const sticker = {
+      id: "sticker/1",
+      emoji: "👋",
+      format: "static" as const,
+      width: 512,
+      height: 512,
+      outlinePath: null,
+    };
+    useChatStore.setState({ favoriteStickers: [], recentStickers: [sticker] });
+    telo.workspace.setStickerFavorite.mockRejectedValue(new Error("offline"));
+    telo.workspace.clearRecentStickers.mockRejectedValue(new Error("offline"));
+
+    await expect(
+      useChatStore.getState().setStickerFavorite(sticker, true),
+    ).rejects.toThrow("offline");
+    await expect(useChatStore.getState().clearRecentStickers()).rejects.toThrow(
+      "offline",
+    );
+
+    expect(useChatStore.getState().favoriteStickers).toEqual([]);
+    expect(useChatStore.getState().recentStickers).toEqual([sticker]);
+  });
+
+  it("refreshes a loaded sticker catalog after a workspace update", async () => {
+    const telo = installTeloApiMock();
+    telo.workspace.getStickerCatalog.mockResolvedValue({
+      recent: [],
+      favorites: [],
+      sets: [],
+    });
+    useChatStore.setState({
+      stickerSets: [
+        {
+          id: "old",
+          title: "Old",
+          shortName: "old",
+          reference: { kind: "short-name", shortName: "old" },
+        },
+      ],
+    });
+
+    useChatStore.getState().receive({ type: "sticker-catalog-changed" });
+
+    await vi.waitFor(() => {
+      expect(telo.workspace.getStickerCatalog).toHaveBeenCalledOnce();
+      expect(useChatStore.getState().stickerSets).toEqual([]);
+    });
   });
 
   it("sendSticker() paints the sticker at once and reconciles it with the ack", async () => {

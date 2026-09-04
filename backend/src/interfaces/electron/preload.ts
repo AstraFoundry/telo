@@ -35,10 +35,20 @@ const api: TeloDesktopApi = {
     getPeerProfile: (peerId) =>
       ipcRenderer.invoke(channels.peerProfileGet, peerId),
     listStickerSets: () => ipcRenderer.invoke(channels.stickerSetList),
+    getStickerCatalog: () => ipcRenderer.invoke(channels.stickerCatalogGet),
+    reorderStickerSets: (setIds) =>
+      ipcRenderer.invoke(channels.stickerSetReorder, setIds),
+    setStickerFavorite: (stickerId, favorite) =>
+      ipcRenderer.invoke(channels.stickerFavoriteSet, stickerId, favorite),
+    removeRecentSticker: (stickerId) =>
+      ipcRenderer.invoke(channels.stickerRecentRemove, stickerId),
+    clearRecentStickers: () => ipcRenderer.invoke(channels.stickerRecentClear),
+    searchStickers: (query) =>
+      ipcRenderer.invoke(channels.stickerSearch, query),
     sendSticker: (chatId, stickerId) =>
       ipcRenderer.invoke(channels.stickerSend, chatId, stickerId),
-    getStickerSet: (shortName) =>
-      ipcRenderer.invoke(channels.stickerSetGet, shortName),
+    getStickerSet: (reference) =>
+      ipcRenderer.invoke(channels.stickerSetGet, reference),
     setStickerSetInstalled: (shortName, installed) =>
       ipcRenderer.invoke(channels.stickerSetInstalledSet, shortName, installed),
     getCustomEmoji: (documentIds) =>

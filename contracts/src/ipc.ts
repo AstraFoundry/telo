@@ -267,6 +267,18 @@ export interface MessageForwardDto {
  */
 export type StickerFormat = "static" | "animated" | "video";
 
+/** A Telegram input-sticker-set reference safe to carry across Electron IPC. */
+export type StickerSetReferenceDto =
+  | {
+      readonly kind: "id";
+      readonly id: string;
+      readonly accessHash: string;
+    }
+  | {
+      readonly kind: "short-name";
+      readonly shortName: string;
+    };
+
 /**
  * Telegram `DocumentAttributeSticker` payload. A sticker is a document, so it
  * keeps every `MessageFileMediaDto` field and adds these on top.
@@ -278,8 +290,8 @@ export interface MessageStickerDto {
    */
   readonly emoji: string | null;
   readonly format: StickerFormat;
-  /** Short name of the set the sticker belongs to; null when it has none. */
-  readonly setName: string | null;
+  /** Set the sticker belongs to; null for set-less/system stickers. */
+  readonly setReference: StickerSetReferenceDto | null;
   /**
    * SVG path of the sticker's own silhouette, decoded main-side from the
    * document's vector thumbnail (Telegram `PhotoPathSize`, `type: "j"`). It
@@ -308,17 +320,33 @@ export interface StickerItemDto {
   readonly outlinePath: string | null;
 }
 
-/** A sticker set, the unit Telegram's picker and set sheet group stickers by. */
-export interface StickerSetDto {
+/** Lightweight installed-set metadata used to paint picker navigation. */
+export interface StickerSetSummaryDto {
   readonly id: string;
   readonly title: string;
   readonly shortName: string;
+  readonly reference: StickerSetReferenceDto;
+}
+
+/** A resolved sticker set with its sendable documents. */
+export interface StickerSetDto extends StickerSetSummaryDto {
   readonly stickers: ReadonlyArray<StickerItemDto>;
   /**
    * Whether the account has the set installed. Always true for the picker's
    * own list; a set opened from a received sticker may not be.
    */
   readonly installed: boolean;
+}
+
+/**
+ * The account-level sticker picker state. Recent and favorite stickers are
+ * server-owned ordered views over the same documents as installed sets; they
+ * stay separate so the renderer never invents synthetic sticker packs.
+ */
+export interface StickerCatalogDto {
+  readonly recent: ReadonlyArray<StickerItemDto>;
+  readonly favorites: ReadonlyArray<StickerItemDto>;
+  readonly sets: ReadonlyArray<StickerSetSummaryDto>;
 }
 
 export interface MessageFileMediaDto {
@@ -477,6 +505,10 @@ export interface MessageSearchPageDto {
 }
 
 export type TelegramWorkspaceEvent =
+  | {
+      /** Installed order, recent stickers, or favorites changed. */
+      readonly type: "sticker-catalog-changed";
+    }
   | {
       readonly type: "connection-state";
       readonly state: "offline" | "synchronizing" | "connected";
@@ -1382,13 +1414,22 @@ export interface TeloDesktopApi {
      * understands, so the picker draws them the same way the transcript does.
      */
     listStickerSets(): Promise<ReadonlyArray<StickerSetDto>>;
+    /** Installed sets plus the account's recent and favorite stickers. */
+    getStickerCatalog(): Promise<StickerCatalogDto>;
+    /** Persists the complete installed-set order. */
+    reorderStickerSets(setIds: ReadonlyArray<string>): Promise<void>;
+    /** Adds or removes a sticker from the account's favorites. */
+    setStickerFavorite(stickerId: string, favorite: boolean): Promise<void>;
+    /** Removes one sticker from the account's recent list. */
+    removeRecentSticker(stickerId: string): Promise<void>;
+    /** Clears the account's recent sticker list. */
+    clearRecentStickers(): Promise<void>;
+    /** Searches Telegram's global sticker index by emoji or keyword. */
+    searchStickers(query: string): Promise<ReadonlyArray<StickerItemDto>>;
     /** Sends one sticker from an installed set into a chat. */
     sendSticker(chatId: string, stickerId: string): Promise<MessageDto>;
-    /**
-     * One set by short name, for the sheet a received sticker opens. Unlike
-     * the picker's list this can return a set the account has not installed.
-     */
-    getStickerSet(shortName: string): Promise<StickerSetDto>;
+    /** Resolves one installed or received sticker set on demand. */
+    getStickerSet(reference: StickerSetReferenceDto): Promise<StickerSetDto>;
     /** Adds the set to the account's stickers, or removes it. */
     setStickerSetInstalled(
       shortName: string,

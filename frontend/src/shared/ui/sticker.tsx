@@ -140,6 +140,7 @@ export function Sticker({
       <img
         src={src}
         alt={name}
+        draggable={false}
         loading="lazy"
         decoding="async"
         className="size-full object-contain"
@@ -267,6 +268,7 @@ function VideoSticker({
         loop={loop}
         muted
         playsInline
+        draggable={false}
         onEnded={() => {
           // A sticker that does not loop gets one pass on demand: it holds
           // its last frame and offers the control again.

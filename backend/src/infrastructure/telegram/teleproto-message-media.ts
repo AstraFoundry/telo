@@ -2,6 +2,7 @@ import type {
   MessageMediaDto,
   MessageStickerDto,
   StickerFormat,
+  StickerSetReferenceDto,
 } from "../../../../contracts/src/ipc";
 import { strippedThumbnailOf } from "./media-thumbnail";
 import { stickerOutlineOf } from "./sticker-outline";
@@ -237,22 +238,47 @@ function stickerOf(
     return {
       emoji: stringValue(attribute.alt),
       format: stickerFormat(mimeType),
-      setName: stickerSetName(attribute.stickerset),
+      setReference: stickerSetReference(attribute.stickerset),
       outlinePath,
     };
   }
   return {
     emoji: null,
     format: stickerFormat(mimeType),
-    setName: null,
+    setReference: null,
     outlinePath,
   };
 }
 
-function stickerSetName(stickerset: unknown): string | null {
+function stickerSetReference(
+  stickerset: unknown,
+): StickerSetReferenceDto | null {
   if (typeof stickerset !== "object" || stickerset === null) return null;
-  if (!("shortName" in stickerset)) return null;
-  return stringValue(stickerset.shortName);
+  if ("shortName" in stickerset) {
+    const shortName = stringValue(stickerset.shortName);
+    return shortName ? { kind: "short-name", shortName } : null;
+  }
+  if (!("id" in stickerset) || !("accessHash" in stickerset)) return null;
+  const id = telegramLongString(stickerset.id);
+  const accessHash = telegramLongString(stickerset.accessHash);
+  return id && accessHash ? { kind: "id", id, accessHash } : null;
+}
+
+function telegramLongString(value: unknown): string | null {
+  if (
+    typeof value !== "string" &&
+    typeof value !== "number" &&
+    typeof value !== "bigint" &&
+    (typeof value !== "object" || value === null)
+  ) {
+    return null;
+  }
+  try {
+    const serialized = String(value);
+    return /^-?\d+$/.test(serialized) ? serialized : null;
+  } catch {
+    return null;
+  }
 }
 
 export function stickerFormat(mimeType: string | null): StickerFormat {

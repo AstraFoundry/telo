@@ -70,6 +70,81 @@ test("sends a sticker from the composer picker", async ({ window }) => {
   await expect(sent.locator("img")).toBeVisible();
 });
 
+test("previews and favorites a sticker from the picker", async ({ window }) => {
+  await waitForDemoWorkspace(window);
+  await window
+    .getByRole("navigation", { name: "Chats" })
+    .getByRole("button", { name: /Telo Design/ })
+    .click();
+
+  await window.getByRole("button", { name: "Emoji and stickers" }).click();
+  await window.getByRole("button", { name: "Stickers", exact: true }).click();
+  const sticker = window.getByRole("button", { name: "🎉", exact: true });
+  await expect(sticker).toBeVisible();
+  await sticker.click({ button: "right" });
+  await window.getByRole("menuitem", { name: "Preview sticker" }).click();
+
+  const preview = window.getByRole("dialog", { name: "Preview sticker" });
+  await expect(preview).toBeVisible();
+  await preview.getByRole("button", { name: "Add to favorites" }).click();
+  await expect(
+    preview.getByRole("button", { name: "Remove from favorites" }),
+  ).toBeVisible();
+});
+
+test("holds and scrubs sticker previews without sending", async ({
+  window,
+}) => {
+  await waitForDemoWorkspace(window);
+  await window
+    .getByRole("navigation", { name: "Chats" })
+    .getByRole("button", { name: /Telo Design/ })
+    .click();
+
+  const conversation = window.getByRole("region", { name: "Conversation" });
+  await window.getByRole("button", { name: "Emoji and stickers" }).click();
+  await window.getByRole("button", { name: "Stickers", exact: true }).click();
+  const first = window.getByRole("button", { name: "👋", exact: true });
+  const second = window.getByRole("button", { name: "🎉", exact: true });
+
+  await first.hover();
+  await window.mouse.down();
+  await window.waitForTimeout(450);
+  const preview = window.locator('[data-slot="sticker-hold-preview"]');
+  await expect(preview).toBeVisible();
+  await expect(preview).toHaveCSS("z-index", "10002");
+  await expect(preview).toHaveAttribute("data-preview-sticker-id", "sticker/1");
+
+  const secondBox = await second.boundingBox();
+  if (!secondBox) throw new Error("Second sticker is not visible");
+  await window.mouse.move(
+    secondBox.x + secondBox.width / 2,
+    secondBox.y + secondBox.height / 2,
+  );
+  await expect(preview).toHaveAttribute("data-preview-sticker-id", "sticker/2");
+
+  await window.mouse.up();
+  await expect(preview).toHaveCount(0);
+  await expect(conversation.locator('[data-slot="sticker"]')).toHaveCount(0);
+});
+
+test("searches Telegram stickers from the picker", async ({ window }) => {
+  await waitForDemoWorkspace(window);
+  await window
+    .getByRole("navigation", { name: "Chats" })
+    .getByRole("button", { name: /Telo Design/ })
+    .click();
+
+  await window.getByRole("button", { name: "Emoji and stickers" }).click();
+  await window.getByRole("button", { name: "Stickers", exact: true }).click();
+  await window.getByRole("textbox", { name: "Search stickers…" }).fill("party");
+
+  await expect(window.getByText("Sticker search results")).toBeVisible();
+  await expect(
+    window.getByRole("button", { name: "🎉", exact: true }),
+  ).toBeVisible();
+});
+
 test("opens a received sticker's set and toggles it", async ({ window }) => {
   await waitForDemoWorkspace(window);
   await window

@@ -15,7 +15,9 @@ import type {
   SendMessageInput,
   SendMediaInput,
   StickerItemDto,
+  StickerCatalogDto,
   StickerSetDto,
+  StickerSetReferenceDto,
   TelegramWorkspaceEvent,
   UpdateKeywordFolderInput,
 } from "../../../../contracts/src/ipc";
@@ -173,15 +175,57 @@ export class TelegramWorkspaceService {
     return this.repository.listStickerSets();
   }
 
+  getStickerCatalog(): Promise<StickerCatalogDto> {
+    return this.repository.getStickerCatalog();
+  }
+
+  reorderStickerSets(setIds: ReadonlyArray<string>): Promise<void> {
+    if (setIds.length === 0) throw new Error("Sticker set order is required");
+    if (new Set(setIds).size !== setIds.length) {
+      throw new Error("Sticker set order contains duplicates");
+    }
+    if (setIds.some((id) => !id.trim())) {
+      throw new Error("Sticker set id is required");
+    }
+    return this.repository.reorderStickerSets(setIds);
+  }
+
+  setStickerFavorite(stickerId: string, favorite: boolean): Promise<void> {
+    if (!stickerId.trim()) throw new Error("Sticker id is required");
+    return this.repository.setStickerFavorite(stickerId, favorite);
+  }
+
+  removeRecentSticker(stickerId: string): Promise<void> {
+    if (!stickerId.trim()) throw new Error("Sticker id is required");
+    return this.repository.removeRecentSticker(stickerId);
+  }
+
+  clearRecentStickers(): Promise<void> {
+    return this.repository.clearRecentStickers();
+  }
+
+  searchStickers(query: string): Promise<ReadonlyArray<StickerItemDto>> {
+    const normalized = query.trim();
+    if (!normalized) throw new Error("Sticker search query is required");
+    return this.repository.searchStickers(normalized);
+  }
+
   sendSticker(chatId: string, stickerId: string): Promise<MessageDto> {
     if (!chatId.trim()) throw new Error("Chat id is required");
     if (!stickerId.trim()) throw new Error("Sticker id is required");
     return this.repository.sendSticker(chatId, stickerId);
   }
 
-  getStickerSet(shortName: string): Promise<StickerSetDto> {
-    if (!shortName.trim()) throw new Error("Sticker set name is required");
-    return this.repository.getStickerSet(shortName);
+  getStickerSet(reference: StickerSetReferenceDto): Promise<StickerSetDto> {
+    if (reference.kind === "short-name") {
+      const shortName = reference.shortName.trim();
+      if (!shortName) throw new Error("Sticker set name is required");
+      return this.repository.getStickerSet({ kind: "short-name", shortName });
+    }
+    const id = reference.id.trim();
+    const accessHash = reference.accessHash.trim();
+    if (!id || !accessHash) throw new Error("Sticker set id is required");
+    return this.repository.getStickerSet({ kind: "id", id, accessHash });
   }
 
   setStickerSetInstalled(shortName: string, installed: boolean): Promise<void> {

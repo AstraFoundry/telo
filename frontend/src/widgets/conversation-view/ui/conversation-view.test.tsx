@@ -416,7 +416,7 @@ describe("ConversationView", () => {
             sticker: {
               emoji: "👋",
               format: "static",
-              setName: "TeloPack",
+              setReference: { kind: "short-name", shortName: "TeloPack" },
               outlinePath: null,
             },
           },
@@ -504,7 +504,7 @@ describe("ConversationView", () => {
             sticker: {
               emoji: "👋",
               format: "static",
-              setName: "TeloPack",
+              setReference: { kind: "short-name", shortName: "TeloPack" },
               outlinePath: null,
             },
           },

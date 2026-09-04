@@ -267,7 +267,7 @@ export function CenterMorphModalContent({
           {(isPresent) => (
             <div
               ref={overlayRef}
-              className="pointer-events-none fixed inset-0 z-[100]"
+              className="pointer-events-none fixed inset-0 z-[10001]"
             >
               <motion.button
                 type="button"

@@ -25,7 +25,7 @@ function sticker(partial: Partial<MessageStickerDto> = {}): MessageStickerDto {
   return {
     emoji: "🐱",
     format: "static",
-    setName: "CatPack",
+    setReference: { kind: "short-name", shortName: "CatPack" },
     outlinePath: null,
     ...partial,
   };

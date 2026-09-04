@@ -31,6 +31,7 @@ import type {
   SendMessageInput,
   SendMediaInput,
   SetMessageReactionInput,
+  StickerSetReferenceDto,
   TelegramLoginInput,
   UpdateKeywordFolderInput,
   UpdateUserPreferencesInput,
@@ -88,13 +89,37 @@ export function registerIpc(container: ApplicationContainer): void {
   ipcMain.handle(channels.stickerSetList, () =>
     container.workspace.listStickerSets(),
   );
+  ipcMain.handle(channels.stickerCatalogGet, () =>
+    container.workspace.getStickerCatalog(),
+  );
+  ipcMain.handle(
+    channels.stickerSetReorder,
+    (_event, setIds: ReadonlyArray<string>) =>
+      container.workspace.reorderStickerSets(setIds),
+  );
+  ipcMain.handle(
+    channels.stickerFavoriteSet,
+    (_event, stickerId: string, favorite: boolean) =>
+      container.workspace.setStickerFavorite(stickerId, favorite),
+  );
+  ipcMain.handle(channels.stickerRecentRemove, (_event, stickerId: string) =>
+    container.workspace.removeRecentSticker(stickerId),
+  );
+  ipcMain.handle(channels.stickerRecentClear, () =>
+    container.workspace.clearRecentStickers(),
+  );
+  ipcMain.handle(channels.stickerSearch, (_event, query: string) =>
+    container.workspace.searchStickers(query),
+  );
   ipcMain.handle(
     channels.stickerSend,
     (_event, chatId: string, stickerId: string) =>
       container.workspace.sendSticker(chatId, stickerId),
   );
-  ipcMain.handle(channels.stickerSetGet, (_event, shortName: string) =>
-    container.workspace.getStickerSet(shortName),
+  ipcMain.handle(
+    channels.stickerSetGet,
+    (_event, reference: StickerSetReferenceDto) =>
+      container.workspace.getStickerSet(reference),
   );
   ipcMain.handle(
     channels.customEmojiGet,

@@ -51,7 +51,7 @@ export function CustomEmoji({
         sticker={{
           emoji: item.emoji,
           format: item.format,
-          setName: null,
+          setReference: null,
           outlinePath: item.outlinePath,
         }}
         width={item.width}
