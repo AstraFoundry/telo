@@ -24,10 +24,10 @@ The renderer's imports from `contracts/src` are an intentional exception to FSD.
 
 - `domain`: agent configuration, thread, and automation (trigger rule, scheduled task, cron expression) invariants, user preferences, keyword folders, and Telegram/agent ports.
 - `application`: save configuration, connect/disconnect a vendor OAuth account, list vendor models, run agent, manage agent threads, manage and execute agent automation (automation service, run runner, trigger engine, scheduler), update preferences, keyword-folder CRUD and projection, and Telegram workspace, chat-state, message-action, and logout use cases.
-- `infrastructure`: AI SDK provider packages, vendor OAuth (PKCE loopback and device code), vendor model-list HTTP, Teleproto, encrypted JSON, session storage, and demo adapters.
+- `infrastructure`: AI SDK provider packages, vendor OAuth (PKCE loopback and device code), vendor model-list HTTP, Telegram (Teleproto today; TDLib is the accepted kernel per [`../decisions/005-tdlib-client-kernel.md`](../decisions/005-tdlib-client-kernel.md)), encrypted JSON, session storage, and demo adapters.
 - `interfaces`: Electron lifecycle, context bridge, IPC channels, and AG-UI event mapping.
 
-The app uses local files rather than a database, cache, or message broker. Electron Builder produces macOS, Windows, and Linux artifacts.
+Agent, preferences, and the account registry use local files. Telegram client data is a TDLib per-account database after cutover. Electron Builder produces macOS, Windows, and Linux artifacts.
 
 ## Data flows
 
