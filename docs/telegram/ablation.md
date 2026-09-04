@@ -10,10 +10,11 @@ Go/no-go after **A0** (packaging). Numbers below were taken on the Linux x64 clo
 | ----------------------------- | -------------------------- | ----------------------------------------------------------------------- |
 | Native payload                | none                       | `tdl` node addon asar-unpacked; `libtdjson` in `resources/tdlib-native` |
 | Host Node load                | n/a                        | `authorizationStateWaitPhoneNumber` in ~170ms                           |
-| Packaged `TELO_TDLIB_SMOKE=1` | n/a                        | run `pnpm package && pnpm tdlib:smoke` on each release OS               |
+| Linux x64 unpacked size       | not recorded this run      | 577M (`release/linux-unpacked`)                                         |
+| Packaged `TELO_TDLIB_SMOKE=1` | n/a                        | ok — `resources/tdlib-native/libtdjson.so`                              |
 | Win arm64                     | ships                      | **unsupported** (`prebuilt-tdlib` has no win-arm64)                     |
 
-**Go/no-go:** go on Linux x64 host load (`authorizationStateWaitPhoneNumber` in ~170ms). Packaged smoke is `pnpm tdlib:smoke` after `pnpm package` on macOS, Windows x64, and Ubuntu x64. Win arm64 is unsupported.
+**Go/no-go:** go on Linux x64. Packaged smoke loaded `libtdjson` from `resources/tdlib-native` and reached `authorizationStateWaitPhoneNumber`. Repeat `pnpm tdlib:smoke` after `pnpm package` on macOS and Windows x64 (release workflow). Win arm64 is unsupported.
 
 ## A1 — `use_message_database` on vs off (Wave 3)
 

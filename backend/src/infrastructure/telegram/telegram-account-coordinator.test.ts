@@ -88,7 +88,7 @@ class StubAccountClient {
   }
 
   async listChatPage(): Promise<{
-    items: ChatDto[];
+    items: ReadonlyArray<ChatDto>;
     nextCursor: null;
   }> {
     const snapshots = new FileTelegramDialogSnapshotRepository(
