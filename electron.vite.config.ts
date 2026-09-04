@@ -66,12 +66,13 @@ export default defineConfig(({ mode }) => {
         "process.env.TELO_KIMI_OAUTH_CLIENT_ID":
           JSON.stringify(kimiOAuthClientId),
       },
-      plugins: [externalizeDepsPlugin()],
+      plugins: [externalizeDepsPlugin({ exclude: [] })],
       build: {
         rollupOptions: {
           input: {
             index: path.join(root, "backend/src/interfaces/electron/main.ts"),
           },
+          external: ["tdl", "prebuilt-tdlib"],
         },
       },
     },

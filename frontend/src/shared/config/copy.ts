@@ -426,4 +426,12 @@ export const copy = {
   contextUnread: "Unread messages",
   contextFolder: "A folder",
   folderId: "Folder ID",
+  secretChat: "Secret chat",
+  secretChatDeviceLocal: "End-to-end encrypted, device-local",
+  startSecretChat: "Start secret chat",
+  startSecretChatConfirm:
+    "Secret chats are end-to-end encrypted and stored only on this device. History will not sync to other devices.",
+  startSecretChatAction: "Start chat",
+  engineChangedSignIn:
+    "Telegram now uses TDLib. Sign in again; existing sessions cannot be imported.",
 } as const;

@@ -14,6 +14,7 @@ import {
   registerMediaScheme,
   unhandleMediaProtocol,
 } from "./media-protocol";
+import { runTdlibSmoke } from "../../infrastructure/telegram/tdlib-probe";
 
 registerMediaScheme();
 
@@ -93,6 +94,19 @@ function createWindow(): void {
 }
 
 app.whenReady().then(async () => {
+  if (process.env.TELO_TDLIB_SMOKE === "1") {
+    const result = await runTdlibSmoke({
+      isPackaged: app.isPackaged,
+      resourcesPath: process.resourcesPath,
+    });
+    if (!result.ok) {
+      console.error("TELO_TDLIB_SMOKE failed", result);
+    } else {
+      console.log("TELO_TDLIB_SMOKE ok", result.tdjson);
+    }
+    app.exit(result.ok ? 0 : 1);
+    return;
+  }
   const container = createContainer(
     (state) => {
       sendToRenderer(channels.telegramAuthEvent, state);

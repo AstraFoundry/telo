@@ -32,9 +32,11 @@ Designed from the ground up for strict privacy and security, Telo isolates crede
 
 ## Key Features
 
-### ⚡ Pure MTProto Client Core
+### ⚡ TDLib client kernel
 
-- **Lightweight & Fast**: Powered by `teleproto`, a pure TypeScript implementation of the Telegram MTProto wire protocol. No bloated C++ native binaries or external TDLib build dependencies.
+- **Native Telegram runtime**: Powered by TDLib (`tdl` + `prebuilt-tdlib` 1.8.67) in the Electron main process. The renderer never imports `tdl` or `td_api`. Packaged builds unpack `libtdjson` beside the asar.
+- **Per-account SQLite**: Each account stores chats and messages under `userData/tdlib/<accountId>/`, encrypted with a `safeStorage` key. Existing Teleproto sessions cannot be imported — sign in again.
+- **Windows arm64**: not supported by `prebuilt-tdlib`.
 - **Seamless Authentication**: Standard phone number login supporting SMS/Telegram verification codes and Cloud Password (2FA) challenges.
 - **Zero-Login Demo Workspace**: Launch with `make dev DEMO=1` to explore the interface and agent workflows without signing into a Telegram account. There is no in-app demo button.
 
@@ -91,8 +93,8 @@ Telo enforces a clean separation of concerns using industry-standard architectur
 |     interfaces  -->  application  -->  domain  <--  infrastructure     |
 +-------------------------------------------------------------------------+
           |                         |                        |
-     [Teleproto]                [AI SDK]             [safeStorage]
-   (Telegram MTProto)      (OpenAI / Compatible)   (Encrypted Local Data)
+     [TDLib]                    [AI SDK]             [safeStorage]
+   (tdl + libtdjson)      (OpenAI / Compatible)   (Encrypted Local Data)
 ```
 
 - **Frontend (Feature-Sliced Design)**: Predictable downward dependency flow across `app`, `pages`, `widgets`, `features`, `entities`, and `shared`.

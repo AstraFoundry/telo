@@ -1,11 +1,12 @@
 import { randomUUID } from "node:crypto";
-import { access, copyFile, mkdir, rm } from "node:fs/promises";
-import path from "node:path";
+import { rm } from "node:fs/promises";
 
 import type {
   BotCallbackAnswerDto,
+  ChatDto,
   ChatFolderDto,
   ChatMemberDto,
+  ChatPageCursorDto,
   ChatPageDto,
   ChatPageInput,
   CurrentUserDto,
@@ -40,7 +41,6 @@ import type {
   TelegramRepository,
   TelegramUploadFile,
 } from "../../domain/telegram/telegram-ports";
-import { FileTelegramDialogSnapshotRepository } from "./file-telegram-dialog-snapshot-repository";
 
 /**
  * tdesktop caps a free client at three signed-in accounts
@@ -54,12 +54,14 @@ export interface TelegramAccountPaths {
   readonly profile: string;
   readonly snapshot: string;
   readonly mediaCacheDirectory: string;
+  readonly tdlibDirectory: string;
+  readonly tdlibKey: string;
 }
 
 /**
  * The slice of one account's client coordinator the switcher drives.
- * `TelegramClientCoordinator` satisfies it structurally; tests inject a
- * stubbed factory instead of a Teleproto connection.
+ * `TdlibClientCoordinator` satisfies it structurally; tests inject a
+ * stubbed factory instead of a live TDLib connection.
  */
 export type TelegramAccountClient = TelegramRepository & {
   getAuthState(): TelegramAuthState;
@@ -75,13 +77,12 @@ export interface TelegramAccountCoordinatorOptions {
   readonly registry: TelegramAccountRegistry;
   readonly paths: (accountId: string) => TelegramAccountPaths;
   /**
-   * The pre-multi-account single files (`telegram.session`, …). Migrated
-   * into the first account's per-account paths on first boot; null in tests
-   * and anywhere migration makes no sense.
+   * Pre-TDLib GramJS files. They cannot be imported; the coordinator only
+   * deletes them so a leftover session does not look restorable.
    */
   readonly legacyPaths: Omit<
     TelegramAccountPaths,
-    "mediaCacheDirectory"
+    "mediaCacheDirectory" | "tdlibDirectory" | "tdlibKey"
   > | null;
   readonly createCoordinator: (
     accountId: string,
@@ -270,6 +271,8 @@ export class TelegramAccountCoordinator implements TelegramRepository {
     await rm(paths.profile, { force: true });
     await rm(paths.snapshot, { force: true });
     await rm(paths.mediaCacheDirectory, { recursive: true, force: true });
+    await rm(paths.tdlibDirectory, { recursive: true, force: true });
+    await rm(paths.tdlibKey, { force: true });
     this.coordinators.delete(activeId);
     const remaining = snapshot.accounts.filter(
       (account) => account.id !== activeId,
@@ -308,6 +311,10 @@ export class TelegramAccountCoordinator implements TelegramRepository {
 
   listChatPage(input: ChatPageInput = {}): Promise<ChatPageDto> {
     return this.delegate().listChatPage(input);
+  }
+
+  createSecretChat(userId: string): Promise<ChatDto> {
+    return this.delegate().createSecretChat(userId);
   }
 
   listFolders(): Promise<ReadonlyArray<ChatFolderDto>> {
@@ -610,7 +617,7 @@ export class TelegramAccountCoordinator implements TelegramRepository {
 
   /**
    * Parks a connected account: persists its unread total for the switcher
-   * badge, then drops the connection. The stored session stays on disk —
+   * badge, then drops the connection. The TDLib directory stays on disk —
    * `disconnect()` parks, `logout()` ends — so switching back restores it.
    */
   private async parkAccount(accountId: string): Promise<void> {
@@ -626,19 +633,24 @@ export class TelegramAccountCoordinator implements TelegramRepository {
   }
 
   /**
-   * The server-side folderUnread total is not tracked main-side, so the
-   * persisted count is the sum of the account's dialog-snapshot chats'
-   * `unreadCount` — the snapshot writer keeps that file current while the
-   * account is connected, which is exactly when parking happens.
+   * Sum unread across the live chat list. TDLib does not write
+   * `dialogs.json`; the adapter's in-memory chats (SQLite-backed after
+   * restore) are the source of truth.
    */
   private async captureUnread(accountId: string): Promise<number> {
-    const snapshots = new FileTelegramDialogSnapshotRepository(
-      this.options.paths(accountId).snapshot,
-    );
-    const snapshot = await snapshots.get();
-    return (
-      snapshot?.chats.reduce((total, chat) => total + chat.unreadCount, 0) ?? 0
-    );
+    const client = this.coordinators.get(accountId);
+    if (!client) return 0;
+    let total = 0;
+    let cursor: ChatPageCursorDto | null = null;
+    do {
+      const page = await client.listChatPage({
+        limit: 100,
+        ...(cursor ? { cursor } : {}),
+      });
+      total += page.items.reduce((sum, chat) => sum + chat.unreadCount, 0);
+      cursor = page.nextCursor;
+    } while (cursor);
+    return total;
   }
 
   private async discardPendingLogin(): Promise<void> {
@@ -661,13 +673,8 @@ export class TelegramAccountCoordinator implements TelegramRepository {
       this.snapshot = stored;
       return stored;
     }
-    // First boot (or an emptied registry file): adopt the legacy
-    // single-account files before concluding nothing is signed in.
-    const migrated = await this.migrateLegacyAccount();
-    if (migrated) {
-      this.snapshot = migrated;
-      return migrated;
-    }
+    // First boot: leftover GramJS session files cannot be imported.
+    await this.discardLegacyGramjsFiles();
     this.snapshot = (await this.registerDemoAccounts()) ?? {
       accounts: [],
       activeAccountId: null,
@@ -683,48 +690,15 @@ export class TelegramAccountCoordinator implements TelegramRepository {
   }
 
   /**
-   * Adopts the pre-multi-account single files as the first account. The
-   * files are copied, never moved: until the registry write succeeds the
-   * legacy files are the only pointer to the session, so a failed boot
-   * leaves them in place and simply migrates again on the next launch.
-   * Only after the registry exists are the legacy files deleted.
+   * GramJS StringSession files cannot become a TDLib database. Delete them
+   * so they are not mistaken for a restorable account.
    */
-  private async migrateLegacyAccount(): Promise<TelegramAccountRegistrySnapshot | null> {
+  private async discardLegacyGramjsFiles(): Promise<void> {
     const legacy = this.options.legacyPaths;
-    if (!legacy || !(await fileExists(legacy.session))) return null;
-    const accountId = this.newAccountId();
-    const paths = this.options.paths(accountId);
-    await mkdir(path.dirname(paths.session), { recursive: true });
-    await copyFile(legacy.session, paths.session);
-    if (await fileExists(legacy.profile)) {
-      await copyFile(legacy.profile, paths.profile);
-    }
-    if (await fileExists(legacy.snapshot)) {
-      await copyFile(legacy.snapshot, paths.snapshot);
-    }
-    const now = new Date().toISOString();
-    const snapshot: TelegramAccountRegistrySnapshot = {
-      accounts: [
-        {
-          id: accountId,
-          // The identity is unknowable until the restored session
-          // connects; the first `ready` refresh replaces this placeholder
-          // with the account's CurrentUserDto.
-          displayName: "Telegram Account",
-          username: null,
-          avatarDataUrl: null,
-          unreadCount: 0,
-          createdAt: now,
-          lastActiveAt: now,
-        },
-      ],
-      activeAccountId: accountId,
-    };
-    await this.options.registry.save(snapshot);
+    if (!legacy) return;
     await rm(legacy.session, { force: true });
     await rm(legacy.profile, { force: true });
     await rm(legacy.snapshot, { force: true });
-    return snapshot;
   }
 
   /**
@@ -758,14 +732,5 @@ export class TelegramAccountCoordinator implements TelegramRepository {
 
   private newAccountId(): string {
     return this.options.createAccountId?.() ?? randomUUID();
-  }
-}
-
-async function fileExists(filePath: string): Promise<boolean> {
-  try {
-    await access(filePath);
-    return true;
-  } catch {
-    return false;
   }
 }
