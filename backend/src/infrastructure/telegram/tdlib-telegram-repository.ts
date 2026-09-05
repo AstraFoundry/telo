@@ -863,6 +863,7 @@ export class TdlibTelegramRepository implements TelegramRepository {
     const peerId = chatIdOf(chat.id);
     const small = chat.photo?.small;
     if (!small) {
+      if (this.hasInFlightAvatar(peerId)) return;
       if (!this.avatarUrls.has(peerId)) this.avatarUrls.set(peerId, null);
       return;
     }
@@ -873,10 +874,21 @@ export class TdlibTelegramRepository implements TelegramRepository {
     const peerId = String(user.id);
     const small = user.profile_photo?.small;
     if (!small) {
+      // Private chats store the same photo on chat.photo. Do not settle empty
+      // while that file is still downloading.
+      if (this.hasInFlightAvatar(peerId)) return;
+      if (this.chats.get(peerId)?.photo?.small) return;
       if (!this.avatarUrls.has(peerId)) this.avatarUrls.set(peerId, null);
       return;
     }
     void this.downloadAvatar(peerId, small);
+  }
+
+  private hasInFlightAvatar(peerId: string): boolean {
+    for (const mapped of this.avatarFilePeers.values()) {
+      if (mapped === peerId) return true;
+    }
+    return false;
   }
 
   private async downloadAvatar(peerId: string, file: Td.file): Promise<void> {
