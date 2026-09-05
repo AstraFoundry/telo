@@ -6,6 +6,7 @@ import type {
   TelegramWorkspaceEvent,
   TeloDesktopApi,
   StickerSetReferenceDto,
+  UserPreferencesDto,
 } from "../../../../contracts/src/ipc";
 
 type MockedFunctions<T> = {
@@ -33,6 +34,46 @@ type MediaUploadState = Extract<
  * (uploading → ready, and cancelled) to listeners registered through onEvent,
  * mirroring the main process, so store upload tracking is testable end to end.
  */
+/**
+ * The persisted preference set every renderer test starts from, in one place
+ * so adding a preference does not mean editing a literal in each suite. Pass
+ * a partial to vary only what the test is about.
+ */
+export function testPreferences(
+  partial: Partial<UserPreferencesDto> = {},
+): UserPreferencesDto {
+  return {
+    agentPanelOpen: false,
+    demoWorkspace: false,
+    theme: "system",
+    accentColor: "blue",
+    messageTextSize: 14,
+    timeFormat: "system",
+    sendWithEnter: true,
+    notificationsEnabled: true,
+    sidebarWidth: 280,
+    agentPanelWidth: 380,
+    recentEmojis: [],
+    recentSearches: [],
+    messageTemplates: [],
+    reduceMotion: false,
+    loopStickers: true,
+    notificationSenderName: true,
+    notificationPreview: true,
+    countMutedChats: false,
+    mediaCacheLimitMb: 512,
+    chatWallpaper: "plain",
+    notifyDirectChats: true,
+    notifyGroupChats: true,
+    notifyChannels: true,
+    notificationSound: true,
+    autoDownloadPhotos: true,
+    autoDownloadVideos: true,
+    autoDownloadFiles: false,
+    ...partial,
+  };
+}
+
 export function installTeloApiMock(): TeloApiMock {
   const workspaceListeners = new Set<(event: TelegramWorkspaceEvent) => void>();
   const emitWorkspaceEvent = (event: TelegramWorkspaceEvent) => {
@@ -251,27 +292,7 @@ export function installTeloApiMock(): TeloApiMock {
       windowControl: vi.fn(),
     },
     preferences: {
-      get: vi.fn(async () => ({
-        agentPanelOpen: false,
-        demoWorkspace: false,
-        theme: "system",
-        accentColor: "blue",
-        messageTextSize: 14,
-        timeFormat: "system",
-        sendWithEnter: true,
-        notificationsEnabled: true,
-        sidebarWidth: 280,
-        agentPanelWidth: 380,
-        recentEmojis: [],
-        recentSearches: [],
-        messageTemplates: [],
-        reduceMotion: false,
-        loopStickers: true,
-        notificationSenderName: true,
-        notificationPreview: true,
-        countMutedChats: false,
-        mediaCacheLimitMb: 512,
-      })),
+      get: vi.fn(async () => testPreferences()),
       update: vi.fn(),
     },
     storage: {

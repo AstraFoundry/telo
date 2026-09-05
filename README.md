@@ -61,9 +61,15 @@ Designed from the ground up for strict privacy and security, Telo isolates crede
   - Theme switching: **System**, **Light**, and **Dark** modes.
   - Accent palettes: **Blue**, **Green**, **Purple**, **Red**, and **Orange**.
   - Dynamic message text scaling slider (**12px – 18px**).
+  - Chat backgrounds: **Plain**, **Dots**, **Grid**, and an accent **Gradient**, all drawn from theme tokens.
   - Time formatting: **System default**, **12-hour**, and **24-hour**.
   - Flexible keyboard shortcuts: send messages with `Enter` or `Cmd/Ctrl + Enter`.
   - Keyboard toggle: `Cmd/Ctrl + B` toggles the AI Agent sidebar instantly.
+- **Settings That Answer Back**:
+  - Search indexes settings, not sections: type an alias, arrow to it, press `Enter`, and land on the row itself — which flashes on arrival.
+  - Live previews instead of descriptions: Appearance renders real transcript bubbles under the same tokens the conversation uses, and Notifications renders the exact banner the OS would raise.
+  - Notification control per chat kind (**Private chats**, **Groups**, **Channels**), plus sender name, message text, and sound.
+  - Media auto-download per kind (**Photos**, **Videos and GIFs**, **Files**) on top of the on-disk cache ceiling.
 
 ### 💬 Comprehensive Message Operations
 

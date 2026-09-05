@@ -14,7 +14,10 @@ import type {
   UserPreferencesDto,
 } from "../../../../../contracts/src/ipc";
 import { copy } from "../../../shared/config/copy";
-import { installTeloApiMock } from "../../../shared/test/mock-telo";
+import {
+  installTeloApiMock,
+  testPreferences,
+} from "../../../shared/test/mock-telo";
 
 function stubMatchMedia(dark: boolean): void {
   // jsdom does not implement matchMedia, which the preferences slice applies
@@ -29,31 +32,6 @@ function stubMatchMedia(dark: boolean): void {
     onchange: null,
     dispatchEvent: () => false,
   })) as unknown as typeof window.matchMedia;
-}
-
-function preferences(partial: Partial<UserPreferencesDto> = {}) {
-  return {
-    agentPanelOpen: false,
-    demoWorkspace: false,
-    theme: "system",
-    accentColor: "blue",
-    messageTextSize: 14,
-    timeFormat: "system",
-    sendWithEnter: true,
-    notificationsEnabled: true,
-    sidebarWidth: 280,
-    agentPanelWidth: 380,
-    recentEmojis: [],
-    recentSearches: [],
-    messageTemplates: [],
-    reduceMotion: false,
-    loopStickers: true,
-    notificationSenderName: true,
-    notificationPreview: true,
-    countMutedChats: false,
-    mediaCacheLimitMb: 512,
-    ...partial,
-  } satisfies UserPreferencesDto;
 }
 
 function message(id: string, chatId: string): MessageDto {
@@ -85,7 +63,7 @@ async function renderComposer(
   } = {},
 ) {
   const telo = installTeloApiMock();
-  const stored = preferences({ sendWithEnter, ...options.preferences });
+  const stored = testPreferences({ sendWithEnter, ...options.preferences });
   telo.preferences.get.mockResolvedValue(stored);
   telo.preferences.update.mockResolvedValue(stored);
   if (options.members) {
@@ -272,7 +250,7 @@ describe("MessageComposer", () => {
     // The composer's onSend is the store's send action here, so editing
     // routes through the store like it does in the conversation view.
     const telo = installTeloApiMock();
-    telo.preferences.get.mockResolvedValue(preferences());
+    telo.preferences.get.mockResolvedValue(testPreferences());
     const { useChatStore } = await import("../../../entities/chat");
     useChatStore.setState({
       chats: [],
@@ -633,7 +611,7 @@ describe("MessageComposer", () => {
 
   it("forwards the silent flag to the workspace send through the store", async () => {
     const telo = installTeloApiMock();
-    telo.preferences.get.mockResolvedValue(preferences());
+    telo.preferences.get.mockResolvedValue(testPreferences());
     const { useChatStore } = await import("../../../entities/chat");
     useChatStore.setState({
       chats: [],
@@ -712,10 +690,10 @@ describe("MessageComposer", () => {
     // must be in place before the composer renders.
     const telo = installTeloApiMock();
     telo.preferences.get.mockResolvedValue(
-      preferences({ recentEmojis: ["🚀", "😀"] }),
+      testPreferences({ recentEmojis: ["🚀", "😀"] }),
     );
     telo.preferences.update.mockResolvedValue(
-      preferences({ recentEmojis: ["🚀", "😀"] }),
+      testPreferences({ recentEmojis: ["🚀", "😀"] }),
     );
     const { useChatStore } = await import("../../../entities/chat");
     useChatStore.setState({

@@ -156,17 +156,18 @@ export function AgentConfigurationForm() {
       }}
     >
       <SettingsGroup title={copy.agentProviderGroup}>
-        <SettingsStackedRow label={copy.provider}>
+        <SettingsStackedRow label={copy.provider} settingId="agent-provider">
           <ProviderPicker value={provider} onValueChange={changeProvider} />
         </SettingsStackedRow>
         <SettingsStackedRow
           label={copy.model}
+          settingId="agent-model"
           description={modelsError ? copy.modelsUnavailable : undefined}
         >
           <ModelPicker value={model} models={models} onValueChange={setModel} />
         </SettingsStackedRow>
         {compatible ? (
-          <SettingsStackedRow label={copy.baseUrl}>
+          <SettingsStackedRow label={copy.baseUrl} settingId="agent-base-url">
             <Input
               value={baseUrl}
               onChange={setBaseUrl}
@@ -178,6 +179,7 @@ export function AgentConfigurationForm() {
         {oauthPath ? (
           <SettingsRow
             label={copy.account}
+            settingId="agent-account"
             value={
               connected ? (configuration?.accountLabel ?? undefined) : undefined
             }
@@ -194,7 +196,7 @@ export function AgentConfigurationForm() {
             </StatefulButton>
           </SettingsRow>
         ) : (
-          <SettingsStackedRow label={copy.apiKey}>
+          <SettingsStackedRow label={copy.apiKey} settingId="agent-api-key">
             <Input
               type="password"
               value={apiKey}
@@ -207,7 +209,10 @@ export function AgentConfigurationForm() {
       </SettingsGroup>
 
       <SettingsGroup title={copy.agentBehaviourGroup}>
-        <SettingsStackedRow label={copy.instructions}>
+        <SettingsStackedRow
+          label={copy.instructions}
+          settingId="agent-instructions"
+        >
           <Input
             value={instructions}
             onChange={setInstructions}
@@ -217,6 +222,7 @@ export function AgentConfigurationForm() {
         </SettingsStackedRow>
         <SettingsRow
           label={copy.inspectWorkspace}
+          settingId="agent-inspect-workspace"
           labelFor={inspectId}
           descriptionId={inspectHintId}
         >
@@ -233,6 +239,7 @@ export function AgentConfigurationForm() {
         {agentRequestOmitsTemperature(provider, model) ? null : (
           <SettingsStackedRow
             label={copy.agentTemperature}
+            settingId="agent-temperature"
             description={copy.agentTemperatureHint}
             value={temperature.toFixed(1)}
           >
@@ -248,6 +255,7 @@ export function AgentConfigurationForm() {
         )}
         <SettingsStackedRow
           label={copy.agentMaxSteps}
+          settingId="agent-max-steps"
           description={copy.agentMaxStepsHint}
           value={`${maxSteps}`}
         >
@@ -262,6 +270,7 @@ export function AgentConfigurationForm() {
         </SettingsStackedRow>
         <SettingsStackedRow
           label={copy.agentHistoryLimit}
+          settingId="agent-history-limit"
           description={copy.agentHistoryLimitHint}
           value={`${historyLimit}`}
         >

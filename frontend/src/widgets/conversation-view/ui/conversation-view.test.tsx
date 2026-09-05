@@ -18,7 +18,10 @@ import type {
 } from "../../../../../contracts/src/ipc";
 import { MESSAGE_ACTION_EVENT_NAME } from "../../../../../contracts/src/ipc";
 import { copy } from "../../../shared/config/copy";
-import { installTeloApiMock } from "../../../shared/test/mock-telo";
+import {
+  installTeloApiMock,
+  testPreferences,
+} from "../../../shared/test/mock-telo";
 
 function stubMatchMedia(dark: boolean, reducedMotion = false): void {
   // jsdom does not implement matchMedia, which the preferences slice applies
@@ -69,31 +72,6 @@ function intersectAll(): void {
   for (const callback of intersectionCallbacks) {
     callback([{ isIntersecting: true }]);
   }
-}
-
-function preferences(partial: Partial<UserPreferencesDto> = {}) {
-  return {
-    agentPanelOpen: false,
-    demoWorkspace: false,
-    theme: "system",
-    accentColor: "blue",
-    messageTextSize: 14,
-    timeFormat: "system",
-    sendWithEnter: true,
-    notificationsEnabled: true,
-    sidebarWidth: 280,
-    agentPanelWidth: 380,
-    recentEmojis: [],
-    recentSearches: [],
-    messageTemplates: [],
-    reduceMotion: false,
-    loopStickers: true,
-    notificationSenderName: true,
-    notificationPreview: true,
-    countMutedChats: false,
-    mediaCacheLimitMb: 512,
-    ...partial,
-  } satisfies UserPreferencesDto;
 }
 
 function chat(partial: Partial<ChatDto> & Pick<ChatDto, "id" | "title">) {
@@ -153,7 +131,7 @@ async function renderView({
   currentUser?: CurrentUserDto | null;
 } = {}) {
   const telo = installTeloApiMock();
-  telo.preferences.get.mockResolvedValue(preferences(prefs));
+  telo.preferences.get.mockResolvedValue(testPreferences(prefs));
   const { useChatStore } = await import("../../../entities/chat");
   useChatStore.setState({
     chats,

@@ -5,14 +5,16 @@ import type {
   AgentConfigurationDto,
   AgentThreadDto,
   UiContextSnapshot,
-  UserPreferencesDto,
 } from "../../../../../contracts/src/ipc";
 import {
   AGENT_OAUTH_PROVIDERS,
   AGENT_SUGGESTIONS_EVENT_NAME,
 } from "../../../../../contracts/src/ipc";
 import { copy } from "../../../shared/config/copy";
-import { installTeloApiMock } from "../../../shared/test/mock-telo";
+import {
+  installTeloApiMock,
+  testPreferences,
+} from "../../../shared/test/mock-telo";
 
 import { subscribeToAgentEvents, useAgentStore } from "./agent-store";
 
@@ -27,33 +29,6 @@ function resetAgentStore(): void {
     configuration: null,
     notificationsEnabled: false,
   });
-}
-
-function preferences(
-  partial: Partial<UserPreferencesDto> = {},
-): UserPreferencesDto {
-  return {
-    agentPanelOpen: false,
-    accentColor: "blue",
-    messageTextSize: 14,
-    timeFormat: "system",
-    sendWithEnter: true,
-    notificationsEnabled: true,
-    sidebarWidth: 280,
-    agentPanelWidth: 380,
-    recentEmojis: [],
-    recentSearches: [],
-    messageTemplates: [],
-    demoWorkspace: false,
-    theme: "system",
-    reduceMotion: false,
-    loopStickers: true,
-    notificationSenderName: true,
-    notificationPreview: true,
-    countMutedChats: false,
-    mediaCacheLimitMb: 512,
-    ...partial,
-  };
 }
 
 function threadDto(partial: Partial<AgentThreadDto> = {}): AgentThreadDto {
@@ -222,7 +197,7 @@ describe("agent-store actions", () => {
   it("toggle() flips the panel visibility and close() hides it", () => {
     const telo = installTeloApiMock();
     telo.preferences.update.mockResolvedValue(
-      preferences({ agentPanelOpen: true }),
+      testPreferences({ agentPanelOpen: true }),
     );
 
     useAgentStore.getState().toggle();
@@ -239,7 +214,7 @@ describe("agent-store actions", () => {
   it("loadPanelState() applies the persisted panel visibility", async () => {
     const telo = installTeloApiMock();
     telo.preferences.get.mockResolvedValue(
-      preferences({ agentPanelOpen: true }),
+      testPreferences({ agentPanelOpen: true }),
     );
 
     await useAgentStore.getState().loadPanelState();
@@ -251,7 +226,7 @@ describe("agent-store actions", () => {
   it("loadPanelState() caches the notifications preference", async () => {
     const telo = installTeloApiMock();
     telo.preferences.get.mockResolvedValue(
-      preferences({ notificationsEnabled: true }),
+      testPreferences({ notificationsEnabled: true }),
     );
 
     await useAgentStore.getState().loadPanelState();
@@ -262,7 +237,7 @@ describe("agent-store actions", () => {
   it("toggle() persists the new panel visibility optimistically", () => {
     const telo = installTeloApiMock();
     telo.preferences.update.mockResolvedValue(
-      preferences({ agentPanelOpen: true }),
+      testPreferences({ agentPanelOpen: true }),
     );
 
     useAgentStore.getState().toggle();
@@ -284,7 +259,7 @@ describe("agent-store actions", () => {
   it("resyncs the panel visibility from storage when the write fails", async () => {
     const telo = installTeloApiMock();
     telo.preferences.update.mockRejectedValue(new Error("disk full"));
-    telo.preferences.get.mockResolvedValue(preferences());
+    telo.preferences.get.mockResolvedValue(testPreferences());
 
     useAgentStore.getState().toggle();
     expect(useAgentStore.getState().open).toBe(true);

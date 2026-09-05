@@ -1,178 +1,24 @@
-import {
-  Bell,
-  ChatCircleDots,
-  FolderOpen,
-  HardDrives,
-  Palette,
-  Sparkle,
-  UserCircle,
-  type Icon,
-} from "@phosphor-icons/react";
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { copy } from "shared/config/copy";
 import { Button, Input } from "shared/ui";
 
-export const SETTINGS_SECTIONS = [
-  "account",
-  "appearance",
-  "chat",
-  "notifications",
-  "folders",
-  "agent",
-  "storage",
-] as const;
-
-export type SettingsSectionId = (typeof SETTINGS_SECTIONS)[number];
-
-export const SECTION_TITLES: Record<SettingsSectionId, string> = {
-  account: copy.settingsAccount,
-  appearance: copy.appearance,
-  chat: copy.chatSettings,
-  notifications: copy.notifications,
-  folders: copy.folders,
-  agent: copy.agentSettings,
-  storage: copy.dataAndStorage,
-};
-
-const SECTION_ICONS: Record<SettingsSectionId, Icon> = {
-  account: UserCircle,
-  appearance: Palette,
-  chat: ChatCircleDots,
-  notifications: Bell,
-  folders: FolderOpen,
-  agent: Sparkle,
-  storage: HardDrives,
-};
-
-/**
- * Every setting the panes render, so search can answer with the setting rather
- * than only the section that holds it. `terms` carries the words a person is
- * likely to type but the label does not contain - "dark" for Theme, "sign out"
- * for Log out - which is the difference between a search that feels helpful
- * and one that only matches what is already on screen.
- */
-interface SettingsIndexEntry {
-  readonly section: SettingsSectionId;
-  readonly label: string;
-  readonly terms: ReadonlyArray<string>;
-}
-
-export const SETTINGS_INDEX: ReadonlyArray<SettingsIndexEntry> = [
-  { section: "account", label: copy.telegramAccount, terms: ["profile"] },
-  {
-    section: "account",
-    label: copy.accountConnection,
-    terms: ["reconnect", "session"],
-  },
-  { section: "account", label: copy.logOut, terms: ["sign out", "logout"] },
-  {
-    section: "appearance",
-    label: copy.theme,
-    terms: ["dark", "light", "night mode"],
-  },
-  { section: "appearance", label: copy.accentColor, terms: ["colour"] },
-  {
-    section: "appearance",
-    label: copy.messageTextSize,
-    terms: ["font size", "bigger text"],
-  },
-  {
-    section: "appearance",
-    label: copy.reduceMotion,
-    terms: ["animation", "power saving", "battery"],
-  },
-  {
-    section: "chat",
-    label: copy.sendWithEnter,
-    terms: ["enter", "return key"],
-  },
-  { section: "chat", label: copy.timeFormat, terms: ["24-hour", "clock"] },
-  { section: "chat", label: copy.loopStickers, terms: ["sticker", "animated"] },
-  {
-    section: "notifications",
-    label: copy.notificationsDesktop,
-    terms: ["alerts"],
-  },
-  {
-    section: "notifications",
-    label: copy.notificationSenderName,
-    terms: ["name"],
-  },
-  {
-    section: "notifications",
-    label: copy.notificationPreview,
-    terms: ["message text", "body"],
-  },
-  {
-    section: "notifications",
-    label: copy.countMutedChats,
-    terms: ["badge", "unread"],
-  },
-  {
-    section: "folders",
-    label: copy.keywordFolders,
-    terms: ["filter", "tabs"],
-  },
-  {
-    section: "agent",
-    label: copy.provider,
-    terms: [
-      "openai",
-      "anthropic",
-      "claude",
-      "google",
-      "gemini",
-      "groq",
-      "xai",
-      "grok",
-      "kimi",
-      "moonshot",
-      "deepseek",
-      "mistral",
-      "compatible",
-      "account",
-    ],
-  },
-  { section: "agent", label: copy.model, terms: ["catalog"] },
-  { section: "agent", label: copy.baseUrl, terms: ["endpoint"] },
-  {
-    section: "agent",
-    label: copy.account,
-    terms: ["oauth", "connect", "sign in"],
-  },
-  { section: "agent", label: copy.apiKey, terms: ["token", "secret"] },
-  { section: "agent", label: copy.instructions, terms: ["system prompt"] },
-  { section: "agent", label: copy.inspectWorkspace, terms: ["tools"] },
-  { section: "agent", label: copy.agentTemperature, terms: ["sampling"] },
-  { section: "agent", label: copy.agentMaxSteps, terms: ["tool calls"] },
-  { section: "agent", label: copy.agentHistoryLimit, terms: ["context"] },
-  {
-    section: "storage",
-    label: copy.mediaCache,
-    terms: ["disk", "downloads", "storage"],
-  },
-  {
-    section: "storage",
-    label: copy.mediaCacheLimit,
-    terms: ["size", "quota"],
-  },
-  { section: "storage", label: copy.clearCache, terms: ["delete", "free up"] },
-];
-
-function matches(entry: SettingsIndexEntry, query: string): boolean {
-  if (entry.label.toLocaleLowerCase().includes(query)) return true;
-  if (SECTION_TITLES[entry.section].toLocaleLowerCase().includes(query)) {
-    return true;
-  }
-  return entry.terms.some((term) => term.includes(query));
-}
+import {
+  matchesSetting,
+  SECTION_ICONS,
+  SECTION_TITLES,
+  SETTINGS_INDEX,
+  SETTINGS_SECTIONS,
+  type SettingsIndexEntry,
+  type SettingsSectionId,
+} from "../model/settings-index";
 
 interface SettingsNavProps {
   readonly active: SettingsSectionId;
   readonly query: string;
   onQueryChange(query: string): void;
-  onSelect(section: SettingsSectionId): void;
+  /** `settingId` is set when the reader picked a setting rather than a section. */
+  onSelect(section: SettingsSectionId, settingId?: string): void;
 }
 
 /**
@@ -181,10 +27,13 @@ interface SettingsNavProps {
  * there is nothing to discover by scrolling.
  *
  * Typing replaces the section list with matching settings, each labelled with
- * the section that owns it, so the answer to "where is dark mode" is one click
- * rather than a hunt. The active row reuses the same secondary-surface
- * treatment every other toggle in the app uses; a rail is not the place to
- * introduce a second visual language for "selected".
+ * the section that owns it, and picking one lands on that row rather than at
+ * the top of its pane - the difference between "here is where it lives" and
+ * "here it is". The field keeps focus while the arrow keys walk the results,
+ * so a reader can type, arrow and Enter without leaving the keyboard. The
+ * active row reuses the same secondary-surface treatment every other toggle in
+ * the app uses; a rail is not the place to introduce a second visual language
+ * for "selected".
  */
 export function SettingsNav({
   active,
@@ -195,31 +44,90 @@ export function SettingsNav({
   const trimmed = query.trim().toLocaleLowerCase();
   const results = useMemo(
     () =>
-      trimmed ? SETTINGS_INDEX.filter((entry) => matches(entry, trimmed)) : [],
+      trimmed
+        ? SETTINGS_INDEX.filter((entry) => matchesSetting(entry, trimmed))
+        : [],
     [trimmed],
   );
+  // The cursor carries the query it was set against. A new query answers with
+  // a different set, so the cursor belongs on its first row again - derived
+  // here rather than reset from an effect, which would render the stale row
+  // once before correcting itself.
+  const [cursor, setCursor] = useState({ query: "", index: 0 });
+  const activeIndex =
+    cursor.query === trimmed
+      ? Math.min(cursor.index, Math.max(results.length - 1, 0))
+      : 0;
+  const listRef = useRef<HTMLUListElement>(null);
+  const moveCursor = (index: number) => setCursor({ query: trimmed, index });
+
+  useEffect(() => {
+    if (results.length === 0) return;
+    listRef.current
+      ?.querySelector('[data-active="true"]')
+      ?.scrollIntoView({ block: "nearest" });
+  }, [activeIndex, results.length]);
+
+  const pick = (entry: SettingsIndexEntry) => {
+    onSelect(entry.section, entry.id);
+    onQueryChange("");
+  };
+
+  const onSearchKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (results.length === 0) return;
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      moveCursor((activeIndex + 1) % results.length);
+      return;
+    }
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      moveCursor((activeIndex - 1 + results.length) % results.length);
+      return;
+    }
+    if (event.key === "Enter") {
+      const entry = results[activeIndex];
+      if (entry) {
+        event.preventDefault();
+        pick(entry);
+      }
+    }
+  };
 
   return (
     <div className="flex h-full min-h-0 w-56 shrink-0 flex-col gap-2 border-r border-border p-3">
       <Input
         value={query}
         onChange={onQueryChange}
+        onKeyDown={onSearchKeyDown}
         placeholder={copy.settingsSearch}
         aria-label={copy.settingsSearch}
+        aria-controls={trimmed ? "settings-search-results" : undefined}
+        aria-activedescendant={
+          results[activeIndex] ? resultId(results[activeIndex].id) : undefined
+        }
       />
       {trimmed ? (
         <div className="min-h-0 flex-1 overflow-y-auto">
           {results.length > 0 ? (
-            <ul className="flex flex-col gap-0.5">
-              {results.map((entry) => (
-                <li key={`${entry.section}-${entry.label}`}>
+            <ul
+              ref={listRef}
+              id="settings-search-results"
+              aria-label={copy.settingsSearchResults}
+              className="flex flex-col gap-0.5"
+            >
+              {results.map((entry, index) => (
+                <li key={entry.id}>
                   <Button
-                    variant="ghost"
+                    id={resultId(entry.id)}
+                    variant={index === activeIndex ? "secondary" : "ghost"}
+                    data-active={index === activeIndex ? "true" : undefined}
                     className="h-auto w-full justify-start rounded-lg px-2.5 py-1.5 text-left"
-                    onClick={() => {
-                      onSelect(entry.section);
-                      onQueryChange("");
-                    }}
+                    // Pointing at a row moves the keyboard cursor onto it, so
+                    // the mouse and the arrow keys never disagree about which
+                    // row Enter would open.
+                    onPointerEnter={() => moveCursor(index)}
+                    onClick={() => pick(entry)}
                   >
                     <span className="flex min-w-0 flex-col items-start">
                       <span className="truncate text-sm text-foreground">
@@ -268,4 +176,8 @@ export function SettingsNav({
       )}
     </div>
   );
+}
+
+function resultId(settingId: string): string {
+  return `settings-search-${settingId}`;
 }
