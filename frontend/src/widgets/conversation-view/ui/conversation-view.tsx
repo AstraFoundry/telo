@@ -1451,18 +1451,21 @@ export function ConversationView() {
     [messages, selectedMessageIds, selecting],
   );
   const composerRegionRef = useRef<HTMLDivElement | null>(null);
-  const openViewer = useCallback((mediaId: string, trigger: HTMLElement) => {
-    const rect = trigger.getBoundingClientRect();
-    setViewer({
-      mediaId,
-      origin: {
-        x: rect.x,
-        y: rect.y,
-        width: rect.width,
-        height: rect.height,
-      },
-    });
-  }, []);
+  const openViewer = useCallback(
+    (mediaId: string, trigger: HTMLElement) => {
+      const rect = trigger.getBoundingClientRect();
+      setViewer({
+        mediaId,
+        origin: {
+          x: rect.x,
+          y: rect.y,
+          width: rect.width,
+          height: rect.height,
+        },
+      });
+    },
+    [setViewer],
+  );
   const transcriptRef = useRef<HTMLElement | null>(null);
   const prependAnchorRef = useRef<{
     firstMessageId: string | undefined;
@@ -1485,7 +1488,7 @@ export function ConversationView() {
     } else {
       viewport.scrollTop = viewport.scrollHeight;
     }
-  }, [reduceMotion]);
+  }, [reduceMotion, setFollowingLiveEdge]);
 
   // MessageScroller establishes the live-edge position on its first frame.
   // Keep the top sentinel disabled until the following frame so its initial
@@ -1655,14 +1658,14 @@ export function ConversationView() {
   // unread and the divider belongs at the top.
   const lastReadMessageId = activeChat?.lastReadMessageId ?? null;
   const unreadCount = activeChat?.unreadCount ?? 0;
-  const unreadBoundaryIndex = useMemo(() => {
+  const unreadBoundaryIndex = ((): number | null => {
     if (unreadCount <= 0 || messages.length === 0) return null;
     const boundary = lastReadMessageId
       ? messages.findIndex((message) => message.id === lastReadMessageId)
       : -1;
     if (boundary !== -1) return boundary + 1;
     return Math.max(0, messages.length - unreadCount);
-  }, [lastReadMessageId, messages, unreadCount]);
+  })();
 
   const firstMessageId = messages[0]?.id;
   useLayoutEffect(() => {
