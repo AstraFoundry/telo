@@ -79,7 +79,7 @@
     },
     {
       "id": "media",
-      "workflow": "Progress/cancel, telo-media, cache cap",
+      "workflow": "Progress/cancel, telo-media, cache cap, chat and user avatars",
       "methods": ["downloadFile", "cancelDownloadFile"],
       "evidence": [
         "backend/src/infrastructure/telegram/tdlib-telegram-repository.ts",

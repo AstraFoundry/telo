@@ -134,7 +134,7 @@ function AppSurfaces() {
   // Telegram's own connection setup (a real getMe() RPC, unlike the local
   // preference/config reads the other loaders make). Retrying on every
   // reconnect is the same self-healing the chat store already gets from
-  // Teleproto's catchUp(), so the account row never stays empty forever.
+  // live `updateConnectionState` events, so the account row never stays empty forever.
   useEffect(() => {
     if (workspaceReady && connectionState === "connected" && !currentUser) {
       void loadCurrentUser();

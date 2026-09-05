@@ -135,6 +135,9 @@ describe("TdlibTelegramRepository", () => {
       total_count: 1,
     }));
     bridge.handlers.set("getChat", () => chat);
+    bridge.handlers.set("getUser", (request) =>
+      tdUser(Number(request.user_id)),
+    );
     bridge.handlers.set("getChatHistory", () => ({
       _: "messages",
       total_count: 1,
@@ -213,6 +216,7 @@ describe("TdlibTelegramRepository", () => {
         displayName: "Ada Byron",
         username: "ada",
         avatarDataUrl: null,
+        avatarPending: false,
       },
     ]);
   });
@@ -411,8 +415,173 @@ describe("TdlibTelegramRepository", () => {
       "up1",
     );
     expect(uploaded[0]?.clientId).toBe("cid");
+    expect(bridge.invokes).toContainEqual(
+      expect.objectContaining({
+        _: "sendMessage",
+        input_message_content: expect.objectContaining({
+          _: "inputMessagePhoto",
+        }),
+      }),
+    );
     await repository.cancelMediaUpload("up1");
     await repository.cancelMediaDownload("tdfile:8");
     await repository.logout();
+  });
+
+  it("copies a completed chat photo into the avatar cache", async () => {
+    const { repository, events, bridge } = setup();
+    const source = path.join(os.tmpdir(), `telo-avatar-${Date.now()}.jpg`);
+    writeFileSync(source, "jpeg");
+    bridge.handlers.set("getChat", () =>
+      tdChat(11, {
+        photo: {
+          _: "chatPhotoInfo",
+          small: {
+            id: 44,
+            size: 4,
+            local: {
+              is_downloading_completed: true,
+              is_downloading_active: false,
+              path: source,
+              downloaded_size: 4,
+            },
+          },
+        },
+      }),
+    );
+    await repository.hydrate();
+    await vi.waitFor(() => {
+      expect(
+        events.some(
+          (event) =>
+            event.type === "chat-avatar" &&
+            event.avatarDataUrl?.includes("avatar_11"),
+        ),
+      ).toBe(true);
+    });
+    const page = await repository.listChatPage({ limit: 50 });
+    expect(page.items[0]?.avatarDataUrl).toMatch(
+      /telo-media:\/\/cache\/avatar_11\.jpg/,
+    );
+    expect(page.items[0]?.avatarPending).toBe(false);
+  });
+
+  it("downloads an incomplete chat photo and stays pending until updateFile", async () => {
+    const { repository, events, bridge } = setup();
+    const source = path.join(os.tmpdir(), `telo-avatar-dl-${Date.now()}.jpg`);
+    writeFileSync(source, "jpeg");
+    bridge.handlers.set("getChat", () =>
+      tdChat(11, {
+        photo: {
+          _: "chatPhotoInfo",
+          small: {
+            id: 45,
+            size: 4,
+            local: {
+              is_downloading_completed: false,
+              is_downloading_active: false,
+              path: "",
+              downloaded_size: 0,
+            },
+          },
+        },
+      }),
+    );
+    bridge.handlers.set("downloadFile", () => ({
+      id: 45,
+      size: 4,
+      local: {
+        is_downloading_completed: false,
+        is_downloading_active: true,
+        path: "",
+        downloaded_size: 0,
+      },
+    }));
+    await repository.hydrate();
+    expect(
+      (await repository.listChatPage({ limit: 50 })).items[0],
+    ).toMatchObject({
+      avatarPending: true,
+      avatarDataUrl: null,
+    });
+    expect(
+      bridge.invokes.some(
+        (item) => (item as { _: string })._ === "downloadFile",
+      ),
+    ).toBe(true);
+    bridge.emit({
+      _: "updateFile",
+      file: {
+        id: 45,
+        size: 4,
+        local: {
+          is_downloading_completed: true,
+          is_downloading_active: false,
+          path: source,
+          downloaded_size: 4,
+        },
+      },
+    } as Td.Update);
+    await vi.waitFor(() => {
+      expect(
+        events.some(
+          (event) => event.type === "chat-avatar" && event.avatarDataUrl,
+        ),
+      ).toBe(true);
+    });
+    expect(
+      events.some(
+        (event) =>
+          event.type === "media-download" && event.mediaId === "tdfile:45",
+      ),
+    ).toBe(false);
+  });
+
+  it("expires typing after six seconds", async () => {
+    vi.useFakeTimers();
+    try {
+      const { repository, events, bridge } = setup();
+      await repository.hydrate();
+      events.length = 0;
+      bridge.emit({
+        _: "updateChatAction",
+        chat_id: 11,
+        action: { _: "chatActionTyping" },
+      } as Td.Update);
+      expect(events).toContainEqual(
+        expect.objectContaining({
+          type: "chat-upsert",
+          chat: expect.objectContaining({ id: "11", typing: true }),
+        }),
+      );
+      await vi.advanceTimersByTimeAsync(6_000);
+      expect(events).toContainEqual(
+        expect.objectContaining({
+          type: "chat-upsert",
+          chat: expect.objectContaining({ id: "11", typing: false }),
+        }),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("maps secret-chat pending from getSecretChat", async () => {
+    const { repository, bridge } = setup();
+    bridge.handlers.set("createNewSecretChat", () =>
+      tdChat(-99, {
+        type: { _: "chatTypeSecret", user_id: 11, secret_chat_id: 4 },
+        title: "Mina",
+      }),
+    );
+    bridge.handlers.set("getSecretChat", () => ({
+      _: "secretChat",
+      id: 4,
+      user_id: 11,
+      state: { _: "secretChatStatePending" },
+    }));
+    const created = await repository.createSecretChat("11");
+    expect(created.kind).toBe("secret");
+    expect(created.secretState).toBe("pending");
   });
 });

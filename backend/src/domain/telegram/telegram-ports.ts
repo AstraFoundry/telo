@@ -195,12 +195,6 @@ export interface TelegramUploadFile {
   readonly size: number;
 }
 
-export interface TelegramSessionRepository {
-  get(): Promise<string>;
-  save(session: string): Promise<void>;
-  clear(): Promise<void>;
-}
-
 /**
  * Per-account TDLib database directory plus a `safeStorage`-derived
  * encryption key. Park leaves the directory; logout deletes it.

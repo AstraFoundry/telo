@@ -432,6 +432,13 @@ export const copy = {
   startSecretChatConfirm:
     "Secret chats are end-to-end encrypted and stored only on this device. History will not sync to other devices.",
   startSecretChatAction: "Start chat",
-  engineChangedSignIn:
-    "Telegram now uses TDLib. Sign in again; existing sessions cannot be imported.",
+  startSecretChatFailed: "Could not start the secret chat.",
+  secretChatWaiting: "Waiting for the other party to come online",
+  secretChatClosed: "This secret chat is closed",
+  loginFailed: "Could not sign in. Check the details and try again.",
+  loginPhoneInvalid: "That phone number is not valid.",
+  loginCodeInvalid: "That sign-in code is not valid.",
+  loginCodeExpired: "That code has expired. Request a new one.",
+  loginPasswordInvalid: "That password is not correct.",
+  loginFlood: "Too many attempts. Try again later.",
 } as const;

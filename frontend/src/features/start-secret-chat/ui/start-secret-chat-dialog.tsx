@@ -7,6 +7,7 @@ import {
   CenterMorphModal,
   CenterMorphModalClose,
   CenterMorphModalContent,
+  StatefulButton,
 } from "shared/ui";
 
 interface StartSecretChatDialogProps {
@@ -31,8 +32,8 @@ export function StartSecretChatDialog({
       const chat = await window.telo.workspace.createSecretChat(userId);
       onOpenChange(false);
       await select(chat.id);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : copy.failed);
+    } catch {
+      setError(copy.startSecretChatFailed);
     } finally {
       setBusy(false);
     }
@@ -61,9 +62,13 @@ export function StartSecretChatDialog({
                 {copy.cancel}
               </Button>
             </CenterMorphModalClose>
-            <Button type="button" disabled={busy} onClick={() => void start()}>
+            <StatefulButton
+              type="button"
+              state={busy ? "loading" : "idle"}
+              onClick={() => void start()}
+            >
               {copy.startSecretChatAction}
-            </Button>
+            </StatefulButton>
           </div>
         </div>
       </CenterMorphModalContent>
