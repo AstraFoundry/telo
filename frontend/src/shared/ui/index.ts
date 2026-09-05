@@ -21,12 +21,14 @@ export type { PressableBlockProps } from "./pressable-block";
 export { ProgressRing } from "./progress-ring";
 export type { ProgressRingProps } from "./progress-ring";
 export {
+  SettingsFocusProvider,
   SettingsGroup,
   SettingsLinkRow,
   SettingsRow,
   SettingsStackedRow,
 } from "./settings-row";
 export type {
+  SettingsFocusProviderProps,
   SettingsGroupProps,
   SettingsLinkRowProps,
   SettingsRowProps,
@@ -62,6 +64,7 @@ export {
   ComboboxTrigger,
   ComboboxValue,
 } from "@components/motion/combobox";
+export { ActionSwapIcon } from "@components/motion/action-swap";
 export { TextReveal } from "@components/motion/text-reveal";
 export { TextShimmer } from "@components/motion/text-shimmer";
 export { MorphingModal } from "@components/motion/morphing-modal";

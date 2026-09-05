@@ -955,6 +955,13 @@ export type AccentColorPreference =
 export type TimeFormatPreference = "system" | "12h" | "24h";
 
 /**
+ * Conversation backdrop, the setting both reference clients call the chat
+ * background. Every option is drawn from theme tokens rather than shipped as
+ * an image, so it follows the theme and the accent instead of fighting them.
+ */
+export type ChatWallpaperPreference = "plain" | "dots" | "grid" | "gradient";
+
+/**
  * A user-defined quick reply: the composer inserts `body` at the caret.
  * Persisted as a preference so templates follow the account on this device.
  */
@@ -1003,6 +1010,22 @@ export interface UserPreferencesDto {
   readonly countMutedChats: boolean;
   /** Ceiling for the on-disk media cache, in mebibytes. */
   readonly mediaCacheLimitMb: number;
+  /** Backdrop drawn behind the transcript. */
+  readonly chatWallpaper: ChatWallpaperPreference;
+  /** Message notifications are raised for one-to-one chats. */
+  readonly notifyDirectChats: boolean;
+  /** Message notifications are raised for groups. */
+  readonly notifyGroupChats: boolean;
+  /** Message notifications are raised for channels. */
+  readonly notifyChannels: boolean;
+  /** Message notifications ring; when off the banner arrives silently. */
+  readonly notificationSound: boolean;
+  /** Photos fetch themselves as their bubble scrolls into view. */
+  readonly autoDownloadPhotos: boolean;
+  /** Videos and animations fetch themselves as their bubble scrolls in. */
+  readonly autoDownloadVideos: boolean;
+  /** Documents and other files fetch themselves as their bubble scrolls in. */
+  readonly autoDownloadFiles: boolean;
 }
 
 export interface UpdateUserPreferencesInput {
@@ -1025,6 +1048,14 @@ export interface UpdateUserPreferencesInput {
   readonly notificationPreview?: boolean;
   readonly countMutedChats?: boolean;
   readonly mediaCacheLimitMb?: number;
+  readonly chatWallpaper?: ChatWallpaperPreference;
+  readonly notifyDirectChats?: boolean;
+  readonly notifyGroupChats?: boolean;
+  readonly notifyChannels?: boolean;
+  readonly notificationSound?: boolean;
+  readonly autoDownloadPhotos?: boolean;
+  readonly autoDownloadVideos?: boolean;
+  readonly autoDownloadFiles?: boolean;
 }
 
 export interface UiContextSnapshot {
@@ -1397,6 +1428,12 @@ export type TelegramAuthState =
   | { readonly status: "ready" }
   | { readonly status: "error"; readonly message: string };
 
+/** Extra shaping for a desktop notification the shell raises. */
+export interface ShellNotifyOptions {
+  /** Suppress the notification sound; the banner still arrives. */
+  readonly silent?: boolean;
+}
+
 export interface TeloDesktopApi {
   readonly workspace: {
     getCurrentUser(): Promise<CurrentUserDto>;
@@ -1651,7 +1688,12 @@ export interface TeloDesktopApi {
     /** True when the window has no native title bar (Linux frameless). */
     readonly frameless: boolean;
     /** `tag` is echoed back by `onNotificationClick` (e.g. a chat id). */
-    notify(title: string, body: string, tag?: string): Promise<void>;
+    notify(
+      title: string,
+      body: string,
+      tag?: string,
+      options?: ShellNotifyOptions,
+    ): Promise<void>;
     onNotificationClick(listener: (tag: string) => void): () => void;
     windowControl(action: "minimize" | "maximize" | "close"): Promise<void>;
   };

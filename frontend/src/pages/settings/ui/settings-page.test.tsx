@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { UserEvent } from "@testing-library/user-event";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -120,6 +126,9 @@ describe("SettingsPage", () => {
       unobserve(): void {}
       disconnect(): void {}
     } as unknown as typeof ResizeObserver;
+    // jsdom does not implement scrollIntoView, which both the search cursor
+    // and the arrived-at settings row call to bring themselves into view.
+    Element.prototype.scrollIntoView = vi.fn();
   });
 
   beforeEach(() => {
@@ -191,6 +200,121 @@ describe("SettingsPage", () => {
     expect(
       screen.getByRole("heading", { level: 2, name: copy.agentSettings }),
     ).toBeTruthy();
+  });
+
+  it("lands on the matched row rather than at the top of its pane", async () => {
+    const user = userEvent.setup();
+    const { container } = await renderPage();
+
+    fireEvent.change(screen.getByLabelText(copy.settingsSearch), {
+      target: { value: "wallpaper" },
+    });
+    await user.click(screen.getByRole("button", { name: /Chat background/ }));
+
+    // The pane opens and the row that answered the search is the one marked,
+    // which is the difference between "it lives here" and "here it is".
+    const marked = container.querySelector('[data-settings-focus="true"]');
+    expect(marked?.textContent).toContain(copy.chatWallpaper);
+    expect(Element.prototype.scrollIntoView).toHaveBeenCalled();
+  });
+
+  it("walks search results with the arrow keys and opens one with Enter", async () => {
+    const user = userEvent.setup();
+    await renderPage();
+
+    const field = screen.getByLabelText(copy.settingsSearch);
+    fireEvent.change(field, { target: { value: "auto download" } });
+
+    const results = screen.getByRole("list", {
+      name: copy.settingsSearchResults,
+    });
+    const rows = within(results).getAllByRole("button");
+    expect(rows.length).toBeGreaterThan(1);
+    expect(rows[0].dataset.active).toBe("true");
+
+    field.focus();
+    await user.keyboard("{ArrowDown}");
+    expect(
+      within(
+        screen.getByRole("list", { name: copy.settingsSearchResults }),
+      ).getAllByRole("button")[1].dataset.active,
+    ).toBe("true");
+
+    await user.keyboard("{Enter}");
+    expect(
+      screen.getByRole("heading", { level: 2, name: copy.dataAndStorage }),
+    ).toBeTruthy();
+  });
+
+  it("persists a chat background and previews it with the transcript's own tokens", async () => {
+    const user = userEvent.setup();
+    const { telo, container } = await renderPage();
+    await openSection(user, copy.appearance);
+
+    // The preview is not a mock-up: it is the same backdrop custom property
+    // the conversation column paints from.
+    expect(
+      container.querySelector(`[aria-label="${copy.appearancePreview}"]`)
+        ?.className,
+    ).toContain("conversation-backdrop");
+
+    await user.click(screen.getByRole("radio", { name: copy.wallpaperDots }));
+
+    await waitFor(() =>
+      expect(telo.preferences.update).toHaveBeenCalledWith({
+        chatWallpaper: "dots",
+      }),
+    );
+    expect(document.documentElement.dataset.chatWallpaper).toBe("dots");
+  });
+
+  it("shapes the notification preview from the switches that shape the banner", async () => {
+    const user = userEvent.setup();
+    await renderPage();
+    await openSection(user, copy.notifications);
+
+    const banner = screen.getByRole("img", { name: copy.notificationBanner });
+    expect(banner.textContent).toContain(copy.previewIncomingMessage);
+
+    await user.click(await enabledSwitch(copy.notificationPreview));
+
+    // Turning the body off has to change the banner, not just the switch:
+    // the preview is the payload.
+    await waitFor(() =>
+      expect(
+        screen.getByRole("img", { name: copy.notificationBanner }).textContent,
+      ).toContain(copy.notifyIncomingMessageBody),
+    );
+  });
+
+  it("persists the per-chat-kind notification switches", async () => {
+    const user = userEvent.setup();
+    const { telo } = await renderPage();
+    await openSection(user, copy.notifications);
+
+    await user.click(await enabledSwitch(copy.notifyChannels));
+
+    await waitFor(() =>
+      expect(telo.preferences.update).toHaveBeenCalledWith({
+        notifyChannels: false,
+      }),
+    );
+  });
+
+  it("persists an auto-download switch", async () => {
+    const user = userEvent.setup();
+    const { telo } = await renderPage();
+    await openSection(user, copy.dataAndStorage);
+
+    await user.click(
+      screen.getByRole("switch", { name: copy.autoDownloadFiles }),
+    );
+
+    await waitFor(() =>
+      expect(telo.preferences.update).toHaveBeenCalledWith({
+        autoDownloadFiles: true,
+      }),
+    );
   });
 
   it("says so when nothing matches instead of showing an empty rail", async () => {

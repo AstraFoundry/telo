@@ -2,6 +2,7 @@ import { useEffect, useSyncExternalStore } from "react";
 
 import type {
   AccentColorPreference,
+  ChatWallpaperPreference,
   UserPreferencesDto,
 } from "../../../../../contracts/src/ipc";
 
@@ -241,6 +242,17 @@ export function applyAccentColor(accent: AccentColorPreference): void {
 }
 
 /**
+ * Token override point: the chat backdrop is published as a data attribute on
+ * documentElement, where app/styles/index.css turns it into the
+ * `--conversation-backdrop` image. Both the transcript and the Settings
+ * preview paint from that one property, so the preview cannot drift from what
+ * the conversation actually shows.
+ */
+export function applyChatWallpaper(wallpaper: ChatWallpaperPreference): void {
+  document.documentElement.dataset.chatWallpaper = wallpaper;
+}
+
+/**
  * Token override point: the conversation text size is published as a CSS
  * custom property so message surfaces size with
  * `var(--message-text-size, 14px)` and track the slider live.
@@ -329,6 +341,39 @@ const mediaCacheLimitMbStore = createPreferenceStore("mediaCacheLimitMb", {
   defaultValue: MEDIA_CACHE_LIMIT_MB_DEFAULT,
 });
 
+const chatWallpaperStore = createPreferenceStore("chatWallpaper", {
+  defaultValue: "plain",
+  apply: applyChatWallpaper,
+});
+
+const notifyDirectChatsStore = createPreferenceStore("notifyDirectChats", {
+  defaultValue: true,
+});
+
+const notifyGroupChatsStore = createPreferenceStore("notifyGroupChats", {
+  defaultValue: true,
+});
+
+const notifyChannelsStore = createPreferenceStore("notifyChannels", {
+  defaultValue: true,
+});
+
+const notificationSoundStore = createPreferenceStore("notificationSound", {
+  defaultValue: true,
+});
+
+const autoDownloadPhotosStore = createPreferenceStore("autoDownloadPhotos", {
+  defaultValue: true,
+});
+
+const autoDownloadVideosStore = createPreferenceStore("autoDownloadVideos", {
+  defaultValue: true,
+});
+
+const autoDownloadFilesStore = createPreferenceStore("autoDownloadFiles", {
+  defaultValue: false,
+});
+
 export const useAccentColor = accentStore.usePreference;
 export const useMessageTextSize = messageTextSizeStore.usePreference;
 export const useTimeFormat = timeFormatStore.usePreference;
@@ -346,6 +391,14 @@ export const useNotificationSenderName =
 export const useNotificationPreview = notificationPreviewStore.usePreference;
 export const useCountMutedChats = countMutedChatsStore.usePreference;
 export const useMediaCacheLimitMb = mediaCacheLimitMbStore.usePreference;
+export const useChatWallpaper = chatWallpaperStore.usePreference;
+export const useNotifyDirectChats = notifyDirectChatsStore.usePreference;
+export const useNotifyGroupChats = notifyGroupChatsStore.usePreference;
+export const useNotifyChannels = notifyChannelsStore.usePreference;
+export const useNotificationSound = notificationSoundStore.usePreference;
+export const useAutoDownloadPhotos = autoDownloadPhotosStore.usePreference;
+export const useAutoDownloadVideos = autoDownloadVideosStore.usePreference;
+export const useAutoDownloadFiles = autoDownloadFilesStore.usePreference;
 
 // Applied at module scope from the local cache (or system if none) so IPC
 // cannot flash the wrong theme. The boot script in index.html does the same
@@ -365,3 +418,6 @@ new MutationObserver(() => applyAccentColor(currentAccent)).observe(
 );
 void accentStore.load();
 void messageTextSizeStore.load();
+// The backdrop is as visible app-wide as the accent, and its default is
+// "no image", so a late load would flash a patterned transcript to plain.
+void chatWallpaperStore.load();

@@ -1,7 +1,64 @@
 import { CaretRight } from "@phosphor-icons/react";
-import type { ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useRef,
+  type ReactNode,
+  type RefObject,
+} from "react";
 
 import { PressableBlock } from "./pressable-block";
+
+/**
+ * The setting a caller has just navigated to, if any. Settings search answers
+ * with a row rather than a pane, so the pane has to be able to say which row
+ * that was.
+ */
+const SettingsFocusContext = createContext<string | null>(null);
+
+export interface SettingsFocusProviderProps {
+  /** `settingId` of the row to land on, or null once it has been read. */
+  readonly settingId: string | null;
+  readonly children: ReactNode;
+}
+
+export function SettingsFocusProvider({
+  settingId,
+  children,
+}: SettingsFocusProviderProps) {
+  return (
+    <SettingsFocusContext.Provider value={settingId}>
+      {children}
+    </SettingsFocusContext.Provider>
+  );
+}
+
+/**
+ * Brings the addressed row into view and marks it, so arriving from search
+ * lands on the setting instead of at the top of the pane holding it. The mark
+ * is a data attribute the stylesheet fades out; nothing here animates, so a
+ * row that is already on screen simply gets the tint.
+ */
+function useSettingsFocus(settingId: string | undefined): {
+  readonly ref: RefObject<HTMLDivElement | null>;
+  readonly focused: boolean;
+} {
+  const target = useContext(SettingsFocusContext);
+  const ref = useRef<HTMLDivElement>(null);
+  const focused = settingId !== undefined && settingId === target;
+
+  useEffect(() => {
+    if (!focused) return;
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)");
+    ref.current?.scrollIntoView({
+      block: "center",
+      behavior: reduce.matches ? "auto" : "smooth",
+    });
+  }, [focused]);
+
+  return { ref, focused };
+}
 
 export interface SettingsGroupProps {
   /** Group caption. Omitted when the pane title already names the group. */
@@ -14,6 +71,8 @@ export interface SettingsGroupProps {
   /** Ids of the caption and description, so the group can point at them. */
   readonly titleId?: string;
   readonly descriptionId?: string;
+  /** Anchor for settings search, when the whole card is one setting. */
+  readonly settingId?: string;
   readonly children: ReactNode;
 }
 
@@ -30,10 +89,16 @@ export function SettingsGroup({
   description,
   titleId,
   descriptionId,
+  settingId,
   children,
 }: SettingsGroupProps) {
+  const { ref, focused } = useSettingsFocus(settingId);
   return (
-    <div className="flex flex-col gap-2">
+    <div
+      ref={ref}
+      data-settings-focus={focused ? "true" : undefined}
+      className="flex flex-col gap-2 rounded-2xl"
+    >
       {title ? (
         // deslop-ignore-next-line 12 — grouped-list caption, not a page heading
         <h3
@@ -76,6 +141,8 @@ export interface SettingsRowProps {
   readonly descriptionId?: string;
   /** Current value, printed left of the control. */
   readonly value?: string;
+  /** Anchor for settings search, so a result can land on this row. */
+  readonly settingId?: string;
   readonly children?: ReactNode;
 }
 
@@ -93,10 +160,16 @@ export function SettingsRow({
   labelFor,
   descriptionId,
   value,
+  settingId,
   children,
 }: SettingsRowProps) {
+  const { ref, focused } = useSettingsFocus(settingId);
   return (
-    <div className="flex min-h-11 items-center justify-between gap-4 px-4 py-2.5">
+    <div
+      ref={ref}
+      data-settings-focus={focused ? "true" : undefined}
+      className="flex min-h-11 items-center justify-between gap-4 px-4 py-2.5"
+    >
       {/* The label covers the whole text stack and the row's full height, so
           the pointer target for a trailing switch is the row rather than the
           28px pill, and the description is part of what activates it. */}
@@ -149,6 +222,8 @@ export interface SettingsStackedRowProps {
   readonly description?: string;
   /** Current value, printed opposite the label. */
   readonly value?: string;
+  /** Anchor for settings search, so a result can land on this row. */
+  readonly settingId?: string;
   readonly children: ReactNode;
 }
 
@@ -161,10 +236,16 @@ export function SettingsStackedRow({
   label,
   description,
   value,
+  settingId,
   children,
 }: SettingsStackedRowProps) {
+  const { ref, focused } = useSettingsFocus(settingId);
   return (
-    <div className="flex flex-col gap-2 px-4 py-3">
+    <div
+      ref={ref}
+      data-settings-focus={focused ? "true" : undefined}
+      className="flex flex-col gap-2 px-4 py-3"
+    >
       <div className="flex items-baseline justify-between gap-4">
         <span className="text-sm font-medium">{label}</span>
         {value ? (

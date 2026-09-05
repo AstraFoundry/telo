@@ -1,5 +1,6 @@
 import type {
   AccentColorPreference,
+  ChatWallpaperPreference,
   MessageTemplateDto,
   ThemePreference,
   TimeFormatPreference,
@@ -25,6 +26,14 @@ export interface UserPreferencesSnapshot {
   readonly notificationPreview: boolean;
   readonly countMutedChats: boolean;
   readonly mediaCacheLimitMb: number;
+  readonly chatWallpaper: ChatWallpaperPreference;
+  readonly notifyDirectChats: boolean;
+  readonly notifyGroupChats: boolean;
+  readonly notifyChannels: boolean;
+  readonly notificationSound: boolean;
+  readonly autoDownloadPhotos: boolean;
+  readonly autoDownloadVideos: boolean;
+  readonly autoDownloadFiles: boolean;
 }
 
 export const MESSAGE_TEXT_SIZE_DEFAULT = 14;
@@ -102,6 +111,16 @@ export class UserPreferences {
       notificationPreview: normalizeBoolean(input.notificationPreview, true),
       countMutedChats: normalizeBoolean(input.countMutedChats, false),
       mediaCacheLimitMb: normalizeMediaCacheLimitMb(input.mediaCacheLimitMb),
+      chatWallpaper: normalizeChatWallpaper(input.chatWallpaper),
+      notifyDirectChats: normalizeBoolean(input.notifyDirectChats, true),
+      notifyGroupChats: normalizeBoolean(input.notifyGroupChats, true),
+      notifyChannels: normalizeBoolean(input.notifyChannels, true),
+      notificationSound: normalizeBoolean(input.notificationSound, true),
+      autoDownloadPhotos: normalizeBoolean(input.autoDownloadPhotos, true),
+      autoDownloadVideos: normalizeBoolean(input.autoDownloadVideos, true),
+      // Documents are the one kind Telegram leaves off by default: a file is
+      // as likely to be a 200 MB archive as a PDF, so it waits to be asked for.
+      autoDownloadFiles: normalizeBoolean(input.autoDownloadFiles, false),
     });
   }
 
@@ -126,6 +145,14 @@ export class UserPreferences {
       notificationPreview: true,
       countMutedChats: false,
       mediaCacheLimitMb: MEDIA_CACHE_LIMIT_MB_DEFAULT,
+      chatWallpaper: "plain",
+      notifyDirectChats: true,
+      notifyGroupChats: true,
+      notifyChannels: true,
+      notificationSound: true,
+      autoDownloadPhotos: true,
+      autoDownloadVideos: true,
+      autoDownloadFiles: false,
     });
   }
 
@@ -163,6 +190,15 @@ function normalizeMessageTextSize(value: unknown): number {
     value <= MESSAGE_TEXT_SIZE_MAX
     ? value
     : MESSAGE_TEXT_SIZE_DEFAULT;
+}
+
+function normalizeChatWallpaper(value: unknown): ChatWallpaperPreference {
+  return value === "plain" ||
+    value === "dots" ||
+    value === "grid" ||
+    value === "gradient"
+    ? value
+    : "plain";
 }
 
 function normalizeTimeFormat(value: unknown): TimeFormatPreference {

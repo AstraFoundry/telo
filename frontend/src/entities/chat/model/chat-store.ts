@@ -126,6 +126,30 @@ export interface ChatPreferences {
   readonly notificationPreview: boolean;
   /** Muted chats contribute to the All and keyword-folder unread badges. */
   readonly countMutedChats: boolean;
+  /** Message notifications are raised for one-to-one chats. */
+  readonly notifyDirectChats: boolean;
+  /** Message notifications are raised for groups. */
+  readonly notifyGroupChats: boolean;
+  /** Message notifications are raised for channels. */
+  readonly notifyChannels: boolean;
+  /** Message notifications ring instead of arriving silently. */
+  readonly notificationSound: boolean;
+}
+
+/**
+ * Whether this chat's kind is one the reader still wants notified, the split
+ * both reference clients expose as Private chats / Groups / Channels. Saved
+ * Messages is the local account's own chat and has no incoming traffic to
+ * notify about, so it rides with the one-to-one switch rather than earning a
+ * fourth one.
+ */
+function notifiesChatKind(
+  preferences: ChatPreferences,
+  kind: ChatDto["kind"],
+): boolean {
+  if (kind === "group") return preferences.notifyGroupChats;
+  if (kind === "channel") return preferences.notifyChannels;
+  return preferences.notifyDirectChats;
 }
 
 // The window-focus check mirrors entities/agent's notifyRunComplete: a
@@ -136,7 +160,12 @@ function notifyIncomingMessage(
   chat: ChatDto,
   message: MessageDto,
 ): void {
-  if (!preferences.notificationsEnabled || chat.muted || !document.hidden) {
+  if (
+    !preferences.notificationsEnabled ||
+    !notifiesChatKind(preferences, chat.kind) ||
+    chat.muted ||
+    !document.hidden
+  ) {
     return;
   }
   // A reader who hides the sender or the preview still gets a notification
@@ -148,6 +177,7 @@ function notifyIncomingMessage(
       ? message.body
       : copy.notifyIncomingMessageBody,
     chat.id,
+    { silent: !preferences.notificationSound },
   );
 }
 
@@ -384,6 +414,10 @@ interface ChatState {
   notificationSenderName: boolean;
   notificationPreview: boolean;
   countMutedChats: boolean;
+  notifyDirectChats: boolean;
+  notifyGroupChats: boolean;
+  notifyChannels: boolean;
+  notificationSound: boolean;
   /**
    * Mirrors the persisted preferences the store reads outside React. Applying
    * them recomputes the keyword badges, so a toggle lands on the badges and
@@ -669,6 +703,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
   notificationSenderName: true,
   notificationPreview: true,
   countMutedChats: false,
+  notifyDirectChats: true,
+  notifyGroupChats: true,
+  notifyChannels: true,
+  notificationSound: true,
   mediaDownloads: {},
   mediaUploads: {},
   searchQuery: "",
@@ -734,6 +772,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
         notificationSenderName: preferences.notificationSenderName,
         notificationPreview: preferences.notificationPreview,
         countMutedChats: preferences.countMutedChats,
+        notifyDirectChats: preferences.notifyDirectChats,
+        notifyGroupChats: preferences.notifyGroupChats,
+        notifyChannels: preferences.notifyChannels,
+        notificationSound: preferences.notificationSound,
         animateInMessageIds: [],
         animateChatIds: [],
         availableReactions: [],

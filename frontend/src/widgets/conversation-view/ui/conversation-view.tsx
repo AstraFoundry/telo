@@ -52,6 +52,9 @@ import {
   useChatStore,
 } from "entities/chat";
 import {
+  useAutoDownloadFiles,
+  useAutoDownloadPhotos,
+  useAutoDownloadVideos,
   useLoopStickers,
   useMessageTextSize,
   useTimeFormat,
@@ -115,9 +118,11 @@ import { CustomEmoji } from "./custom-emoji";
 import { PinnedMessageBar } from "./pinned-message-bar";
 import { StickerSetDialog } from "./sticker-set-dialog";
 import {
+  autoDownloadsMedia,
   groupTranscript,
   isVisualMedia,
   mediaDownloadKey,
+  type AutoDownloadPolicy,
 } from "./media-groups";
 
 const MEDIA_LABELS = {
@@ -667,6 +672,7 @@ function ConversationMessage({
   showAvatar,
   timeFormat,
   loopStickers,
+  autoDownload,
   onForward,
   onDelete,
   onJumpToMessage,
@@ -685,6 +691,7 @@ function ConversationMessage({
   showAvatar: boolean;
   timeFormat: TimeFormatPreference;
   loopStickers: boolean;
+  autoDownload: AutoDownloadPolicy;
   onForward(message: MessageDto): void;
   onDelete(message: MessageDto): void;
   onJumpToMessage(messageId: string): void;
@@ -741,9 +748,14 @@ function ConversationMessage({
     messageAction?.messageId === message.id ? messageAction : null;
 
   // Thumbnail preload: once the bubble scrolls into view, fetch its media
-  // quietly. A failed or cancelled preload is left to an explicit retry.
+  // quietly, if this media kind is one Data and storage still downloads on
+  // its own. A failed or cancelled preload is left to an explicit retry.
   const preloadRef = useEdgeSentinel({
-    enabled: mediaKey !== null && mediaDownload === null,
+    enabled:
+      mediaKey !== null &&
+      mediaDownload === null &&
+      message.media !== null &&
+      autoDownloadsMedia(message.media, autoDownload),
     onReach: () => {
       if (mediaKey) void downloadMedia(mediaKey);
     },
@@ -1150,6 +1162,7 @@ function AlbumMessage({
   groupStart,
   showAvatar,
   timeFormat,
+  autoDownload,
   onOpenViewer,
 }: {
   messages: ReadonlyArray<MessageDto>;
@@ -1158,6 +1171,7 @@ function AlbumMessage({
   groupStart: boolean;
   showAvatar: boolean;
   timeFormat: TimeFormatPreference;
+  autoDownload: AutoDownloadPolicy;
   onOpenViewer(mediaId: string, trigger: HTMLElement): void;
 }) {
   const first = messages[0];
@@ -1176,7 +1190,9 @@ function AlbumMessage({
     isVisualMedia(message.media) ? [{ message, media: message.media }] : [],
   );
   const pendingPreload = tiles.some(
-    ({ media }) => mediaDownloads[media.id] === undefined,
+    ({ media }) =>
+      mediaDownloads[media.id] === undefined &&
+      autoDownloadsMedia(media, autoDownload),
   );
   // Album thumbnails preload together once the grid scrolls into view.
   const preloadRef = useEdgeSentinel({
@@ -1184,7 +1200,12 @@ function AlbumMessage({
     onReach: () => {
       const downloads = useChatStore.getState().mediaDownloads;
       for (const { media } of tiles) {
-        if (downloads[media.id] === undefined) void downloadMedia(media.id);
+        if (
+          downloads[media.id] === undefined &&
+          autoDownloadsMedia(media, autoDownload)
+        ) {
+          void downloadMedia(media.id);
+        }
       }
     },
   });
@@ -1420,6 +1441,17 @@ export function ConversationView() {
   const { value: timeFormat } = useTimeFormat();
   const { value: textSize } = useMessageTextSize();
   const { value: loopStickers } = useLoopStickers();
+  const { value: autoDownloadPhotos } = useAutoDownloadPhotos();
+  const { value: autoDownloadVideos } = useAutoDownloadVideos();
+  const { value: autoDownloadFiles } = useAutoDownloadFiles();
+  const autoDownload = useMemo<AutoDownloadPolicy>(
+    () => ({
+      photos: autoDownloadPhotos,
+      videos: autoDownloadVideos,
+      files: autoDownloadFiles,
+    }),
+    [autoDownloadPhotos, autoDownloadVideos, autoDownloadFiles],
+  );
   const [forwardSource, setForwardSource] = useState<MessageDto | null>(null);
   const [deleteSource, setDeleteSource] = useState<MessageDto | null>(null);
   const [selectionDeleteOpen, setSelectionDeleteOpen] = useState(false);
@@ -1851,7 +1883,11 @@ export function ConversationView() {
       </header>
       <InChatSearchBar />
       {activeChatId ? <PinnedMessageBar chatId={activeChatId} /> : null}
-      <div className="relative min-h-0 flex-1">
+      {/* The chat background paints on the transcript's own box rather than
+          the window, so it stops at the composer and the header the way every
+          Telegram client draws it. The pattern comes from a custom property
+          the appearance model sets on documentElement. */}
+      <div className="conversation-backdrop relative min-h-0 flex-1">
         <MessageScroller
           label={copy.conversation}
           smooth={false}
@@ -1986,6 +2022,7 @@ export function ConversationView() {
                     showAvatar={showAvatar}
                     timeFormat={timeFormat}
                     loopStickers={loopStickers}
+                    autoDownload={autoDownload}
                     onForward={setForwardSource}
                     onDelete={setDeleteSource}
                     onJumpToMessage={(messageId) =>
@@ -2001,6 +2038,7 @@ export function ConversationView() {
                     groupStart={groupStart}
                     showAvatar={showAvatar}
                     timeFormat={timeFormat}
+                    autoDownload={autoDownload}
                     onOpenViewer={openViewer}
                   />
                 )}

@@ -73,7 +73,7 @@ export function AccountSection({ onLoggedOut }: AccountSectionProps) {
     <div className="flex flex-col gap-6">
       {/* Identity cover. Avatar, name and the stable handle - the same three
           things every Telegram client leads its settings with. */}
-      <SettingsGroup>
+      <SettingsGroup settingId="telegram-account">
         <div className="flex items-center gap-4 p-4">
           <Avatar
             src={currentUser.avatarDataUrl}
@@ -95,6 +95,7 @@ export function AccountSection({ onLoggedOut }: AccountSectionProps) {
         <SettingsRow
           label={copy.accountConnection}
           value={CONNECTION_COPY[connectionState]}
+          settingId="account-connection"
         >
           <Button
             variant="outline"
@@ -115,7 +116,7 @@ export function AccountSection({ onLoggedOut }: AccountSectionProps) {
       {/* Destructive action, last and alone: nothing below it to mis-click.
           The row is the button - a row labelled "Log out" wrapping a button
           labelled "Log out" would say it twice. */}
-      <SettingsGroup>
+      <SettingsGroup settingId="log-out">
         <StatefulButton
           variant="ghost"
           state={logOutState}

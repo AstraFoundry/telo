@@ -1,10 +1,10 @@
 import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { UserPreferencesDto } from "../../../../../contracts/src/ipc";
 import {
-  installTeloApiMock,
   type TeloApiMock,
+  installTeloApiMock,
+  testPreferences,
 } from "../../../shared/test/mock-telo";
 
 function stubMatchMedia(dark: boolean): void {
@@ -22,33 +22,6 @@ function stubMatchMedia(dark: boolean): void {
   })) as unknown as typeof window.matchMedia;
 }
 
-function preferences(
-  partial: Partial<UserPreferencesDto> = {},
-): UserPreferencesDto {
-  return {
-    agentPanelOpen: false,
-    accentColor: "blue",
-    messageTextSize: 14,
-    timeFormat: "system",
-    sendWithEnter: true,
-    notificationsEnabled: true,
-    sidebarWidth: 280,
-    agentPanelWidth: 380,
-    recentEmojis: [],
-    recentSearches: [],
-    messageTemplates: [],
-    demoWorkspace: false,
-    theme: "system",
-    reduceMotion: false,
-    loopStickers: true,
-    notificationSenderName: true,
-    notificationPreview: true,
-    countMutedChats: false,
-    mediaCacheLimitMb: 512,
-    ...partial,
-  };
-}
-
 describe("send-with-enter model", () => {
   let telo: TeloApiMock;
 
@@ -56,15 +29,15 @@ describe("send-with-enter model", () => {
     vi.resetModules();
     telo = installTeloApiMock();
     stubMatchMedia(false);
-    telo.preferences.get.mockResolvedValue(preferences());
+    telo.preferences.get.mockResolvedValue(testPreferences());
     telo.preferences.update.mockImplementation((input) =>
-      Promise.resolve(preferences(input)),
+      Promise.resolve(testPreferences(input)),
     );
   });
 
   it("publishes the persisted send-with-enter choice to subscribers", async () => {
     telo.preferences.get.mockResolvedValue(
-      preferences({ sendWithEnter: false }),
+      testPreferences({ sendWithEnter: false }),
     );
     const { useSendWithEnter } = await import("./hooks");
     const { result } = renderHook(() => useSendWithEnter());

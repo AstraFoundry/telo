@@ -94,11 +94,17 @@
      when the OS forces scrollbars always-on (mouse attached on macOS). */
   --scrollbar-thumb: oklch(0 0 0 / 0.16);
   --scrollbar-thumb-hover: oklch(0 0 0 / 0.28);
+
+  /* Ink the chat backdrop patterns draw with. Pure black / pure white at a
+     low alpha rather than a tinted neutral, so a pattern never picks up a
+     second hue on top of the surface it sits on. */
+  --conversation-backdrop-ink: oklch(0 0 0 / 0.07);
 }
 
 .dark {
   --scrollbar-thumb: oklch(1 0 0 / 0.18);
   --scrollbar-thumb-hover: oklch(1 0 0 / 0.3);
+  --conversation-backdrop-ink: oklch(1 0 0 / 0.07);
   --background: oklch(0.17 0.014 250);
   --foreground: oklch(0.94 0.006 250);
   --card: oklch(0.2 0.014 250);
@@ -294,4 +300,72 @@
   ::view-transition-new(root) {
     animation: none;
   }
+}
+
+/* Chat background, the setting Telegram Web K keeps under General and
+   Nicegram under Appearance. Every option is drawn from theme tokens instead
+   of a shipped image, so a backdrop follows the theme and the accent rather
+   than fighting them, costs no bytes, and stays crisp at any zoom. The
+   attribute lives on documentElement next to the accent overrides, so the
+   Settings preview and the real transcript read one source. */
+.conversation-backdrop {
+  background-image: var(--conversation-backdrop, none);
+  background-size: var(--conversation-backdrop-size, auto);
+}
+
+[data-chat-wallpaper="dots"] {
+  --conversation-backdrop: radial-gradient(
+    var(--conversation-backdrop-ink) 1px,
+    transparent 1px
+  );
+  --conversation-backdrop-size: 22px 22px;
+}
+
+[data-chat-wallpaper="grid"] {
+  --conversation-backdrop:
+    linear-gradient(
+      to right,
+      var(--conversation-backdrop-ink) 1px,
+      transparent 1px
+    ),
+    linear-gradient(
+      to bottom,
+      var(--conversation-backdrop-ink) 1px,
+      transparent 1px
+    );
+  --conversation-backdrop-size: 24px 24px;
+}
+
+/* The one backdrop that reads the accent: two corner washes at an alpha low
+   enough that message text keeps its contrast ratio on either theme. */
+[data-chat-wallpaper="gradient"] {
+  --conversation-backdrop:
+    radial-gradient(
+      120% 90% at 12% 0%,
+      color-mix(in oklch, var(--primary) 14%, transparent),
+      transparent 60%
+    ),
+    radial-gradient(
+      110% 80% at 95% 100%,
+      color-mix(in oklch, var(--primary) 10%, transparent),
+      transparent 55%
+    );
+  --conversation-backdrop-size: cover;
+}
+
+/* Deep-linked setting: settings search answers with a row, not a pane, so the
+   row it lands on says so for a moment and then stops. Background only - the
+   reader is about to read this row, and moving text is harder to read than
+   still text. */
+@keyframes telo-settings-flash {
+  from {
+    background-color: color-mix(in oklch, var(--primary) 20%, transparent);
+  }
+  to {
+    background-color: transparent;
+  }
+}
+
+[data-settings-focus="true"] {
+  animation: telo-settings-flash 1100ms var(--ease-out);
 }

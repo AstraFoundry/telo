@@ -3,8 +3,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { UserPreferencesDto } from "../../../../../contracts/src/ipc";
 import {
-  installTeloApiMock,
   type TeloApiMock,
+  installTeloApiMock,
+  testPreferences,
 } from "../../../shared/test/mock-telo";
 
 function stubMatchMedia(dark: boolean): void {
@@ -21,33 +22,6 @@ function stubMatchMedia(dark: boolean): void {
   })) as unknown as typeof window.matchMedia;
 }
 
-function preferences(
-  partial: Partial<UserPreferencesDto> = {},
-): UserPreferencesDto {
-  return {
-    agentPanelOpen: false,
-    accentColor: "blue",
-    messageTextSize: 14,
-    timeFormat: "system",
-    sendWithEnter: true,
-    notificationsEnabled: true,
-    sidebarWidth: 280,
-    agentPanelWidth: 380,
-    recentEmojis: [],
-    recentSearches: [],
-    messageTemplates: [],
-    demoWorkspace: false,
-    theme: "system",
-    reduceMotion: false,
-    loopStickers: true,
-    notificationSenderName: true,
-    notificationPreview: true,
-    countMutedChats: false,
-    mediaCacheLimitMb: 512,
-    ...partial,
-  };
-}
-
 async function importHooks() {
   return import("./hooks");
 }
@@ -61,14 +35,14 @@ describe("theme model", () => {
     stubMatchMedia(false);
     window.localStorage.clear();
     document.documentElement.classList.remove("dark");
-    telo.preferences.get.mockResolvedValue(preferences());
+    telo.preferences.get.mockResolvedValue(testPreferences());
     telo.preferences.update.mockImplementation((input) =>
-      Promise.resolve(preferences(input)),
+      Promise.resolve(testPreferences(input)),
     );
   });
 
   it("applies the persisted theme once preferences resolve over IPC", async () => {
-    telo.preferences.get.mockResolvedValue(preferences({ theme: "dark" }));
+    telo.preferences.get.mockResolvedValue(testPreferences({ theme: "dark" }));
 
     await importHooks();
 
@@ -92,7 +66,9 @@ describe("theme model", () => {
     // Module scope applies the system theme immediately to avoid a flash.
     expect(document.documentElement.classList.contains("dark")).toBe(true);
 
-    resolvers.forEach((resolve) => resolve(preferences({ theme: "light" })));
+    resolvers.forEach((resolve) =>
+      resolve(testPreferences({ theme: "light" })),
+    );
     await vi.waitFor(() => {
       expect(document.documentElement.classList.contains("dark")).toBe(false);
     });
@@ -113,7 +89,7 @@ describe("theme model", () => {
 
   it("discards an unrecognized legacy value and keeps the persisted theme", async () => {
     window.localStorage.setItem("telo:theme", "neon");
-    telo.preferences.get.mockResolvedValue(preferences({ theme: "dark" }));
+    telo.preferences.get.mockResolvedValue(testPreferences({ theme: "dark" }));
 
     await importHooks();
 
@@ -136,7 +112,7 @@ describe("theme model", () => {
 
     expect(document.documentElement.classList.contains("dark")).toBe(true);
 
-    resolvers.forEach((resolve) => resolve(preferences({ theme: "dark" })));
+    resolvers.forEach((resolve) => resolve(testPreferences({ theme: "dark" })));
     await vi.waitFor(() => {
       expect(document.documentElement.classList.contains("dark")).toBe(true);
     });

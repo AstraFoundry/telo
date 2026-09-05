@@ -183,8 +183,8 @@ const api: TeloDesktopApi = {
   },
   shell: {
     frameless: process.platform === "linux",
-    notify: (title, body, tag) =>
-      ipcRenderer.invoke(channels.notify, title, body, tag),
+    notify: (title, body, tag, options) =>
+      ipcRenderer.invoke(channels.notify, title, body, tag, options),
     onNotificationClick: (listener) =>
       subscribe<string>(channels.notifyClick, listener),
     windowControl: (action) =>

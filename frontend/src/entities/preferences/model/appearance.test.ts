@@ -1,10 +1,10 @@
 import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { UserPreferencesDto } from "../../../../../contracts/src/ipc";
 import {
-  installTeloApiMock,
   type TeloApiMock,
+  installTeloApiMock,
+  testPreferences,
 } from "../../../shared/test/mock-telo";
 
 function stubMatchMedia(dark: boolean): void {
@@ -20,33 +20,6 @@ function stubMatchMedia(dark: boolean): void {
     onchange: null,
     dispatchEvent: () => false,
   })) as unknown as typeof window.matchMedia;
-}
-
-function preferences(
-  partial: Partial<UserPreferencesDto> = {},
-): UserPreferencesDto {
-  return {
-    agentPanelOpen: false,
-    accentColor: "blue",
-    messageTextSize: 14,
-    timeFormat: "system",
-    sendWithEnter: true,
-    notificationsEnabled: true,
-    sidebarWidth: 280,
-    agentPanelWidth: 380,
-    recentEmojis: [],
-    recentSearches: [],
-    messageTemplates: [],
-    demoWorkspace: false,
-    theme: "system",
-    reduceMotion: false,
-    loopStickers: true,
-    notificationSenderName: true,
-    notificationPreview: true,
-    countMutedChats: false,
-    mediaCacheLimitMb: 512,
-    ...partial,
-  };
 }
 
 const OVERRIDDEN_TOKENS = ["--primary", "--primary-foreground", "--ring"];
@@ -71,15 +44,15 @@ describe("appearance model", () => {
     telo = installTeloApiMock();
     stubMatchMedia(false);
     clearDocumentTokens();
-    telo.preferences.get.mockResolvedValue(preferences());
+    telo.preferences.get.mockResolvedValue(testPreferences());
     telo.preferences.update.mockImplementation((input) =>
-      Promise.resolve(preferences(input)),
+      Promise.resolve(testPreferences(input)),
     );
   });
 
   it("applies the persisted accent and text size once preferences resolve", async () => {
     telo.preferences.get.mockResolvedValue(
-      preferences({ accentColor: "purple", messageTextSize: 16 }),
+      testPreferences({ accentColor: "purple", messageTextSize: 16 }),
     );
 
     await importHooks();
@@ -102,7 +75,7 @@ describe("appearance model", () => {
 
   it("follows the dark class with the dark token set", async () => {
     telo.preferences.get.mockResolvedValue(
-      preferences({ accentColor: "green" }),
+      testPreferences({ accentColor: "green" }),
     );
     await importHooks();
     await vi.waitFor(() => {
@@ -125,7 +98,7 @@ describe("appearance model", () => {
 
   it("keeps blue on the stylesheet defaults by clearing inline overrides", async () => {
     telo.preferences.get.mockResolvedValue(
-      preferences({ accentColor: "orange" }),
+      testPreferences({ accentColor: "orange" }),
     );
     const { useAccentColor } = await importHooks();
     await vi.waitFor(() => {
@@ -152,7 +125,7 @@ describe("appearance model", () => {
     await act(async () => {});
     telo.preferences.update.mockRejectedValue(new Error("disk full"));
     telo.preferences.get.mockResolvedValue(
-      preferences({ accentColor: "green" }),
+      testPreferences({ accentColor: "green" }),
     );
 
     act(() => result.current.select("red"));
@@ -169,7 +142,7 @@ describe("appearance model", () => {
 
   it("persists the text size and applies the token optimistically", async () => {
     telo.preferences.get.mockResolvedValue(
-      preferences({ messageTextSize: 16 }),
+      testPreferences({ messageTextSize: 16 }),
     );
     const { useMessageTextSize } = await importHooks();
     const { result } = renderHook(() => useMessageTextSize());
@@ -189,7 +162,9 @@ describe("appearance model", () => {
   });
 
   it("persists the time format choice", async () => {
-    telo.preferences.get.mockResolvedValue(preferences({ timeFormat: "12h" }));
+    telo.preferences.get.mockResolvedValue(
+      testPreferences({ timeFormat: "12h" }),
+    );
     const { useTimeFormat } = await importHooks();
     const { result } = renderHook(() => useTimeFormat());
     await vi.waitFor(() => {

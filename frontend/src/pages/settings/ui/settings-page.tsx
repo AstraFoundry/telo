@@ -1,23 +1,38 @@
 import { ArrowLeft } from "@phosphor-icons/react";
 import { motion, useReducedMotionConfig } from "motion/react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { AgentConfigurationForm } from "features/configure-agent";
 import { AgentAutomationSettings } from "features/manage-agent-automation";
 import { KeywordFoldersSettings } from "features/manage-keyword-folders";
 import { copy } from "shared/config/copy";
-import { Button, EASE_OUT, Tooltip, WindowControls } from "shared/ui";
+import {
+  Button,
+  EASE_OUT,
+  SettingsFocusProvider,
+  Tooltip,
+  WindowControls,
+} from "shared/ui";
 
+import {
+  SECTION_SUBTITLES,
+  SECTION_TITLES,
+  type SettingsSectionId,
+} from "../model/settings-index";
 import { AccountSection } from "./sections/account-section";
 import { AppearanceSection } from "./sections/appearance-section";
 import { ChatSection } from "./sections/chat-section";
 import { NotificationsSection } from "./sections/notifications-section";
 import { StorageSection } from "./sections/storage-section";
-import {
-  SECTION_TITLES,
-  SettingsNav,
-  type SettingsSectionId,
-} from "./settings-nav";
+import { SettingsNav } from "./settings-nav";
+
+/**
+ * How long the arrived-at row stays marked. Long enough to find with the eye
+ * after the pane has swapped and scrolled, short enough that the tint is gone
+ * before the reader reaches for the control. Matches the flash keyframe in
+ * app/styles/index.css.
+ */
+const FOCUS_MARK_MS = 1100;
 
 interface SettingsPageProps {
   onBack(): void;
@@ -40,7 +55,20 @@ export function SettingsPage({
 }: SettingsPageProps) {
   const [section, setSection] = useState<SettingsSectionId>(initialSection);
   const [query, setQuery] = useState("");
+  const [focusedSetting, setFocusedSetting] = useState<string | null>(null);
   const reduceMotion = useReducedMotionConfig() ?? false;
+
+  // The mark is a one-shot arrival cue, not a selection: it clears itself so a
+  // reader who wanders off and comes back does not find a row still lit from
+  // a search they have forgotten.
+  useEffect(() => {
+    if (focusedSetting === null) return;
+    const timer = window.setTimeout(
+      () => setFocusedSetting(null),
+      FOCUS_MARK_MS,
+    );
+    return () => window.clearTimeout(timer);
+  }, [focusedSetting]);
 
   return (
     // The shell hands each surface a grid cell that clips its overflow, so the
@@ -71,7 +99,10 @@ export function SettingsPage({
           active={section}
           query={query}
           onQueryChange={setQuery}
-          onSelect={setSection}
+          onSelect={(next, settingId) => {
+            setSection(next);
+            setFocusedSetting(settingId ?? null);
+          }}
         />
         <div className="min-h-0 min-w-0 flex-1 overflow-y-auto">
           {/* Content is left-aligned inside a measure rather than centred in
@@ -91,26 +122,33 @@ export function SettingsPage({
               transition={{ duration: 0.14, ease: EASE_OUT }}
               className="flex flex-col gap-6"
             >
-              <h2
-                id="settings-section-title"
-                className="text-xl font-semibold text-balance"
-              >
-                {SECTION_TITLES[section]}
-              </h2>
-              {section === "account" ? (
-                <AccountSection onLoggedOut={onLoggedOut} />
-              ) : null}
-              {section === "appearance" ? <AppearanceSection /> : null}
-              {section === "chat" ? <ChatSection /> : null}
-              {section === "notifications" ? <NotificationsSection /> : null}
-              {section === "folders" ? <KeywordFoldersSettings /> : null}
-              {section === "agent" ? (
-                <>
-                  <AgentConfigurationForm />
-                  <AgentAutomationSettings />
-                </>
-              ) : null}
-              {section === "storage" ? <StorageSection /> : null}
+              <div className="flex flex-col gap-1">
+                <h2
+                  id="settings-section-title"
+                  className="text-xl font-semibold text-balance"
+                >
+                  {SECTION_TITLES[section]}
+                </h2>
+                <p className="text-sm text-pretty text-muted-foreground">
+                  {SECTION_SUBTITLES[section]}
+                </p>
+              </div>
+              <SettingsFocusProvider settingId={focusedSetting}>
+                {section === "account" ? (
+                  <AccountSection onLoggedOut={onLoggedOut} />
+                ) : null}
+                {section === "appearance" ? <AppearanceSection /> : null}
+                {section === "chat" ? <ChatSection /> : null}
+                {section === "notifications" ? <NotificationsSection /> : null}
+                {section === "folders" ? <KeywordFoldersSettings /> : null}
+                {section === "agent" ? (
+                  <>
+                    <AgentConfigurationForm />
+                    <AgentAutomationSettings />
+                  </>
+                ) : null}
+                {section === "storage" ? <StorageSection /> : null}
+              </SettingsFocusProvider>
             </motion.section>
           </div>
         </div>

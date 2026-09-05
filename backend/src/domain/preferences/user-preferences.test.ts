@@ -22,6 +22,14 @@ const DEFAULTS = {
   notificationPreview: true,
   countMutedChats: false,
   mediaCacheLimitMb: 512,
+  chatWallpaper: "plain",
+  notifyDirectChats: true,
+  notifyGroupChats: true,
+  notifyChannels: true,
+  notificationSound: true,
+  autoDownloadPhotos: true,
+  autoDownloadVideos: true,
+  autoDownloadFiles: false,
 } as const;
 
 describe("UserPreferences", () => {
@@ -38,6 +46,33 @@ describe("UserPreferences", () => {
       ...DEFAULTS,
       agentPanelOpen: true,
     });
+  });
+
+  it("falls back to a plain chat background when the stored one is unknown", () => {
+    const preferences = UserPreferences.create({
+      ...DEFAULTS,
+      chatWallpaper: "aurora" as never,
+    });
+
+    expect(preferences.snapshot().chatWallpaper).toBe("plain");
+  });
+
+  it("keeps a recognised chat background", () => {
+    const preferences = UserPreferences.default().update({
+      chatWallpaper: "gradient",
+    });
+
+    expect(preferences.snapshot().chatWallpaper).toBe("gradient");
+  });
+
+  it("leaves file auto-download off by default and every other kind on", () => {
+    const snapshot = UserPreferences.default().snapshot();
+
+    expect(snapshot.autoDownloadPhotos).toBe(true);
+    expect(snapshot.autoDownloadVideos).toBe(true);
+    // A file is as likely to be a large archive as a small document, so it
+    // waits to be asked for - the same default both reference clients ship.
+    expect(snapshot.autoDownloadFiles).toBe(false);
   });
 
   it("coerces persisted values to booleans", () => {

@@ -187,15 +187,53 @@ export const copy = {
   notifications: "Notifications",
   notificationsDesktop: "Desktop notifications",
   notificationsDesktopHint:
-    "Show a system notification when the agent finishes while the window is unfocused.",
+    "Show system notifications while the window is unfocused: incoming messages, and agent runs that finish.",
   notifyRunCompleteBody: "Your agent response is ready.",
   notifyIncomingMessageBody: "New message",
   settingsSearch: "Search settings",
+  settingsSearchResults: "Matching settings",
   settingsNoResults: "No settings match",
   settingsAccount: "Account",
   chatSettings: "Chat settings",
   folders: "Folders",
   dataAndStorage: "Data and storage",
+  // One line under each pane title saying what the pane decides, so a reader
+  // scanning the rail knows which one holds the switch they came for.
+  settingsAccountSubtitle:
+    "The Telegram account this workspace is signed in to.",
+  appearanceSubtitle: "How the workspace and the transcript are drawn.",
+  chatSettingsSubtitle: "How messages are written, sent and timestamped.",
+  notificationsSubtitle: "What reaches you while Telo is in the background.",
+  foldersSubtitle: "Keyword folders collect chats by what their messages say.",
+  agentSettingsSubtitle:
+    "The model behind the agent panel, and what it may do on its own.",
+  dataAndStorageSubtitle:
+    "What downloads on its own, and what is kept on this device.",
+  chatWallpaper: "Chat background",
+  chatWallpaperHint:
+    "Backgrounds are drawn from the theme, so they follow the accent and the light/dark switch instead of fighting them.",
+  wallpaperPlain: "Plain",
+  wallpaperDots: "Dots",
+  wallpaperGrid: "Grid",
+  wallpaperGradient: "Gradient",
+  appearancePreview: "Appearance preview",
+  previewIncomingMessage: "Does this size read well?",
+  previewOutgoingMessage: "Looks right from here.",
+  notificationBanner: "Notification preview",
+  messageNotifications: "Message notifications",
+  notifyDirectChats: "Private chats",
+  notifyGroupChats: "Groups",
+  notifyChannels: "Channels",
+  notificationSound: "Sound",
+  notificationSoundHint:
+    "Message notifications ring. When off the banner still arrives, silently.",
+  autoDownload: "Automatic download",
+  autoDownloadHint:
+    "Media fetches itself as its message scrolls into view. What is off here waits for you to ask for it, one attachment at a time.",
+  autoDownloadPhotos: "Photos",
+  autoDownloadVideos: "Videos and GIFs",
+  autoDownloadFiles: "Files",
+  autoDownloadFilesHint: "Also covers audio and voice messages.",
   reduceMotion: "Reduce motion",
   reduceMotionHint:
     "Replace slides and springs with plain fades. The system setting still applies when this is off.",

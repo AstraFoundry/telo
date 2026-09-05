@@ -611,6 +611,14 @@ describe("registerIpc preferences", () => {
     notificationPreview: true,
     countMutedChats: false,
     mediaCacheLimitMb: 512,
+    chatWallpaper: "plain",
+    notifyDirectChats: true,
+    notifyGroupChats: true,
+    notifyChannels: true,
+    notificationSound: true,
+    autoDownloadPhotos: true,
+    autoDownloadVideos: true,
+    autoDownloadFiles: false,
   };
 
   function preferencesContainer(

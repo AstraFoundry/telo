@@ -5,7 +5,11 @@ import {
   useCountMutedChats,
   useNotificationPreview,
   useNotificationSenderName,
+  useNotificationSound,
   useNotificationsEnabled,
+  useNotifyChannels,
+  useNotifyDirectChats,
+  useNotifyGroupChats,
 } from "entities/preferences";
 
 /**
@@ -27,11 +31,19 @@ export function useChatPreferenceSync(): void {
   const notificationSenderName = useNotificationSenderName();
   const notificationPreview = useNotificationPreview();
   const countMutedChats = useCountMutedChats();
+  const notifyDirectChats = useNotifyDirectChats();
+  const notifyGroupChats = useNotifyGroupChats();
+  const notifyChannels = useNotifyChannels();
+  const notificationSound = useNotificationSound();
   const hydrated =
     notificationsEnabled.loaded &&
     notificationSenderName.loaded &&
     notificationPreview.loaded &&
-    countMutedChats.loaded;
+    countMutedChats.loaded &&
+    notifyDirectChats.loaded &&
+    notifyGroupChats.loaded &&
+    notifyChannels.loaded &&
+    notificationSound.loaded;
 
   useEffect(() => {
     if (!hydrated) return;
@@ -40,6 +52,10 @@ export function useChatPreferenceSync(): void {
       notificationSenderName: notificationSenderName.value,
       notificationPreview: notificationPreview.value,
       countMutedChats: countMutedChats.value,
+      notifyDirectChats: notifyDirectChats.value,
+      notifyGroupChats: notifyGroupChats.value,
+      notifyChannels: notifyChannels.value,
+      notificationSound: notificationSound.value,
     });
   }, [
     applyPreferences,
@@ -48,5 +64,9 @@ export function useChatPreferenceSync(): void {
     notificationSenderName.value,
     notificationPreview.value,
     countMutedChats.value,
+    notifyDirectChats.value,
+    notifyGroupChats.value,
+    notifyChannels.value,
+    notificationSound.value,
   ]);
 }

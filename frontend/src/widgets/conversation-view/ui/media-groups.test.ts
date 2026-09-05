@@ -5,9 +5,11 @@ import type {
   MessageFileMediaDto,
 } from "../../../../../contracts/src/ipc";
 import {
+  autoDownloadsMedia,
   groupTranscript,
   isVisualMedia,
   mediaDownloadKey,
+  type AutoDownloadPolicy,
 } from "./media-groups";
 
 function message(partial: Partial<MessageDto> & Pick<MessageDto, "id">) {
@@ -121,5 +123,58 @@ describe("mediaDownloadKey", () => {
         thumbnailMediaId: null,
       }),
     ).toBeNull();
+  });
+});
+
+describe("autoDownloadsMedia", () => {
+  const ALL_OFF: AutoDownloadPolicy = {
+    photos: false,
+    videos: false,
+    files: false,
+  };
+
+  function media(kind: MessageFileMediaDto["kind"]): MessageFileMediaDto {
+    return { ...photo("m"), kind };
+  }
+
+  it("reads photos and link-preview thumbnails off the photo switch", () => {
+    const policy = { ...ALL_OFF, photos: true };
+    expect(autoDownloadsMedia(media("photo"), policy)).toBe(true);
+    expect(
+      autoDownloadsMedia(
+        {
+          id: "preview",
+          kind: "webpage",
+          url: "https://example.com",
+          displayUrl: null,
+          siteName: null,
+          title: null,
+          description: null,
+          thumbnailMediaId: "thumb",
+        },
+        policy,
+      ),
+    ).toBe(true);
+    expect(autoDownloadsMedia(media("photo"), ALL_OFF)).toBe(false);
+  });
+
+  it("reads every moving picture off the video switch", () => {
+    const policy = { ...ALL_OFF, videos: true };
+    for (const kind of ["video", "animation", "video-note"] as const) {
+      expect(autoDownloadsMedia(media(kind), policy)).toBe(true);
+      expect(autoDownloadsMedia(media(kind), ALL_OFF)).toBe(false);
+    }
+  });
+
+  it("reads documents, audio and voice off the file switch", () => {
+    const policy = { ...ALL_OFF, files: true };
+    for (const kind of ["file", "audio", "voice"] as const) {
+      expect(autoDownloadsMedia(media(kind), policy)).toBe(true);
+      expect(autoDownloadsMedia(media(kind), ALL_OFF)).toBe(false);
+    }
+  });
+
+  it("always downloads stickers, which are glyphs rather than attachments", () => {
+    expect(autoDownloadsMedia(media("sticker"), ALL_OFF)).toBe(true);
   });
 });

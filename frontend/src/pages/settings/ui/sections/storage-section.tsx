@@ -1,9 +1,12 @@
 import { Trash } from "@phosphor-icons/react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useId, useState } from "react";
 
 import {
   MEDIA_CACHE_LIMIT_MB_MAX,
   MEDIA_CACHE_LIMIT_MB_MIN,
+  useAutoDownloadFiles,
+  useAutoDownloadPhotos,
+  useAutoDownloadVideos,
   useMediaCacheLimitMb,
 } from "entities/preferences";
 import { copy } from "shared/config/copy";
@@ -13,6 +16,7 @@ import {
   SettingsRow,
   SettingsStackedRow,
   StatefulButton,
+  Switch,
   type ButtonState,
 } from "shared/ui";
 
@@ -31,8 +35,16 @@ function formatBytes(bytes: number): string {
 
 export function StorageSection() {
   const limit = useMediaCacheLimitMb();
+  const photos = useAutoDownloadPhotos();
+  const videos = useAutoDownloadVideos();
+  const files = useAutoDownloadFiles();
   const [usage, setUsage] = useState<number | null>(null);
   const [clearState, setClearState] = useState<ButtonState>("idle");
+
+  const photosId = useId();
+  const videosId = useId();
+  const filesId = useId();
+  const filesHintId = useId();
 
   const readUsage = useCallback(async () => {
     setUsage(await window.telo.storage.mediaCacheUsage());
@@ -61,17 +73,63 @@ export function StorageSection() {
 
   return (
     <div className="flex flex-col gap-6">
+      {/* Auto-download leads the pane: it decides what ever reaches the cache,
+          so the cache rows below are downstream of these three switches. */}
+      <SettingsGroup
+        title={copy.autoDownload}
+        description={copy.autoDownloadHint}
+      >
+        <SettingsRow
+          label={copy.autoDownloadPhotos}
+          labelFor={photosId}
+          settingId="auto-download-photos"
+        >
+          <Switch
+            id={photosId}
+            checked={photos.value}
+            onCheckedChange={photos.select}
+          />
+        </SettingsRow>
+        <SettingsRow
+          label={copy.autoDownloadVideos}
+          labelFor={videosId}
+          settingId="auto-download-videos"
+        >
+          <Switch
+            id={videosId}
+            checked={videos.value}
+            onCheckedChange={videos.select}
+          />
+        </SettingsRow>
+        <SettingsRow
+          label={copy.autoDownloadFiles}
+          description={copy.autoDownloadFilesHint}
+          labelFor={filesId}
+          descriptionId={filesHintId}
+          settingId="auto-download-files"
+        >
+          <Switch
+            id={filesId}
+            describedBy={filesHintId}
+            checked={files.value}
+            onCheckedChange={files.select}
+          />
+        </SettingsRow>
+      </SettingsGroup>
+
       <SettingsGroup title={copy.mediaCache} description={copy.mediaCacheHint}>
         <SettingsRow
           label={copy.mediaCacheUsage}
           // Until the first read lands the row shows the loading word rather
           // than a zero, which would read as an empty cache.
           value={usage === null ? copy.loading : formatBytes(usage)}
+          settingId="media-cache-usage"
         />
         <SettingsStackedRow
           label={copy.mediaCacheLimit}
           description={copy.mediaCacheLimitHint}
           value={`${limit.value} MB`}
+          settingId="media-cache-limit"
         >
           <RangeSlider
             min={MEDIA_CACHE_LIMIT_MB_MIN}

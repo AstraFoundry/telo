@@ -29,6 +29,38 @@ export function mediaDownloadKey(
 }
 
 /**
+ * The three auto-download switches Data and storage exposes, in the split
+ * both reference clients use. Audio and voice notes ride with `files`: they
+ * are attachments a reader chooses to play, not part of reading the
+ * transcript.
+ */
+export interface AutoDownloadPolicy {
+  readonly photos: boolean;
+  readonly videos: boolean;
+  readonly files: boolean;
+}
+
+/**
+ * Whether a bubble's media may fetch itself as it scrolls into view. A false
+ * answer is not a failure: the tile stays a placeholder with its download
+ * control, so an explicit tap still gets the file.
+ *
+ * Stickers are exempt. They are inline glyphs rather than attachments, and
+ * gating them would punch holes in the transcript the reader cannot read
+ * around.
+ */
+export function autoDownloadsMedia(
+  media: NonNullable<MessageDto["media"]>,
+  policy: AutoDownloadPolicy,
+): boolean {
+  if (media.kind === "sticker") return true;
+  // A link preview downloads its thumbnail, which is a photo.
+  if (media.kind === "webpage" || media.kind === "photo") return policy.photos;
+  if (VISUAL_KINDS.has(media.kind)) return policy.videos;
+  return policy.files;
+}
+
+/**
  * Render unit for the transcript: a single message, or an album — the run of
  * consecutive messages sharing one `groupedId` when every member is visual
  * media. Non-visual members break the run back into single messages so a

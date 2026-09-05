@@ -4,15 +4,14 @@ import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type {
-  ChatDto,
-  MessageDto,
-  UserPreferencesDto,
-} from "../../../../../contracts/src/ipc";
+import type { ChatDto, MessageDto } from "../../../../../contracts/src/ipc";
 import { useAgentStore } from "../../../entities/agent";
 import { useChatProfileStore, useChatStore } from "../../../entities/chat";
 import { copy } from "../../../shared/config/copy";
-import { installTeloApiMock } from "../../../shared/test/mock-telo";
+import {
+  installTeloApiMock,
+  testPreferences,
+} from "../../../shared/test/mock-telo";
 
 // The widget's public API pulls in the mutual-exclusion subscriptions.
 import { ChatProfilePanel } from "../index";
@@ -83,36 +82,12 @@ const PINNED = [
   }),
 ];
 
-function preferences() {
-  return {
-    agentPanelOpen: false,
-    demoWorkspace: false,
-    theme: "system",
-    accentColor: "blue",
-    messageTextSize: 14,
-    timeFormat: "system",
-    sendWithEnter: true,
-    notificationsEnabled: true,
-    sidebarWidth: 280,
-    agentPanelWidth: 380,
-    recentEmojis: [],
-    recentSearches: [],
-    messageTemplates: [],
-    reduceMotion: false,
-    loopStickers: true,
-    notificationSenderName: true,
-    notificationPreview: true,
-    countMutedChats: false,
-    mediaCacheLimitMb: 512,
-  } satisfies UserPreferencesDto;
-}
-
 describe("ChatProfilePanel", () => {
   let telo: ReturnType<typeof installTeloApiMock>;
 
   beforeEach(() => {
     telo = installTeloApiMock();
-    telo.preferences.update.mockResolvedValue(preferences());
+    telo.preferences.update.mockResolvedValue(testPreferences());
     telo.workspace.listSharedMedia.mockResolvedValue({
       items: SHARED,
       nextCursor: null,
