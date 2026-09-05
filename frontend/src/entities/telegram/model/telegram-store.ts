@@ -7,6 +7,7 @@ import type {
   TelegramLoginConfigurationDto,
   TelegramLoginInput,
 } from "../../../../../contracts/src/ipc";
+import { copy } from "shared/config/copy";
 
 interface TelegramState {
   auth: TelegramAuthState | null;
@@ -38,12 +39,14 @@ export const useTelegramStore = create<TelegramState>((set) => ({
   currentUser: null,
   start() {
     const unsubscribe = window.telo.telegram.onAuthState((auth) =>
-      set({ auth }),
+      set({ auth: sanitizeAuth(auth) }),
     );
     void Promise.all([
       window.telo.telegram.getAuthState(),
       window.telo.telegram.getLoginConfiguration(),
-    ]).then(([auth, configuration]) => set({ auth, configuration }));
+    ]).then(([auth, configuration]) =>
+      set({ auth: sanitizeAuth(auth), configuration }),
+    );
     return unsubscribe;
   },
   async loadCurrentUser() {
@@ -111,8 +114,36 @@ export const useTelegramStore = create<TelegramState>((set) => ({
   },
 }));
 
+function sanitizeAuth(auth: TelegramAuthState): TelegramAuthState {
+  if (auth.status !== "error") return auth;
+  return { status: "error", message: safeMessage(new Error(auth.message)) };
+}
+
 function safeMessage(error: unknown): string {
-  return error instanceof Error && error.message.trim()
-    ? error.message
-    : "Telegram authentication failed";
+  const raw = error instanceof Error ? error.message.trim() : "";
+  const mapped = mapTelegramAuthError(raw);
+  if (mapped) return mapped;
+  if (!raw || /tdlib|tdjson|\btdl\b/i.test(raw)) return copy.loginFailed;
+  return raw;
+}
+
+function mapTelegramAuthError(message: string): string | null {
+  if (/\bPHONE_NUMBER_INVALID\b/.test(message)) return copy.loginPhoneInvalid;
+  if (/\bPHONE_NUMBER_BANNED\b/.test(message)) return copy.loginPhoneInvalid;
+  if (
+    /\bPHONE_CODE_INVALID\b/.test(message) ||
+    /\bPHONE_CODE_EMPTY\b/.test(message)
+  ) {
+    return copy.loginCodeInvalid;
+  }
+  if (/\bPHONE_CODE_EXPIRED\b/.test(message)) return copy.loginCodeExpired;
+  if (/\bPASSWORD_HASH_INVALID\b/.test(message))
+    return copy.loginPasswordInvalid;
+  if (
+    /\bFLOOD_WAIT\b/.test(message) ||
+    /\bPHONE_NUMBER_FLOOD\b/.test(message)
+  ) {
+    return copy.loginFlood;
+  }
+  return null;
 }

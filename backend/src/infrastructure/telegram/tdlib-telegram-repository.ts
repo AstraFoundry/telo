@@ -59,8 +59,16 @@ import {
   type MessageMapContext,
 } from "./tdlib-mappers";
 import { copyIntoMediaCache } from "./file-telegram-account-database";
-import { enforceMediaCacheLimit } from "./media-cache";
+import {
+  avatarCacheFileName,
+  avatarMediaUrl,
+  enforceMediaCacheLimit,
+  listCachedAvatarUrls,
+} from "./media-cache";
 import type { TelegramAccountClient } from "./telegram-account-coordinator";
+
+/** Telegram Desktop drops a typing indicator after about six seconds. */
+const TYPING_EXPIRY_MS = 6_000;
 
 export class TdlibTelegramRepository implements TelegramRepository {
   private readonly listeners = new Set<
@@ -72,6 +80,14 @@ export class TdlibTelegramRepository implements TelegramRepository {
   private readonly clientIds = new Map<string, string>();
   private readonly callbackData = new Map<string, string>();
   private readonly filePaths = new Map<string, string>();
+  private readonly avatarUrls = new Map<string, string | null>();
+  private readonly avatarFilePeers = new Map<number, string>();
+  private readonly typingTimers = new Map<
+    string,
+    ReturnType<typeof setTimeout>
+  >();
+  private readonly secretChats = new Map<number, Td.secretChat>();
+  private readonly stickerOutlines = new Map<number, string | null>();
   private selfUserId: number | null = null;
   private sendingId = 1;
   private unsubscribe: (() => void) | null = null;
@@ -92,9 +108,11 @@ export class TdlibTelegramRepository implements TelegramRepository {
   }
 
   async hydrate(): Promise<void> {
+    await this.hydrateAvatarsFromDisk();
     const me = await this.client.invoke<Td.user>({ _: "getMe" });
     this.selfUserId = me.id;
     this.users.set(me.id, me);
+    this.scheduleUserAvatar(me);
     await this.loadList({ _: "chatListMain" });
     await this.loadList({ _: "chatListArchive" });
     this.emit({
@@ -108,14 +126,14 @@ export class TdlibTelegramRepository implements TelegramRepository {
     const me = await this.client.invoke<Td.user>({ _: "getMe" });
     this.selfUserId = me.id;
     this.users.set(me.id, me);
+    this.scheduleUserAvatar(me);
+    const name = [me.first_name, me.last_name].filter(Boolean).join(" ");
     return {
       id: String(me.id),
-      displayName: [me.first_name, me.last_name].filter(Boolean).join(" "),
+      displayName: name,
       username: me.usernames?.active_usernames[0] ?? null,
-      initials: initials(
-        [me.first_name, me.last_name].filter(Boolean).join(" ") || "You",
-      ),
-      avatarDataUrl: null,
+      initials: initials(name || "You"),
+      avatarDataUrl: this.avatarUrls.get(String(me.id)) ?? null,
     };
   }
 
@@ -139,6 +157,10 @@ export class TdlibTelegramRepository implements TelegramRepository {
       user_id: Number(userId),
     });
     this.chats.set(chatIdOf(chat.id), chat);
+    this.scheduleChatAvatar(chat);
+    if (chat.type._ === "chatTypeSecret") {
+      await this.hydrateSecretChat(chat.type.secret_chat_id);
+    }
     const dto = this.toChat(chat);
     this.emit({ type: "chat-upsert", chat: dto });
     return dto;
@@ -243,15 +265,18 @@ export class TdlibTelegramRepository implements TelegramRepository {
     return members.members.flatMap((member) => {
       if (member.member_id._ !== "messageSenderUser") return [];
       const user = this.users.get(member.member_id.user_id);
+      const id = String(member.member_id.user_id);
+      if (user) this.scheduleUserAvatar(user);
       const name = user
         ? [user.first_name, user.last_name].filter(Boolean).join(" ")
-        : String(member.member_id.user_id);
+        : id;
       return [
         {
-          id: String(member.member_id.user_id),
+          id,
           displayName: name,
           username: user?.usernames?.active_usernames[0] ?? null,
-          avatarDataUrl: null,
+          avatarDataUrl: this.avatarUrls.get(id) ?? null,
+          avatarPending: this.avatarIsPending(id),
         },
       ];
     });
@@ -263,27 +288,32 @@ export class TdlibTelegramRepository implements TelegramRepository {
       .catch(() => null);
     if (user) {
       this.users.set(user.id, user);
+      this.scheduleUserAvatar(user);
       const full = await this.client
         .invoke<Td.userFullInfo>({ _: "getUserFullInfo", user_id: user.id })
         .catch(() => null);
+      const id = String(user.id);
       return {
-        id: String(user.id),
+        id,
         title: [user.first_name, user.last_name].filter(Boolean).join(" "),
         username: user.usernames?.active_usernames[0] ?? null,
         kind: "direct",
-        avatarDataUrl: null,
+        avatarDataUrl: this.avatarUrls.get(id) ?? null,
+        avatarPending: this.avatarIsPending(id),
         bio: full?.bio?.text ?? null,
         phone: user.phone_number || null,
       };
     }
     const chat = this.chats.get(peerId);
     if (!chat) throw new Error(`Unknown peer ${peerId}`);
+    this.scheduleChatAvatar(chat);
     return {
       id: peerId,
       title: chat.title,
       username: null,
       kind: this.toChat(chat).kind,
-      avatarDataUrl: null,
+      avatarDataUrl: this.avatarUrls.get(peerId) ?? null,
+      avatarPending: this.avatarIsPending(peerId),
       bio: null,
       phone: null,
     };
@@ -308,8 +338,12 @@ export class TdlibTelegramRepository implements TelegramRepository {
       .invoke<Td.stickers>({ _: "getFavoriteStickers" })
       .catch(() => ({ stickers: [] as Td.sticker[] }));
     return {
-      recent: recent.stickers.map(stickerItem),
-      favorites: favorites.stickers.map(stickerItem),
+      recent: await Promise.all(
+        recent.stickers.map((item) => this.toStickerItem(item)),
+      ),
+      favorites: await Promise.all(
+        favorites.stickers.map((item) => this.toStickerItem(item)),
+      ),
       sets: installed.sets.map((set) => ({
         id: set.id,
         title: set.title,
@@ -362,7 +396,7 @@ export class TdlibTelegramRepository implements TelegramRepository {
       offset: 0,
       limit: 32,
     });
-    return result.stickers.map(stickerItem);
+    return Promise.all(result.stickers.map((item) => this.toStickerItem(item)));
   }
 
   async sendSticker(chatId: string, stickerId: string): Promise<MessageDto> {
@@ -400,7 +434,9 @@ export class TdlibTelegramRepository implements TelegramRepository {
       title: set.title,
       shortName: set.name,
       reference: { kind: "id", id: set.id },
-      stickers: set.stickers.map(stickerItem),
+      stickers: await Promise.all(
+        set.stickers.map((item) => this.toStickerItem(item)),
+      ),
       installed: set.is_installed,
     };
   }
@@ -429,7 +465,9 @@ export class TdlibTelegramRepository implements TelegramRepository {
       _: "getCustomEmojiStickers",
       custom_emoji_ids: documentIds,
     });
-    return stickers.stickers.map(stickerItem);
+    return Promise.all(
+      stickers.stickers.map((item) => this.toStickerItem(item)),
+    );
   }
 
   async searchGlobal(query: string): Promise<GlobalSearchResultDto> {
@@ -583,14 +621,14 @@ export class TdlibTelegramRepository implements TelegramRepository {
       progress: 0,
       error: null,
     });
-    const contents = files.map((file, index) => ({
-      _: "inputMessageDocument" as const,
-      document: { _: "inputFileLocal" as const, path: file.source },
-      caption:
+    const contents = files.map((file, index) =>
+      inputContentForFile(
+        file,
         index === 0 && caption
           ? { _: "formattedText" as const, text: caption, entities: [] }
           : undefined,
-    }));
+      ),
+    );
     const replyTo = replyToId
       ? {
           _: "inputMessageReplyToMessage" as const,
@@ -802,12 +840,217 @@ export class TdlibTelegramRepository implements TelegramRepository {
 
   dispose(): void {
     this.unsubscribe?.();
+    for (const timer of this.typingTimers.values()) clearTimeout(timer);
+    this.typingTimers.clear();
+  }
+
+  private async hydrateAvatarsFromDisk(): Promise<void> {
+    const urls = await listCachedAvatarUrls(this.mediaCacheDirectory);
+    for (const [peerId, url] of urls) {
+      this.avatarUrls.set(peerId, url);
+    }
+  }
+
+  private avatarIsPending(peerId: string): boolean {
+    if (this.avatarUrls.has(peerId)) return false;
+    const chat = this.chats.get(peerId);
+    if (chat?.photo?.small) return true;
+    const user = this.users.get(Number(peerId));
+    return Boolean(user?.profile_photo?.small);
+  }
+
+  private scheduleChatAvatar(chat: Td.chat): void {
+    const peerId = chatIdOf(chat.id);
+    const small = chat.photo?.small;
+    if (!small) {
+      if (!this.avatarUrls.has(peerId)) this.avatarUrls.set(peerId, null);
+      return;
+    }
+    void this.downloadAvatar(peerId, small);
+  }
+
+  private scheduleUserAvatar(user: Td.user): void {
+    const peerId = String(user.id);
+    const small = user.profile_photo?.small;
+    if (!small) {
+      if (!this.avatarUrls.has(peerId)) this.avatarUrls.set(peerId, null);
+      return;
+    }
+    void this.downloadAvatar(peerId, small);
+  }
+
+  private async downloadAvatar(peerId: string, file: Td.file): Promise<void> {
+    if (this.avatarUrls.get(peerId)) return;
+    this.avatarFilePeers.set(file.id, peerId);
+    try {
+      if (file.local.is_downloading_completed && file.local.path) {
+        await this.settleAvatar(peerId, file);
+        return;
+      }
+      const downloaded = await this.client.invoke<Td.file>({
+        _: "downloadFile",
+        file_id: file.id,
+        priority: 1,
+        offset: 0,
+        limit: 0,
+        synchronous: false,
+      });
+      this.avatarFilePeers.set(downloaded.id, peerId);
+      if (downloaded.local.is_downloading_completed && downloaded.local.path) {
+        await this.settleAvatar(peerId, downloaded);
+      }
+    } catch (error) {
+      console.error("TDLib avatar download failed", {
+        peerId,
+        fileId: file.id,
+        error,
+      });
+      this.settleAvatarUrl(peerId, null);
+    }
+  }
+
+  private async settleAvatar(peerId: string, file: Td.file): Promise<void> {
+    if (!file.local.path) return;
+    try {
+      const fileName = avatarCacheFileName(peerId);
+      await copyIntoMediaCache(
+        file.local.path,
+        this.mediaCacheDirectory,
+        fileName,
+      );
+      this.settleAvatarUrl(peerId, avatarMediaUrl(fileName));
+    } catch (error) {
+      console.error("TDLib avatar cache copy failed", { peerId, error });
+      this.settleAvatarUrl(peerId, null);
+    }
+  }
+
+  private settleAvatarUrl(peerId: string, url: string | null): void {
+    this.avatarUrls.set(peerId, url);
+    this.emit({ type: "chat-avatar", chatId: peerId, avatarDataUrl: url });
+  }
+
+  private scheduleTypingExpiry(chatId: string): void {
+    this.clearTyping(chatId, false);
+    const timer = setTimeout(() => {
+      this.typingTimers.delete(chatId);
+      const chat = this.chats.get(chatId);
+      if (!chat) return;
+      this.emit({ type: "chat-upsert", chat: this.toChat(chat) });
+    }, TYPING_EXPIRY_MS);
+    this.typingTimers.set(chatId, timer);
+  }
+
+  private clearTyping(chatId: string, emit = true): void {
+    const timer = this.typingTimers.get(chatId);
+    if (timer) clearTimeout(timer);
+    this.typingTimers.delete(chatId);
+    if (!emit) return;
+    const chat = this.chats.get(chatId);
+    if (chat) this.emit({ type: "chat-upsert", chat: this.toChat(chat) });
+  }
+
+  private async hydratePrivateUser(userId: number): Promise<void> {
+    if (this.users.has(userId)) {
+      this.scheduleUserAvatar(this.users.get(userId)!);
+      return;
+    }
+    try {
+      const user = await this.client.invoke<Td.user>({
+        _: "getUser",
+        user_id: userId,
+      });
+      if (user._ !== "user") return;
+      this.users.set(user.id, user);
+      this.scheduleUserAvatar(user);
+      const chat = this.chats.get(String(userId));
+      if (chat) this.emit({ type: "chat-upsert", chat: this.toChat(chat) });
+    } catch (error) {
+      console.error("TDLib getUser failed", { userId, error });
+    }
+  }
+
+  private async hydrateSecretChat(secretChatId: number): Promise<void> {
+    if (this.secretChats.has(secretChatId)) return;
+    try {
+      const secret = await this.client.invoke<Td.secretChat>({
+        _: "getSecretChat",
+        secret_chat_id: secretChatId,
+      });
+      if (secret._ !== "secretChat") return;
+      this.secretChats.set(secret.id, secret);
+    } catch (error) {
+      console.error("TDLib getSecretChat failed", { secretChatId, error });
+    }
+  }
+
+  private secretStateOf(chat: Td.chat): ChatDto["secretState"] {
+    if (chat.type._ !== "chatTypeSecret") return undefined;
+    const secret = this.secretChats.get(chat.type.secret_chat_id);
+    if (!secret) return "pending";
+    if (secret.state._ === "secretChatStateReady") return "ready";
+    if (secret.state._ === "secretChatStateClosed") return "closed";
+    return "pending";
+  }
+
+  private async toStickerItem(sticker: Td.sticker): Promise<StickerItemDto> {
+    const item = stickerItem(sticker);
+    return {
+      ...item,
+      outlinePath: await this.stickerOutlinePath(sticker.sticker.id),
+    };
+  }
+
+  private async stickerOutlinePath(fileId: number): Promise<string | null> {
+    if (this.stickerOutlines.has(fileId)) {
+      return this.stickerOutlines.get(fileId) ?? null;
+    }
+    try {
+      const outline = await this.client.invoke<Td.text>({
+        _: "getStickerOutlineSvgPath",
+        sticker_file_id: fileId,
+      });
+      const path = outline._ === "text" && outline.text ? outline.text : null;
+      this.stickerOutlines.set(fileId, path);
+      return path;
+    } catch (error) {
+      console.error("TDLib sticker outline failed", { fileId, error });
+      this.stickerOutlines.set(fileId, null);
+      return null;
+    }
   }
 
   private async handleUpdate(update: Td.Update): Promise<void> {
     if (update._ === "updateNewChat") {
       this.chats.set(chatIdOf(update.chat.id), update.chat);
+      this.scheduleChatAvatar(update.chat);
+      if (update.chat.type._ === "chatTypePrivate") {
+        void this.hydratePrivateUser(update.chat.type.user_id);
+      }
+      if (update.chat.type._ === "chatTypeSecret") {
+        void this.hydrateSecretChat(update.chat.type.secret_chat_id);
+      }
       this.emit({ type: "chat-upsert", chat: this.toChat(update.chat) });
+      return;
+    }
+    if (update._ === "updateChatPhoto") {
+      const chat = this.chats.get(chatIdOf(update.chat_id));
+      if (!chat) return;
+      const peerId = chatIdOf(update.chat_id);
+      this.avatarUrls.delete(peerId);
+      chat.photo = update.photo;
+      this.scheduleChatAvatar(chat);
+      this.emit({ type: "chat-upsert", chat: this.toChat(chat) });
+      return;
+    }
+    if (update._ === "updateSecretChat") {
+      this.secretChats.set(update.secret_chat.id, update.secret_chat);
+      const chat = [...this.chats.values()].find(
+        (entry) =>
+          entry.type._ === "chatTypeSecret" &&
+          entry.type.secret_chat_id === update.secret_chat.id,
+      );
+      if (chat) this.emit({ type: "chat-upsert", chat: this.toChat(chat) });
       return;
     }
     if (update._ === "updateChatPosition") {
@@ -910,16 +1153,18 @@ export class TdlibTelegramRepository implements TelegramRepository {
     }
     if (update._ === "updateUser") {
       this.users.set(update.user.id, update.user);
+      this.scheduleUserAvatar(update.user);
+      const chat = this.chats.get(String(update.user.id));
+      if (chat) this.emit({ type: "chat-upsert", chat: this.toChat(chat) });
       return;
     }
     if (update._ === "updateChatAction") {
-      if (update.action._ !== "chatActionTyping") return;
       const chat = this.chats.get(chatIdOf(update.chat_id));
       if (!chat) return;
-      this.emit({
-        type: "chat-upsert",
-        chat: { ...this.toChat(chat), typing: true },
-      });
+      const typing = update.action._ === "chatActionTyping";
+      if (typing) this.scheduleTypingExpiry(chatIdOf(update.chat_id));
+      else this.clearTyping(chatIdOf(update.chat_id));
+      this.emit({ type: "chat-upsert", chat: this.toChat(chat) });
       return;
     }
     if (update._ === "updateConnectionState") {
@@ -940,6 +1185,13 @@ export class TdlibTelegramRepository implements TelegramRepository {
   }
 
   private async handleFile(file: Td.file): Promise<void> {
+    const avatarPeerId = this.avatarFilePeers.get(file.id);
+    if (avatarPeerId) {
+      if (file.local.is_downloading_completed && file.local.path) {
+        await this.settleAvatar(avatarPeerId, file);
+      }
+      return;
+    }
     const mediaId = mediaIdForFile(file.id);
     if (file.local.is_downloading_completed && file.local.path) {
       const fileName = `tdfile_${file.id}${path.extname(file.local.path)}`;
@@ -998,6 +1250,13 @@ export class TdlibTelegramRepository implements TelegramRepository {
         chat_id: id,
       });
       this.chats.set(chatIdOf(chat.id), chat);
+      this.scheduleChatAvatar(chat);
+      if (chat.type._ === "chatTypePrivate") {
+        void this.hydratePrivateUser(chat.type.user_id);
+      }
+      if (chat.type._ === "chatTypeSecret") {
+        void this.hydrateSecretChat(chat.type.secret_chat_id);
+      }
     }
   }
 
@@ -1016,26 +1275,28 @@ export class TdlibTelegramRepository implements TelegramRepository {
   private toChat(chat: Td.chat): ChatDto {
     const mapped = mapChat(chat, {
       selfUserId: this.selfUserId,
-      avatarUrl: () => null,
-      avatarPending: () => false,
+      avatarUrl: (peerId) => this.avatarUrls.get(peerId) ?? null,
+      avatarPending: (peerId) => this.avatarIsPending(peerId),
     });
+    const typing = this.typingTimers.has(chatIdOf(chat.id));
+    let next: ChatDto = { ...mapped, typing };
     if (mapped.kind === "direct" && chat.type._ === "chatTypePrivate") {
       const user = this.users.get(chat.type.user_id);
       if (user?.status._ === "userStatusOnline") {
-        return { ...mapped, presence: "online" };
+        next = { ...next, presence: "online" };
       }
     }
     if (mapped.kind === "secret") {
-      return { ...mapped, secretState: mapped.secretState ?? "ready" };
+      next = { ...next, secretState: this.secretStateOf(chat) };
     }
-    return mapped;
+    return next;
   }
 
   private async toMessage(message: Td.message): Promise<MessageDto> {
     const context: MessageMapContext = {
       selfUserId: this.selfUserId,
-      avatarUrl: () => null,
-      avatarPending: () => false,
+      avatarUrl: (peerId) => this.avatarUrls.get(peerId) ?? null,
+      avatarPending: (peerId) => this.avatarIsPending(peerId),
       senderName: (sender) => this.senderName(sender),
       senderId: (sender) =>
         sender._ === "messageSenderUser"
@@ -1044,6 +1305,19 @@ export class TdlibTelegramRepository implements TelegramRepository {
     };
     const dto = mapMessage(message, context);
     this.indexKeyboard(dto, message);
+    if (dto.media?.kind === "sticker" && dto.media.sticker) {
+      const fileId = fileIdFromMediaId(dto.media.id);
+      if (fileId !== null) {
+        const outlinePath = await this.stickerOutlinePath(fileId);
+        return {
+          ...dto,
+          media: {
+            ...dto.media,
+            sticker: { ...dto.media.sticker, outlinePath },
+          },
+        };
+      }
+    }
     return dto;
   }
 
@@ -1076,6 +1350,36 @@ export class TdlibTelegramRepository implements TelegramRepository {
   private emit(event: TelegramWorkspaceEvent): void {
     for (const listener of this.listeners) listener(event);
   }
+}
+
+function inputContentForFile(
+  file: TelegramUploadFile,
+  caption: Td.formattedText$Input | undefined,
+): Td.InputMessageContent$Input {
+  const localFile = { _: "inputFileLocal" as const, path: file.source };
+  if (file.mimeType.startsWith("image/")) {
+    return {
+      _: "inputMessagePhoto",
+      photo: { _: "inputPhoto", photo: localFile },
+      caption,
+    };
+  }
+  if (file.mimeType.startsWith("video/")) {
+    return {
+      _: "inputMessageVideo",
+      video: {
+        _: "inputVideo",
+        video: localFile,
+        supports_streaming: true,
+      },
+      caption,
+    };
+  }
+  return {
+    _: "inputMessageDocument",
+    document: { _: "inputDocument", document: localFile },
+    caption,
+  };
 }
 
 function stickerItem(sticker: Td.sticker): StickerItemDto {

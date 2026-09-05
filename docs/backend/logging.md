@@ -2,9 +2,9 @@
 
 This document defines logging and error-observability conventions for Telo's Electron main process.
 
-> **Status: partial.** There is no structured logger yet. Telegram catch-up
-> and update-queue failures are written with `console.error` from
-> `TeleprotoRepository.emitSyncError`. Do not add incidental `console.log`
+> **Status: partial.** There is no structured logger yet. Unexpected Telegram
+> adapter failures are written with `console.error` from
+> `TdlibTelegramRepository` and `TdlibClientCoordinator`. Do not add incidental `console.log`
 > debugging.
 
 ## Scope
@@ -64,5 +64,5 @@ Mask sensitive fields with a consistent pattern:
 - Do not swallow errors with silent `catch` blocks.
 - Translate low-level errors into domain/application errors before they cross IPC; the renderer only receives concise, user-safe messages (see [`api-conventions.md`](api-conventions.md)).
 - Language-level Telegram sync failures (`TypeError`, `instanceof` not callable, and similar) stay in the main-process log. They are not published as `sync-error` workspace events, and the conversation header has no error strip for them.
-- A sync failure raised while the transport is down is published as `connection-state: "offline"`, never as `sync-error`. Telegram's `ConnectionsManager` reports exactly this condition as a connection state — the chat list title reads "Connecting…" — and never as an error surface, because reconnecting is not something the reader can act on. teleproto rejects with a bare `Error` whose prose ("Cannot send requests while disconnected. Please reconnect.") carries no type, so the classification reads the client's own `connected` flag rather than matching the message text. The failure is still logged in the main process.
+- A sync failure raised while the transport is down is published as `connection-state: "offline"`, never as `sync-error`. Telegram's `ConnectionsManager` reports exactly this condition as a connection state — the chat list title reads "Connecting…" — and never as an error surface, because reconnecting is not something the reader can act on. TDLib reports the same condition as `connectionStateWaitingForNetwork` / `connectionStateConnecting`. The failure is still logged in the main process.
 - User-facing catch-up and update-queue failures (`FLOOD_WAIT_*` and similar) are logged the same way. They are not published as workspace events and are not painted in the renderer.

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { installTeloApiMock } from "../../../shared/test/mock-telo";
+import { copy } from "../../../shared/config/copy";
 
 import { useTelegramStore } from "./telegram-store";
 
@@ -49,7 +50,7 @@ describe("telegram-store", () => {
 
     expect(useTelegramStore.getState().auth).toEqual({
       status: "error",
-      message: "Telegram authentication failed",
+      message: copy.loginFailed,
     });
   });
 
@@ -61,7 +62,35 @@ describe("telegram-store", () => {
 
     expect(useTelegramStore.getState().auth).toEqual({
       status: "error",
-      message: "Telegram authentication failed",
+      message: copy.loginFailed,
+    });
+  });
+
+  it("beginLogin() maps TDLib error codes to user-facing copy", async () => {
+    const telo = installTeloApiMock();
+    telo.telegram.beginLogin.mockRejectedValue(
+      new Error("400 PHONE_NUMBER_INVALID"),
+    );
+
+    await useTelegramStore.getState().beginLogin({ phoneNumber: "+1" });
+
+    expect(useTelegramStore.getState().auth).toEqual({
+      status: "error",
+      message: copy.loginPhoneInvalid,
+    });
+  });
+
+  it("beginLogin() hides TDLib jargon from the login form", async () => {
+    const telo = installTeloApiMock();
+    telo.telegram.beginLogin.mockRejectedValue(
+      new Error("TDLib client closed"),
+    );
+
+    await useTelegramStore.getState().beginLogin({ phoneNumber: "+1" });
+
+    expect(useTelegramStore.getState().auth).toEqual({
+      status: "error",
+      message: copy.loginFailed,
     });
   });
 
@@ -86,7 +115,7 @@ describe("telegram-store", () => {
 
     expect(useTelegramStore.getState().auth).toEqual({
       status: "error",
-      message: "Telegram authentication failed",
+      message: copy.loginFailed,
     });
   });
 
@@ -113,6 +142,27 @@ describe("telegram-store", () => {
     listener({ status: "code-required" });
     expect(useTelegramStore.getState().auth).toEqual({
       status: "code-required",
+    });
+  });
+
+  it("start() hides TDLib jargon from a main-process auth error", async () => {
+    const telo = installTeloApiMock();
+    telo.telegram.onAuthState.mockReturnValue(() => {});
+    telo.telegram.getAuthState.mockResolvedValue({
+      status: "error",
+      message: "TDLib client closed",
+    });
+    telo.telegram.getLoginConfiguration.mockResolvedValue({
+      applicationCredentialsConfigured: true,
+    });
+
+    useTelegramStore.getState().start();
+
+    await vi.waitFor(() => {
+      expect(useTelegramStore.getState().auth).toEqual({
+        status: "error",
+        message: copy.loginFailed,
+      });
     });
   });
 

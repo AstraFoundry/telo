@@ -10,7 +10,7 @@ Telo is a third-party Telegram client. The production kernel is TDLib in the Ele
 
 `pnpm telegram:check` runs as part of `make check`. It fingerprints the installed `prebuilt-tdlib` version and commit, and requires every `covered` capability to cite existing evidence files.
 
-The matrix is a planning and audit baseline. `covered` means the named product capability has an implemented client workflow. New workflows must update this matrix and the relevant product documentation in the same change.
+The matrix is a planning and audit baseline. `covered` means the named product capability has an implemented client workflow. Chat and user photos download through TDLib `downloadFile` into the existing `telo-media:` avatar cache (`chat.photo.small` / `user.profile_photo.small`) and patch the renderer with `chat-avatar`. New workflows must update this matrix and the relevant product documentation in the same change.
 
 Related:
 

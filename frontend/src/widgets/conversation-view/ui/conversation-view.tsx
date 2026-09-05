@@ -46,6 +46,7 @@ import type {
 } from "../../../../../contracts/src/ipc";
 import {
   chatsForFolder,
+  secretChatStatus,
   useChatProfileStore,
   useChatStore,
 } from "entities/chat";
@@ -1796,7 +1797,7 @@ export function ConversationView() {
           {activeChat?.kind === "secret" ? (
             <span className="flex items-center gap-1 text-xs text-muted-foreground">
               <Lock aria-hidden="true" className="size-3" />
-              {copy.secretChatDeviceLocal}
+              {secretChatStatus(activeChat.secretState)}
             </span>
           ) : activeChat?.typing ? (
             <span className="block text-xs text-muted-foreground">

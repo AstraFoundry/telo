@@ -903,7 +903,7 @@ export interface DemoTelegramRepositoryOptions {
 
 // Deterministic progress checkpoints emitted while a demo upload is in
 // flight, so dev mode and E2E can watch (and cancel) uploads the way the
-// teleproto adapter behaves.
+// production adapter behaves.
 const DEMO_UPLOAD_PROGRESS_STEPS = [0.25, 0.5, 0.75] as const;
 
 // Demo-only failure simulation: a body carrying this marker is rejected on
@@ -1033,7 +1033,7 @@ export class DemoTelegramRepository implements TelegramRepository {
   }
 
   // Folder unread badges sum the unread counts of the member chats, like the
-  // teleproto adapter computes them from the full dialog list.
+  // production adapter computes them from the chat list.
   private foldersSnapshot(): ReadonlyArray<ChatFolderDto> {
     const chats = [...this.chats.values()];
     const unreadIn = (folderId: number) =>
@@ -1156,8 +1156,8 @@ export class DemoTelegramRepository implements TelegramRepository {
 
   // The demo "server" search runs over the deterministic fixtures: chats
   // match on title/preview (the old sidebar filter semantics), messages on
-  // body text, most recent first — the same sections the teleproto adapter
-  // reports from messages.searchGlobal.
+  // body text, most recent first — the same sections the production adapter
+  // reports from TDLib searchChats / searchMessages.
   async searchGlobal(query: string): Promise<GlobalSearchResultDto> {
     const term = query.toLocaleLowerCase();
     const chats = [...this.chats.values()].filter((chat) =>
@@ -1634,7 +1634,7 @@ export class DemoTelegramRepository implements TelegramRepository {
 
   async setTyping(chatId: string, typing: boolean): Promise<void> {
     // The local user's own typing signal has no counterpart to notify in the
-    // demo workspace; teleproto sends it out over the wire in production.
+    // demo workspace; the production adapter sends it as sendChatAction.
     void typing;
     this.requireChat(chatId);
   }

@@ -35,7 +35,7 @@ export function DeleteMessageDialog({
     (messages?.length ?? 0) > 0 &&
     (messages ?? []).every((message) => message.outgoing);
   // The default stays "everyone": that is the behavior the delete action had
-  // before scopes existed (the teleproto adapter always revoked).
+  // before scopes existed (the production adapter always revoked).
   const [scope, setScope] = useState<DeleteMessageScope>("everyone");
   const [previousMessages, setPreviousMessages] = useState(messages);
   if (messages !== previousMessages) {

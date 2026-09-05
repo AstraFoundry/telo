@@ -182,4 +182,12 @@ describe("TelegramConnectionForm", () => {
     expect(screen.getByRole("alert").textContent).toBe("Invalid phone");
     expect(screen.getByLabelText(copy.phoneNumber)).toBeTruthy();
   });
+
+  it("does not mention TDLib or the client kernel on the phone step", () => {
+    render(<TelegramConnectionForm />);
+
+    expect(screen.queryByText(/TDLib/i)).toBeNull();
+    expect(screen.queryByText(/Teleproto/i)).toBeNull();
+    expect(screen.queryByText(/GramJS/i)).toBeNull();
+  });
 });
