@@ -32,6 +32,7 @@ import type {
   SendMessageInput,
   SendMediaInput,
   SetMessageReactionInput,
+  ShellNotifyOptions,
   StickerSetReferenceDto,
   TelegramLoginInput,
   UpdateKeywordFolderInput,
@@ -335,9 +336,22 @@ export function registerIpc(container: ApplicationContainer): void {
   );
   ipcMain.handle(
     channels.notify,
-    (event, title: string, body: string, tag?: string) => {
+    (
+      event,
+      title: string,
+      body: string,
+      tag?: string,
+      options?: ShellNotifyOptions,
+    ) => {
       if (!Notification.isSupported()) return;
-      const notification = new Notification({ title, body });
+      // `silent` is the OS-level sound switch: the banner still arrives, it
+      // just does not ring, which is what "notification sound off" means on
+      // every other Telegram client.
+      const notification = new Notification({
+        title,
+        body,
+        silent: options?.silent ?? false,
+      });
       if (tag) {
         notification.on("click", () =>
           event.sender.send(channels.notifyClick, tag),

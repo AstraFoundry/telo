@@ -19,6 +19,7 @@ import {
   folderUnread,
   subscribeToWorkspaceEvents,
   useChatStore,
+  type ChatPreferences,
 } from "./chat-store";
 
 function chat(id: string): ChatDto {
@@ -56,6 +57,26 @@ function message(id: string, chatId: string): MessageDto {
   };
 }
 
+/**
+ * The mirrored preference set, so a suite states only the switch it is
+ * about. The store spreads the whole object, so every field has to be there.
+ */
+function chatPreferences(
+  partial: Partial<ChatPreferences> = {},
+): ChatPreferences {
+  return {
+    notificationsEnabled: true,
+    notificationSenderName: true,
+    notificationPreview: true,
+    countMutedChats: false,
+    notifyDirectChats: true,
+    notifyGroupChats: true,
+    notifyChannels: true,
+    notificationSound: true,
+    ...partial,
+  };
+}
+
 describe("chat-store", () => {
   beforeEach(() => {
     useChatStore.setState({
@@ -79,10 +100,9 @@ describe("chat-store", () => {
       recentStickers: [],
       favoriteStickers: [],
       stickerSetsError: null,
-      notificationsEnabled: false,
-      notificationSenderName: true,
-      notificationPreview: true,
-      countMutedChats: false,
+      // Every mirrored preference resets, so a suite that flips one does not
+      // leave it flipped for the next.
+      ...chatPreferences({ notificationsEnabled: false }),
       mediaDownloads: {},
       mediaUploads: {},
       animateInMessageIds: [],
@@ -996,7 +1016,93 @@ describe("chat-store", () => {
       message: message("m2", "b"),
     });
 
-    expect(telo.shell.notify).toHaveBeenCalledWith("Chat b", "Message m2", "b");
+    expect(telo.shell.notify).toHaveBeenCalledWith(
+      "Chat b",
+      "Message m2",
+      "b",
+      { silent: false },
+    );
+    Object.defineProperty(document, "hidden", {
+      configurable: true,
+      value: false,
+    });
+  });
+
+  it("receive() skips a chat kind whose notification switch is off", () => {
+    const telo = installTeloApiMock();
+    Object.defineProperty(document, "hidden", {
+      configurable: true,
+      value: true,
+    });
+    useChatStore.setState({
+      chats: [chat("a"), { ...chat("b"), kind: "channel" }],
+      activeChatId: "a",
+    });
+    useChatStore
+      .getState()
+      .applyPreferences(chatPreferences({ notifyChannels: false }));
+
+    useChatStore.getState().receive({
+      type: "message-upsert",
+      cause: "new",
+      message: message("m2", "b"),
+    });
+
+    expect(telo.shell.notify).not.toHaveBeenCalled();
+
+    // The same message in a private chat still gets through: the switch is
+    // per kind, not a second master switch.
+    useChatStore.getState().receive({
+      type: "message-upsert",
+      cause: "new",
+      message: message("m3", "a"),
+    });
+    useChatStore.setState({ activeChatId: "b" });
+    useChatStore.getState().receive({
+      type: "message-upsert",
+      cause: "new",
+      message: message("m4", "a"),
+    });
+
+    expect(telo.shell.notify).toHaveBeenCalledWith(
+      "Chat a",
+      "Message m4",
+      "a",
+      { silent: false },
+    );
+    Object.defineProperty(document, "hidden", {
+      configurable: true,
+      value: false,
+    });
+  });
+
+  it("receive() raises a silent notification when the sound is off", () => {
+    const telo = installTeloApiMock();
+    Object.defineProperty(document, "hidden", {
+      configurable: true,
+      value: true,
+    });
+    useChatStore.setState({
+      chats: [chat("a"), chat("b")],
+      activeChatId: "a",
+    });
+    useChatStore
+      .getState()
+      .applyPreferences(chatPreferences({ notificationSound: false }));
+
+    useChatStore.getState().receive({
+      type: "message-upsert",
+      cause: "new",
+      message: message("m2", "b"),
+    });
+
+    // The banner still arrives; only the ring is suppressed.
+    expect(telo.shell.notify).toHaveBeenCalledWith(
+      "Chat b",
+      "Message m2",
+      "b",
+      { silent: true },
+    );
     Object.defineProperty(document, "hidden", {
       configurable: true,
       value: false,
@@ -1053,6 +1159,7 @@ describe("chat-store", () => {
       copy.appName,
       "Message m2",
       "b",
+      { silent: false },
     );
     Object.defineProperty(document, "hidden", {
       configurable: true,
@@ -1083,6 +1190,7 @@ describe("chat-store", () => {
       "Chat b",
       copy.notifyIncomingMessageBody,
       "b",
+      { silent: false },
     );
     Object.defineProperty(document, "hidden", {
       configurable: true,
@@ -1101,12 +1209,7 @@ describe("chat-store", () => {
       activeChatId: "a",
     });
 
-    useChatStore.getState().applyPreferences({
-      notificationsEnabled: true,
-      notificationSenderName: true,
-      notificationPreview: true,
-      countMutedChats: false,
-    });
+    useChatStore.getState().applyPreferences(chatPreferences());
     useChatStore.getState().receive({
       type: "message-upsert",
       cause: "new",
@@ -1117,15 +1220,16 @@ describe("chat-store", () => {
       "Chat b",
       "Message m2",
       "b",
+      { silent: false },
     );
 
     // The reader flips both toggles in Settings; nothing reloads.
-    useChatStore.getState().applyPreferences({
-      notificationsEnabled: true,
-      notificationSenderName: false,
-      notificationPreview: false,
-      countMutedChats: false,
-    });
+    useChatStore.getState().applyPreferences(
+      chatPreferences({
+        notificationSenderName: false,
+        notificationPreview: false,
+      }),
+    );
     useChatStore.getState().receive({
       type: "message-upsert",
       cause: "new",
@@ -1136,6 +1240,7 @@ describe("chat-store", () => {
       copy.appName,
       copy.notifyIncomingMessageBody,
       "b",
+      { silent: false },
     );
     Object.defineProperty(document, "hidden", {
       configurable: true,
@@ -1166,24 +1271,20 @@ describe("chat-store", () => {
       ],
     });
 
-    useChatStore.getState().applyPreferences({
-      notificationsEnabled: false,
-      notificationSenderName: true,
-      notificationPreview: true,
-      countMutedChats: true,
-    });
+    useChatStore
+      .getState()
+      .applyPreferences(
+        chatPreferences({ notificationsEnabled: false, countMutedChats: true }),
+      );
 
     const counted = useChatStore.getState();
     // The All badge the sidebar draws, and the keyword badge held in state.
     expect(folderUnread(counted.chats, null, counted.countMutedChats)).toBe(10);
     expect(counted.folders[0]?.unreadCount).toBe(10);
 
-    useChatStore.getState().applyPreferences({
-      notificationsEnabled: false,
-      notificationSenderName: true,
-      notificationPreview: true,
-      countMutedChats: false,
-    });
+    useChatStore
+      .getState()
+      .applyPreferences(chatPreferences({ notificationsEnabled: false }));
 
     const ignored = useChatStore.getState();
     expect(folderUnread(ignored.chats, null, ignored.countMutedChats)).toBe(4);

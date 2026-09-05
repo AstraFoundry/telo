@@ -129,3 +129,93 @@ test("turns a preference into behaviour in the running app", async ({
     )
     .toBe(`${Number(before) + 1}px`);
 });
+
+test("lands a search result on the row it names", async ({ window }) => {
+  await waitForDemoWorkspace(window);
+  await openSettings(window);
+
+  await window.getByLabel("Search settings").fill("wallpaper");
+  // Arrow-then-Enter, without leaving the field: a settings search that makes
+  // you reach for the mouse to accept its answer is only half a search.
+  await window.getByLabel("Search settings").press("Enter");
+
+  await expect(
+    window.getByRole("heading", { level: 2, name: "Appearance" }),
+  ).toBeVisible();
+  await expect(window.locator('[data-settings-focus="true"]')).toContainText(
+    "Chat background",
+  );
+});
+
+test("paints the chosen chat background behind the transcript", async ({
+  window,
+}) => {
+  await waitForDemoWorkspace(window);
+  await openSettings(window);
+  await window.getByRole("button", { name: "Appearance", exact: true }).click();
+
+  await window.getByRole("radio", { name: "Grid" }).click();
+
+  await expect
+    .poll(async () =>
+      window.evaluate(() => document.documentElement.dataset.chatWallpaper),
+    )
+    .toBe("grid");
+
+  // The preference is not a stored word: the transcript resolves it to a real
+  // background image through the shared custom property.
+  await window.getByRole("button", { name: "Back to conversation" }).click();
+  const backdrop = window.locator(".conversation-backdrop").first();
+  await expect(backdrop).toBeVisible();
+  expect(
+    await backdrop.evaluate(
+      (element) => getComputedStyle(element).backgroundImage,
+    ),
+  ).toContain("linear-gradient");
+});
+
+test("persists an auto-download switch across Settings visits", async ({
+  window,
+}) => {
+  await waitForDemoWorkspace(window);
+  await openSettings(window);
+  await window
+    .getByRole("button", { name: "Data and storage", exact: true })
+    .click();
+
+  const files = window.getByRole("switch", { name: "Files" });
+  await expect(files).toHaveAttribute("aria-checked", "false");
+  await files.click();
+  await expect(files).toHaveAttribute("aria-checked", "true");
+
+  await window.getByRole("button", { name: "Back to conversation" }).click();
+  await openSettings(window);
+  await window
+    .getByRole("button", { name: "Data and storage", exact: true })
+    .click();
+
+  await expect(window.getByRole("switch", { name: "Files" })).toHaveAttribute(
+    "aria-checked",
+    "true",
+  );
+});
+
+test("reshapes the notification banner as its switches move", async ({
+  window,
+}) => {
+  await waitForDemoWorkspace(window);
+  await openSettings(window);
+  await window
+    .getByRole("button", { name: "Notifications", exact: true })
+    .click();
+
+  const banner = window.getByRole("img", { name: "Notification preview" });
+  const before = await banner.textContent();
+
+  await window.getByRole("switch", { name: "Show message text" }).click();
+
+  // The banner is assembled by the same rules the chat store applies before
+  // it calls the shell, so a switch has to change it, not just itself.
+  await expect(banner).toContainText("New message");
+  expect(await banner.textContent()).not.toBe(before);
+});

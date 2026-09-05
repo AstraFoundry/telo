@@ -35,7 +35,10 @@ export function ChatSection() {
   return (
     <div className="flex flex-col gap-6">
       <SettingsGroup title={copy.messages}>
-        <SettingsStackedRow label={copy.sendWithEnter}>
+        <SettingsStackedRow
+          label={copy.sendWithEnter}
+          settingId="send-with-enter"
+        >
           <RadioGroup
             orientation="horizontal"
             value={sendWithEnter.value ? "enter" : "cmd-enter"}
@@ -48,7 +51,7 @@ export function ChatSection() {
             />
           </RadioGroup>
         </SettingsStackedRow>
-        <SettingsStackedRow label={copy.timeFormat}>
+        <SettingsStackedRow label={copy.timeFormat} settingId="time-format">
           <RadioGroup
             orientation="horizontal"
             value={timeFormat.value}
@@ -73,6 +76,7 @@ export function ChatSection() {
           description={copy.loopStickersHint}
           labelFor={loopStickersId}
           descriptionId={loopStickersHintId}
+          settingId="loop-stickers"
         >
           <Switch
             id={loopStickersId}
