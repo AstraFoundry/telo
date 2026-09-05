@@ -8,6 +8,7 @@ import type {
   TelegramLoginInput,
 } from "../../../../../contracts/src/ipc";
 import { copy } from "shared/config/copy";
+import { isTechnicalErrorMessage } from "shared/lib/user-facing-error";
 
 interface TelegramState {
   auth: TelegramAuthState | null;
@@ -123,7 +124,7 @@ function safeMessage(error: unknown): string {
   const raw = error instanceof Error ? error.message.trim() : "";
   const mapped = mapTelegramAuthError(raw);
   if (mapped) return mapped;
-  if (!raw || /tdlib|tdjson|\btdl\b/i.test(raw)) return copy.loginFailed;
+  if (!raw || isTechnicalErrorMessage(raw)) return copy.loginFailed;
   return raw;
 }
 

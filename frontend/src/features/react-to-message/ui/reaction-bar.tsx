@@ -2,6 +2,7 @@ import { AnimatePresence, motion, useReducedMotionConfig } from "motion/react";
 
 import type { MessageDto } from "../../../../../contracts/src/ipc";
 import { useChatStore } from "entities/chat";
+import { userFacingErrorDetail } from "shared/lib/user-facing-error";
 import { EASE_OUT } from "shared/ui";
 
 import { ReactionChip } from "./reaction-chip";
@@ -56,7 +57,7 @@ export function ReactionBar({ message, onFailure }: ReactionBarProps) {
               onSelect={() => {
                 void toggleReaction(message.id, reaction.emoji).catch(
                   (error: unknown) => {
-                    onFailure(error instanceof Error ? error.message : "");
+                    onFailure(userFacingErrorDetail(error) ?? "");
                   },
                 );
               }}

@@ -28,6 +28,8 @@ export interface ChatMapContext {
 export interface MessageMapContext extends ChatMapContext {
   readonly senderName: (sender: Td.MessageSender) => string;
   readonly senderId: (sender: Td.MessageSender) => string;
+  /** Chat `last_read_outbox_message_id`; outgoing ids at or below this are read. */
+  readonly lastReadOutboxMessageId?: number;
 }
 
 export function chatIdOf(id: number): string {
@@ -196,8 +198,8 @@ export function mapMessage(
     groupedId: message.media_album_id === "0" ? null : message.media_album_id,
     sentAt: new Date(message.date * 1000).toISOString(),
     outgoing,
-    status: mapMessageStatus(message),
-    replyTo: null,
+    status: mapMessageStatus(message, context.lastReadOutboxMessageId),
+    replyTo: mapReply(message, context),
     editedAt: message.edit_date
       ? new Date(message.edit_date * 1000).toISOString()
       : null,
@@ -205,7 +207,7 @@ export function mapMessage(
       message.sending_state?._ === "messageSendingStatePending"
         ? String(message.sending_state.sending_id)
         : null,
-    forwardedFrom: mapForward(message),
+    forwardedFrom: mapForward(message, context),
     keyboard: mapKeyboard(message.reply_markup),
     reactions: mapReactions(message.interaction_info),
   };
@@ -289,7 +291,7 @@ function mapEntity(entity: Td.textEntity): MessageEntityDto | null {
 function mapMedia(message: Td.message): MessageMediaDto | null {
   const content = message.content;
   if (content._ === "messagePhoto" && content.photo.sizes.length > 0) {
-    const size = content.photo.sizes.at(-1)!;
+    const size = largestPhotoSize(content.photo.sizes);
     return fileMedia({
       id: mediaIdForFile(size.photo.id),
       kind: "photo",
@@ -298,6 +300,7 @@ function mapMedia(message: Td.message): MessageMediaDto | null {
       size: size.photo.size,
       mimeType: "image/jpeg",
       spoiler: content.has_spoiler,
+      blurredThumbnail: blurredThumbnail(content.photo.minithumbnail),
     });
   }
   if (content._ === "messageVideo") {
@@ -311,6 +314,7 @@ function mapMedia(message: Td.message): MessageMediaDto | null {
       height: content.video.height,
       duration: content.video.duration,
       spoiler: content.has_spoiler,
+      blurredThumbnail: blurredThumbnail(content.video.minithumbnail),
     });
   }
   if (content._ === "messageAnimation") {
@@ -324,6 +328,7 @@ function mapMedia(message: Td.message): MessageMediaDto | null {
       height: content.animation.height,
       duration: content.animation.duration,
       spoiler: content.has_spoiler,
+      blurredThumbnail: blurredThumbnail(content.animation.minithumbnail),
     });
   }
   if (content._ === "messageDocument") {
@@ -333,6 +338,7 @@ function mapMedia(message: Td.message): MessageMediaDto | null {
       fileName: content.document.file_name,
       mimeType: content.document.mime_type,
       size: content.document.document.size,
+      blurredThumbnail: blurredThumbnail(content.document.minithumbnail),
     });
   }
   if (content._ === "messageAudio") {
@@ -363,6 +369,7 @@ function mapMedia(message: Td.message): MessageMediaDto | null {
       width: content.video_note.length,
       height: content.video_note.length,
       duration: content.video_note.duration,
+      blurredThumbnail: blurredThumbnail(content.video_note.minithumbnail),
     });
   }
   if (content._ === "messageSticker") {
@@ -400,6 +407,9 @@ function mapMedia(message: Td.message): MessageMediaDto | null {
   }
   if (content._ === "messageText" && content.link_preview) {
     const preview = content.link_preview;
+    const photo = photoFromLinkPreview(preview.type);
+    const size =
+      photo && photo.sizes.length > 0 ? largestPhotoSize(photo.sizes) : null;
     return {
       id: `webpage:${message.chat_id}:${message.id}`,
       kind: "webpage",
@@ -408,7 +418,7 @@ function mapMedia(message: Td.message): MessageMediaDto | null {
       siteName: preview.site_name,
       title: preview.title,
       description: preview.description.text,
-      thumbnailMediaId: null,
+      thumbnailMediaId: size ? mediaIdForFile(size.photo.id) : null,
     };
   }
   return null;
@@ -470,7 +480,7 @@ function mapButton(
   };
 }
 
-function mapReactions(
+export function mapReactions(
   info: Td.messageInteractionInfo | undefined,
 ): ReadonlyArray<MessageReactionDto> | undefined {
   const reactions = info?.reactions?.reactions;
@@ -487,26 +497,42 @@ function mapReactions(
   });
 }
 
-function mapForward(message: Td.message): MessageForwardDto | null {
+function mapForward(
+  message: Td.message,
+  context: MessageMapContext,
+): MessageForwardDto | null {
   const origin = message.forward_info?.origin;
   if (!origin) return null;
   if (origin._ === "messageOriginUser") {
     return {
-      senderName: String(origin.sender_user_id),
+      senderName: context.senderName({
+        _: "messageSenderUser",
+        user_id: origin.sender_user_id,
+      }),
       senderId: String(origin.sender_user_id),
       messageId: null,
     };
   }
   if (origin._ === "messageOriginChat") {
     return {
-      senderName: origin.author_signature || String(origin.sender_chat_id),
+      senderName:
+        origin.author_signature ||
+        context.senderName({
+          _: "messageSenderChat",
+          chat_id: origin.sender_chat_id,
+        }),
       senderId: String(origin.sender_chat_id),
       messageId: null,
     };
   }
   if (origin._ === "messageOriginChannel") {
     return {
-      senderName: origin.author_signature || String(origin.chat_id),
+      senderName:
+        origin.author_signature ||
+        context.senderName({
+          _: "messageSenderChat",
+          chat_id: origin.chat_id,
+        }),
       senderId: String(origin.chat_id),
       messageId: messageIdOf(origin.message_id),
       postAuthor: origin.author_signature || null,
@@ -522,12 +548,74 @@ function mapForward(message: Td.message): MessageForwardDto | null {
   return null;
 }
 
-function mapMessageStatus(message: Td.message): MessageDto["status"] {
+function mapReply(
+  message: Td.message,
+  context: MessageMapContext,
+): MessageReplyToDto | null {
+  const reply = message.reply_to;
+  if (reply?._ !== "messageReplyToMessage" || !reply.message_id) return null;
+  const quote = reply.quote?.text;
+  const contentText = reply.content ? formattedTextOf(reply.content) : null;
+  const body = quote?.text ?? contentText?.text ?? "";
+  const entities = quote
+    ? mapEntities(quote)
+    : contentText
+      ? mapEntities(contentText)
+      : [];
+  const senderName = reply.origin ? mapOriginName(reply.origin, context) : "";
+  return {
+    id: messageIdOf(reply.message_id),
+    senderName,
+    body,
+    entities,
+  };
+}
+
+function mapOriginName(
+  origin: Td.MessageOrigin,
+  context: MessageMapContext,
+): string {
+  if (origin._ === "messageOriginUser") {
+    return context.senderName({
+      _: "messageSenderUser",
+      user_id: origin.sender_user_id,
+    });
+  }
+  if (origin._ === "messageOriginChat") {
+    return (
+      origin.author_signature ||
+      context.senderName({
+        _: "messageSenderChat",
+        chat_id: origin.sender_chat_id,
+      })
+    );
+  }
+  if (origin._ === "messageOriginChannel") {
+    return (
+      origin.author_signature ||
+      context.senderName({
+        _: "messageSenderChat",
+        chat_id: origin.chat_id,
+      })
+    );
+  }
+  if (origin._ === "messageOriginHiddenUser") return origin.sender_name;
+  return "";
+}
+
+function mapMessageStatus(
+  message: Td.message,
+  lastReadOutboxMessageId?: number,
+): MessageDto["status"] {
   if (message.sending_state?._ === "messageSendingStateFailed") return "failed";
   if (message.sending_state?._ === "messageSendingStatePending")
     return "sending";
-  if (message.is_outgoing && message.contains_unread_mention === false) {
-    return "sent";
+  if (
+    message.is_outgoing &&
+    lastReadOutboxMessageId !== undefined &&
+    message.id <= lastReadOutboxMessageId
+  ) {
+    return "read";
   }
   return "sent";
 }
@@ -548,8 +636,55 @@ function formattedTextOf(content: Td.MessageContent): Td.formattedText | null {
   return null;
 }
 
+/**
+ * Chat-list preview. Telegram Desktop shows the caption when one exists, and
+ * otherwise a media kind label (`Photo`, `Sticker`, …).
+ */
 function previewOf(message: Td.message): string {
-  return formattedTextOf(message.content)?.text ?? "";
+  const text = formattedTextOf(message.content)?.text.trim();
+  if (text) return text;
+  const content = message.content;
+  if (content._ === "messagePhoto") return "Photo";
+  if (content._ === "messageVideo") return "Video";
+  if (content._ === "messageAnimation") return "GIF";
+  if (content._ === "messageSticker") {
+    return content.sticker.emoji || "Sticker";
+  }
+  if (content._ === "messageVoiceNote") return "Voice message";
+  if (content._ === "messageVideoNote") return "Video message";
+  if (content._ === "messageAudio") {
+    return content.audio.file_name || "Audio";
+  }
+  if (content._ === "messageDocument") {
+    return content.document.file_name || "File";
+  }
+  return "";
+}
+
+function largestPhotoSize(sizes: ReadonlyArray<Td.photoSize>): Td.photoSize {
+  return sizes.reduce((best, size) =>
+    size.width * size.height > best.width * best.height ? size : best,
+  );
+}
+
+function blurredThumbnail(mini?: Td.minithumbnail): string | null {
+  if (!mini?.data) return null;
+  return `data:image/jpeg;base64,${mini.data}`;
+}
+
+function photoFromLinkPreview(type: Td.LinkPreviewType): Td.photo | undefined {
+  if (type._ === "linkPreviewTypeAlbum") {
+    const first = type.media[0];
+    if (first?._ === "linkPreviewAlbumMediaPhoto") return first.photo;
+    return undefined;
+  }
+  if ("photo" in type) {
+    const photo = type.photo;
+    if (photo && typeof photo === "object" && photo._ === "photo") {
+      return photo;
+    }
+  }
+  return undefined;
 }
 
 function draftText(draft: Td.draftMessage | undefined): string | null {
