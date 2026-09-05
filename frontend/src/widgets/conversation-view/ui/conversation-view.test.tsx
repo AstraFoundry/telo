@@ -526,18 +526,19 @@ describe("ConversationView", () => {
     expect(screen.getByText(copy.online)).toBeTruthy();
   });
 
-  it("shows the secret-chat lock line in the header", async () => {
+  it("shows a waiting line while a secret chat is still pending", async () => {
     await renderView({
       chats: [
         chat({
           id: "chat-1",
           title: "Mina",
           kind: "secret",
+          secretState: "pending",
         }),
       ],
     });
 
-    expect(screen.getByText(copy.secretChatDeviceLocal)).toBeTruthy();
+    expect(screen.getByText(copy.secretChatWaiting)).toBeTruthy();
   });
 
   it("pins and unpins the active chat from the header", async () => {

@@ -56,7 +56,6 @@ export default defineConfig({
         "backend/src/application/**/*.ts",
         "backend/src/infrastructure/telegram/demo-telegram-repository.ts",
         "backend/src/infrastructure/telegram/file-telegram-connection-profile-repository.ts",
-        "backend/src/infrastructure/telegram/file-telegram-session-repository.ts",
         "backend/src/infrastructure/telegram/file-telegram-account-database.ts",
         "backend/src/infrastructure/telegram/tdlib-json-path.ts",
         "backend/src/infrastructure/telegram/tdlib-client.ts",

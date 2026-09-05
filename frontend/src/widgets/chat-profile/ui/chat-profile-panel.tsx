@@ -8,7 +8,11 @@ import type {
   PeerProfileDto,
   TimeFormatPreference,
 } from "../../../../../contracts/src/ipc";
-import { useChatProfileStore, useChatStore } from "entities/chat";
+import {
+  secretChatStatus,
+  useChatProfileStore,
+  useChatStore,
+} from "entities/chat";
 import { useTimeFormat } from "entities/preferences";
 import { copy } from "shared/config/copy";
 import {
@@ -74,7 +78,7 @@ function isFileMedia(media: MessageDto["media"]): media is MessageFileMediaDto {
 // The header's subtitle line reports only what ChatDto knows: presence for
 // direct chats, otherwise the conversation kind.
 function subtitle(chat: ChatDto): string | null {
-  if (chat.kind === "secret") return copy.secretChatDeviceLocal;
+  if (chat.kind === "secret") return secretChatStatus(chat.secretState);
   if (chat.presence === "online") return copy.online;
   if (chat.kind === "group") return copy.chatKindGroup;
   if (chat.kind === "channel") return copy.chatKindChannel;

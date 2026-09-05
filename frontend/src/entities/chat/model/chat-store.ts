@@ -558,7 +558,7 @@ function withKeywordUnread(
 
 // Archive membership is the chat's folderId, and the Archive folder entry
 // exists only while it holds chats — the rule the demo snapshot and the
-// teleproto folder mapping share. A local membership change therefore
+// TDLib folder mapping share. A local membership change therefore
 // rebuilds that entry alongside the chat patch: its position is preserved
 // when it was already listed, otherwise it is appended the way the server
 // snapshot lists it after the custom folders.
