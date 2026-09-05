@@ -13,6 +13,7 @@ import {
   StickerPreviewGesture,
 } from "features/send-message";
 import { copy } from "shared/config/copy";
+import { userFacingErrorDetail } from "shared/lib/user-facing-error";
 import {
   Button,
   CenterMorphModal,
@@ -123,7 +124,7 @@ export function StickerSetDialog({
       },
       (error: unknown) => {
         if (cancelled) return;
-        setLoadError(error instanceof Error ? error.message : String(error));
+        setLoadError(userFacingErrorDetail(error) ?? copy.failed);
       },
     );
     return () => {
@@ -138,7 +139,7 @@ export function StickerSetDialog({
       await setStickerSetInstalled(set, !set.installed);
       setSet({ ...set, installed: !set.installed });
     } catch (error) {
-      setLoadError(error instanceof Error ? error.message : String(error));
+      setLoadError(userFacingErrorDetail(error) ?? copy.failed);
     } finally {
       setBusy(false);
     }
@@ -155,7 +156,7 @@ export function StickerSetDialog({
     try {
       await setStickerFavorite(sticker, favorite);
     } catch (error) {
-      setLoadError(error instanceof Error ? error.message : String(error));
+      setLoadError(userFacingErrorDetail(error) ?? copy.failed);
     } finally {
       setBusy(false);
     }
@@ -179,7 +180,7 @@ export function StickerSetDialog({
           </h2>
           {loadError ? (
             <p role="alert" className="px-2.5 py-6 text-sm text-destructive">
-              {copy.failed}: {loadError}
+              {loadError}
             </p>
           ) : set === null ? (
             /* The sheet is about to be a wall of same-size cells, so the

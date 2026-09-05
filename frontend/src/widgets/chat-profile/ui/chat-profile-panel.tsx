@@ -15,6 +15,7 @@ import {
 } from "entities/chat";
 import { useTimeFormat } from "entities/preferences";
 import { copy } from "shared/config/copy";
+import { userFacingErrorDetail } from "shared/lib/user-facing-error";
 import {
   Avatar,
   Button,
@@ -421,7 +422,7 @@ export function ChatProfilePanel() {
         if (cancelled) return;
         setLoaded((state) => ({
           ...state,
-          loadError: error instanceof Error ? error.message : String(error),
+          loadError: userFacingErrorDetail(error) ?? copy.chatInfoFailed,
         }));
       });
     return () => {
@@ -453,7 +454,7 @@ export function ChatProfilePanel() {
         setPeerCard({
           key: navKey,
           profile: null,
-          error: error instanceof Error ? error.message : String(error),
+          error: userFacingErrorDetail(error) ?? copy.chatInfoFailed,
         });
       });
     return () => {
@@ -523,7 +524,7 @@ export function ChatProfilePanel() {
       setViewerError(null);
       await action();
     } catch (error) {
-      setViewerError({ detail: error instanceof Error ? error.message : "" });
+      setViewerError({ detail: userFacingErrorDetail(error) ?? "" });
     }
   };
 
@@ -628,13 +629,13 @@ export function ChatProfilePanel() {
       <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
         {loadError ? (
           <p role="alert" className="px-4 py-3 text-sm text-destructive">
-            {copy.failed}: {loadError}
+            {loadError}
           </p>
         ) : null}
         {!chat ? (
           !peerId ? null : peerCard.error ? (
             <p role="alert" className="px-4 py-3 text-sm text-destructive">
-              {copy.failed}: {peerCard.error}
+              {peerCard.error}
             </p>
           ) : peerCard.profile === null ? (
             <ProfileSkeleton />

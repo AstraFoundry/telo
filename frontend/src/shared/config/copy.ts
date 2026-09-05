@@ -441,4 +441,12 @@ export const copy = {
   loginCodeExpired: "That code has expired. Request a new one.",
   loginPasswordInvalid: "That password is not correct.",
   loginFlood: "Too many attempts. Try again later.",
+  photo: "Photo",
+  video: "Video",
+  gif: "GIF",
+  voiceMessage: "Voice message",
+  videoMessage: "Video message",
+  audio: "Audio",
+  file: "File",
+  chatInfoFailed: "Couldn't load chat info.",
 } as const;

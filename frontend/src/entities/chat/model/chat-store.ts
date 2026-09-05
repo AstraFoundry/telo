@@ -28,6 +28,7 @@ import {
   MESSAGE_ACTION_THREAD_ID,
 } from "../../../../../contracts/src/ipc";
 import { copy } from "shared/config/copy";
+import { isTechnicalErrorMessage } from "shared/lib/user-facing-error";
 
 let selectionRequest = 0;
 let globalSearchRequest = 0;
@@ -2205,7 +2206,11 @@ function compareTelegramIds(left: string, right: string): number {
 // transport prose belong in the main-process log, not on those surfaces.
 function errorMessage(error: unknown): string | null {
   const message = error instanceof Error ? error.message : String(error);
-  if (isInternalExceptionMessage(message) || isTransportFailureMessage(message))
+  if (
+    isTechnicalErrorMessage(message) ||
+    isInternalExceptionMessage(message) ||
+    isTransportFailureMessage(message)
+  )
     return null;
   return message;
 }

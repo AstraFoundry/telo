@@ -584,4 +584,89 @@ describe("TdlibTelegramRepository", () => {
     expect(created.kind).toBe("secret");
     expect(created.secretState).toBe("pending");
   });
+
+  it("hydrates a same-chat reply through getRepliedMessage", async () => {
+    const { repository, bridge } = setup();
+    bridge.handlers.set("getChatHistory", () => ({
+      _: "messages",
+      total_count: 1,
+      messages: [
+        {
+          ...tdMessage(4),
+          is_outgoing: false,
+          sender_id: { _: "messageSenderUser", user_id: 11 },
+          reply_to: {
+            _: "messageReplyToMessage",
+            chat_id: 11,
+            message_id: 2,
+          },
+        },
+      ],
+    }));
+    bridge.handlers.set("getRepliedMessage", () => ({
+      ...tdMessage(2),
+      is_outgoing: false,
+      sender_id: { _: "messageSenderUser", user_id: 11 },
+      content: {
+        _: "messageText",
+        text: { _: "formattedText", text: "original", entities: [] },
+      },
+    }));
+    await repository.hydrate();
+    const page = await repository.listMessagePage("11", { limit: 50 });
+    expect(page.items[0]?.replyTo).toMatchObject({
+      id: "2",
+      senderName: "Ada Byron",
+      body: "original",
+    });
+  });
+
+  it("emits outbox read receipts from updateChatReadOutbox", async () => {
+    const { repository, events, bridge } = setup();
+    await repository.hydrate();
+    events.length = 0;
+    bridge.emit({
+      _: "updateChatReadOutbox",
+      chat_id: 11,
+      last_read_outbox_message_id: 8,
+    } as Td.Update);
+    expect(events).toContainEqual({
+      type: "message-read",
+      chatId: "11",
+      maxMessageId: "8",
+      direction: "outbox",
+    });
+  });
+
+  it("lists basic-group members via getBasicGroupFullInfo", async () => {
+    const { repository, bridge } = setup();
+    bridge.handlers.set("getChat", () =>
+      tdChat(-5, {
+        type: { _: "chatTypeBasicGroup", basic_group_id: 5 },
+        title: "Design",
+      }),
+    );
+    bridge.handlers.set("getChats", () => ({
+      _: "chats",
+      chat_ids: [-5],
+      total_count: 1,
+    }));
+    bridge.handlers.set("getBasicGroupFullInfo", () => ({
+      _: "basicGroupFullInfo",
+      members: [
+        {
+          member_id: { _: "messageSenderUser", user_id: 11 },
+        },
+      ],
+    }));
+    await repository.hydrate();
+    const members = await repository.listChatMembers("-5");
+    expect(members).toEqual([
+      expect.objectContaining({
+        id: "11",
+        displayName: "Ada Byron",
+        username: "ada",
+      }),
+    ]);
+  });
 });

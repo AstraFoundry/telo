@@ -15,6 +15,7 @@ import type {
 } from "../../../../../contracts/src/ipc";
 import { useChatStore } from "entities/chat";
 import { copy } from "shared/config/copy";
+import { userFacingErrorDetail } from "shared/lib/user-facing-error";
 import { Button, Input, Skeleton, SkeletonGroup, Sticker } from "shared/ui";
 
 import { StickerGridCell } from "./sticker-grid-cell";
@@ -284,8 +285,7 @@ export function StickerPanel({ active, onPick }: StickerPanelProps) {
         if (cancelled) return;
         setSetLoadErrors((current) => ({
           ...current,
-          [activeSetSummary.id]:
-            error instanceof Error ? error.message : String(error),
+          [activeSetSummary.id]: userFacingErrorDetail(error) ?? copy.failed,
         }));
       },
     );
@@ -321,7 +321,7 @@ export function StickerPanel({ active, onPick }: StickerPanelProps) {
     try {
       await action();
     } catch (error) {
-      setActionError(error instanceof Error ? error.message : String(error));
+      setActionError(userFacingErrorDetail(error) ?? copy.failed);
     } finally {
       setBusy(false);
     }
@@ -361,9 +361,7 @@ export function StickerPanel({ active, onPick }: StickerPanelProps) {
         .catch((error: unknown) => {
           if (requestId !== searchRequest.current) return;
           setSearchResults([]);
-          setActionError(
-            error instanceof Error ? error.message : String(error),
-          );
+          setActionError(userFacingErrorDetail(error) ?? copy.failed);
         })
         .finally(() => {
           if (requestId === searchRequest.current) setSearching(false);
@@ -514,7 +512,7 @@ export function StickerPanel({ active, onPick }: StickerPanelProps) {
       )}
       {actionError ? (
         <p role="alert" className="px-1 text-xs text-destructive">
-          {copy.failed}: {actionError}
+          {actionError}
         </p>
       ) : null}
       <div className="flex items-center gap-0.5 overflow-x-auto border-t border-border pt-1.5">

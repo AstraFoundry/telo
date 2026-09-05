@@ -63,6 +63,7 @@ import { MessageComposer } from "features/send-message";
 import { AgentToggle } from "features/toggle-agent";
 import { ChatProfileToggle } from "features/toggle-chat-profile";
 import { copy } from "shared/config/copy";
+import { userFacingErrorDetail } from "shared/lib/user-facing-error";
 import { useEdgeSentinel } from "shared/lib/use-edge-sentinel";
 import { useHotkeys } from "shared/lib/use-hotkeys";
 import { safeLink } from "shared/lib/safe-link";
@@ -465,12 +466,8 @@ function BotKeyboard({ message }: { message: MessageDto }) {
         const target = safeLink(answer.url);
         if (target) window.open(target, "_blank", "noreferrer");
       }
-    } catch (error) {
-      showNotice(
-        error instanceof Error
-          ? `${copy.botButtonFailed}: ${error.message}`
-          : copy.botButtonFailed,
-      );
+    } catch {
+      showNotice(copy.botButtonFailed);
     } finally {
       setPendingButtonId(null);
     }
@@ -745,7 +742,7 @@ function ConversationMessage({
     } catch (error) {
       setActionError({
         title: copy.mediaActionFailed,
-        detail: error instanceof Error ? error.message : "",
+        detail: userFacingErrorDetail(error) ?? "",
       });
     }
   };
@@ -1313,7 +1310,7 @@ function ConversationMediaViewer({
       await action();
     } catch (error) {
       setActionError({
-        detail: error instanceof Error ? error.message : "",
+        detail: userFacingErrorDetail(error) ?? "",
       });
     }
   };
