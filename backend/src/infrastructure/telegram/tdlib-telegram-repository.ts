@@ -54,6 +54,7 @@ import {
   mapConnectionState,
   mapFolders,
   mapMessage,
+  mapReactions,
   mediaIdForFile,
   messageIdOf,
   type MessageMapContext,
@@ -204,27 +205,50 @@ export class TdlibTelegramRepository implements TelegramRepository {
     chatId: string,
     input: MessagePageInput,
   ): Promise<MessagePageDto> {
-    const found = await this.client.invoke<Td.foundChatMessages>({
-      _: "searchChatMessages",
-      chat_id: Number(chatId),
-      query: "",
-      from_message_id: input.beforeMessageId
-        ? Number(input.beforeMessageId)
-        : 0,
-      offset: 0,
-      limit: input.limit ?? 50,
-      filter: { _: "searchMessagesFilterPhotoAndVideo" },
-    });
-    const items = await Promise.all(
-      [...found.messages].reverse().map((message) => this.toMessage(message)),
+    const limit = input.limit ?? 50;
+    const fromMessageId = input.beforeMessageId
+      ? Number(input.beforeMessageId)
+      : 0;
+    const [visual, files] = await Promise.all([
+      this.client.invoke<Td.foundChatMessages>({
+        _: "searchChatMessages",
+        chat_id: Number(chatId),
+        query: "",
+        from_message_id: fromMessageId,
+        offset: 0,
+        limit,
+        filter: { _: "searchMessagesFilterPhotoAndVideo" },
+      }),
+      this.client.invoke<Td.foundChatMessages>({
+        _: "searchChatMessages",
+        chat_id: Number(chatId),
+        query: "",
+        from_message_id: fromMessageId,
+        offset: 0,
+        limit,
+        filter: { _: "searchMessagesFilterDocument" },
+      }),
+    ]);
+    const merged = new Map<number, Td.message>();
+    for (const message of [
+      ...(visual.messages ?? []),
+      ...(files.messages ?? []),
+    ]) {
+      merged.set(message.id, message);
+    }
+    const ordered = [...merged.values()].sort(
+      (left, right) => left.id - right.id,
     );
-    const oldest = found.messages.at(-1);
+    const items = await Promise.all(
+      ordered.map((message) => this.toMessage(message)),
+    );
+    const oldest = ordered[0];
+    const more =
+      (visual.messages?.length ?? 0) >= limit ||
+      (files.messages?.length ?? 0) >= limit;
     return {
       items,
-      nextCursor:
-        found.messages.length >= (input.limit ?? 50) && oldest
-          ? messageIdOf(oldest.id)
-          : null,
+      nextCursor: more && oldest ? messageIdOf(oldest.id) : null,
     };
   }
 
@@ -246,40 +270,26 @@ export class TdlibTelegramRepository implements TelegramRepository {
   async listChatMembers(chatId: string): Promise<ReadonlyArray<ChatMemberDto>> {
     const chat = this.chats.get(chatId);
     if (!chat) return [];
-    if (
-      chat.type._ !== "chatTypeSupergroup" &&
-      chat.type._ !== "chatTypeBasicGroup"
-    ) {
-      return [];
+    if (chat.type._ === "chatTypeSupergroup") {
+      if (chat.type.is_channel) return [];
+      const members = await this.client.invoke<Td.chatMembers>({
+        _: "getSupergroupMembers",
+        supergroup_id: chat.type.supergroup_id,
+        offset: 0,
+        limit: 50,
+      });
+      if (members._ !== "chatMembers") return [];
+      return this.toChatMembers(members.members);
     }
-    if (chat.type._ === "chatTypeSupergroup" && chat.type.is_channel) return [];
-    const supergroupId =
-      chat.type._ === "chatTypeSupergroup" ? chat.type.supergroup_id : null;
-    if (!supergroupId) return [];
-    const members = await this.client.invoke<Td.chatMembers>({
-      _: "getSupergroupMembers",
-      supergroup_id: supergroupId,
-      offset: 0,
-      limit: 50,
-    });
-    return members.members.flatMap((member) => {
-      if (member.member_id._ !== "messageSenderUser") return [];
-      const user = this.users.get(member.member_id.user_id);
-      const id = String(member.member_id.user_id);
-      if (user) this.scheduleUserAvatar(user);
-      const name = user
-        ? [user.first_name, user.last_name].filter(Boolean).join(" ")
-        : id;
-      return [
-        {
-          id,
-          displayName: name,
-          username: user?.usernames?.active_usernames[0] ?? null,
-          avatarDataUrl: this.avatarUrls.get(id) ?? null,
-          avatarPending: this.avatarIsPending(id),
-        },
-      ];
-    });
+    if (chat.type._ === "chatTypeBasicGroup") {
+      const full = await this.client.invoke<Td.basicGroupFullInfo>({
+        _: "getBasicGroupFullInfo",
+        basic_group_id: chat.type.basic_group_id,
+      });
+      if (full._ !== "basicGroupFullInfo") return [];
+      return this.toChatMembers(full.members);
+    }
+    return [];
   }
 
   async getPeerProfile(peerId: string): Promise<PeerProfileDto> {
@@ -963,6 +973,10 @@ export class TdlibTelegramRepository implements TelegramRepository {
   }
 
   private async hydratePrivateUser(userId: number): Promise<void> {
+    await this.hydrateUser(userId);
+  }
+
+  private async hydrateUser(userId: number): Promise<void> {
     if (this.users.has(userId)) {
       this.scheduleUserAvatar(this.users.get(userId)!);
       return;
@@ -980,6 +994,36 @@ export class TdlibTelegramRepository implements TelegramRepository {
     } catch (error) {
       console.error("TDLib getUser failed", { userId, error });
     }
+  }
+
+  private async hydrateSender(sender: Td.MessageSender): Promise<void> {
+    if (sender._ === "messageSenderUser") {
+      await this.hydrateUser(sender.user_id);
+    }
+  }
+
+  private async toChatMembers(
+    members: ReadonlyArray<Td.chatMember>,
+  ): Promise<ReadonlyArray<ChatMemberDto>> {
+    const items: ChatMemberDto[] = [];
+    for (const member of members) {
+      if (member.member_id._ !== "messageSenderUser") continue;
+      await this.hydrateUser(member.member_id.user_id);
+      const user = this.users.get(member.member_id.user_id);
+      const id = String(member.member_id.user_id);
+      if (user) this.scheduleUserAvatar(user);
+      const name = user
+        ? [user.first_name, user.last_name].filter(Boolean).join(" ")
+        : id;
+      items.push({
+        id,
+        displayName: name,
+        username: user?.usernames?.active_usernames[0] ?? null,
+        avatarDataUrl: this.avatarUrls.get(id) ?? null,
+        avatarPending: this.avatarIsPending(id),
+      });
+    }
+    return items;
   }
 
   private async hydrateSecretChat(secretChatId: number): Promise<void> {
@@ -1098,6 +1142,18 @@ export class TdlibTelegramRepository implements TelegramRepository {
       });
       return;
     }
+    if (update._ === "updateChatReadOutbox") {
+      const chat = this.chats.get(chatIdOf(update.chat_id));
+      if (!chat) return;
+      chat.last_read_outbox_message_id = update.last_read_outbox_message_id;
+      this.emit({
+        type: "message-read",
+        chatId: chatIdOf(update.chat_id),
+        maxMessageId: messageIdOf(update.last_read_outbox_message_id),
+        direction: "outbox",
+      });
+      return;
+    }
     if (update._ === "updateChatDraftMessage") {
       const chat = this.chats.get(chatIdOf(update.chat_id));
       if (!chat) return;
@@ -1128,6 +1184,18 @@ export class TdlibTelegramRepository implements TelegramRepository {
       });
       return;
     }
+    if (update._ === "updateMessageSendFailed") {
+      const dto = await this.toMessage(update.message);
+      const clientId = this.clientIds.get(String(update.old_message_id));
+      this.emit({
+        type: "message-upsert",
+        cause: "new",
+        message: clientId
+          ? { ...dto, clientId, status: "failed" }
+          : { ...dto, status: "failed" },
+      });
+      return;
+    }
     if (update._ === "updateMessageContent") {
       const message = await this.client
         .invoke<Td.message>({
@@ -1149,6 +1217,15 @@ export class TdlibTelegramRepository implements TelegramRepository {
         type: "message-delete",
         chatId: chatIdOf(update.chat_id),
         messageIds: update.message_ids.map(messageIdOf),
+      });
+      return;
+    }
+    if (update._ === "updateMessageInteractionInfo") {
+      this.emit({
+        type: "message-reactions",
+        chatId: chatIdOf(update.chat_id),
+        messageId: messageIdOf(update.message_id),
+        reactions: mapReactions(update.interaction_info) ?? [],
       });
       return;
     }
@@ -1305,6 +1382,13 @@ export class TdlibTelegramRepository implements TelegramRepository {
   }
 
   private async toMessage(message: Td.message): Promise<MessageDto> {
+    this.indexKeyboard(message);
+    await this.hydrateSender(message.sender_id);
+    const origin = message.forward_info?.origin;
+    if (origin?._ === "messageOriginUser") {
+      await this.hydrateUser(origin.sender_user_id);
+    }
+    const chat = this.chats.get(chatIdOf(message.chat_id));
     const context: MessageMapContext = {
       selfUserId: this.selfUserId,
       avatarUrl: (peerId) => this.avatarUrls.get(peerId) ?? null,
@@ -1314,23 +1398,63 @@ export class TdlibTelegramRepository implements TelegramRepository {
         sender._ === "messageSenderUser"
           ? String(sender.user_id)
           : String(sender.chat_id),
+      lastReadOutboxMessageId: chat?.last_read_outbox_message_id,
     };
     const dto = mapMessage(message, context);
-    this.indexKeyboard(dto, message);
-    if (dto.media?.kind === "sticker" && dto.media.sticker) {
-      const fileId = fileIdFromMediaId(dto.media.id);
+    const withReply = await this.hydrateReply(dto, message);
+    if (withReply.media?.kind === "sticker" && withReply.media.sticker) {
+      const fileId = fileIdFromMediaId(withReply.media.id);
       if (fileId !== null) {
         const outlinePath = await this.stickerOutlinePath(fileId);
         return {
-          ...dto,
+          ...withReply,
           media: {
-            ...dto.media,
-            sticker: { ...dto.media.sticker, outlinePath },
+            ...withReply.media,
+            sticker: { ...withReply.media.sticker, outlinePath },
           },
         };
       }
     }
-    return dto;
+    return withReply;
+  }
+
+  private async hydrateReply(
+    dto: MessageDto,
+    message: Td.message,
+  ): Promise<MessageDto> {
+    if (!dto.replyTo || (dto.replyTo.senderName && dto.replyTo.body)) {
+      return dto;
+    }
+    const replied = await this.client
+      .invoke<Td.message>({
+        _: "getRepliedMessage",
+        chat_id: message.chat_id,
+        message_id: message.id,
+      })
+      .catch(() => null);
+    if (!replied || replied._ !== "message") return dto;
+    await this.hydrateSender(replied.sender_id);
+    const mapped = mapMessage(replied, {
+      selfUserId: this.selfUserId,
+      avatarUrl: () => null,
+      avatarPending: () => false,
+      senderName: (sender) => this.senderName(sender),
+      senderId: (sender) =>
+        sender._ === "messageSenderUser"
+          ? String(sender.user_id)
+          : String(sender.chat_id),
+    });
+    return {
+      ...dto,
+      replyTo: {
+        id: mapped.id,
+        senderName: mapped.senderName,
+        body: mapped.body || dto.replyTo.body,
+        entities: mapped.entities.length
+          ? mapped.entities
+          : dto.replyTo.entities,
+      },
+    };
   }
 
   private senderName(sender: Td.MessageSender): string {
@@ -1345,14 +1469,14 @@ export class TdlibTelegramRepository implements TelegramRepository {
     );
   }
 
-  private indexKeyboard(dto: MessageDto, message: Td.message): void {
+  private indexKeyboard(message: Td.message): void {
     const markup = message.reply_markup;
     if (!markup || markup._ !== "replyMarkupInlineKeyboard") return;
     markup.rows.forEach((row, rowIndex) => {
       row.forEach((button, columnIndex) => {
         if (button.type._ !== "inlineKeyboardButtonTypeCallback") return;
         this.callbackData.set(
-          `${dto.chatId}:${dto.id}:${rowIndex}:${columnIndex}`,
+          `${chatIdOf(message.chat_id)}:${messageIdOf(message.id)}:${rowIndex}:${columnIndex}`,
           button.type.data,
         );
       });

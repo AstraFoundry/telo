@@ -305,4 +305,143 @@ describe("tdlib mappers", () => {
       },
     });
   });
+
+  it("maps reply quotes, stripped thumbnails, webpage photos, and read receipts", () => {
+    const reply = mapMessage(
+      {
+        _: "message",
+        id: 3,
+        chat_id: 11,
+        is_outgoing: false,
+        date: 1,
+        edit_date: 0,
+        media_album_id: "0",
+        reply_to: {
+          _: "messageReplyToMessage",
+          chat_id: 11,
+          message_id: 2,
+          quote: {
+            text: { _: "formattedText", text: "quoted", entities: [] },
+          },
+        },
+        content: {
+          _: "messageText",
+          text: { _: "formattedText", text: "ok", entities: [] },
+        },
+      } as unknown as Td.message,
+      {
+        ...emptyContext,
+        senderName: () => "Mina",
+        senderId: () => "7",
+      },
+    );
+    expect(reply.replyTo).toEqual({
+      id: "2",
+      senderName: "",
+      body: "quoted",
+      entities: [],
+    });
+
+    const photo = mapMessage(
+      {
+        _: "message",
+        id: 4,
+        chat_id: 11,
+        is_outgoing: true,
+        date: 1,
+        edit_date: 0,
+        media_album_id: "0",
+        content: {
+          _: "messagePhoto",
+          photo: {
+            minithumbnail: {
+              _: "minithumbnail",
+              data: "abcd",
+              width: 8,
+              height: 8,
+            },
+            sizes: [{ width: 10, height: 10, photo: { id: 8, size: 12 } }],
+          },
+          has_spoiler: false,
+        },
+      } as unknown as Td.message,
+      { ...emptyContext, senderName: () => "", senderId: () => "" },
+    );
+    expect(photo.media).toMatchObject({
+      kind: "photo",
+      blurredThumbnail: "data:image/jpeg;base64,abcd",
+    });
+
+    const webpage = mapMessage(
+      {
+        _: "message",
+        id: 5,
+        chat_id: 11,
+        is_outgoing: false,
+        date: 1,
+        edit_date: 0,
+        media_album_id: "0",
+        content: {
+          _: "messageText",
+          text: { _: "formattedText", text: "https://telo.dev", entities: [] },
+          link_preview: {
+            url: "https://telo.dev",
+            display_url: "telo.dev",
+            site_name: "Telo",
+            title: "Telo",
+            description: { _: "formattedText", text: "Client", entities: [] },
+            type: {
+              _: "linkPreviewTypeArticle",
+              photo: {
+                _: "photo",
+                sizes: [{ width: 20, height: 10, photo: { id: 9, size: 4 } }],
+              },
+            },
+          },
+        },
+      } as unknown as Td.message,
+      { ...emptyContext, senderName: () => "Mina", senderId: () => "7" },
+    );
+    expect(webpage.media).toMatchObject({
+      kind: "webpage",
+      thumbnailMediaId: "tdfile:9",
+    });
+
+    const read = mapMessage(
+      {
+        _: "message",
+        id: 6,
+        chat_id: 11,
+        is_outgoing: true,
+        date: 1,
+        edit_date: 0,
+        media_album_id: "0",
+        content: {
+          _: "messageText",
+          text: { _: "formattedText", text: "hi", entities: [] },
+        },
+      } as unknown as Td.message,
+      {
+        ...emptyContext,
+        senderName: () => "",
+        senderId: () => "",
+        lastReadOutboxMessageId: 6,
+      },
+    );
+    expect(read.status).toBe("read");
+  });
+
+  it("uses Telegram Desktop media labels for caption-less chat previews", () => {
+    const mapped = mapChat(
+      chat({
+        last_message: {
+          _: "message",
+          date: 1700000000,
+          content: { _: "messagePhoto", photo: { sizes: [] } },
+        },
+      }),
+      emptyContext,
+    );
+    expect(mapped.preview).toBe("Photo");
+  });
 });

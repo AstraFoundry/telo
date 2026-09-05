@@ -560,8 +560,7 @@ export type TelegramWorkspaceEvent =
   | {
       /**
        * A message's reaction buckets changed, either from this account's own
-       * `sendReaction` or from someone else reacting
-       * (`Api.UpdateMessageReactions`).
+       * `setMessageReaction` or from `updateMessageInteractionInfo`.
        */
       readonly type: "message-reactions";
       readonly chatId: string;

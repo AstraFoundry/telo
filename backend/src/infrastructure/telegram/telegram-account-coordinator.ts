@@ -101,12 +101,10 @@ export interface TelegramAccountCoordinatorOptions {
 const SCRATCH_ACCOUNT_ID = "scratch";
 
 /**
- * Multi-account façade over the per-account `TelegramClientCoordinator`s,
- * tdesktop-style: every signed-in account keeps its own session, profile,
- * dialog snapshot, and media cache; exactly one — the active one — is
- * connected, and every workspace method and event addresses it alone. The
- * public surface matches what `TelegramClientCoordinator` exposed to the
- * container and IPC layer, so callers needed no per-account awareness.
+ * Multi-account façade over the per-account `TelegramAccountClient`s,
+ * tdesktop-style: every signed-in account keeps its own TDLib database, profile,
+ * and media cache; exactly one — the active one — is connected, and every
+ * workspace method and event addresses it alone.
  */
 export class TelegramAccountCoordinator implements TelegramRepository {
   private readonly listeners = new Set<

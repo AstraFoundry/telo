@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { MessageDto } from "../../../../../contracts/src/ipc";
 import { useChatStore } from "entities/chat";
 import { copy } from "shared/config/copy";
+import { userFacingErrorDetail } from "shared/lib/user-facing-error";
 import {
   Button,
   LoadIndicator,
@@ -88,7 +89,7 @@ export function ReactionPicker({ message, onFailure }: ReactionPickerProps) {
                   setOpen(false);
                   void toggleReaction(message.id, emoji).catch(
                     (error: unknown) => {
-                      onFailure(error instanceof Error ? error.message : "");
+                      onFailure(userFacingErrorDetail(error) ?? "");
                     },
                   );
                 }}

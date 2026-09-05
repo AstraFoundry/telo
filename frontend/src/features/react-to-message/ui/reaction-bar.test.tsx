@@ -130,7 +130,7 @@ describe("ReactionBar", () => {
     });
 
     await waitFor(() => {
-      expect(onFailure).toHaveBeenCalledWith("REACTION_INVALID");
+      expect(onFailure).toHaveBeenCalledWith("");
     });
   });
 });
