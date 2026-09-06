@@ -36,6 +36,16 @@ export function chatIdOf(id: number): string {
   return String(id);
 }
 
+/**
+ * JPEG data URL for a TDLib minithumbnail. Profile and chat photos include
+ * this even on min objects, so the renderer can paint a disc before
+ * `downloadFile` finishes.
+ */
+export function minithumbnailDataUrl(mini?: Td.minithumbnail): string | null {
+  if (!mini?.data) return null;
+  return `data:image/jpeg;base64,${mini.data}`;
+}
+
 export function messageIdOf(id: number): string {
   return String(id);
 }
@@ -668,8 +678,7 @@ function largestPhotoSize(sizes: ReadonlyArray<Td.photoSize>): Td.photoSize {
 }
 
 function blurredThumbnail(mini?: Td.minithumbnail): string | null {
-  if (!mini?.data) return null;
-  return `data:image/jpeg;base64,${mini.data}`;
+  return minithumbnailDataUrl(mini);
 }
 
 function photoFromLinkPreview(type: Td.LinkPreviewType): Td.photo | undefined {

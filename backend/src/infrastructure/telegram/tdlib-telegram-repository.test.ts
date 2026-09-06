@@ -463,6 +463,156 @@ describe("TdlibTelegramRepository", () => {
     expect(me.avatarPending).toBe(false);
   });
 
+  it("paints a profile minithumbnail before the file download settles", async () => {
+    const { repository, events, bridge } = setup();
+    bridge.handlers.set("getChat", () => tdChat(11, { photo: null }));
+    bridge.handlers.set("getUser", () =>
+      tdUser(11, {
+        profile_photo: {
+          _: "profilePhoto",
+          id: "5",
+          minithumbnail: {
+            _: "minithumbnail",
+            width: 8,
+            height: 8,
+            data: "YQ==",
+          },
+          small: {
+            id: 70,
+            size: 4,
+            local: {
+              is_downloading_completed: false,
+              is_downloading_active: false,
+              path: "",
+              downloaded_size: 0,
+            },
+          },
+        },
+      }),
+    );
+    bridge.handlers.set("downloadFile", () => ({
+      id: 70,
+      size: 4,
+      local: {
+        is_downloading_completed: false,
+        is_downloading_active: true,
+        path: "",
+        downloaded_size: 0,
+      },
+    }));
+    await repository.hydrate();
+    const page = await repository.listChatPage({ limit: 50 });
+    expect(page.items[0]).toMatchObject({
+      id: "11",
+      avatarPending: false,
+      avatarDataUrl: "data:image/jpeg;base64,YQ==",
+    });
+    expect(
+      events.some(
+        (event) =>
+          event.type === "chat-avatar" &&
+          event.chatId === "11" &&
+          event.avatarDataUrl === "data:image/jpeg;base64,YQ==",
+      ),
+    ).toBe(true);
+    expect(
+      bridge.invokes.some(
+        (item) =>
+          (item as { _: string; file_id?: number })._ === "downloadFile" &&
+          (item as { file_id?: number }).file_id === 70,
+      ),
+    ).toBe(true);
+  });
+
+  it("returns the current user minithumbnail when downloadFile is still running", async () => {
+    const { repository, bridge } = setup();
+    bridge.handlers.set("getMe", () =>
+      tdUser(1, {
+        profile_photo: {
+          _: "profilePhoto",
+          id: "9",
+          minithumbnail: {
+            _: "minithumbnail",
+            width: 8,
+            height: 8,
+            data: "bWU=",
+          },
+          small: {
+            id: 22,
+            size: 4,
+            local: {
+              is_downloading_completed: false,
+              is_downloading_active: false,
+              path: "",
+              downloaded_size: 0,
+            },
+          },
+        },
+      }),
+    );
+    bridge.handlers.set("downloadFile", () => ({
+      id: 22,
+      size: 4,
+      local: {
+        is_downloading_completed: false,
+        is_downloading_active: true,
+        path: "",
+        downloaded_size: 0,
+      },
+    }));
+    const me = await repository.getCurrentUser();
+    expect(me.avatarDataUrl).toBe("data:image/jpeg;base64,bWU=");
+    expect(me.avatarPending).toBe(false);
+  });
+
+  it("calls getUser for the current account when getMe omits the profile photo", async () => {
+    const { repository, bridge } = setup();
+    const source = path.join(
+      os.tmpdir(),
+      `telo-avatar-me-getuser-${Date.now()}.jpg`,
+    );
+    writeFileSync(source, "jpeg");
+    bridge.handlers.set("getMe", () => tdUser(1));
+    bridge.handlers.set("getUser", (request) => {
+      if (Number(request.user_id) !== 1) return tdUser(Number(request.user_id));
+      return tdUser(1, {
+        profile_photo: {
+          _: "profilePhoto",
+          id: "9",
+          small: {
+            id: 22,
+            size: 4,
+            local: {
+              is_downloading_completed: false,
+              is_downloading_active: false,
+              path: "",
+              downloaded_size: 0,
+            },
+          },
+        },
+      });
+    });
+    bridge.handlers.set("downloadFile", () => ({
+      id: 22,
+      size: 4,
+      local: {
+        is_downloading_completed: true,
+        is_downloading_active: false,
+        path: source,
+        downloaded_size: 4,
+      },
+    }));
+    const me = await repository.getCurrentUser();
+    expect(
+      bridge.invokes.some(
+        (item) =>
+          (item as { _: string; user_id?: number })._ === "getUser" &&
+          (item as { user_id?: number }).user_id === 1,
+      ),
+    ).toBe(true);
+    expect(me.avatarDataUrl).toMatch(/telo-media:\/\/cache\/avatar_1\.jpg/);
+  });
+
   it("downloads an unready sticker file and retries send", async () => {
     const { repository, bridge } = setup();
     const sticker = tdSticker(8);
