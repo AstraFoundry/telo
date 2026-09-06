@@ -190,7 +190,6 @@ function MessageHoverRail({
   message,
   agentActionsAvailable,
   clearBubblePadding,
-  onFailure,
 }: {
   message: MessageDto;
   agentActionsAvailable: boolean;
@@ -200,12 +199,13 @@ function MessageHoverRail({
    * A bare sticker carries no padding to clear.
    */
   clearBubblePadding: boolean;
-  onFailure(detail: string): void;
 }) {
   const startReply = useChatStore((state) => state.startReply);
   const runMessageAction = useChatStore((state) => state.runMessageAction);
   const messageAction = useChatStore((state) => state.messageAction);
   const [aiOpen, setAiOpen] = useState(false);
+  const [reactOpen, setReactOpen] = useState(false);
+  const railHeld = reactOpen || aiOpen;
 
   const side = message.outgoing
     ? `${
@@ -221,7 +221,11 @@ function MessageHoverRail({
 
   return (
     <div
-      className={`pointer-events-none absolute bottom-0 z-10 flex items-center opacity-0 transition-opacity duration-100 group-focus-within/message:pointer-events-auto group-focus-within/message:opacity-100 pointer-fine:group-hover/message:pointer-events-auto pointer-fine:group-hover/message:opacity-100 motion-reduce:transition-none ${side}`}
+      className={`absolute bottom-0 z-10 flex items-center transition-opacity duration-100 motion-reduce:transition-none ${side} ${
+        railHeld
+          ? "pointer-events-auto opacity-100"
+          : "pointer-events-none opacity-0 group-focus-within/message:pointer-events-auto group-focus-within/message:opacity-100 pointer-fine:group-hover/message:pointer-events-auto pointer-fine:group-hover/message:opacity-100"
+      }`}
     >
       {message.status !== "failed" ? (
         <Tooltip content={copy.reply}>
@@ -239,7 +243,7 @@ function MessageHoverRail({
         </Tooltip>
       ) : null}
       {message.status === "sent" || message.status === "read" ? (
-        <ReactionPicker message={message} onFailure={onFailure} />
+        <ReactionPicker message={message} onOpenChange={setReactOpen} />
       ) : null}
       {agentActionsAvailable ? (
         <MorphPopover open={aiOpen} onOpenChange={setAiOpen}>
@@ -899,9 +903,6 @@ function ConversationMessage({
                     message={message}
                     agentActionsAvailable={agentActionsAvailable}
                     clearBubblePadding={false}
-                    onFailure={(detail) =>
-                      setActionError({ title: copy.reactionFailed, detail })
-                    }
                   />
                 )}
               </div>
@@ -983,9 +984,6 @@ function ConversationMessage({
                       message={message}
                       agentActionsAvailable={agentActionsAvailable}
                       clearBubblePadding
-                      onFailure={(detail) =>
-                        setActionError({ title: copy.reactionFailed, detail })
-                      }
                     />
                   )}
                 </MessageBubbleContent>
@@ -1123,12 +1121,7 @@ function ConversationMessage({
             </ContextMenuItem>
           </ContextMenuContent>
         </ContextMenu>
-        <ReactionBar
-          message={message}
-          onFailure={(detail) =>
-            setActionError({ title: copy.reactionFailed, detail })
-          }
-        />
+        <ReactionBar message={message} />
         {actionError ? (
           <p role="alert" className="mt-1 text-xs text-destructive">
             {actionError.title}

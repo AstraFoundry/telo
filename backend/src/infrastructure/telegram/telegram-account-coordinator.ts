@@ -512,8 +512,11 @@ export class TelegramAccountCoordinator implements TelegramRepository {
     return this.delegate().setMessageReaction(input);
   }
 
-  listAvailableReactions(chatId: string): Promise<ReadonlyArray<string>> {
-    return this.delegate().listAvailableReactions(chatId);
+  listAvailableReactions(
+    chatId: string,
+    messageId?: string,
+  ): Promise<ReadonlyArray<string>> {
+    return this.delegate().listAvailableReactions(chatId, messageId);
   }
 
   private delegate(): TelegramAccountClient {

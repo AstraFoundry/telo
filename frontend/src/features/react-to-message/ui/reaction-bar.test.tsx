@@ -29,7 +29,6 @@ function message(partial: Partial<MessageDto> = {}): MessageDto {
   };
 }
 
-// The bar and the picker both drive the chat store, so each test imports a
 // The bar and the picker both drive the chat store, whose available-reaction
 // cache is module state: the import has to run after `vi.resetModules()` in
 // each test, so a static import would share one cache across cases.
@@ -41,11 +40,11 @@ async function renderBar(subject: MessageDto) {
     messages: [subject],
     activeChatId: "a",
     availableReactions: [],
+    availableReactionsReady: false,
   });
   const { ReactionBar } = await import("./reaction-bar");
-  const onFailure = vi.fn();
-  render(<ReactionBar message={subject} onFailure={onFailure} />);
-  return { telo, useChatStore, onFailure };
+  render(<ReactionBar message={subject} />);
+  return { telo, useChatStore };
 }
 
 describe("ReactionBar", () => {
@@ -116,11 +115,11 @@ describe("ReactionBar", () => {
     });
   });
 
-  it("reports a failed reaction instead of swallowing it", async () => {
+  it("reverts the chip when the reaction call fails and paints no alert", async () => {
     const subject = message({
       reactions: [{ emoji: "👍", count: 1, chosen: false }],
     });
-    const { telo, onFailure } = await renderBar(subject);
+    const { telo, useChatStore } = await renderBar(subject);
     telo.workspace.setMessageReaction.mockRejectedValue(
       new Error("REACTION_INVALID"),
     );
@@ -130,8 +129,11 @@ describe("ReactionBar", () => {
     });
 
     await waitFor(() => {
-      expect(onFailure).toHaveBeenCalledWith("");
+      expect(useChatStore.getState().messages[0]?.reactions).toEqual([
+        { emoji: "👍", count: 1, chosen: false },
+      ]);
     });
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 });
 
@@ -155,9 +157,10 @@ describe("ReactionPicker", () => {
       messages: [subject],
       activeChatId: "a",
       availableReactions: [],
+      availableReactionsReady: false,
     });
     const { ReactionPicker } = await import("./reaction-picker");
-    render(<ReactionPicker message={subject} onFailure={vi.fn()} />);
+    render(<ReactionPicker message={subject} />);
     return { telo, useChatStore, subject };
   }
 
@@ -169,7 +172,10 @@ describe("ReactionPicker", () => {
       fireEvent.click(trigger);
     });
 
-    expect(telo.workspace.listAvailableReactions).toHaveBeenCalledWith("a");
+    expect(telo.workspace.listAvailableReactions).toHaveBeenCalledWith(
+      "a",
+      "m1",
+    );
     await waitFor(() => {
       expect(screen.getByRole("group", { name: copy.reactions })).toBeTruthy();
     });
@@ -207,5 +213,35 @@ describe("ReactionPicker", () => {
     await waitFor(() => {
       expect(screen.queryByRole("group", { name: copy.reactions })).toBeNull();
     });
+  });
+
+  it("leaves an empty picker, not a spinner, when the chat allows none", async () => {
+    const telo = installTeloApiMock();
+    telo.workspace.listAvailableReactions.mockResolvedValue([]);
+    const { useChatStore } = await import("../../../entities/chat");
+    const subject = message();
+    useChatStore.setState({
+      chats: [],
+      messages: [subject],
+      activeChatId: "a",
+      availableReactions: [],
+      availableReactionsReady: false,
+    });
+    const { ReactionPicker } = await import("./reaction-picker");
+    render(<ReactionPicker message={subject} />);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: copy.react }));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole("group", { name: copy.reactions })).toBeTruthy();
+    });
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(
+      screen
+        .getAllByRole("button")
+        .filter((button) => button.dataset.reaction !== undefined),
+    ).toHaveLength(0);
   });
 });

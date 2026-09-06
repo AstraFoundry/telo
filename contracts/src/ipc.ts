@@ -1539,11 +1539,14 @@ export interface TeloDesktopApi {
      */
     setMessageReaction(input: SetMessageReactionInput): Promise<void>;
     /**
-     * Emoji this chat allows as reactions, in Telegram's own order
-     * (`messages.getAvailableReactions`, inactive entries dropped). The
-     * picker renders exactly this list.
+     * Emoji this message (or chat, when `messageId` is omitted) allows as
+     * reactions, in Telegram's own order (`getMessageAvailableReactions`).
+     * The picker renders exactly this list.
      */
-    listAvailableReactions(chatId: string): Promise<ReadonlyArray<string>>;
+    listAvailableReactions(
+      chatId: string,
+      messageId?: string,
+    ): Promise<ReadonlyArray<string>>;
     setChatPinned(chatId: string, pinned: boolean): Promise<void>;
     setChatMuted(chatId: string, muted: boolean): Promise<void>;
     setChatRead(chatId: string, read: boolean): Promise<void>;

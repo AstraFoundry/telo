@@ -134,7 +134,6 @@ export const copy = {
   editMessage: "Edit message",
   react: "React",
   reactions: "Reactions",
-  reactionFailed: "Reaction was not sent",
   cancel: "Cancel",
   replyingTo: "Reply to",
   editingMessage: "Edit message",
