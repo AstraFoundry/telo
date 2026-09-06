@@ -810,13 +810,18 @@ describe("TdlibTelegramRepository", () => {
       }),
     } as Td.Update);
     expect(await repository.listChatMembers("22")).toEqual([
-      {
+      expect.objectContaining({
         id: "1",
         displayName: "Ada Byron",
         username: "ada",
         avatarDataUrl: null,
         avatarPending: true,
-      },
+        avatarPlaceholder: {
+          glyph: "A",
+          lightColors: ["#E17076", "#FF885E"],
+          darkColors: ["#E17076", "#FF885E"],
+        },
+      }),
     ]);
   });
 

@@ -188,6 +188,27 @@ describe("ConversationSidebar", () => {
     expect(row.querySelector("img")).toBeNull();
   });
 
+  it("paints a letter on the accent fill when a chat has no photo", async () => {
+    await renderSidebar({
+      chats: [
+        chat({
+          id: "chat-test",
+          title: "test",
+          avatarDataUrl: null,
+          avatarPlaceholder: {
+            glyph: "T",
+            lightColors: ["#7BC862", "#6EC96C"],
+            darkColors: ["#7BC862", "#6EC96C"],
+          },
+        }),
+      ],
+    });
+
+    const row = screen.getByRole("button", { name: /test/ });
+    expect(row.querySelector("img")).toBeNull();
+    expect(row.textContent).toContain("T");
+  });
+
   it("replaces the app title with connection status, never a transcript banner", async () => {
     const { useChatStore } = await renderSidebar();
 

@@ -25,7 +25,7 @@ export function mentionOptionId(listboxId: string, index: number): string {
 /**
  * Listbox for an in-progress `@` query, anchored above the composer that
  * owns it. Every row carries the peer's photo so a name is recognisable at a
- * glance; a missing photo leaves an empty circle rather than initials.
+ * glance; a missing photo paints the TDLib empty userpic when one is known.
  */
 export function MentionAutocomplete<T extends MentionItem>({
   id,
@@ -59,6 +59,7 @@ export function MentionAutocomplete<T extends MentionItem>({
                 <Avatar
                   src={item.avatarUrl}
                   pending={item.avatarPending}
+                  placeholder={item.avatarPlaceholder}
                   className="size-6"
                 />
               }

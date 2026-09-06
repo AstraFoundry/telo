@@ -78,6 +78,7 @@ export function AccountSection({ onLoggedOut }: AccountSectionProps) {
           <Avatar
             src={currentUser.avatarDataUrl}
             pending={currentUser.avatarPending}
+            placeholder={currentUser.avatarPlaceholder}
             className="size-14"
           />
           <div className="min-w-0">

@@ -47,6 +47,11 @@ export interface MentionItem {
   readonly description: string | null;
   readonly avatarUrl: string | null;
   readonly avatarPending?: boolean;
+  readonly avatarPlaceholder?: {
+    readonly glyph: string;
+    readonly lightColors: ReadonlyArray<string>;
+    readonly darkColors: ReadonlyArray<string>;
+  } | null;
 }
 
 /**

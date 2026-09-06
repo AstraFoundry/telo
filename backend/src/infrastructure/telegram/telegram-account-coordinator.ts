@@ -198,6 +198,7 @@ export class TelegramAccountCoordinator implements TelegramRepository {
       displayName: account.displayName,
       username: account.username,
       avatarDataUrl: account.avatarDataUrl,
+      avatarPlaceholder: account.avatarPlaceholder,
       active: account.id === snapshot.activeAccountId,
       unreadCount: account.unreadCount,
     }));
@@ -573,6 +574,7 @@ export class TelegramAccountCoordinator implements TelegramRepository {
       displayName: user.displayName,
       username: user.username,
       avatarDataUrl: user.avatarDataUrl,
+      avatarPlaceholder: user.avatarPlaceholder,
       unreadCount: existing?.unreadCount ?? 0,
       createdAt: existing?.createdAt ?? new Date().toISOString(),
       lastActiveAt: new Date().toISOString(),
