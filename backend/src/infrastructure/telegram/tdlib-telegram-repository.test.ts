@@ -958,6 +958,89 @@ describe("TdlibTelegramRepository", () => {
     expect(await repository.listAvailableReactions("11")).toEqual(["👍"]);
   });
 
+  it("lists message reactions from getMessageAvailableReactions in Telegram's order", async () => {
+    const { repository, bridge } = setup();
+    await repository.hydrate();
+    bridge.handlers.set("getMessageAvailableReactions", () => ({
+      _: "availableReactions",
+      top_reactions: [
+        {
+          _: "availableReaction",
+          type: { _: "reactionTypeEmoji", emoji: "🔥" },
+          needs_premium: false,
+        },
+      ],
+      recent_reactions: [],
+      popular_reactions: [
+        {
+          _: "availableReaction",
+          type: { _: "reactionTypeEmoji", emoji: "👍" },
+          needs_premium: false,
+        },
+        {
+          _: "availableReaction",
+          type: { _: "reactionTypeEmoji", emoji: "🎉" },
+          needs_premium: false,
+        },
+      ],
+      allow_custom_emoji: false,
+      are_tags: false,
+    }));
+
+    expect(await repository.listAvailableReactions("11", "1")).toEqual([
+      "🔥",
+      "👍",
+      "🎉",
+    ]);
+    expect(
+      bridge.invokes.some(
+        (request) =>
+          (request as { _: string })._ === "getMessageAvailableReactions",
+      ),
+    ).toBe(true);
+  });
+
+  it("falls back to the account's active emoji when a chat allows every reaction", async () => {
+    const { repository, bridge } = setup();
+    await repository.hydrate();
+    bridge.emit({
+      _: "updateNewChat",
+      chat: tdChat(12, {
+        available_reactions: {
+          _: "chatAvailableReactionsAll",
+          max_reaction_count: 11,
+        },
+      }),
+    } as Td.Update);
+    bridge.emit({
+      _: "updateActiveEmojiReactions",
+      emojis: ["👍", "❤️", "🔥"],
+    } as Td.Update);
+
+    expect(await repository.listAvailableReactions("12")).toEqual([
+      "👍",
+      "❤",
+      "🔥",
+    ]);
+  });
+
+  it("sends the wire-form heart when the picker offers the emoji variant", async () => {
+    const { repository, bridge } = setup();
+    await repository.hydrate();
+    await repository.setMessageReaction({
+      chatId: "11",
+      messageId: "1",
+      emoji: "❤️",
+    });
+    expect(bridge.invokes).toContainEqual({
+      _: "setMessageReactions",
+      chat_id: 11,
+      message_id: 1,
+      reaction_types: [{ _: "reactionTypeEmoji", emoji: "❤" }],
+      is_big: false,
+    });
+  });
+
   it("searches globally and by chat", async () => {
     const { repository, bridge } = setup();
     await repository.hydrate();

@@ -2,7 +2,6 @@ import { AnimatePresence, motion, useReducedMotionConfig } from "motion/react";
 
 import type { MessageDto } from "../../../../../contracts/src/ipc";
 import { useChatStore } from "entities/chat";
-import { userFacingErrorDetail } from "shared/lib/user-facing-error";
 import { EASE_OUT } from "shared/ui";
 
 import { ReactionChip } from "./reaction-chip";
@@ -15,8 +14,6 @@ const CHIP_TRANSITION = { duration: 0.15, ease: EASE_OUT } as const;
 
 export interface ReactionBarProps {
   readonly message: MessageDto;
-  /** Surfaced by the transcript row, which owns the bubble's alert slot. */
-  onFailure(detail: string): void;
 }
 
 /**
@@ -25,8 +22,12 @@ export interface ReactionBarProps {
  * with `margin-top: -.125rem`, Telegram Web A `Reactions.is-outside`), and
  * reverses the row on own messages so the first chip always sits on the
  * bubble's outer edge.
+ *
+ * A failed toggle restores the buckets the message arrived with. The row does
+ * not grow an error label — Telegram Desktop leaves a rejected reaction
+ * unapplied and says nothing under the bubble.
  */
-export function ReactionBar({ message, onFailure }: ReactionBarProps) {
+export function ReactionBar({ message }: ReactionBarProps) {
   const toggleReaction = useChatStore((state) => state.toggleReaction);
   const reduce = useReducedMotionConfig() ?? false;
   const reactions = message.reactions ?? [];
@@ -56,9 +57,7 @@ export function ReactionBar({ message, onFailure }: ReactionBarProps) {
               chosen={reaction.chosen}
               onSelect={() => {
                 void toggleReaction(message.id, reaction.emoji).catch(
-                  (error: unknown) => {
-                    onFailure(userFacingErrorDetail(error) ?? "");
-                  },
+                  () => undefined,
                 );
               }}
             />

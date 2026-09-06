@@ -2,7 +2,7 @@ import type { BrowserWindowConstructorOptions } from "electron";
 
 type WindowChromeOptions = Pick<
   BrowserWindowConstructorOptions,
-  "titleBarStyle" | "titleBarOverlay"
+  "titleBarStyle" | "titleBarOverlay" | "autoHideMenuBar"
 >;
 
 /**
@@ -10,6 +10,9 @@ type WindowChromeOptions = Pick<
  * workspace to extend into the title bar. The overlay exposes Chromium's
  * titlebar-area-* CSS environment variables so the renderer can avoid the
  * traffic lights without relying on hardcoded coordinates.
+ *
+ * Chromium's File/Edit/View application menu is not product chrome. Callers
+ * also hide it with `Menu.setApplicationMenu(null)`.
  */
 export function windowChromeOptions(
   platform: NodeJS.Platform,
@@ -18,8 +21,9 @@ export function windowChromeOptions(
     return {
       titleBarStyle: "hiddenInset",
       titleBarOverlay: true,
+      autoHideMenuBar: true,
     };
   }
 
-  return { titleBarStyle: "default" };
+  return { titleBarStyle: "default", autoHideMenuBar: true };
 }

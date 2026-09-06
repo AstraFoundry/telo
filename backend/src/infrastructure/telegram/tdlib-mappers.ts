@@ -579,6 +579,55 @@ function mapButton(
   };
 }
 
+/**
+ * Telegram's reaction identity is the emoji without U+FE0F. A picker that
+ * offers "❤️" while the wire uses "❤" looks chosen-wrong and
+ * `setMessageReactions` rejects the variant as `REACTION_INVALID`.
+ */
+export function normalizeReactionEmoji(emoji: string): string {
+  return emoji.replaceAll("\uFE0F", "");
+}
+
+function pushUniqueReactionEmoji(
+  target: string[],
+  seen: Set<string>,
+  type: Td.ReactionType,
+): void {
+  if (type._ !== "reactionTypeEmoji") return;
+  const emoji = normalizeReactionEmoji(type.emoji);
+  if (!emoji || seen.has(emoji)) return;
+  seen.add(emoji);
+  target.push(emoji);
+}
+
+/**
+ * Picker order matches Telegram Desktop: top, then recent, then popular,
+ * dropping custom-emoji entries this client cannot render as chips.
+ */
+export function mapAvailableReactionEmojis(
+  available: Td.availableReactions,
+): ReadonlyArray<string> {
+  const seen = new Set<string>();
+  const emojis: string[] = [];
+  for (const entry of [
+    ...available.top_reactions,
+    ...available.recent_reactions,
+    ...available.popular_reactions,
+  ]) {
+    pushUniqueReactionEmoji(emojis, seen, entry.type);
+  }
+  return emojis;
+}
+
+export function mapReactionTypeEmojis(
+  types: ReadonlyArray<Td.ReactionType>,
+): ReadonlyArray<string> {
+  const seen = new Set<string>();
+  const emojis: string[] = [];
+  for (const type of types) pushUniqueReactionEmoji(emojis, seen, type);
+  return emojis;
+}
+
 export function mapReactions(
   info: Td.messageInteractionInfo | undefined,
 ): ReadonlyArray<MessageReactionDto> | undefined {
@@ -588,7 +637,7 @@ export function mapReactions(
     if (reaction.type._ !== "reactionTypeEmoji") return [];
     return [
       {
-        emoji: reaction.type.emoji,
+        emoji: normalizeReactionEmoji(reaction.type.emoji),
         count: reaction.total_count,
         chosen: reaction.is_chosen,
       },
