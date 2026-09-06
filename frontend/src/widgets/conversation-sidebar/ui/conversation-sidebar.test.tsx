@@ -171,6 +171,23 @@ describe("ConversationSidebar", () => {
     expect(useChatStore.getState().activeChatId).toBe("chat-1");
   });
 
+  it("paints a bookmark disc for Saved Messages instead of an empty photo slot", async () => {
+    await renderSidebar({
+      chats: [
+        chat({
+          id: "saved",
+          title: "Rafa K93",
+          kind: "saved",
+          avatarDataUrl: null,
+        }),
+      ],
+    });
+
+    const row = screen.getByRole("button", { name: /Saved Messages/ });
+    expect(row.querySelector("svg")).not.toBeNull();
+    expect(row.querySelector("img")).toBeNull();
+  });
+
   it("replaces the app title with connection status, never a transcript banner", async () => {
     const { useChatStore } = await renderSidebar();
 

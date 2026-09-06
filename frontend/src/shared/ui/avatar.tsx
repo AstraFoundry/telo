@@ -1,3 +1,4 @@
+import { BookmarkSimple } from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
 
 import { copy } from "@/shared/config/copy";
@@ -11,6 +12,13 @@ export interface AvatarProps {
    * initials. Omit (or false) after the download settles with no photo.
    */
   pending?: boolean;
+  /**
+   * Saved Messages is a private chat with `getMe()`, so TDLib's photo is the
+   * account userpic — often none. Telegram Desktop paints a bookmark disc
+   * instead (`EmptyUserpic::PaintSavedMessages`). Use this on chat-identifying
+   * slots (list, header, picker, profile), never on message-author photos.
+   */
+  mark?: "saved";
   className?: string;
 }
 
@@ -18,12 +26,17 @@ export interface AvatarProps {
  * Conversation avatar: a cached photo appears immediately; otherwise the slot
  * is a skeleton until the download settles, then an empty circle. Initials are
  * never painted — that is a product rule, even though Telegram/Nicegram still
- * use `AvatarDrawable` letters.
+ * use `AvatarDrawable` letters. Saved Messages (`mark="saved"`) is the
+ * bookmark disc, not a photo.
  */
-export function Avatar({ src, pending = false, className }: AvatarProps) {
+export function Avatar({
+  src,
+  pending = false,
+  mark,
+  className,
+}: AvatarProps) {
   const [loaded, setLoaded] = useState(false);
   const imgRef = useRef<HTMLImageElement>(null);
-
   // A changed source must fade in again rather than pop.
   const [previousSrc, setPreviousSrc] = useState(src);
   if (src !== previousSrc) {
@@ -36,6 +49,24 @@ export function Avatar({ src, pending = false, className }: AvatarProps) {
   useEffect(() => {
     if (src && imgRef.current?.complete) setLoaded(true);
   }, [src]);
+
+  if (mark === "saved") {
+    return (
+      <span
+        /* deslop-ignore-next-line 19 — circular avatars are a messaging convention */
+        className={cn(
+          "relative grid shrink-0 place-items-center overflow-hidden rounded-full bg-primary text-primary-foreground",
+          className,
+        )}
+      >
+        <BookmarkSimple
+          aria-hidden="true"
+          weight="fill"
+          className="size-[52%]"
+        />
+      </span>
+    );
+  }
 
   const showSkeleton = src ? !loaded : pending;
 

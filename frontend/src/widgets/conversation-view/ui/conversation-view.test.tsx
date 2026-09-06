@@ -212,6 +212,11 @@ describe("ConversationView", () => {
       screen.getByRole("heading", { name: copy.savedMessages }),
     ).toBeTruthy();
     expect(screen.queryByRole("heading", { name: "Rafa K93" })).toBeNull();
+    const headerPhoto = screen.getByRole("button", {
+      name: copy.openProfile,
+    });
+    expect(headerPhoto.querySelector("svg")).not.toBeNull();
+    expect(headerPhoto.querySelector("img")).toBeNull();
   });
 
   it("labels forwarded bubbles with their original sender", async () => {
