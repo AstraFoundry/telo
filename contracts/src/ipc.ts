@@ -1534,8 +1534,8 @@ export interface TeloDesktopApi {
     deleteMessage(input: DeleteMessageInput): Promise<void>;
     forwardMessage(input: ForwardMessageInput): Promise<void>;
     /**
-     * Sets (or clears, with a null emoji) this account's reaction on a
-     * message.
+     * Adds or removes this account's reaction on a message. `remove` takes
+     * the named emoji back; otherwise it is added.
      */
     setMessageReaction(input: SetMessageReactionInput): Promise<void>;
     /**
@@ -1648,9 +1648,12 @@ export interface TeloDesktopApi {
     setActiveAccount(accountId: string): Promise<void>;
   };
   readonly shell: {
+    /** True when the window has no native title bar (Linux frameless). */
+    readonly frameless: boolean;
     /** `tag` is echoed back by `onNotificationClick` (e.g. a chat id). */
     notify(title: string, body: string, tag?: string): Promise<void>;
     onNotificationClick(listener: (tag: string) => void): () => void;
+    windowControl(action: "minimize" | "maximize" | "close"): Promise<void>;
   };
   readonly preferences: {
     get(): Promise<UserPreferencesDto>;

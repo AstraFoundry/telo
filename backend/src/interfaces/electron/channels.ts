@@ -83,4 +83,5 @@ export const channels = {
   storageMediaCacheClear: "storage:media-cache-clear",
   notify: "shell:notify",
   notifyClick: "shell:notify-click",
+  windowControl: "shell:window-control",
 } as const;

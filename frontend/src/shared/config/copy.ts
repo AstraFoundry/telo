@@ -1,5 +1,8 @@
 export const copy = {
   appName: "Telo",
+  windowClose: "Close",
+  windowMinimize: "Minimize",
+  windowMaximize: "Maximize",
   skipToContent: "Skip to main content",
   chats: "Chats",
   searchChats: "Search chats",
