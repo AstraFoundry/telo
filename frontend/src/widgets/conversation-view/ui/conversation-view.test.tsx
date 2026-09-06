@@ -877,6 +877,31 @@ describe("ConversationView", () => {
     );
   });
 
+  it("offers the chat's reactions at the top of the message menu", async () => {
+    const { telo, useChatStore } = await renderView({
+      messages: [message({ id: "m1", body: "Message body" })],
+    });
+    telo.workspace.listAvailableReactions.mockResolvedValue(["👍", "❤"]);
+    useChatStore.setState({
+      availableReactions: ["👍", "❤"],
+      availableReactionsReady: true,
+    });
+
+    fireEvent.contextMenu(screen.getByText("Message body"));
+    const menu = await screen.findByRole("menu");
+    const thumbs = await within(menu).findByRole("menuitem", { name: "👍" });
+    fireEvent.click(thumbs);
+
+    await waitFor(() => {
+      expect(telo.workspace.setMessageReaction).toHaveBeenCalledWith({
+        chatId: "chat-1",
+        messageId: "m1",
+        emoji: "👍",
+      });
+    });
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
   it("offers Edit only on outgoing messages", async () => {
     await renderView({
       messages: [
