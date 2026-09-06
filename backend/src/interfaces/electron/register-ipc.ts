@@ -234,6 +234,11 @@ export function registerIpc(container: ApplicationContainer): void {
       container.messageActions.listAvailableReactions(chatId, messageId),
   );
   ipcMain.handle(
+    channels.animatedEmojiClick,
+    (_event, chatId: string, messageId: string) =>
+      container.messageActions.clickAnimatedEmoji(chatId, messageId),
+  );
+  ipcMain.handle(
     channels.chatPinSet,
     (_event, chatId: string, pinned: boolean) =>
       container.chatActions.setPinned(chatId, pinned),

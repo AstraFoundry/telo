@@ -118,6 +118,8 @@ const api: TeloDesktopApi = {
       ipcRenderer.invoke(channels.messageReactionSet, input),
     listAvailableReactions: (chatId, messageId) =>
       ipcRenderer.invoke(channels.messageReactionsAvailable, chatId, messageId),
+    clickAnimatedEmoji: (chatId, messageId) =>
+      ipcRenderer.invoke(channels.animatedEmojiClick, chatId, messageId),
     setChatArchived: (chatId, archived) =>
       ipcRenderer.invoke(channels.chatArchiveSet, chatId, archived),
     onEvent: (listener) =>

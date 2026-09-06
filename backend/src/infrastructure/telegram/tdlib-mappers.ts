@@ -16,9 +16,12 @@ import {
   type MessageMediaDto,
   type MessageReactionDto,
   type MessageReplyToDto,
+  type MessageStickerDto,
   type StickerFormat,
+  type StickerRole,
   type StickerSetReferenceDto,
 } from "../../../../contracts/src/ipc";
+import { isolatedEmojiCount } from "../../domain/telegram/isolated-emoji";
 
 export interface ChatMapContext {
   readonly selfUserId: number | null;
@@ -271,6 +274,13 @@ export function mapMessage(
   context: MessageMapContext,
 ): MessageDto {
   const text = formattedTextOf(message.content);
+  // TDLib substitutes `messageAnimatedEmoji` for a text message whose whole
+  // text is one emoji it has an animation for, so the emoji itself is no
+  // longer in a `text` field. It is still the message's body: it is what a
+  // reply quote, a chat-list preview and a notification have to say, and it
+  // is the fallback the transcript draws until the document lands.
+  const animatedEmoji =
+    message.content._ === "messageAnimatedEmoji" ? message.content : null;
   const outgoing = message.is_outgoing;
   return {
     id: messageIdOf(message.id),
@@ -291,8 +301,12 @@ export function mapMessage(
           0,
           context.accentPalette,
         )),
-    body: text?.text ?? "",
+    body: animatedEmoji ? animatedEmoji.emoji : (text?.text ?? ""),
     entities: text ? mapEntities(text) : [],
+    // A message that carries formatting is not isolated emoji, whatever its
+    // characters are: a link over a thumbs-up is a link.
+    isolatedEmojiCount:
+      text && text.entities.length === 0 ? isolatedEmojiCount(text.text) : 0,
     media: mapMedia(message),
     groupedId: message.media_album_id === "0" ? null : message.media_album_id,
     sentAt: new Date(message.date * 1000).toISOString(),
@@ -387,6 +401,50 @@ function mapEntity(entity: Td.textEntity): MessageEntityDto | null {
   }
 }
 
+/**
+ * One sticker document as message media. Both a sticker message and an
+ * animated-emoji message land here; `role` is the only thing that separates
+ * them, and it is what the transcript reads to decide the size and the
+ * playback rule.
+ */
+export function stickerMedia(
+  sticker: Td.sticker,
+  role: StickerRole,
+  emoji: string,
+): MessageFileMediaDto & { readonly sticker: MessageStickerDto } {
+  const format: StickerFormat =
+    sticker.format._ === "stickerFormatTgs"
+      ? "animated"
+      : sticker.format._ === "stickerFormatWebm"
+        ? "video"
+        : "static";
+  const setReference: StickerSetReferenceDto | null = sticker.set_id
+    ? { kind: "id", id: sticker.set_id }
+    : null;
+  return {
+    ...fileMedia({
+      id: mediaIdForFile(sticker.sticker.id),
+      kind: "sticker",
+      mimeType:
+        format === "animated"
+          ? "application/x-tgsticker"
+          : format === "video"
+            ? "video/webm"
+            : "image/webp",
+      size: sticker.sticker.size,
+      width: sticker.width,
+      height: sticker.height,
+    }),
+    sticker: {
+      emoji: emoji || null,
+      role,
+      format,
+      setReference,
+      outlinePath: null,
+    },
+  };
+}
+
 function mapMedia(message: Td.message): MessageMediaDto | null {
   const content = message.content;
   if (content._ === "messagePhoto" && content.photo.sizes.length > 0) {
@@ -472,37 +530,21 @@ function mapMedia(message: Td.message): MessageMediaDto | null {
     });
   }
   if (content._ === "messageSticker") {
-    const sticker = content.sticker;
-    const format: StickerFormat =
-      sticker.format._ === "stickerFormatTgs"
-        ? "animated"
-        : sticker.format._ === "stickerFormatWebm"
-          ? "video"
-          : "static";
-    const setReference: StickerSetReferenceDto | null = sticker.set_id
-      ? { kind: "id", id: sticker.set_id }
-      : null;
-    return {
-      ...fileMedia({
-        id: mediaIdForFile(sticker.sticker.id),
-        kind: "sticker",
-        mimeType:
-          format === "animated"
-            ? "application/x-tgsticker"
-            : format === "video"
-              ? "video/webm"
-              : "image/webp",
-        size: sticker.sticker.size,
-        width: sticker.width,
-        height: sticker.height,
-      }),
-      sticker: {
-        emoji: sticker.emoji || null,
-        format,
-        setReference,
-        outlinePath: null,
-      },
-    };
+    return stickerMedia(content.sticker, "sticker", content.sticker.emoji);
+  }
+  if (content._ === "messageAnimatedEmoji") {
+    const sticker = content.animated_emoji.sticker;
+    // "May be null if yet unknown": TDLib promises an `updateMessageContent`
+    // once it resolves, and gives the expected box meanwhile. Returning no
+    // media here would draw the emoji as text and then reflow the row when
+    // the document arrives, so the slot is reserved at the promised size and
+    // the outline/skeleton stands in — the same contract every other sticker
+    // has while it downloads.
+    if (!sticker) return null;
+    // The message's emoji names the document, not the sticker's own emoji:
+    // for a custom animated emoji those differ, and what the reader typed is
+    // the honest accessible name and text fallback.
+    return stickerMedia(sticker, "emoji", content.emoji);
   }
   if (content._ === "messageText" && content.link_preview) {
     const preview = content.link_preview;

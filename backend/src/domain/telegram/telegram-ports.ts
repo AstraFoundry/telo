@@ -1,4 +1,5 @@
 import type {
+  AnimatedEmojiEffectDto,
   BotCallbackAnswerDto,
   ChatDto,
   ChatFolderDto,
@@ -189,6 +190,15 @@ export interface TelegramRepository {
     chatId: string,
     messageId?: string,
   ): Promise<ReadonlyArray<string>>;
+  /**
+   * Reports a click on an animated-emoji message and answers with the
+   * oversized sticker to play over it, or null when Telegram has none and the
+   * bubble's own animation should simply replay.
+   */
+  clickAnimatedEmoji(
+    chatId: string,
+    messageId: string,
+  ): Promise<AnimatedEmojiEffectDto | null>;
   /**
    * Ends the current session: disconnects the client and clears the stored
    * session. A no-op for the demo workspace; the demo reset is owned by the

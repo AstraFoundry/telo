@@ -123,6 +123,31 @@ function videoSticker(id: string): NonNullable<MessageDto["media"]> {
   };
 }
 
+/**
+ * What TDLib delivers for a message whose whole text was one emoji: the emoji
+ * stays the body and the animation rides as sticker media with the emoji role.
+ */
+function animatedEmoji(id: string): NonNullable<MessageDto["media"]> {
+  return {
+    id,
+    kind: "sticker",
+    fileName: "party.webm",
+    mimeType: "video/webm",
+    size: null,
+    width: 512,
+    height: 512,
+    duration: null,
+    spoiler: false,
+    sticker: {
+      emoji: "\u{1F389}",
+      role: "emoji",
+      format: "video",
+      setReference: null,
+      outlinePath: null,
+    },
+  };
+}
+
 function readyDownload(url: string) {
   return {
     state: "ready" as const,
@@ -374,6 +399,97 @@ describe("ConversationView media", () => {
       "\u{1F431}",
     )) as HTMLVideoElement;
     expect(video.loop).toBe(true);
+  });
+
+  it("plays an animated emoji once, whatever the sticker looping preference says", async () => {
+    await renderView({
+      messages: [
+        message({
+          id: "m1",
+          body: "\u{1F389}",
+          media: animatedEmoji("chat-1/e1"),
+        }),
+      ],
+      mediaDownloads: {
+        "chat-1/e1": readyDownload("telo-media://cache/party.webm"),
+      },
+      // Looping is a sticker preference. An animated emoji stands in for a
+      // character someone typed, and a character that never stops moving is
+      // noise, so Telegram plays it once either way.
+      preferences: { loopStickers: true },
+    });
+
+    const video = (await screen.findByLabelText(
+      "\u{1F389}",
+    )) as HTMLVideoElement;
+    expect(video.loop).toBe(false);
+  });
+
+  it("draws an animated emoji without a bubble and without repeating its text", async () => {
+    await renderView({
+      messages: [
+        message({
+          id: "m1",
+          body: "\u{1F389}",
+          media: animatedEmoji("chat-1/e1"),
+        }),
+      ],
+      mediaDownloads: {
+        "chat-1/e1": readyDownload("telo-media://cache/party.webm"),
+      },
+    });
+
+    await screen.findByLabelText("\u{1F389}");
+    // The body is the same emoji the animation already is; drawing both would
+    // say it twice.
+    expect(
+      document.querySelector('[data-slot="message-sticker"]'),
+    ).toBeTruthy();
+    expect(
+      document.querySelector('[data-slot="message-bubble-content"]'),
+    ).toBeNull();
+  });
+
+  it("asks Telegram for an effect when an animated emoji is clicked", async () => {
+    const { telo } = await renderView({
+      messages: [
+        message({
+          id: "m1",
+          body: "\u{1F389}",
+          media: animatedEmoji("chat-1/e1"),
+        }),
+      ],
+      mediaDownloads: {
+        "chat-1/e1": readyDownload("telo-media://cache/party.webm"),
+      },
+    });
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: copy.playAnimatedEmoji }),
+    );
+
+    expect(telo.workspace.clickAnimatedEmoji).toHaveBeenCalledWith(
+      "chat-1",
+      "m1",
+    );
+  });
+
+  it("draws emoji-only text large and bubbleless", async () => {
+    await renderView({
+      messages: [
+        message({
+          id: "m1",
+          body: "\u{1F680}\u{1F318}",
+          isolatedEmojiCount: 2,
+        }),
+      ],
+    });
+
+    const glyphs = await screen.findByText("\u{1F680}\u{1F318}");
+    // Two emoji sit a step below one; the ramp is what keeps three of them
+    // inside the column.
+    expect(glyphs.style.fontSize).toBe("40px");
+    expect(glyphs.closest('[data-slot="message-sticker"]')).toBeTruthy();
   });
 
   it("opens a received sticker's set with its id-based Telegram reference", async () => {

@@ -1291,6 +1291,75 @@ describe("chat-store", () => {
     expect(ignored.folders[0]?.unreadCount).toBe(4);
   });
 
+  it("clickAnimatedEmoji() publishes the effect and downloads its document", async () => {
+    const telo = installTeloApiMock();
+    const effect = {
+      chatId: "a",
+      messageId: "m1",
+      mediaId: "effect-1",
+      sticker: {
+        emoji: "🎉",
+        role: "emoji" as const,
+        format: "animated" as const,
+        setReference: null,
+        outlinePath: null,
+      },
+      width: 512,
+      height: 512,
+    };
+    telo.workspace.clickAnimatedEmoji.mockResolvedValue(effect);
+    useChatStore.setState({ chats: [chat("a")], activeChatId: "a" });
+
+    await expect(
+      useChatStore.getState().clickAnimatedEmoji("a", "m1"),
+    ).resolves.toBe(true);
+
+    expect(useChatStore.getState().animatedEmojiEffects.m1).toEqual(effect);
+    // The effect is its own document, so it needs its own download.
+    expect(telo.workspace.downloadMedia).toHaveBeenCalledWith("effect-1");
+
+    useChatStore.getState().clearAnimatedEmojiEffect("m1");
+    expect(useChatStore.getState().animatedEmojiEffects.m1).toBeUndefined();
+  });
+
+  it("clickAnimatedEmoji() reports no effect so the caller can replay in place", async () => {
+    const telo = installTeloApiMock();
+    // Telegram's 404 means "play the usual animation", not "something broke".
+    telo.workspace.clickAnimatedEmoji.mockResolvedValue(null);
+
+    await expect(
+      useChatStore.getState().clickAnimatedEmoji("a", "m1"),
+    ).resolves.toBe(false);
+    expect(useChatStore.getState().animatedEmojiEffects).toEqual({});
+  });
+
+  it("receive() plays a peer's emoji click only in the open chat", () => {
+    installTeloApiMock();
+    const effect = {
+      chatId: "b",
+      messageId: "m9",
+      mediaId: "effect-9",
+      sticker: {
+        emoji: "🎉",
+        role: "emoji" as const,
+        format: "animated" as const,
+        setReference: null,
+        outlinePath: null,
+      },
+      width: 512,
+      height: 512,
+    };
+    useChatStore.setState({ chats: [chat("a"), chat("b")], activeChatId: "a" });
+
+    // A burst over a chat nobody is looking at would fire and finish unseen.
+    useChatStore.getState().receive({ type: "animated-emoji-clicked", effect });
+    expect(useChatStore.getState().animatedEmojiEffects).toEqual({});
+
+    useChatStore.setState({ activeChatId: "b" });
+    useChatStore.getState().receive({ type: "animated-emoji-clicked", effect });
+    expect(useChatStore.getState().animatedEmojiEffects.m9).toEqual(effect);
+  });
+
   it("receive() applies deletion and outbox read events", () => {
     useChatStore.setState({
       chats: [chat("a")],

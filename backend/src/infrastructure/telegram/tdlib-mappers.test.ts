@@ -370,6 +370,117 @@ describe("tdlib mappers", () => {
     });
   });
 
+  it("maps an animated emoji to sticker media that keeps its emoji as the body", () => {
+    const message = mapMessage(
+      {
+        _: "message",
+        id: 4,
+        chat_id: 11,
+        is_outgoing: false,
+        date: 1,
+        edit_date: 0,
+        media_album_id: "0",
+        sender_id: { _: "messageSenderUser", user_id: 7 },
+        content: {
+          _: "messageAnimatedEmoji",
+          emoji: "🎉",
+          animated_emoji: {
+            _: "animatedEmoji",
+            sticker_width: 512,
+            sticker_height: 512,
+            fitzpatrick_type: 0,
+            sticker: {
+              emoji: "🎉",
+              width: 512,
+              height: 512,
+              set_id: "0",
+              format: { _: "stickerFormatTgs" },
+              sticker: { id: 5, size: 10 },
+            },
+          },
+        },
+      } as unknown as Td.message,
+      { ...emptyContext, senderName: () => "Mina", senderId: () => "7" },
+    );
+
+    // TDLib takes the emoji out of the text when it substitutes this content
+    // type, but a reply quote, a chat-list preview and a notification all
+    // still have to say something, so the body keeps it.
+    expect(message.body).toBe("🎉");
+    expect(message.media).toMatchObject({
+      kind: "sticker",
+      sticker: { emoji: "🎉", role: "emoji", format: "animated" },
+    });
+    // It is the message, not an emoji-only text message on top of it.
+    expect(message.isolatedEmojiCount).toBe(0);
+  });
+
+  it("leaves an animated emoji without a resolved document as text", () => {
+    const message = mapMessage(
+      {
+        _: "message",
+        id: 5,
+        chat_id: 11,
+        is_outgoing: false,
+        date: 1,
+        edit_date: 0,
+        media_album_id: "0",
+        sender_id: { _: "messageSenderUser", user_id: 7 },
+        content: {
+          _: "messageAnimatedEmoji",
+          emoji: "🎉",
+          animated_emoji: {
+            _: "animatedEmoji",
+            sticker_width: 512,
+            sticker_height: 512,
+            fitzpatrick_type: 0,
+          },
+        },
+      } as unknown as Td.message,
+      { ...emptyContext, senderName: () => "Mina", senderId: () => "7" },
+    );
+
+    // "May be null if yet unknown". TDLib follows with updateMessageContent
+    // once it resolves; until then the emoji is all there is to draw.
+    expect(message.body).toBe("🎉");
+    expect(message.media).toBeNull();
+  });
+
+  it("counts emoji-only text so the transcript can draw it large", () => {
+    const isolated = (text: string, entities: unknown[] = []) =>
+      mapMessage(
+        {
+          _: "message",
+          id: 6,
+          chat_id: 11,
+          is_outgoing: false,
+          date: 1,
+          edit_date: 0,
+          media_album_id: "0",
+          sender_id: { _: "messageSenderUser", user_id: 7 },
+          content: {
+            _: "messageText",
+            text: { _: "formattedText", text, entities },
+          },
+        } as unknown as Td.message,
+        { ...emptyContext, senderName: () => "Mina", senderId: () => "7" },
+      ).isolatedEmojiCount;
+
+    expect(isolated("🚀🌘")).toBe(2);
+    expect(isolated("ship it 🚀")).toBe(0);
+    // Formatting means the message is more than its characters.
+    expect(
+      isolated("🚀", [
+        {
+          _: "textEntity",
+          offset: 0,
+          length: 2,
+          type: { _: "textEntityTypeTextUrl", url: "https://example.com" },
+        },
+      ]),
+    ).toBe(0);
+  });
+
   it("maps reply quotes, stripped thumbnails, webpage photos, and read receipts", () => {
     const reply = mapMessage(
       {

@@ -308,12 +308,29 @@ export type StickerSetReferenceDto =
  * Telegram `DocumentAttributeSticker` payload. A sticker is a document, so it
  * keeps every `MessageFileMediaDto` field and adds these on top.
  */
+/**
+ * What a sticker document is standing in for.
+ *
+ * `"sticker"` is one the sender picked out of a set. `"emoji"` is Telegram's
+ * animated rendering of a message whose whole text was one emoji — TDLib
+ * `messageAnimatedEmoji`, which it substitutes for `messageText` on its own.
+ * The two are drawn at different sizes and play by different rules, so the
+ * transcript has to be able to tell them apart.
+ */
+export type StickerRole = "sticker" | "emoji";
+
 export interface MessageStickerDto {
   /**
    * Emoji the sticker stands for. It is the accessible name; it is not the
    * placeholder — see `outlinePath`.
    */
   readonly emoji: string | null;
+  /**
+   * Defaults to `"sticker"` when absent — a picker cell and a sticker message
+   * have no opinion to state, and only the transcript's animated-emoji path
+   * asks.
+   */
+  readonly role?: StickerRole;
   readonly format: StickerFormat;
   /** Set the sticker belongs to; null for set-less/system stickers. */
   readonly setReference: StickerSetReferenceDto | null;
@@ -343,6 +360,26 @@ export interface StickerItemDto {
   readonly height: number | null;
   /** Silhouette to draw until the document lands; see `MessageStickerDto`. */
   readonly outlinePath: string | null;
+}
+
+/**
+ * The oversized sticker Telegram plays over the transcript when an animated
+ * emoji is clicked (TDLib `clickAnimatedEmojiMessage`, and the peer's own
+ * click arriving as `updateAnimatedEmojiMessageClicked`).
+ *
+ * It is a separate document from the one in the bubble: the message carries
+ * the small looping-once emoji, the effect is a bigger, louder take on it.
+ * Null is a real answer — TDLib answers 404 for "no effect, replay the usual
+ * animation", which is not an error.
+ */
+export interface AnimatedEmojiEffectDto {
+  readonly chatId: string;
+  readonly messageId: string;
+  /** Media id of the effect document, downloadable through the media pipeline. */
+  readonly mediaId: string;
+  readonly sticker: MessageStickerDto;
+  readonly width: number | null;
+  readonly height: number | null;
 }
 
 /** Lightweight installed-set metadata used to paint picker navigation. */
@@ -462,6 +499,19 @@ export interface MessageDto {
   readonly senderAvatarPlaceholder?: AvatarPlaceholderDto | null;
   readonly body: string;
   readonly entities: ReadonlyArray<MessageEntityDto>;
+  /**
+   * How many emoji this message is, when its whole text is emoji and nothing
+   * else. Telegram draws such a message at a larger size than ordinary text —
+   * "jumbomoji" — and both reference clients cap it at three
+   * (`tdesktop … ui/text/text_isolated_emoji.h kIsolatedEmojiLimit`, Web K
+   * `wrapRichText`'s `loadPromises`/`isSingleEmoji` path). Absent or zero for
+   * every other message, including one emoji followed by any other character.
+   *
+   * A single emoji that Telegram has an animation for never reaches here:
+   * TDLib substitutes `messageAnimatedEmoji` for the text and it arrives as
+   * sticker media with the `"emoji"` role instead.
+   */
+  readonly isolatedEmojiCount?: number;
   readonly media: MessageMediaDto | null;
   /** Telegram album identifier shared by each message in an album. */
   readonly groupedId: string | null;
@@ -564,6 +614,15 @@ export type TelegramWorkspaceEvent =
       readonly type: "message-upsert";
       readonly cause: "new" | "edited";
       readonly message: MessageDto;
+    }
+  | {
+      /**
+       * The peer clicked an animated emoji of theirs; play the effect over
+       * that message if it is on screen. Telegram pushes this so both sides
+       * see the same burst at the same moment.
+       */
+      readonly type: "animated-emoji-clicked";
+      readonly effect: AnimatedEmojiEffectDto;
     }
   | {
       readonly type: "message-delete";
@@ -1584,6 +1643,16 @@ export interface TeloDesktopApi {
       chatId: string,
       messageId?: string,
     ): Promise<ReadonlyArray<string>>;
+    /**
+     * Tells Telegram an animated-emoji message was clicked and answers with
+     * the oversized sticker to play over the transcript, or null when
+     * Telegram has no effect for it and the bubble's own animation should
+     * simply replay (TDLib answers that case with a 404, not an error).
+     */
+    clickAnimatedEmoji(
+      chatId: string,
+      messageId: string,
+    ): Promise<AnimatedEmojiEffectDto | null>;
     setChatPinned(chatId: string, pinned: boolean): Promise<void>;
     setChatMuted(chatId: string, muted: boolean): Promise<void>;
     setChatRead(chatId: string, read: boolean): Promise<void>;

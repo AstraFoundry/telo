@@ -323,6 +323,7 @@ export const copy = {
   copied: "Copied",
   sticker: "Sticker",
   playSticker: "Play sticker",
+  playAnimatedEmoji: "Play emoji animation",
   stickerPicker: "Stickers",
   recentStickers: "Recent stickers",
   favoriteStickers: "Favorite stickers",
