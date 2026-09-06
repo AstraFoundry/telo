@@ -19,6 +19,7 @@ const api: TeloDesktopApi = {
     listChatPage: (input) => ipcRenderer.invoke(channels.chatPageList, input),
     createSecretChat: (userId) =>
       ipcRenderer.invoke(channels.secretChatCreate, userId),
+    openSavedMessages: () => ipcRenderer.invoke(channels.savedMessagesOpen),
     listFolders: () => ipcRenderer.invoke(channels.folderList),
     createKeywordFolder: (input) =>
       ipcRenderer.invoke(channels.keywordFolderCreate, input),
@@ -47,8 +48,8 @@ const api: TeloDesktopApi = {
     clearRecentStickers: () => ipcRenderer.invoke(channels.stickerRecentClear),
     searchStickers: (query) =>
       ipcRenderer.invoke(channels.stickerSearch, query),
-    sendSticker: (chatId, stickerId) =>
-      ipcRenderer.invoke(channels.stickerSend, chatId, stickerId),
+    sendSticker: (chatId, stickerId, clientId) =>
+      ipcRenderer.invoke(channels.stickerSend, chatId, stickerId, clientId),
     getStickerSet: (reference) =>
       ipcRenderer.invoke(channels.stickerSetGet, reference),
     setStickerSetInstalled: (shortName, installed) =>

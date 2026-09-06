@@ -79,6 +79,7 @@ export class TdlibTelegramRepository implements TelegramRepository {
   private readonly users = new Map<number, Td.user>();
   private readonly folders: Td.chatFolderInfo[] = [];
   private readonly clientIds = new Map<string, string>();
+  private readonly stickersByFileId = new Map<number, Td.sticker>();
   private readonly callbackData = new Map<string, string>();
   private readonly filePaths = new Map<string, string>();
   private readonly avatarUrls = new Map<string, string | null>();
@@ -127,14 +128,16 @@ export class TdlibTelegramRepository implements TelegramRepository {
     const me = await this.client.invoke<Td.user>({ _: "getMe" });
     this.selfUserId = me.id;
     this.users.set(me.id, me);
-    this.scheduleUserAvatar(me);
+    await this.scheduleUserAvatar(me);
     const name = [me.first_name, me.last_name].filter(Boolean).join(" ");
+    const id = String(me.id);
     return {
-      id: String(me.id),
+      id,
       displayName: name,
       username: me.usernames?.active_usernames[0] ?? null,
       initials: initials(name || "You"),
-      avatarDataUrl: this.avatarUrls.get(String(me.id)) ?? null,
+      avatarDataUrl: this.avatarUrls.get(id) ?? null,
+      avatarPending: this.avatarIsPending(id),
     };
   }
 
@@ -167,6 +170,22 @@ export class TdlibTelegramRepository implements TelegramRepository {
     return dto;
   }
 
+  async openSavedMessages(): Promise<ChatDto> {
+    const me = await this.client.invoke<Td.user>({ _: "getMe" });
+    this.selfUserId = me.id;
+    this.users.set(me.id, me);
+    const chat = await this.client.invoke<Td.chat>({
+      _: "createPrivateChat",
+      user_id: me.id,
+      force: false,
+    });
+    this.chats.set(chatIdOf(chat.id), chat);
+    this.scheduleChatAvatar(chat);
+    const dto = this.toChat(chat);
+    this.emit({ type: "chat-upsert", chat: dto });
+    return dto;
+  }
+
   async listFolders(): Promise<ReadonlyArray<ChatFolderDto>> {
     return this.folderDtos();
   }
@@ -175,29 +194,55 @@ export class TdlibTelegramRepository implements TelegramRepository {
     chatId: string,
     input: MessagePageInput,
   ): Promise<MessagePageDto> {
-    const history = await this.client.invoke<Td.messages>({
-      _: "getChatHistory",
-      chat_id: Number(chatId),
-      from_message_id: input.beforeMessageId
-        ? Number(input.beforeMessageId)
-        : 0,
-      offset: 0,
-      limit: input.limit ?? 50,
-      only_local: false,
-    });
-    const historyMessages = history.messages.filter(
-      (message): message is Td.message => message !== null,
-    );
+    const limit = input.limit ?? 50;
+    const chatIdNum = Number(chatId);
+    let fromId = input.beforeMessageId ? Number(input.beforeMessageId) : 0;
+    const collected: Td.message[] = [];
+    const seen = new Set<number>();
+    // TDLib may return fewer than `limit` from local SQLite even when older
+    // messages exist. Loop a few batches so the first paint is not a single
+    // "Today" bubble with a dead cursor.
+    const maxBatches = 5;
+    for (
+      let batch = 0;
+      batch < maxBatches && collected.length < limit;
+      batch += 1
+    ) {
+      const history = await this.client.invoke<Td.messages>({
+        _: "getChatHistory",
+        chat_id: chatIdNum,
+        from_message_id: fromId,
+        offset: 0,
+        limit,
+        only_local: false,
+      });
+      const batchMessages = (history.messages ?? []).filter(
+        (message): message is Td.message => message !== null,
+      );
+      if (batchMessages.length === 0) break;
+      let added = 0;
+      for (const message of batchMessages) {
+        // offset 0 includes the cursor message; drop it so pages do not overlap.
+        if (fromId !== 0 && message.id === fromId) continue;
+        if (seen.has(message.id)) continue;
+        seen.add(message.id);
+        collected.push(message);
+        added += 1;
+        if (collected.length >= limit) break;
+      }
+      const oldest = batchMessages.at(-1);
+      if (!oldest || oldest.id === fromId || added === 0) break;
+      fromId = oldest.id;
+    }
     const items = await Promise.all(
-      [...historyMessages].reverse().map((message) => this.toMessage(message)),
+      [...collected].reverse().map((message) => this.toMessage(message)),
     );
-    const oldest = historyMessages.at(-1);
+    const oldest = collected.at(-1);
     return {
       items,
-      nextCursor:
-        historyMessages.length >= (input.limit ?? 50) && oldest
-          ? messageIdOf(oldest.id)
-          : null,
+      // A short page is not the end of history. The next call may come back
+      // empty, which clears the cursor; a one-message chat pays that extra round.
+      nextCursor: oldest ? messageIdOf(oldest.id) : null,
     };
   }
 
@@ -409,21 +454,53 @@ export class TdlibTelegramRepository implements TelegramRepository {
     return Promise.all(result.stickers.map((item) => this.toStickerItem(item)));
   }
 
-  async sendSticker(chatId: string, stickerId: string): Promise<MessageDto> {
+  async sendSticker(
+    chatId: string,
+    stickerId: string,
+    clientId?: string,
+  ): Promise<MessageDto> {
     const fileId = fileIdFromMediaId(stickerId);
     if (fileId === null) throw new Error("Sticker id is required");
-    const message = await this.client.invoke<Td.message>({
-      _: "sendMessage",
-      chat_id: Number(chatId),
-      input_message_content: {
-        _: "inputMessageSticker",
-        sticker: { _: "inputFileId", id: fileId },
-        emoji: "",
-        width: 0,
-        height: 0,
-      },
-    });
-    return this.toMessage(message);
+    const cached = this.stickersByFileId.get(fileId);
+    const sendingId = this.nextSendingId();
+    this.rememberClientId(sendingId, clientId);
+    const send = () =>
+      this.client.invoke<Td.message>({
+        _: "sendMessage",
+        chat_id: Number(chatId),
+        options: {
+          _: "messageSendOptions",
+          sending_id: sendingId,
+        },
+        input_message_content: {
+          _: "inputMessageSticker",
+          sticker: {
+            _: "inputSticker",
+            sticker: { _: "inputFileId", id: fileId },
+            width: cached?.width ?? 0,
+            height: cached?.height ?? 0,
+          },
+          emoji: cached?.emoji ?? "",
+        },
+      });
+    let message: Td.message;
+    try {
+      message = await send();
+    } catch (error) {
+      if (!isStickerFileNotReady(error)) throw error;
+      await this.client.invoke({
+        _: "downloadFile",
+        file_id: fileId,
+        priority: 32,
+        offset: 0,
+        limit: 0,
+        synchronous: true,
+      });
+      message = await send();
+    }
+    this.bindPendingClientId(message);
+    const dto = await this.toMessage(message);
+    return clientId ? { ...dto, clientId } : dto;
   }
 
   async getStickerSet(
@@ -536,9 +613,8 @@ export class TdlibTelegramRepository implements TelegramRepository {
     silent?: boolean,
     entities?: ReadonlyArray<MessageEntityDto>,
   ): Promise<MessageDto> {
-    const sendingId = this.sendingId;
-    this.sendingId += 1;
-    if (clientId) this.clientIds.set(String(sendingId), clientId);
+    const sendingId = this.nextSendingId();
+    this.rememberClientId(sendingId, clientId);
     const message = await this.client.invoke<Td.message>({
       _: "sendMessage",
       chat_id: Number(chatId),
@@ -562,6 +638,7 @@ export class TdlibTelegramRepository implements TelegramRepository {
         },
       },
     });
+    this.bindPendingClientId(message);
     const dto = await this.toMessage(message);
     return clientId ? { ...dto, clientId } : dto;
   }
@@ -645,6 +722,12 @@ export class TdlibTelegramRepository implements TelegramRepository {
           message_id: Number(replyToId),
         }
       : undefined;
+    const sendingId = this.nextSendingId();
+    this.rememberClientId(sendingId, clientId);
+    const sendOptions = {
+      _: "messageSendOptions" as const,
+      sending_id: sendingId,
+    };
     const sent =
       contents.length === 1
         ? [
@@ -652,6 +735,7 @@ export class TdlibTelegramRepository implements TelegramRepository {
               _: "sendMessage",
               chat_id: Number(chatId),
               reply_to: replyTo,
+              options: sendOptions,
               input_message_content: contents[0],
             }),
           ]
@@ -660,6 +744,7 @@ export class TdlibTelegramRepository implements TelegramRepository {
               _: "sendMessageAlbum",
               chat_id: Number(chatId),
               reply_to: replyTo,
+              options: sendOptions,
               input_message_contents: contents,
             })
           ).messages;
@@ -673,7 +758,10 @@ export class TdlibTelegramRepository implements TelegramRepository {
     const mapped = await Promise.all(
       sent
         .filter((message): message is Td.message => message !== null)
-        .map((message) => this.toMessage(message)),
+        .map((message) => {
+          this.bindPendingClientId(message);
+          return this.toMessage(message);
+        }),
     );
     return clientId
       ? mapped.map((message) => ({ ...message, clientId }))
@@ -854,6 +942,69 @@ export class TdlibTelegramRepository implements TelegramRepository {
     this.typingTimers.clear();
   }
 
+  private nextSendingId(): number {
+    const id = this.sendingId;
+    this.sendingId += 1;
+    return id;
+  }
+
+  private rememberClientId(
+    sendingId: number,
+    clientId: string | undefined,
+  ): void {
+    if (clientId) this.clientIds.set(`sid:${sendingId}`, clientId);
+  }
+
+  private bindPendingClientId(message: Td.message): string | undefined {
+    const state = message.sending_state;
+    if (state && state._ === "messageSendingStatePending") {
+      const fromSid = this.clientIds.get(`sid:${state.sending_id}`);
+      if (fromSid) this.clientIds.set(String(message.id), fromSid);
+    }
+    return this.clientIdFor(message.id, message.sending_state);
+  }
+
+  private clientIdFor(
+    messageId: number,
+    sendingState?: Td.message["sending_state"],
+  ): string | undefined {
+    const fromMessage = this.clientIds.get(String(messageId));
+    if (fromMessage) return fromMessage;
+    if (sendingState && sendingState._ === "messageSendingStatePending") {
+      return this.clientIds.get(`sid:${sendingState.sending_id}`);
+    }
+    return undefined;
+  }
+
+  private async emitSendResult(
+    message: Td.message,
+    oldMessageId: number,
+    failed: boolean,
+  ): Promise<void> {
+    this.bindPendingClientId(message);
+    const clientId =
+      this.clientIds.get(String(oldMessageId)) ??
+      this.clientIdFor(message.id, message.sending_state);
+    if (clientId) this.clientIds.set(String(message.id), clientId);
+    if (oldMessageId !== message.id) {
+      this.emit({
+        type: "message-delete",
+        chatId: chatIdOf(message.chat_id),
+        messageIds: [messageIdOf(oldMessageId)],
+      });
+    }
+    const dto = await this.toMessage(message);
+    this.emit({
+      type: "message-upsert",
+      cause: "new",
+      message: failed
+        ? { ...dto, ...(clientId ? { clientId } : {}), status: "failed" }
+        : clientId
+          ? { ...dto, clientId }
+          : dto,
+    });
+  }
+
   private async hydrateAvatarsFromDisk(): Promise<void> {
     const urls = await listCachedAvatarUrls(this.mediaCacheDirectory);
     for (const [peerId, url] of urls) {
@@ -862,36 +1013,40 @@ export class TdlibTelegramRepository implements TelegramRepository {
   }
 
   private avatarIsPending(peerId: string): boolean {
-    if (this.avatarUrls.has(peerId)) return false;
-    const chat = this.chats.get(peerId);
-    if (chat?.photo?.small) return true;
-    const user = this.users.get(Number(peerId));
-    return Boolean(user?.profile_photo?.small);
+    return !this.avatarUrls.has(peerId);
   }
 
   private scheduleChatAvatar(chat: Td.chat): void {
     const peerId = chatIdOf(chat.id);
+    if (chat.photo === null) {
+      this.settleEmptyAvatar(peerId);
+      return;
+    }
     const small = chat.photo?.small;
     if (!small) {
-      if (this.hasInFlightAvatar(peerId)) return;
-      if (!this.avatarUrls.has(peerId)) this.avatarUrls.set(peerId, null);
+      // Min chats omit photo.small; keep avatarPending rather than an empty disc.
       return;
     }
     void this.downloadAvatar(peerId, small);
   }
 
-  private scheduleUserAvatar(user: Td.user): void {
+  private scheduleUserAvatar(user: Td.user): Promise<void> {
     const peerId = String(user.id);
-    const small = user.profile_photo?.small;
-    if (!small) {
-      // Private chats store the same photo on chat.photo. Do not settle empty
-      // while that file is still downloading.
-      if (this.hasInFlightAvatar(peerId)) return;
-      if (this.chats.get(peerId)?.photo?.small) return;
-      if (!this.avatarUrls.has(peerId)) this.avatarUrls.set(peerId, null);
-      return;
+    if (user.profile_photo === null) {
+      if (this.hasInFlightAvatar(peerId)) return Promise.resolve();
+      if (this.chats.get(peerId)?.photo?.small) return Promise.resolve();
+      this.settleEmptyAvatar(peerId);
+      return Promise.resolve();
     }
-    void this.downloadAvatar(peerId, small);
+    const small = user.profile_photo?.small;
+    if (!small) return Promise.resolve();
+    return this.downloadAvatar(peerId, small);
+  }
+
+  private settleEmptyAvatar(peerId: string): void {
+    if (this.hasInFlightAvatar(peerId)) return;
+    if (this.avatarUrls.get(peerId)) return;
+    this.avatarUrls.set(peerId, null);
   }
 
   private hasInFlightAvatar(peerId: string): boolean {
@@ -1050,6 +1205,7 @@ export class TdlibTelegramRepository implements TelegramRepository {
   }
 
   private async toStickerItem(sticker: Td.sticker): Promise<StickerItemDto> {
+    this.stickersByFileId.set(sticker.sticker.id, sticker);
     const item = stickerItem(sticker);
     return {
       ...item,
@@ -1170,13 +1326,8 @@ export class TdlibTelegramRepository implements TelegramRepository {
       return;
     }
     if (update._ === "updateNewMessage") {
+      const clientId = this.bindPendingClientId(update.message);
       const dto = await this.toMessage(update.message);
-      this.emit({ type: "message-upsert", cause: "new", message: dto });
-      return;
-    }
-    if (update._ === "updateMessageSendSucceeded") {
-      const dto = await this.toMessage(update.message);
-      const clientId = this.clientIds.get(String(update.old_message_id));
       this.emit({
         type: "message-upsert",
         cause: "new",
@@ -1184,16 +1335,12 @@ export class TdlibTelegramRepository implements TelegramRepository {
       });
       return;
     }
+    if (update._ === "updateMessageSendSucceeded") {
+      await this.emitSendResult(update.message, update.old_message_id, false);
+      return;
+    }
     if (update._ === "updateMessageSendFailed") {
-      const dto = await this.toMessage(update.message);
-      const clientId = this.clientIds.get(String(update.old_message_id));
-      this.emit({
-        type: "message-upsert",
-        cause: "new",
-        message: clientId
-          ? { ...dto, clientId, status: "failed" }
-          : { ...dto, status: "failed" },
-      });
+      await this.emitSendResult(update.message, update.old_message_id, true);
       return;
     }
     if (update._ === "updateMessageContent") {
@@ -1535,6 +1682,11 @@ function stickerItem(sticker: Td.sticker): StickerItemDto {
   };
 }
 
+function isStickerFileNotReady(error: unknown): boolean {
+  const text = error instanceof Error ? error.message : String(error);
+  return /FILE|DOWNLOAD|not found|not downloaded/i.test(text);
+}
+
 function toTdEntity(entity: MessageEntityDto): Td.textEntity$Input {
   const base = {
     _: "textEntity" as const,
@@ -1738,6 +1890,9 @@ export class TdlibClientCoordinator implements TelegramAccountClient {
   createSecretChat(userId: string): Promise<ChatDto> {
     return this.repository.createSecretChat(userId);
   }
+  openSavedMessages(): Promise<ChatDto> {
+    return this.repository.openSavedMessages();
+  }
   listFolders(): Promise<ReadonlyArray<ChatFolderDto>> {
     return this.repository.listFolders();
   }
@@ -1783,8 +1938,12 @@ export class TdlibClientCoordinator implements TelegramAccountClient {
   searchStickers(query: string): Promise<ReadonlyArray<StickerItemDto>> {
     return this.repository.searchStickers(query);
   }
-  sendSticker(chatId: string, stickerId: string): Promise<MessageDto> {
-    return this.repository.sendSticker(chatId, stickerId);
+  sendSticker(
+    chatId: string,
+    stickerId: string,
+    clientId?: string,
+  ): Promise<MessageDto> {
+    return this.repository.sendSticker(chatId, stickerId, clientId);
   }
   getStickerSet(reference: StickerSetReferenceDto): Promise<StickerSetDto> {
     return this.repository.getStickerSet(reference);

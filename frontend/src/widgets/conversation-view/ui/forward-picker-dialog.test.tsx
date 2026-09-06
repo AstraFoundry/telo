@@ -133,4 +133,18 @@ describe("ForwardPickerDialog", () => {
     expect(action).toHaveProperty("disabled", true);
     expect(useChatStore.getState().forwardMessage).not.toHaveBeenCalled();
   });
+
+  it("lists Saved Messages even when that chat was not on the first dialog page", async () => {
+    const telo = installTeloApiMock();
+    useChatStore.setState({
+      chats: [chat({ id: "chat-2", title: "Product Notes", initials: "PN" })],
+      forwardMessage: vi.fn().mockResolvedValue(undefined),
+    });
+    render(<ForwardPickerDialog message={forwarded} onClose={vi.fn()} />);
+
+    await screen.findByRole("dialog", { name: copy.forwardTo });
+    await vi.waitFor(() => {
+      expect(telo.workspace.openSavedMessages).toHaveBeenCalledOnce();
+    });
+  });
 });

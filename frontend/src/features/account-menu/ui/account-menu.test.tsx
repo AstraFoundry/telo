@@ -117,6 +117,7 @@ describe("AccountMenu", () => {
     );
 
     expect(telo.workspace.listMessagePage).toHaveBeenCalledWith("saved");
+    expect(telo.workspace.openSavedMessages).not.toHaveBeenCalled();
     // The popover content stays mounted for its exit spring, so aria-expanded
     // on the trigger (flipped synchronously by the controlled open state) is
     // the deterministic signal that the menu closed, not the item's removal.
@@ -125,6 +126,31 @@ describe("AccountMenu", () => {
         .getByRole("button", { name: copy.openAccountMenu })
         .getAttribute("aria-expanded"),
     ).toBe("false");
+  });
+
+  it("opens Saved Messages through IPC when the chat is not in the loaded list", async () => {
+    useTelegramStore.setState({ currentUser });
+    const telo = installTeloApiMock();
+    telo.workspace.listMessagePage.mockResolvedValue({
+      items: [],
+      nextCursor: null,
+    });
+    useChatStore.setState({
+      chats: [chat({ id: "general", kind: "direct" })],
+      activeChatId: "general",
+    });
+    const user = userEvent.setup();
+    render(<AccountMenu onOpenSettings={vi.fn()} />);
+
+    await user.click(
+      screen.getByRole("button", { name: copy.openAccountMenu }),
+    );
+    await user.click(
+      await screen.findByRole("button", { name: copy.savedMessages }),
+    );
+
+    expect(telo.workspace.openSavedMessages).toHaveBeenCalledOnce();
+    expect(telo.workspace.listMessagePage).toHaveBeenCalledWith("saved");
   });
 
   it("opens Settings and closes the menu", async () => {

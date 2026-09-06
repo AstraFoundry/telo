@@ -1,7 +1,7 @@
 import { renderHook } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import { useHotkeys } from "./use-hotkeys";
+import { isEditableTarget, useHotkeys } from "./use-hotkeys";
 
 function press(key: string, init: KeyboardEventInit = {}, target?: Element) {
   const event = new KeyboardEvent("keydown", {
@@ -94,5 +94,14 @@ describe("useHotkeys", () => {
     press("Delete");
     expect(first).toHaveBeenCalledTimes(1);
     expect(second).not.toHaveBeenCalled();
+  });
+
+  it("identifies typing targets the Agent Ctrl+B shortcut must skip", () => {
+    const textarea = document.createElement("textarea");
+    const input = document.createElement("input");
+    document.body.append(textarea, input);
+    expect(isEditableTarget(textarea)).toBe(true);
+    expect(isEditableTarget(input)).toBe(true);
+    expect(isEditableTarget(document.body)).toBe(false);
   });
 });

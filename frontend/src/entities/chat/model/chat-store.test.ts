@@ -332,6 +332,58 @@ describe("chat-store", () => {
     expect(useChatStore.getState().messages).toEqual([message("m3", "c")]);
   });
 
+  it("openSavedMessages() selects an already-loaded saved chat without IPC", async () => {
+    const telo = installTeloApiMock();
+    telo.workspace.listMessagePage.mockResolvedValue({
+      items: [],
+      nextCursor: null,
+    });
+    useChatStore.setState({
+      chats: [
+        chat("general"),
+        { ...chat("saved"), kind: "saved", title: "Saved Messages" },
+      ],
+      activeChatId: "general",
+    });
+
+    await useChatStore.getState().openSavedMessages();
+
+    expect(telo.workspace.openSavedMessages).not.toHaveBeenCalled();
+    expect(telo.workspace.listMessagePage).toHaveBeenCalledWith("saved");
+    expect(useChatStore.getState().activeChatId).toBe("saved");
+  });
+
+  it("openSavedMessages() creates the chat when it is missing from the list", async () => {
+    const telo = installTeloApiMock();
+    telo.workspace.listMessagePage.mockResolvedValue({
+      items: [],
+      nextCursor: null,
+    });
+    useChatStore.setState({
+      chats: [chat("general")],
+      activeChatId: "general",
+    });
+
+    await useChatStore.getState().openSavedMessages();
+
+    expect(telo.workspace.openSavedMessages).toHaveBeenCalledOnce();
+    expect(
+      useChatStore.getState().chats.some((entry) => entry.kind === "saved"),
+    ).toBe(true);
+    expect(useChatStore.getState().activeChatId).toBe("saved");
+  });
+
+  it("includeSavedMessages() is a no-op when Saved Messages is already listed", async () => {
+    const telo = installTeloApiMock();
+    useChatStore.setState({
+      chats: [{ ...chat("saved"), kind: "saved", title: "Saved Messages" }],
+    });
+
+    await useChatStore.getState().includeSavedMessages();
+
+    expect(telo.workspace.openSavedMessages).not.toHaveBeenCalled();
+  });
+
   it("loadOlderMessages() prepends an exclusive page and advances its cursor", async () => {
     const telo = installTeloApiMock();
     telo.workspace.listMessagePage.mockResolvedValue({
@@ -474,6 +526,54 @@ describe("chat-store", () => {
       message("m1", "a"),
       sent,
     ]);
+  });
+
+  it("receive() replaces an optimistic bubble when a later upsert shares its clientId", () => {
+    const optimistic: MessageDto = {
+      ...message("uuid-1", "a"),
+      outgoing: true,
+      status: "sending",
+      clientId: "uuid-1",
+    };
+    useChatStore.setState({
+      chats: [chat("a")],
+      activeChatId: "a",
+      messages: [optimistic],
+    });
+
+    useChatStore.getState().receive({
+      type: "message-upsert",
+      cause: "new",
+      message: {
+        ...message("100", "a"),
+        outgoing: true,
+        status: "sending",
+        clientId: "uuid-1",
+      },
+    });
+    useChatStore.getState().receive({
+      type: "message-delete",
+      chatId: "a",
+      messageIds: ["100"],
+    });
+    useChatStore.getState().receive({
+      type: "message-upsert",
+      cause: "new",
+      message: {
+        ...message("200", "a"),
+        outgoing: true,
+        status: "sent",
+        clientId: "uuid-1",
+      },
+    });
+
+    const messages = useChatStore.getState().messages;
+    expect(messages).toHaveLength(1);
+    expect(messages[0]).toMatchObject({
+      id: "200",
+      clientId: "uuid-1",
+      status: "sent",
+    });
   });
 
   it("send() forwards composer entities to the workspace", async () => {
@@ -1845,6 +1945,7 @@ describe("chat-store", () => {
     expect(telo.workspace.sendSticker).toHaveBeenCalledWith(
       "a",
       "sticker/12345",
+      expect.any(String),
     );
     expect(useChatStore.getState().messages).toEqual([acked]);
   });

@@ -2,6 +2,7 @@ export const channels = {
   currentUserGet: "workspace:get-current-user",
   chatPageList: "workspace:list-chat-page",
   secretChatCreate: "workspace:create-secret-chat",
+  savedMessagesOpen: "workspace:open-saved-messages",
   folderList: "workspace:list-folders",
   keywordFolderCreate: "workspace:create-keyword-folder",
   keywordFolderUpdate: "workspace:update-keyword-folder",
