@@ -6,11 +6,14 @@ import { describe, expect, it } from "vitest";
 import type * as Td from "tdlib-types";
 
 import {
+  accentPaletteOf,
+  avatarGlyph,
   chatIdOf,
   compareListOrder,
   fileIdFromMediaId,
   initials,
   mapAuthorizationStatus,
+  mapAvatarPlaceholder,
   mapChat,
   mapChatKind,
   mapConnectionState,
@@ -170,6 +173,11 @@ describe("tdlib mappers", () => {
       draftPreview: "draft",
       folderId: 1,
       listOrder: "200",
+      avatarPlaceholder: {
+        glyph: "A",
+        lightColors: ["#E17076", "#FF885E"],
+        darkColors: ["#E17076", "#FF885E"],
+      },
     });
   });
 
@@ -222,12 +230,18 @@ describe("tdlib mappers", () => {
       ...emptyContext,
       senderName: () => "Mina",
       senderId: () => "7",
+      avatarPlaceholder: () => mapAvatarPlaceholder("Mina", 2),
     });
     expect(mapped).toMatchObject({
       id: "42",
       chatId: "11",
       senderName: "Mina",
       senderId: "7",
+      senderAvatarPlaceholder: {
+        glyph: "M",
+        lightColors: ["#A695E7", "#BFA0F3"],
+        darkColors: ["#A695E7", "#BFA0F3"],
+      },
       body: "Hello **Ada**",
       entities: [{ offset: 6, length: 5, type: "bold" }],
       outgoing: false,
@@ -243,6 +257,38 @@ describe("tdlib mappers", () => {
     expect(initials("Ada Byron")).toBe("AB");
     expect(initials("Ada")).toBe("AD");
     expect(initials("")).toBe("?");
+    expect(avatarGlyph("Ada Byron")).toBe("A");
+    expect(avatarGlyph("test")).toBe("T");
+    expect(avatarGlyph("风向旗参考快讯")).toBe("风");
+    expect(avatarGlyph("🔥 HN")).toBe("🔥");
+    expect(avatarGlyph("")).toBe("?");
+    expect(mapAvatarPlaceholder("test", 3)).toEqual({
+      glyph: "T",
+      lightColors: ["#7BC862", "#6EC96C"],
+      darkColors: ["#7BC862", "#6EC96C"],
+    });
+    expect(accentPaletteOf(0).light[0]).toBe("#E17076");
+    expect(
+      accentPaletteOf(
+        42,
+        new Map([
+          [
+            42,
+            {
+              _: "accentColor",
+              id: 42,
+              built_in_accent_color_id: 0,
+              light_theme_colors: [0xe91e63],
+              dark_theme_colors: [0x880e4f],
+              min_channel_chat_boost_level: 0,
+            } as Td.accentColor,
+          ],
+        ]),
+      ),
+    ).toEqual({
+      light: ["#e91e63"],
+      dark: ["#880e4f"],
+    });
 
     const photo = mapMessage(
       {

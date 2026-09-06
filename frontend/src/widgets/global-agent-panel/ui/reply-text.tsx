@@ -85,6 +85,7 @@ export function MentionChip({
       <Avatar
         src={target.avatarUrl}
         pending={target.avatarPending}
+        placeholder={target.avatarPlaceholder}
         className="mr-1 ml-0.5 inline-grid size-3.5 align-[-0.2em]"
       />
       {target.name}

@@ -26,6 +26,9 @@ export function filterMentionMembers(
             description: `@${member.username}`,
             avatarUrl: member.avatarDataUrl,
             avatarPending: member.avatarPending,
+            ...(member.avatarPlaceholder
+              ? { avatarPlaceholder: member.avatarPlaceholder }
+              : {}),
             member,
           },
         ]

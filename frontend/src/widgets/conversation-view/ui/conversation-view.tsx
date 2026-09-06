@@ -615,6 +615,11 @@ function MessageAuthorAvatar({
           ? !currentUser
           : settled === undefined && (message.senderAvatarPending ?? false)
       }
+      placeholder={
+        outgoing
+          ? currentUser?.avatarPlaceholder
+          : message.senderAvatarPlaceholder
+      }
       className="size-full"
     />
   );
@@ -1787,6 +1792,7 @@ export function ConversationView() {
               src={activeChat.avatarDataUrl}
               pending={activeChat.avatarPending}
               mark={activeChat.kind === "saved" ? "saved" : undefined}
+              placeholder={activeChat.avatarPlaceholder}
               className="size-full"
             />
           </PressableBlock>
