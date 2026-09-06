@@ -373,7 +373,13 @@ interface ChatState {
    * chat switch: the allowed set is a per-chat setting.
    */
   availableReactions: ReadonlyArray<string>;
-  loadAvailableReactions(): Promise<void>;
+  /**
+   * True after the first listing for the active chat settles (success or
+   * empty). Distinguishes "not loaded yet" from "this chat allows none",
+   * so the picker does not spin forever on an empty set.
+   */
+  availableReactionsReady: boolean;
+  loadAvailableReactions(messageId?: string): Promise<void>;
   notificationsEnabled: boolean;
   notificationSenderName: boolean;
   notificationPreview: boolean;
@@ -658,6 +664,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   favoriteStickers: [],
   stickerSetsError: null,
   availableReactions: [],
+  availableReactionsReady: false,
   notificationsEnabled: false,
   notificationSenderName: true,
   notificationPreview: true,
@@ -730,6 +737,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         animateInMessageIds: [],
         animateChatIds: [],
         availableReactions: [],
+        availableReactionsReady: false,
       }));
       // Folder unread walks every dialog and Telegram flood-waits that RPC.
       // Keep it off the first-paint path so the chat list can appear.
@@ -800,6 +808,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       selectedMessageIds: [],
       animateInMessageIds: [],
       availableReactions: [],
+      availableReactionsReady: false,
     });
     try {
       const page = await window.telo.workspace.listMessagePage(chatId);
@@ -1068,7 +1077,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           ),
     }));
   },
-  async loadAvailableReactions() {
+  async loadAvailableReactions(messageId) {
     const chatId = get().activeChatId;
     if (!chatId) return;
     // One listing per chat, like the sticker sets above: every reaction
@@ -1077,15 +1086,20 @@ export const useChatStore = create<ChatState>((set, get) => ({
     if (availableReactionsChatId === chatId) return;
     availableReactionsChatId = chatId;
     try {
-      const emojis = await window.telo.workspace.listAvailableReactions(chatId);
+      const emojis = await window.telo.workspace.listAvailableReactions(
+        chatId,
+        messageId,
+      );
       // A chat switch mid-request already emptied the list for the new
       // conversation; the late answer describes the previous one.
       if (get().activeChatId !== chatId) return;
-      set({ availableReactions: emojis });
-    } catch (error) {
+      set({ availableReactions: emojis, availableReactionsReady: true });
+    } catch {
       // Nothing is held for this chat, so the next picker asks again.
       availableReactionsChatId = null;
-      throw error;
+      if (get().activeChatId === chatId) {
+        set({ availableReactions: [], availableReactionsReady: true });
+      }
     }
   },
   async sendSticker(sticker) {

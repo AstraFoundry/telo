@@ -69,8 +69,15 @@ export class MessageActionsService {
     });
   }
 
-  listAvailableReactions(chatId: string): Promise<ReadonlyArray<string>> {
+  listAvailableReactions(
+    chatId: string,
+    messageId?: string,
+  ): Promise<ReadonlyArray<string>> {
     if (!chatId.trim()) throw new Error("Chat id is required");
-    return this.repository.listAvailableReactions(chatId);
+    const target = messageId?.trim();
+    return this.repository.listAvailableReactions(
+      chatId,
+      target ? target : undefined,
+    );
   }
 }

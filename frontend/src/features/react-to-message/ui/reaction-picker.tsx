@@ -4,7 +4,6 @@ import { useState } from "react";
 import type { MessageDto } from "../../../../../contracts/src/ipc";
 import { useChatStore } from "entities/chat";
 import { copy } from "shared/config/copy";
-import { userFacingErrorDetail } from "shared/lib/user-facing-error";
 import {
   Button,
   LoadIndicator,
@@ -17,8 +16,7 @@ import { ReactionChip } from "./reaction-chip";
 
 export interface ReactionPickerProps {
   readonly message: MessageDto;
-  /** Surfaced by the transcript row, which owns the bubble's alert slot. */
-  onFailure(detail: string): void;
+  onOpenChange?(open: boolean): void;
 }
 
 /**
@@ -26,33 +24,40 @@ export interface ReactionPickerProps {
  * and both web clients offer the same strip of the chat's allowed reactions
  * (Telegram Web A `ReactionSelector`, mounted on the message context menu;
  * Telegram Web K's hover-reaction button off the bubble edge), so the list
- * comes from the chat itself rather than a list this client invented.
+ * comes from `getMessageAvailableReactions` rather than a list this client
+ * invented.
  *
  * One reaction per account: picking the emoji already chosen clears it, which
  * is what `toggleReaction` does, so the picker needs no separate remove
  * action. The popover owns Escape, focus return and its reduced-motion
  * fallback; the chips are ordinary buttons, so Enter and Space activate them.
+ *
+ * A failed toggle reverts the optimistic chip. Telegram Desktop does not
+ * paint a protocol error under the bubble, so this picker does not either.
  */
-export function ReactionPicker({ message, onFailure }: ReactionPickerProps) {
+export function ReactionPicker({ message, onOpenChange }: ReactionPickerProps) {
   const [open, setOpen] = useState(false);
   const availableReactions = useChatStore((state) => state.availableReactions);
+  const availableReactionsReady = useChatStore(
+    (state) => state.availableReactionsReady,
+  );
   const loadAvailableReactions = useChatStore(
     (state) => state.loadAvailableReactions,
   );
   const toggleReaction = useChatStore((state) => state.toggleReaction);
   const chosen = message.reactions?.find((reaction) => reaction.chosen)?.emoji;
 
+  const changeOpen = (next: boolean) => {
+    setOpen(next);
+    onOpenChange?.(next);
+    // The list is fetched when the picker is first shown, not when the
+    // transcript renders: a chat's allowed reactions cost a round trip
+    // and most rows are never reacted to.
+    if (next) void loadAvailableReactions(message.id);
+  };
+
   return (
-    <MorphPopover
-      open={open}
-      onOpenChange={(next) => {
-        setOpen(next);
-        // The list is fetched when the picker is first shown, not when the
-        // transcript renders: a chat's allowed reactions cost a round trip
-        // and most rows are never reacted to.
-        if (next) void loadAvailableReactions();
-      }}
-    >
+    <MorphPopover open={open} onOpenChange={changeOpen}>
       <MorphPopoverTrigger>
         <Button
           size="icon"
@@ -70,9 +75,9 @@ export function ReactionPicker({ message, onFailure }: ReactionPickerProps) {
       <MorphPopoverContent
         side="top"
         align={message.outgoing ? "end" : "start"}
-        className="p-1"
+        className="pointer-events-auto p-1"
       >
-        {availableReactions.length === 0 ? (
+        {!availableReactionsReady ? (
           <LoadIndicator label={copy.reactions} />
         ) : (
           <div
@@ -86,12 +91,8 @@ export function ReactionPicker({ message, onFailure }: ReactionPickerProps) {
                 emoji={emoji}
                 chosen={emoji === chosen}
                 onSelect={() => {
-                  setOpen(false);
-                  void toggleReaction(message.id, emoji).catch(
-                    (error: unknown) => {
-                      onFailure(userFacingErrorDetail(error) ?? "");
-                    },
-                  );
+                  changeOpen(false);
+                  void toggleReaction(message.id, emoji).catch(() => undefined);
                 }}
               />
             ))}

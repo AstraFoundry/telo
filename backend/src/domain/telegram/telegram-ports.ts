@@ -183,11 +183,14 @@ export interface TelegramRepository {
    */
   setMessageReaction(input: SetMessageReactionInput): Promise<void>;
   /**
-   * Emoji the picker may offer for this chat, in Telegram's own order.
-   * Reaction sets are per-chat on the wire, which is why the chat is named
-   * even where an adapter answers the account-wide list.
+   * Emoji the picker may offer, in Telegram's own order. Prefer the
+   * per-message list (`getMessageAvailableReactions`) when `messageId` is
+   * given; otherwise the chat's allowed set / the account's active emoji.
    */
-  listAvailableReactions(chatId: string): Promise<ReadonlyArray<string>>;
+  listAvailableReactions(
+    chatId: string,
+    messageId?: string,
+  ): Promise<ReadonlyArray<string>>;
   /**
    * Ends the current session: disconnects the client and clears the stored
    * session. A no-op for the demo workspace; the demo reset is owned by the

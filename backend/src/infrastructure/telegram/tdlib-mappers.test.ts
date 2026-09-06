@@ -13,14 +13,17 @@ import {
   fileIdFromMediaId,
   initials,
   mapAuthorizationStatus,
+  mapAvailableReactionEmojis,
   mapAvatarPlaceholder,
   mapChat,
   mapChatKind,
   mapConnectionState,
   mapFolders,
   mapMessage,
+  mapReactionTypeEmojis,
   mediaIdForFile,
   minithumbnailDataUrl,
+  normalizeReactionEmoji,
 } from "./tdlib-mappers";
 
 const goldenRoot = path.dirname(fileURLToPath(import.meta.url));
@@ -516,5 +519,56 @@ describe("tdlib mappers", () => {
       }),
     ).toBe("data:image/jpeg;base64,YQ==");
     expect(minithumbnailDataUrl(undefined)).toBeNull();
+  });
+
+  it("strips emoji variation selectors so reactions match Telegram's wire form", () => {
+    expect(normalizeReactionEmoji("❤️")).toBe("❤");
+    expect(normalizeReactionEmoji("👍")).toBe("👍");
+  });
+
+  it("orders message reactions as top, then recent, then popular, unique", () => {
+    expect(
+      mapAvailableReactionEmojis({
+        _: "availableReactions",
+        top_reactions: [
+          {
+            _: "availableReaction",
+            type: { _: "reactionTypeEmoji", emoji: "❤️" },
+            needs_premium: false,
+          },
+        ],
+        recent_reactions: [
+          {
+            _: "availableReaction",
+            type: { _: "reactionTypeEmoji", emoji: "🔥" },
+            needs_premium: false,
+          },
+        ],
+        popular_reactions: [
+          {
+            _: "availableReaction",
+            type: { _: "reactionTypeEmoji", emoji: "❤" },
+            needs_premium: false,
+          },
+          {
+            _: "availableReaction",
+            type: { _: "reactionTypeEmoji", emoji: "🎉" },
+            needs_premium: false,
+          },
+        ],
+        allow_custom_emoji: false,
+        are_tags: false,
+      }),
+    ).toEqual(["❤", "🔥", "🎉"]);
+  });
+
+  it("maps a chat's restricted reaction types without inventing extras", () => {
+    expect(
+      mapReactionTypeEmojis([
+        { _: "reactionTypeEmoji", emoji: "👍" },
+        { _: "reactionTypeCustomEmoji", custom_emoji_id: "1" },
+        { _: "reactionTypeEmoji", emoji: "👍" },
+      ]),
+    ).toEqual(["👍"]);
   });
 });

@@ -46,21 +46,24 @@ import {
 } from "./tdlib-client";
 import type { TdjsonResolveOptions } from "./tdlib-json-path";
 import {
+  accentPaletteOf,
   chatIdOf,
   compareListOrder,
   fileIdFromMediaId,
   initials,
   mapAuthorizationStatus,
+  mapAvailableReactionEmojis,
   mapAvatarPlaceholder,
   mapChat,
   mapConnectionState,
   mapFolders,
   mapMessage,
   mapReactions,
+  mapReactionTypeEmojis,
   mediaIdForFile,
   messageIdOf,
   minithumbnailDataUrl,
-  accentPaletteOf,
+  normalizeReactionEmoji,
   type MessageMapContext,
 } from "./tdlib-mappers";
 import { copyIntoMediaCache } from "./file-telegram-account-database";
@@ -97,6 +100,8 @@ export class TdlibTelegramRepository implements TelegramRepository {
   >();
   private readonly secretChats = new Map<number, Td.secretChat>();
   private readonly stickerOutlines = new Map<number, string | null>();
+  /** Account-wide default emoji set from `updateActiveEmojiReactions`. */
+  private activeEmojiReactions: ReadonlyArray<string> = [];
   private selfUserId: number | null = null;
   private sendingId = 1;
   private unsubscribe: (() => void) | null = null;
@@ -933,22 +938,46 @@ export class TdlibTelegramRepository implements TelegramRepository {
       chat_id: Number(input.chatId),
       message_id: Number(input.messageId),
       reaction_types: input.emoji
-        ? [{ _: "reactionTypeEmoji", emoji: input.emoji }]
+        ? [
+            {
+              _: "reactionTypeEmoji",
+              emoji: normalizeReactionEmoji(input.emoji),
+            },
+          ]
         : [],
       is_big: false,
     });
   }
 
-  async listAvailableReactions(chatId: string): Promise<ReadonlyArray<string>> {
-    const chat = this.chats.get(chatId);
-    const available = chat?.available_reactions;
-    if (!available) return [];
-    if (available._ === "chatAvailableReactionsAll") {
-      return ["👍", "👎", "❤️", "🔥", "🎉", "😁"];
+  async listAvailableReactions(
+    chatId: string,
+    messageId?: string,
+  ): Promise<ReadonlyArray<string>> {
+    if (messageId) {
+      try {
+        const available = await this.client.invoke<Td.availableReactions>({
+          _: "getMessageAvailableReactions",
+          chat_id: Number(chatId),
+          message_id: Number(messageId),
+          row_size: 8,
+        });
+        if (available._ === "availableReactions") {
+          const emojis = mapAvailableReactionEmojis(available);
+          if (emojis.length > 0) return emojis;
+        }
+      } catch {
+        // A deleted or inaccessible message still has a chat reaction policy.
+      }
     }
-    return available.reactions.flatMap((reaction) =>
-      reaction._ === "reactionTypeEmoji" ? [reaction.emoji] : [],
-    );
+    return this.chatReactionEmojis(chatId);
+  }
+
+  private chatReactionEmojis(chatId: string): ReadonlyArray<string> {
+    const available = this.chats.get(chatId)?.available_reactions;
+    if (available?._ === "chatAvailableReactionsSome") {
+      return mapReactionTypeEmojis(available.reactions);
+    }
+    return this.activeEmojiReactions.map(normalizeReactionEmoji);
   }
 
   async logout(): Promise<void> {
@@ -1480,6 +1509,16 @@ export class TdlibTelegramRepository implements TelegramRepository {
       if (!chat) return;
       chat.title = update.title;
       this.emit({ type: "chat-upsert", chat: this.toChat(chat) });
+      return;
+    }
+    if (update._ === "updateChatAvailableReactions") {
+      const chat = this.chats.get(chatIdOf(update.chat_id));
+      if (!chat) return;
+      chat.available_reactions = update.available_reactions;
+      return;
+    }
+    if (update._ === "updateActiveEmojiReactions") {
+      this.activeEmojiReactions = update.emojis;
       return;
     }
     if (update._ === "updateNewMessage") {
@@ -2242,8 +2281,11 @@ export class TdlibClientCoordinator implements TelegramAccountClient {
   setMessageReaction(input: SetMessageReactionInput): Promise<void> {
     return this.repository.setMessageReaction(input);
   }
-  listAvailableReactions(chatId: string): Promise<ReadonlyArray<string>> {
-    return this.repository.listAvailableReactions(chatId);
+  listAvailableReactions(
+    chatId: string,
+    messageId?: string,
+  ): Promise<ReadonlyArray<string>> {
+    return this.repository.listAvailableReactions(chatId, messageId);
   }
 
   private async openClient(apiId: number, apiHash: string): Promise<void> {

@@ -7,14 +7,16 @@ describe("windowChromeOptions", () => {
     expect(windowChromeOptions("darwin")).toEqual({
       titleBarStyle: "hiddenInset",
       titleBarOverlay: true,
+      autoHideMenuBar: true,
     });
   });
 
   it.each(["win32", "linux"] satisfies NodeJS.Platform[])(
-    "keeps the native title bar on %s",
+    "keeps the native title bar on %s without Chromium's menu bar",
     (platform) => {
       expect(windowChromeOptions(platform)).toEqual({
         titleBarStyle: "default",
+        autoHideMenuBar: true,
       });
     },
   );

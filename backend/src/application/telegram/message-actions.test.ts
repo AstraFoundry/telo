@@ -257,11 +257,10 @@ describe("MessageActionsService", () => {
     const port = repository();
     const service = new MessageActionsService(port);
 
-    await expect(service.listAvailableReactions("chat")).resolves.toEqual([
-      "👍",
-      "🎉",
-    ]);
-    expect(port.listAvailableReactions).toHaveBeenCalledWith("chat");
+    await expect(service.listAvailableReactions("chat", "m1")).resolves.toEqual(
+      ["👍", "🎉"],
+    );
+    expect(port.listAvailableReactions).toHaveBeenCalledWith("chat", "m1");
   });
 
   it("rejects an available-reactions lookup without a chat", () => {

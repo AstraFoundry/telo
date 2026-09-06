@@ -2242,8 +2242,10 @@ describe("chat-store", () => {
     expect(telo.workspace.listAvailableReactions).toHaveBeenCalledTimes(1);
     expect(telo.workspace.listAvailableReactions).toHaveBeenCalledWith(
       "reactions-a",
+      undefined,
     );
     expect(useChatStore.getState().availableReactions).toEqual(["👍", "❤"]);
+    expect(useChatStore.getState().availableReactionsReady).toBe(true);
 
     // The allowed set belongs to the conversation, so the next chat starts
     // empty and loads its own.
@@ -2255,7 +2257,22 @@ describe("chat-store", () => {
     expect(telo.workspace.listAvailableReactions).toHaveBeenCalledTimes(2);
     expect(telo.workspace.listAvailableReactions).toHaveBeenLastCalledWith(
       "reactions-b",
+      undefined,
     );
+  });
+
+  it("loadAvailableReactions() settles empty without throwing when the listing fails", async () => {
+    const telo = installTeloApiMock();
+    telo.workspace.listAvailableReactions.mockRejectedValue(
+      new Error("REACTION_INVALID"),
+    );
+
+    await useChatStore.getState().select("reactions-fail");
+    await expect(
+      useChatStore.getState().loadAvailableReactions("m1"),
+    ).resolves.toBeUndefined();
+    expect(useChatStore.getState().availableReactions).toEqual([]);
+    expect(useChatStore.getState().availableReactionsReady).toBe(true);
   });
 });
 

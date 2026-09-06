@@ -226,8 +226,10 @@ export function registerIpc(container: ApplicationContainer): void {
     (_event, input: SetMessageReactionInput) =>
       container.messageActions.setMessageReaction(input),
   );
-  ipcMain.handle(channels.messageReactionsAvailable, (_event, chatId: string) =>
-    container.messageActions.listAvailableReactions(chatId),
+  ipcMain.handle(
+    channels.messageReactionsAvailable,
+    (_event, chatId: string, messageId?: string) =>
+      container.messageActions.listAvailableReactions(chatId, messageId),
   );
   ipcMain.handle(
     channels.chatPinSet,

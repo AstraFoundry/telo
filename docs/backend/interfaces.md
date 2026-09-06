@@ -6,7 +6,7 @@ The interfaces layer adapts the application layer to the outside world. In Telo 
 
 `interfaces/electron/` contains the whole adapter:
 
-- **`main.ts`** — Electron main-process entry point. Builds the container, registers IPC handlers, creates the window, and pushes Telegram auth-state events to the renderer.
+- **`main.ts`** — Electron main-process entry point. Builds the container, registers IPC handlers, hides Chromium's application menu, creates the window, and pushes Telegram auth-state events to the renderer.
 - **`container.ts`** — composition root. Wires infrastructure implementations into application services.
 - **`channels.ts`** — IPC channel names. Private to this layer; the renderer never references raw channel strings.
 - **`register-ipc.ts`** — one `ipcMain.handle` registration per capability, plus the AG-UI event stream for agent runs.

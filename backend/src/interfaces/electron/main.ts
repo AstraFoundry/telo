@@ -51,6 +51,7 @@ function createWindow(): void {
       sandbox: true,
     },
   });
+  mainWindow.setMenuBarVisibility(false);
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (isSafeExternalUrl(url)) void shell.openExternal(url);
@@ -142,6 +143,8 @@ app.whenReady().then(async () => {
     stopTriggerEngine();
     container.agentScheduler.stop();
   };
+  // Chromium's default File/Edit/View bar is not part of the product.
+  Menu.setApplicationMenu(null);
   createWindow();
   void container.telegram.initialize();
   app.on("activate", () => {
