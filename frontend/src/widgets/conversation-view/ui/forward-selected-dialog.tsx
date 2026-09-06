@@ -1,4 +1,6 @@
-import { useChatStore } from "entities/chat";
+import { useEffect, useMemo } from "react";
+
+import { chatsForPicker, displayChatTitle, useChatStore } from "entities/chat";
 import { copy } from "shared/config/copy";
 import {
   Avatar,
@@ -22,9 +24,18 @@ export function ForwardSelectedDialog({
   onClose,
 }: ForwardSelectedDialogProps) {
   const chats = useChatStore((state) => state.chats);
+  const includeSavedMessages = useChatStore(
+    (state) => state.includeSavedMessages,
+  );
   const forwardSelectedMessages = useChatStore(
     (state) => state.forwardSelectedMessages,
   );
+  const visible = useMemo(() => chatsForPicker(chats, ""), [chats]);
+
+  useEffect(() => {
+    if (!open) return;
+    void includeSavedMessages();
+  }, [open, includeSavedMessages]);
 
   return (
     <CenterMorphModal
@@ -43,7 +54,7 @@ export function ForwardSelectedDialog({
             {copy.forwardTo}
           </h2>
           <div className="min-h-0 overflow-y-auto">
-            {chats.map((chat) => (
+            {visible.map((chat) => (
               <Button
                 key={chat.id}
                 variant="ghost"
@@ -60,7 +71,7 @@ export function ForwardSelectedDialog({
                   className="size-10"
                 />
                 <span className="min-w-0 flex-1 truncate text-left text-sm font-semibold">
-                  {chat.title}
+                  {displayChatTitle(chat)}
                 </span>
               </Button>
             ))}

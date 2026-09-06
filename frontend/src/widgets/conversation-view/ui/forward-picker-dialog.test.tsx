@@ -136,15 +136,36 @@ describe("ForwardPickerDialog", () => {
 
   it("lists Saved Messages even when that chat was not on the first dialog page", async () => {
     const telo = installTeloApiMock();
+    telo.workspace.openSavedMessages.mockResolvedValue(
+      chat({
+        id: "saved",
+        title: "Rafa K93",
+        kind: "saved",
+        initials: "RK",
+      }),
+    );
     useChatStore.setState({
       chats: [chat({ id: "chat-2", title: "Product Notes", initials: "PN" })],
       forwardMessage: vi.fn().mockResolvedValue(undefined),
     });
+    const user = userEvent.setup();
     render(<ForwardPickerDialog message={forwarded} onClose={vi.fn()} />);
 
-    await screen.findByRole("dialog", { name: copy.forwardTo });
+    const dialog = await screen.findByRole("dialog", { name: copy.forwardTo });
     await vi.waitFor(() => {
       expect(telo.workspace.openSavedMessages).toHaveBeenCalledOnce();
     });
+    expect(
+      within(dialog).getByRole("button", { name: copy.savedMessages }),
+    ).toBeTruthy();
+
+    await user.type(
+      within(dialog).getByRole("textbox", { name: copy.searchChats }),
+      "Saved",
+    );
+    expect(
+      within(dialog).getByRole("button", { name: copy.savedMessages }),
+    ).toBeTruthy();
+    expect(within(dialog).queryByText("Product Notes")).toBeNull();
   });
 });

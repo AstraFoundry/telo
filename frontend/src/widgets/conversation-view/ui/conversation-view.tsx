@@ -46,6 +46,7 @@ import type {
 } from "../../../../../contracts/src/ipc";
 import {
   chatsForFolder,
+  displayChatTitle,
   secretChatStatus,
   useChatProfileStore,
   useChatStore,
@@ -1792,7 +1793,7 @@ export function ConversationView() {
         <div className="min-w-0 flex-1">
           {/* deslop-ignore-next-line 12 */}
           <h1 className="truncate text-base font-semibold">
-            {activeChat?.title ?? ""}
+            {activeChat ? displayChatTitle(activeChat) : ""}
           </h1>
           {activeChat?.kind === "secret" ? (
             <span className="flex items-center gap-1 text-xs text-muted-foreground">
