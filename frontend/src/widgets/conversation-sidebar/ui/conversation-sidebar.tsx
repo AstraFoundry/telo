@@ -652,8 +652,11 @@ export function ConversationSidebar({
   const historyMode = searchFocused && !searching;
 
   return (
-    <aside className="flex min-w-0 flex-col" aria-label={copy.chats}>
-      <header className="window-titlebar-safe-leading h-14 pr-3 [app-region:drag]">
+    <aside
+      className="flex h-full min-h-0 min-w-0 flex-col"
+      aria-label={copy.chats}
+    >
+      <header className="window-titlebar-safe-leading window-titlebar-safe-trailing h-14 [app-region:drag]">
         <div className="window-titlebar-safe-content">
           <strong
             className="truncate text-base tracking-tight"

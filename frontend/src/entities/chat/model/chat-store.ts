@@ -1364,7 +1364,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       await window.telo.workspace.setMessageReaction({
         chatId,
         messageId,
-        emoji: toggled.emoji,
+        emoji,
+        ...(toggled.emoji === null ? { remove: true } : {}),
       });
     } catch (error) {
       set((state) => ({

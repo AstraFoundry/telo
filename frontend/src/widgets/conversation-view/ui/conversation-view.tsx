@@ -1778,7 +1778,7 @@ export function ConversationView() {
       className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden"
       style={{ "--message-font-size": `${textSize}px` } as CSSProperties}
     >
-      <header className="flex h-14 items-center gap-2 px-4 [app-region:drag]">
+      <header className="window-titlebar-safe-trailing flex h-14 items-center gap-2 pl-4 [app-region:drag]">
         {activeChat ? (
           <PressableBlock
             aria-label={copy.openProfile}

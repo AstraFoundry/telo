@@ -228,13 +228,19 @@ describe("MessageActionsService", () => {
       chatId: "chat",
       messageId: "message",
       emoji: "👍",
+      remove: false,
     });
   });
 
-  it("clears a reaction with a null emoji", async () => {
+  it("clears a reaction with remove true", async () => {
     const port = repository();
     const service = new MessageActionsService(port);
-    const input = { chatId: "chat", messageId: "message", emoji: null };
+    const input = {
+      chatId: "chat",
+      messageId: "message",
+      emoji: "👍",
+      remove: true,
+    };
 
     await service.setMessageReaction(input);
 

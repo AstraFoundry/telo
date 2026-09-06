@@ -111,7 +111,8 @@ describe("ReactionBar", () => {
     expect(telo.workspace.setMessageReaction).toHaveBeenCalledWith({
       chatId: "a",
       messageId: "m1",
-      emoji: null,
+      emoji: "👍",
+      remove: true,
     });
   });
 

@@ -6,13 +6,15 @@ type WindowChromeOptions = Pick<
 >;
 
 /**
- * Keeps native window controls on every platform while allowing the macOS
- * workspace to extend into the title bar. The overlay exposes Chromium's
- * titlebar-area-* CSS environment variables so the renderer can avoid the
- * traffic lights without relying on hardcoded coordinates.
+ * Keeps native window controls on every platform while letting the workspace
+ * occupy the title-bar band. Chromium's File/Edit/View application menu is
+ * not product chrome; callers also hide it with `Menu.setApplicationMenu(null)`
+ * and `BrowserWindow.setMenu(null)`.
  *
- * Chromium's File/Edit/View application menu is not product chrome. Callers
- * also hide it with `Menu.setApplicationMenu(null)`.
+ * macOS uses `hiddenInset` so the traffic lights sit in the content. Windows
+ * and Linux use a hidden title bar plus Window Controls Overlay so the OS
+ * close/min/max buttons sit in the same 56px header band instead of a second
+ * system bar above the workspace.
  */
 export function windowChromeOptions(
   platform: NodeJS.Platform,
@@ -25,5 +27,9 @@ export function windowChromeOptions(
     };
   }
 
-  return { titleBarStyle: "default", autoHideMenuBar: true };
+  return {
+    titleBarStyle: "hidden",
+    titleBarOverlay: { height: 56 },
+    autoHideMenuBar: true,
+  };
 }

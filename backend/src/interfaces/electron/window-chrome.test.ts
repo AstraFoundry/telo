@@ -12,10 +12,11 @@ describe("windowChromeOptions", () => {
   });
 
   it.each(["win32", "linux"] satisfies NodeJS.Platform[])(
-    "keeps the native title bar on %s without Chromium's menu bar",
+    "hides the native title bar on %s and overlays window controls",
     (platform) => {
       expect(windowChromeOptions(platform)).toEqual({
-        titleBarStyle: "default",
+        titleBarStyle: "hidden",
+        titleBarOverlay: { height: 56 },
         autoHideMenuBar: true,
       });
     },
