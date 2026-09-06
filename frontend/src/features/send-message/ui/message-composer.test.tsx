@@ -790,7 +790,7 @@ describe("MessageComposer", () => {
     field.setSelectionRange(0, 5);
     fireEvent.select(field);
 
-    fireEvent.keyDown(field, { key: "b", ctrlKey: true });
+    expect(fireEvent.keyDown(field, { key: "b", ctrlKey: true })).toBe(false);
     fireEvent.keyDown(field, { key: "Enter" });
 
     expect(onSend).toHaveBeenCalledWith("Hello team", {

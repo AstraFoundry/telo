@@ -1,5 +1,5 @@
 import { Check, CircleNotch } from "@phosphor-icons/react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import type { MessageDto } from "../../../../../contracts/src/ipc";
 import { useChatStore } from "entities/chat";
@@ -30,11 +30,19 @@ export function ForwardPickerDialog({
 }: ForwardPickerDialogProps) {
   const chats = useChatStore((state) => state.chats);
   const forwardMessage = useChatStore((state) => state.forwardMessage);
+  const includeSavedMessages = useChatStore(
+    (state) => state.includeSavedMessages,
+  );
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<ReadonlyArray<string>>([]);
   const [hideSender, setHideSender] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!message) return;
+    void includeSavedMessages();
+  }, [message, includeSavedMessages]);
 
   // Each forwarded message gets a fresh picker: selection, query, and the
   // toggle reset when the dialog reopens for another message.

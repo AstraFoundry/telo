@@ -56,6 +56,9 @@ export function registerIpc(container: ApplicationContainer): void {
   ipcMain.handle(channels.secretChatCreate, (_event, userId: string) =>
     container.workspace.createSecretChat(userId),
   );
+  ipcMain.handle(channels.savedMessagesOpen, () =>
+    container.workspace.openSavedMessages(),
+  );
   ipcMain.handle(channels.folderList, () => container.workspace.listFolders());
   ipcMain.handle(
     channels.keywordFolderCreate,
@@ -116,8 +119,8 @@ export function registerIpc(container: ApplicationContainer): void {
   );
   ipcMain.handle(
     channels.stickerSend,
-    (_event, chatId: string, stickerId: string) =>
-      container.workspace.sendSticker(chatId, stickerId),
+    (_event, chatId: string, stickerId: string, clientId?: string) =>
+      container.workspace.sendSticker(chatId, stickerId, clientId),
   );
   ipcMain.handle(
     channels.stickerSetGet,

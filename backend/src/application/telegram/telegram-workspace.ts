@@ -111,6 +111,10 @@ export class TelegramWorkspaceService {
     return this.repository.createSecretChat(userId.trim());
   }
 
+  openSavedMessages(): Promise<ChatDto> {
+    return this.repository.openSavedMessages();
+  }
+
   async listFolders(): Promise<ReadonlyArray<ChatFolderDto>> {
     const native = await this.repository.listFolders();
     if (!this.keywordFolders) return native;
@@ -216,10 +220,14 @@ export class TelegramWorkspaceService {
     return this.repository.searchStickers(normalized);
   }
 
-  sendSticker(chatId: string, stickerId: string): Promise<MessageDto> {
+  sendSticker(
+    chatId: string,
+    stickerId: string,
+    clientId?: string,
+  ): Promise<MessageDto> {
     if (!chatId.trim()) throw new Error("Chat id is required");
     if (!stickerId.trim()) throw new Error("Sticker id is required");
-    return this.repository.sendSticker(chatId, stickerId);
+    return this.repository.sendSticker(chatId, stickerId, clientId);
   }
 
   getStickerSet(reference: StickerSetReferenceDto): Promise<StickerSetDto> {

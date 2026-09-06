@@ -189,6 +189,235 @@ describe("TdlibTelegramRepository", () => {
     );
   });
 
+  it("pages history past a short first batch and drops the cursor message", async () => {
+    const { repository, bridge } = setup();
+    bridge.handlers.set("getChatHistory", (request) => {
+      const from = Number(request.from_message_id);
+      if (from === 0) {
+        return {
+          _: "messages",
+          total_count: 40,
+          messages: [tdMessage(40)],
+        };
+      }
+      if (from === 40) {
+        return {
+          _: "messages",
+          total_count: 40,
+          messages: [tdMessage(40), tdMessage(39), tdMessage(38)],
+        };
+      }
+      return {
+        _: "messages",
+        total_count: 40,
+        messages: [tdMessage(from)],
+      };
+    });
+    const first = await repository.listMessagePage("11", { limit: 1 });
+    expect(first.items.map((item) => item.id)).toEqual(["40"]);
+    expect(first.nextCursor).toBe("40");
+    const second = await repository.listMessagePage("11", {
+      beforeMessageId: first.nextCursor,
+      limit: 50,
+    });
+    expect(second.items.map((item) => item.id)).toEqual(["38", "39"]);
+    expect(second.nextCursor).toBe("38");
+    const third = await repository.listMessagePage("11", {
+      beforeMessageId: second.nextCursor,
+      limit: 50,
+    });
+    expect(third.items).toEqual([]);
+    expect(third.nextCursor).toBeNull();
+  });
+
+  it("opens Saved Messages through createPrivateChat", async () => {
+    const { repository, bridge, events } = setup();
+    await repository.hydrate();
+    const saved = tdChat(1, {
+      title: "Saved Messages",
+      type: { _: "chatTypePrivate", user_id: 1 },
+    });
+    bridge.handlers.set("createPrivateChat", () => saved);
+    const opened = await repository.openSavedMessages();
+    expect(opened.kind).toBe("saved");
+    expect(opened.id).toBe("1");
+    expect(
+      bridge.invokes.some(
+        (item) => (item as { _: string })._ === "createPrivateChat",
+      ),
+    ).toBe(true);
+    expect(events).toContainEqual(
+      expect.objectContaining({ type: "chat-upsert", chat: opened }),
+    );
+  });
+
+  it("reconciles a pending send onto the server message id", async () => {
+    const { repository, bridge, events } = setup();
+    await repository.hydrate();
+    bridge.handlers.set("sendMessage", (request) => {
+      const sendingId = (request.options as { sending_id: number }).sending_id;
+      return {
+        ...tdMessage(100),
+        sending_state: {
+          _: "messageSendingStatePending",
+          sending_id: sendingId,
+        },
+      };
+    });
+    const sent = await repository.sendMessage("11", "hello", undefined, "c1");
+    expect(sent.clientId).toBe("c1");
+    const sendingId = (
+      bridge.invokes.find(
+        (item) => (item as { _: string })._ === "sendMessage",
+      ) as {
+        options: { sending_id: number };
+      }
+    ).options.sending_id;
+    events.length = 0;
+    bridge.emit({
+      _: "updateNewMessage",
+      message: {
+        ...tdMessage(100),
+        sending_state: {
+          _: "messageSendingStatePending",
+          sending_id: sendingId,
+        },
+      },
+    } as Td.Update);
+    bridge.emit({
+      _: "updateMessageSendSucceeded",
+      old_message_id: 100,
+      message: tdMessage(200),
+    } as Td.Update);
+    await vi.waitFor(() => {
+      expect(
+        events.some(
+          (event) =>
+            event.type === "message-delete" && event.messageIds.includes("100"),
+        ),
+      ).toBe(true);
+      expect(
+        events.some(
+          (event) =>
+            event.type === "message-upsert" &&
+            event.message.id === "200" &&
+            event.message.clientId === "c1",
+        ),
+      ).toBe(true);
+    });
+  });
+
+  it("keeps a min chat avatar pending until the photo arrives", async () => {
+    const { events, bridge } = setup();
+    const source = path.join(os.tmpdir(), `telo-avatar-min-${Date.now()}.jpg`);
+    writeFileSync(source, "jpeg");
+    events.length = 0;
+    bridge.emit({
+      _: "updateNewChat",
+      chat: tdChat(77),
+    } as Td.Update);
+    const created = events.find(
+      (event) => event.type === "chat-upsert" && event.chat.id === "77",
+    );
+    expect(created).toMatchObject({
+      type: "chat-upsert",
+      chat: { id: "77", avatarPending: true, avatarDataUrl: null },
+    });
+    expect(
+      events.some(
+        (event) => event.type === "chat-avatar" && event.chatId === "77",
+      ),
+    ).toBe(false);
+    bridge.handlers.set("downloadFile", () => ({
+      id: 91,
+      size: 4,
+      local: {
+        is_downloading_completed: true,
+        is_downloading_active: false,
+        path: source,
+        downloaded_size: 4,
+      },
+    }));
+    bridge.emit({
+      _: "updateChatPhoto",
+      chat_id: 77,
+      photo: {
+        _: "chatPhotoInfo",
+        small: {
+          id: 91,
+          size: 4,
+          local: {
+            is_downloading_completed: false,
+            is_downloading_active: false,
+            path: "",
+            downloaded_size: 0,
+          },
+        },
+      },
+    } as Td.Update);
+    await vi.waitFor(() => {
+      expect(
+        events.some(
+          (event) =>
+            event.type === "chat-avatar" &&
+            event.chatId === "77" &&
+            Boolean(event.avatarDataUrl),
+        ),
+      ).toBe(true);
+    });
+  });
+
+  it("downloads an unready sticker file and retries send", async () => {
+    const { repository, bridge } = setup();
+    const sticker = tdSticker(8);
+    bridge.handlers.set("searchStickers", () => ({ stickers: [sticker] }));
+    await repository.searchStickers("octopus");
+    let attempts = 0;
+    bridge.handlers.set("sendMessage", () => {
+      attempts += 1;
+      if (attempts === 1) throw new Error("FILE not found");
+      return tdMessage(10);
+    });
+    bridge.handlers.set("downloadFile", () => ({
+      id: 8,
+      size: 10,
+      local: {
+        is_downloading_completed: true,
+        is_downloading_active: false,
+        path: "/tmp/sticker.webp",
+        downloaded_size: 10,
+      },
+    }));
+    expect((await repository.sendSticker("11", "tdfile:8", "sid")).id).toBe(
+      "10",
+    );
+    expect(attempts).toBe(2);
+    expect(
+      bridge.invokes.some(
+        (item) => (item as { _: string })._ === "downloadFile",
+      ),
+    ).toBe(true);
+    const send = bridge.invokes.find(
+      (item) =>
+        (item as { _: string; input_message_content?: { _: string } })._ ===
+          "sendMessage" &&
+        (item as { input_message_content?: { _: string } })
+          .input_message_content?._ === "inputMessageSticker",
+    ) as {
+      input_message_content: {
+        emoji: string;
+        sticker: { width: number; height: number };
+      };
+      options: { sending_id: number };
+    };
+    expect(send.input_message_content.emoji).toBe("🐙");
+    expect(send.input_message_content.sticker).toMatchObject({
+      width: 512,
+      height: 512,
+    });
+    expect(send.options.sending_id).toBeGreaterThan(0);
+  });
+
   it("loads history, shared media, pins, and members", async () => {
     const { repository, bridge } = setup();
     await repository.hydrate();
@@ -216,7 +445,7 @@ describe("TdlibTelegramRepository", () => {
         displayName: "Ada Byron",
         username: "ada",
         avatarDataUrl: null,
-        avatarPending: false,
+        avatarPending: true,
       },
     ]);
   });

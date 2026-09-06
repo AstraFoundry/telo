@@ -315,6 +315,10 @@ export class TelegramAccountCoordinator implements TelegramRepository {
     return this.delegate().createSecretChat(userId);
   }
 
+  openSavedMessages(): Promise<ChatDto> {
+    return this.delegate().openSavedMessages();
+  }
+
   listFolders(): Promise<ReadonlyArray<ChatFolderDto>> {
     return this.delegate().listFolders();
   }
@@ -373,8 +377,12 @@ export class TelegramAccountCoordinator implements TelegramRepository {
     return this.delegate().searchStickers(query);
   }
 
-  sendSticker(chatId: string, stickerId: string): Promise<MessageDto> {
-    return this.delegate().sendSticker(chatId, stickerId);
+  sendSticker(
+    chatId: string,
+    stickerId: string,
+    clientId?: string,
+  ): Promise<MessageDto> {
+    return this.delegate().sendSticker(chatId, stickerId, clientId);
   }
 
   getStickerSet(reference: StickerSetReferenceDto): Promise<StickerSetDto> {

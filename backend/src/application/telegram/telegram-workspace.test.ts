@@ -31,6 +31,21 @@ function repository(): TelegramRepository {
       typing: false,
       secretState: "pending" as const,
     })),
+    openSavedMessages: vi.fn(async () => ({
+      id: "saved",
+      title: "Saved Messages",
+      preview: "",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+      unreadCount: 0,
+      lastReadMessageId: null,
+      muted: false,
+      pinned: false,
+      kind: "saved" as const,
+      initials: "SM",
+      avatarDataUrl: null,
+      draftPreview: null,
+      typing: false,
+    })),
     listFolders: vi.fn(async () => []),
     listMessagePage: vi.fn(async () => ({ items: [], nextCursor: null })),
     listSharedMedia: vi.fn(async () => ({ items: [], nextCursor: null })),
@@ -433,7 +448,19 @@ describe("TelegramWorkspaceService", () => {
     await expect(
       service.sendSticker("chat", "sticker/12345"),
     ).resolves.toMatchObject({ chatId: "chat", outgoing: true });
-    expect(port.sendSticker).toHaveBeenCalledWith("chat", "sticker/12345");
+    expect(port.sendSticker).toHaveBeenCalledWith(
+      "chat",
+      "sticker/12345",
+      undefined,
+    );
+  });
+
+  it("opens Saved Messages through the port", async () => {
+    const port = repository();
+    const service = new TelegramWorkspaceService(port);
+
+    await service.openSavedMessages();
+    expect(port.openSavedMessages).toHaveBeenCalledOnce();
   });
 
   it.each([

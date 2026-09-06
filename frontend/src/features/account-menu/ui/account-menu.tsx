@@ -27,12 +27,14 @@ export function AccountMenu({ onOpenSettings }: AccountMenuProps) {
   );
   const chats = useChatStore((state) => state.chats);
   const select = useChatStore((state) => state.select);
+  const openSavedMessages = useChatStore((state) => state.openSavedMessages);
 
   if (!currentUser) return null;
 
   const showSavedMessages = () => {
     const savedMessages = chats.find((chat) => chat.kind === "saved");
     if (savedMessages) void select(savedMessages.id);
+    else void openSavedMessages();
     setOpen(false);
   };
 
@@ -49,7 +51,11 @@ export function AccountMenu({ onOpenSettings }: AccountMenuProps) {
           aria-label={copy.openAccountMenu}
           className="h-14 w-full justify-start rounded-none px-3"
         >
-          <Avatar src={currentUser.avatarDataUrl} className="size-9" />
+          <Avatar
+            src={currentUser.avatarDataUrl}
+            pending={currentUser.avatarPending}
+            className="size-9"
+          />
           <span className="min-w-0 text-left">
             <strong className="block truncate text-sm font-semibold">
               {currentUser.displayName}

@@ -712,6 +712,8 @@ export interface CurrentUserDto {
   readonly username: string | null;
   readonly initials: string;
   readonly avatarDataUrl: string | null;
+  /** True until the account photo settles, like `ChatDto.avatarPending`. */
+  readonly avatarPending?: boolean;
 }
 
 /**
@@ -1381,6 +1383,11 @@ export interface TeloDesktopApi {
      */
     createSecretChat(userId: string): Promise<ChatDto>;
     /**
+     * Opens Saved Messages even when that chat is not in the loaded dialog
+     * page. The Saved Messages chat id is the current account's user id.
+     */
+    openSavedMessages(): Promise<ChatDto>;
+    /**
      * Lists the chat folders (custom folders plus the Archive when it holds
      * chats, plus local keyword folders) with server-computed unread counts.
      * The implicit "All chats" view is not part of the list.
@@ -1438,7 +1445,11 @@ export interface TeloDesktopApi {
     /** Searches Telegram's global sticker index by emoji or keyword. */
     searchStickers(query: string): Promise<ReadonlyArray<StickerItemDto>>;
     /** Sends one sticker from an installed set into a chat. */
-    sendSticker(chatId: string, stickerId: string): Promise<MessageDto>;
+    sendSticker(
+      chatId: string,
+      stickerId: string,
+      clientId?: string,
+    ): Promise<MessageDto>;
     /** Resolves one installed or received sticker set on demand. */
     getStickerSet(reference: StickerSetReferenceDto): Promise<StickerSetDto>;
     /** Adds the set to the account's stickers, or removes it. */

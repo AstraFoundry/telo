@@ -1028,6 +1028,15 @@ export class DemoTelegramRepository implements TelegramRepository {
     return chat;
   }
 
+  async openSavedMessages(): Promise<ChatDto> {
+    const existing = [...this.chats.values()].find(
+      (chat) => chat.kind === "saved",
+    );
+    if (!existing)
+      throw new Error("Saved Messages is not in the demo workspace");
+    return existing;
+  }
+
   async listFolders(): Promise<ReadonlyArray<ChatFolderDto>> {
     return this.foldersSnapshot();
   }
@@ -1598,7 +1607,11 @@ export class DemoTelegramRepository implements TelegramRepository {
 
   // Sending a set sticker is an ordinary outgoing message carrying the
   // sticker's media, so the transcript renders it exactly like a received one.
-  async sendSticker(chatId: string, stickerId: string): Promise<MessageDto> {
+  async sendSticker(
+    chatId: string,
+    stickerId: string,
+    clientId?: string,
+  ): Promise<MessageDto> {
     this.requireChat(chatId);
     const sticker = this.requireSticker(stickerId);
     const message: MessageDto = {
@@ -1614,6 +1627,7 @@ export class DemoTelegramRepository implements TelegramRepository {
       sentAt: new Date().toISOString(),
       outgoing: true,
       status: "sent",
+      clientId: clientId ?? undefined,
     };
     const current = this.messages.get(chatId) ?? [];
     this.messages.set(chatId, [...current, message]);
