@@ -27,7 +27,7 @@ import {
   SkeletonGroup,
   Tooltip,
 } from "shared/ui";
-import type { MediaViewerOrigin } from "shared/ui";
+import type { AvatarPlaceholder, MediaViewerOrigin } from "shared/ui";
 
 const MEDIA_LABELS = {
   download: copy.downloadMedia,
@@ -132,12 +132,14 @@ function ProfileIdentity({
   avatarDataUrl,
   avatarPending,
   mark,
+  placeholder,
   title,
   status,
 }: {
   readonly avatarDataUrl: string | null;
   readonly avatarPending?: boolean;
   readonly mark?: "saved";
+  readonly placeholder?: AvatarPlaceholder | null;
   readonly title: string;
   readonly status: string | null;
 }) {
@@ -147,6 +149,7 @@ function ProfileIdentity({
         src={avatarDataUrl}
         pending={avatarPending}
         mark={mark}
+        placeholder={placeholder}
         className="size-20"
       />
       {/* deslop-ignore-next-line 12 — the name outranks body text here, and
@@ -263,6 +266,7 @@ function PeerCard({ profile }: { profile: PeerProfileDto }) {
       <ProfileIdentity
         avatarDataUrl={profile.avatarDataUrl}
         avatarPending={profile.avatarPending}
+        placeholder={profile.avatarPlaceholder}
         title={profile.title}
         status={peerStatus(profile)}
       />
@@ -669,6 +673,7 @@ export function ChatProfilePanel() {
               avatarDataUrl={chat.avatarDataUrl}
               avatarPending={chat.avatarPending}
               mark={chat.kind === "saved" ? "saved" : undefined}
+              placeholder={chat.avatarPlaceholder}
               title={displayChatTitle(chat)}
               status={subtitle(chat)}
             />

@@ -2,6 +2,17 @@ import type { AGUIEvent } from "@ag-ui/core";
 
 export type ChatKind = "direct" | "group" | "channel" | "saved" | "secret";
 
+/**
+ * TDLib empty userpic: one grapheme (letter or emoji) on the peer's accent
+ * colors. Built-in ids 0–6 are theme reds/oranges/…; higher ids come from
+ * `updateAccentColors`. Used only when there is no profile/chat photo.
+ */
+export interface AvatarPlaceholderDto {
+  readonly glyph: string;
+  readonly lightColors: ReadonlyArray<string>;
+  readonly darkColors: ReadonlyArray<string>;
+}
+
 export interface ChatDto {
   readonly id: string;
   readonly title: string;
@@ -25,9 +36,15 @@ export interface ChatDto {
   readonly avatarDataUrl: string | null;
   /**
    * True until a disk/memory cache hit or the Telegram download settles.
-   * The avatar slot shows a skeleton while this is set, never initials.
+   * The avatar slot shows a skeleton while this is set, unless a
+   * placeholder can paint immediately.
    */
   readonly avatarPending?: boolean;
+  /**
+   * Empty userpic from TDLib `accent_color_id` plus the first grapheme of
+   * the title. Painted when `avatarDataUrl` is null.
+   */
+  readonly avatarPlaceholder?: AvatarPlaceholderDto | null;
   /** Server-synced draft text (e.g. typed on another Telegram client). */
   readonly draftPreview: string | null;
   /** Whether the other party is currently typing in this chat. */
@@ -438,9 +455,11 @@ export interface MessageDto {
   /**
    * True until the author photo settles. A later `chat-avatar` event keyed by
    * `senderId` overlays this snapshot; the avatar slot shows a skeleton
-   * meanwhile, never initials.
+   * meanwhile unless `senderAvatarPlaceholder` can paint.
    */
   readonly senderAvatarPending?: boolean;
+  /** Empty userpic for the author when they have no photo. */
+  readonly senderAvatarPlaceholder?: AvatarPlaceholderDto | null;
   readonly body: string;
   readonly entities: ReadonlyArray<MessageEntityDto>;
   readonly media: MessageMediaDto | null;
@@ -714,6 +733,7 @@ export interface CurrentUserDto {
   readonly avatarDataUrl: string | null;
   /** True until the account photo settles, like `ChatDto.avatarPending`. */
   readonly avatarPending?: boolean;
+  readonly avatarPlaceholder?: AvatarPlaceholderDto | null;
 }
 
 /**
@@ -733,6 +753,7 @@ export interface ChatMemberDto {
   readonly avatarDataUrl: string | null;
   /** True until the photo settles, exactly like `ChatDto.avatarPending`. */
   readonly avatarPending?: boolean;
+  readonly avatarPlaceholder?: AvatarPlaceholderDto | null;
 }
 
 /**
@@ -749,6 +770,7 @@ export interface PeerProfileDto {
   readonly avatarDataUrl: string | null;
   /** True until the photo settles, exactly like `ChatDto.avatarPending`. */
   readonly avatarPending?: boolean;
+  readonly avatarPlaceholder?: AvatarPlaceholderDto | null;
   /** Telegram "about" text; null when empty or hidden from the account. */
   readonly bio: string | null;
   /** Set only when the peer shares their number with the account. */
@@ -1355,6 +1377,7 @@ export interface TelegramAccountDto {
   readonly username: string | null;
   /** Profile photo (`telo-media://` or a data URL); null when unknown. */
   readonly avatarDataUrl: string | null;
+  readonly avatarPlaceholder?: AvatarPlaceholderDto | null;
   /** Whether this is the account the workspace is currently attached to. */
   readonly active: boolean;
   /**

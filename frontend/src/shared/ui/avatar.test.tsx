@@ -41,4 +41,53 @@ describe("Avatar", () => {
     expect(container.querySelector("img")).toBeNull();
     expect(container.querySelector("svg")).not.toBeNull();
   });
+
+  it("paints a TDLib empty userpic glyph on the accent fill", () => {
+    const { container } = render(
+      <Avatar
+        placeholder={{
+          glyph: "T",
+          lightColors: ["#7BC862", "#6EC96C"],
+          darkColors: ["#7BC862", "#6EC96C"],
+        }}
+        className="size-10"
+      />,
+    );
+
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(container.querySelector("img")).toBeNull();
+    expect(container.textContent).toBe("T");
+  });
+
+  it("paints an emoji glyph without uppercasing", () => {
+    const { container } = render(
+      <Avatar
+        placeholder={{
+          glyph: "🔥",
+          lightColors: ["#E17076"],
+          darkColors: ["#E17076"],
+        }}
+        className="size-10"
+      />,
+    );
+
+    expect(container.textContent).toBe("🔥");
+  });
+
+  it("paints the empty userpic immediately while a photo is still pending", () => {
+    const { container } = render(
+      <Avatar
+        pending
+        placeholder={{
+          glyph: "R",
+          lightColors: ["#65AADD", "#54B3F0"],
+          darkColors: ["#65AADD", "#54B3F0"],
+        }}
+        className="size-10"
+      />,
+    );
+
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(container.textContent).toBe("R");
+  });
 });

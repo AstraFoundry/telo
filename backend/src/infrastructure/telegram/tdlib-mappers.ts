@@ -2,6 +2,7 @@ import type * as Td from "tdlib-types";
 
 import {
   ARCHIVE_FOLDER_ID,
+  type AvatarPlaceholderDto,
   type ChatDto,
   type ChatFolderDto,
   type ChatKind,
@@ -23,6 +24,8 @@ export interface ChatMapContext {
   readonly selfUserId: number | null;
   readonly avatarUrl: (peerId: string) => string | null;
   readonly avatarPending: (peerId: string) => boolean;
+  readonly accentPalette?: AccentPaletteLookup;
+  readonly avatarPlaceholder?: (peerId: string) => AvatarPlaceholderDto | null;
 }
 
 export interface MessageMapContext extends ChatMapContext {
@@ -30,6 +33,79 @@ export interface MessageMapContext extends ChatMapContext {
   readonly senderId: (sender: Td.MessageSender) => string;
   /** Chat `last_read_outbox_message_id`; outgoing ids at or below this are read. */
   readonly lastReadOutboxMessageId?: number;
+}
+
+/**
+ * TDLib `updateAccentColors`: ids 0–6 are named theme colors the client
+ * must supply; higher ids arrive as RGB lists. Gradients are two stops
+ * matching Telegram Desktop `EmptyUserpic` / Android `AvatarDrawable`.
+ */
+export type AccentPaletteLookup = (accentColorId: number) => {
+  light: ReadonlyArray<string>;
+  dark: ReadonlyArray<string>;
+};
+
+const BUILT_IN_ACCENT: ReadonlyArray<{
+  light: ReadonlyArray<string>;
+  dark: ReadonlyArray<string>;
+}> = [
+  { light: ["#E17076", "#FF885E"], dark: ["#E17076", "#FF885E"] },
+  { light: ["#FAA774", "#FFCD6A"], dark: ["#FAA774", "#FFCD6A"] },
+  { light: ["#A695E7", "#BFA0F3"], dark: ["#A695E7", "#BFA0F3"] },
+  { light: ["#7BC862", "#6EC96C"], dark: ["#7BC862", "#6EC96C"] },
+  { light: ["#6EC9CB", "#53D4D4"], dark: ["#6EC9CB", "#53D4D4"] },
+  { light: ["#65AADD", "#54B3F0"], dark: ["#65AADD", "#54B3F0"] },
+  { light: ["#EE7AAE", "#F58FB7"], dark: ["#EE7AAE", "#F58FB7"] },
+];
+
+export function rgbToCss(rgb: number): string {
+  return `#${(rgb & 0xffffff).toString(16).padStart(6, "0")}`;
+}
+
+export function accentPaletteOf(
+  accentColorId: number,
+  custom: ReadonlyMap<number, Td.accentColor> = new Map(),
+): { light: ReadonlyArray<string>; dark: ReadonlyArray<string> } {
+  const extra = custom.get(accentColorId);
+  if (extra) {
+    return {
+      light: extra.light_theme_colors.map(rgbToCss),
+      dark: extra.dark_theme_colors.map(rgbToCss),
+    };
+  }
+  if (accentColorId >= 0 && accentColorId <= 6) {
+    return BUILT_IN_ACCENT[accentColorId]!;
+  }
+  return BUILT_IN_ACCENT[((accentColorId % 7) + 7) % 7]!;
+}
+
+/**
+ * First grapheme of a peer title: one letter (uppercased) or an emoji,
+ * matching Telegram's empty userpic, not two-letter initials.
+ */
+export function avatarGlyph(title: string): string {
+  const trimmed = title.trim();
+  if (!trimmed) return "?";
+  const segmenter = new Intl.Segmenter(undefined, {
+    granularity: "grapheme",
+  });
+  const first = [...segmenter.segment(trimmed)][0]?.segment;
+  if (!first) return "?";
+  if (/^\p{L}$/u.test(first)) return first.toUpperCase();
+  return first;
+}
+
+export function mapAvatarPlaceholder(
+  title: string,
+  accentColorId: number,
+  palette: AccentPaletteLookup = (id) => accentPaletteOf(id),
+): AvatarPlaceholderDto {
+  const colors = palette(accentColorId);
+  return {
+    glyph: avatarGlyph(title),
+    lightColors: colors.light,
+    darkColors: colors.dark,
+  };
 }
 
 export function chatIdOf(id: number): string {
@@ -141,6 +217,11 @@ export function mapChat(chat: Td.chat, context: ChatMapContext): ChatDto {
     initials: initials(chat.title),
     avatarDataUrl,
     avatarPending: context.avatarPending(id),
+    avatarPlaceholder: mapAvatarPlaceholder(
+      chat.title,
+      chat.accent_color_id ?? 0,
+      context.accentPalette,
+    ),
     draftPreview: draftText(chat.draft_message),
     typing: false,
     folderId: folderIdOf(chat),
@@ -202,6 +283,10 @@ export function mapMessage(
     senderAvatarPending: outgoing
       ? false
       : context.avatarPending(context.senderId(message.sender_id)),
+    senderAvatarPlaceholder: outgoing
+      ? null
+      : (context.avatarPlaceholder?.(context.senderId(message.sender_id)) ??
+        null),
     body: text?.text ?? "",
     entities: text ? mapEntities(text) : [],
     media: mapMedia(message),

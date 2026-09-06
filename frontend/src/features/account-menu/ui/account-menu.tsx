@@ -54,6 +54,7 @@ export function AccountMenu({ onOpenSettings }: AccountMenuProps) {
           <Avatar
             src={currentUser.avatarDataUrl}
             pending={currentUser.avatarPending}
+            placeholder={currentUser.avatarPlaceholder}
             className="size-9"
           />
           <span className="min-w-0 text-left">
@@ -99,6 +100,7 @@ export function AccountMenu({ onOpenSettings }: AccountMenuProps) {
               >
                 <Avatar
                   src={account.avatarDataUrl}
+                  placeholder={account.avatarPlaceholder}
                   className={`size-8 ${
                     account.active
                       ? // tdesktop draws a 2px accent ring on the active

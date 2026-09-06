@@ -16,6 +16,7 @@ import {
   DEMO_SEND_FAIL_ONCE_MARKER,
   DemoTelegramRepository,
 } from "./demo-telegram-repository";
+import { mapAvatarPlaceholder } from "./tdlib-mappers";
 
 const photoUpload: TelegramUploadFile = {
   source: "/tmp/photo.jpg",
@@ -796,18 +797,21 @@ describe("DemoTelegramRepository", () => {
         displayName: "Mina",
         username: "mina",
         avatarDataUrl: null,
+        avatarPlaceholder: mapAvatarPlaceholder("Mina", 5),
       },
       {
         id: "demo-aron",
         displayName: "Aron",
         username: "aron",
         avatarDataUrl: null,
+        avatarPlaceholder: mapAvatarPlaceholder("Aron", 5),
       },
       {
         id: "demo-lev",
         displayName: "Lev",
         username: "lev",
         avatarDataUrl: null,
+        avatarPlaceholder: mapAvatarPlaceholder("Lev", 5),
       },
     ]);
     await expect(repository.listChatMembers("saved")).resolves.toEqual([]);
@@ -825,6 +829,7 @@ describe("DemoTelegramRepository", () => {
       username: "mina",
       kind: "direct",
       avatarDataUrl: null,
+      avatarPlaceholder: mapAvatarPlaceholder("Mina", 5),
       bio: "Design systems, spacing rules, and long changelogs.",
       phone: "+1 555 0142",
     });
@@ -845,6 +850,7 @@ describe("DemoTelegramRepository", () => {
       username: null,
       kind: "channel",
       avatarDataUrl: null,
+      avatarPlaceholder: mapAvatarPlaceholder("Product Notes", 2),
       bio: null,
       phone: null,
     });

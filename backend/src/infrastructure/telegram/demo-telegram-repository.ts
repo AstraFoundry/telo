@@ -41,6 +41,7 @@ import {
   demoStickerTgs,
   demoVideoWebm,
 } from "./demo-media-assets";
+import { mapAvatarPlaceholder } from "./tdlib-mappers";
 import {
   MEDIA_CACHE_MAX_BYTES,
   enforceMediaCacheLimit,
@@ -190,7 +191,10 @@ const INITIAL_CHATS: ReadonlyArray<ChatDto> = [
     folderId: null,
     secretState: "ready",
   },
-];
+].map((chat, index) => ({
+  ...chat,
+  avatarPlaceholder: mapAvatarPlaceholder(chat.title, index % 7),
+}));
 
 // Demo auto-reply copy, keyed by chat id; falls back to a generic reply for
 // any chat added later (e.g. by forwardMessage into a new target).
@@ -256,6 +260,7 @@ function demoMembers(
     username: DEMO_PEERS[id].username,
     // Demo peers carry no photo and are settled by construction.
     avatarDataUrl: null,
+    avatarPlaceholder: mapAvatarPlaceholder(DEMO_PEERS[id].displayName, 5),
   }));
 }
 
@@ -978,6 +983,7 @@ export class DemoTelegramRepository implements TelegramRepository {
       username: null,
       initials: "DU",
       avatarDataUrl: null,
+      avatarPlaceholder: mapAvatarPlaceholder("Demo User", 5),
     };
   }
 
@@ -1017,6 +1023,8 @@ export class DemoTelegramRepository implements TelegramRepository {
       kind: "secret",
       initials: title.slice(0, 2).toUpperCase(),
       avatarDataUrl: peer?.avatarDataUrl ?? null,
+      avatarPlaceholder:
+        peer?.avatarPlaceholder ?? mapAvatarPlaceholder(title, 5),
       draftPreview: null,
       typing: false,
       folderId: null,
@@ -1146,6 +1154,7 @@ export class DemoTelegramRepository implements TelegramRepository {
         username: null,
         kind: chat.kind,
         avatarDataUrl: chat.avatarDataUrl,
+        avatarPlaceholder: chat.avatarPlaceholder,
         bio: null,
         phone: null,
       };
@@ -1158,6 +1167,7 @@ export class DemoTelegramRepository implements TelegramRepository {
       username: peer.username,
       kind: "direct",
       avatarDataUrl: null,
+      avatarPlaceholder: mapAvatarPlaceholder(peer.displayName, 5),
       bio: peer.bio,
       phone: peer.phone,
     };

@@ -19,6 +19,11 @@ export interface TelegramAccountRecord {
   readonly displayName: string;
   readonly username: string | null;
   readonly avatarDataUrl: string | null;
+  readonly avatarPlaceholder?: {
+    readonly glyph: string;
+    readonly lightColors: ReadonlyArray<string>;
+    readonly darkColors: ReadonlyArray<string>;
+  } | null;
   readonly unreadCount: number;
   /** ISO timestamps; `lastActiveAt` orders "most recently used". */
   readonly createdAt: string;

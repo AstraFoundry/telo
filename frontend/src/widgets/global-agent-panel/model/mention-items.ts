@@ -22,6 +22,9 @@ export function toMentionItems(
     description: target.handle ? `@${target.handle}` : null,
     avatarUrl: target.avatarUrl,
     avatarPending: target.avatarPending,
+    ...(target.avatarPlaceholder
+      ? { avatarPlaceholder: target.avatarPlaceholder }
+      : {}),
     target,
   }));
 }

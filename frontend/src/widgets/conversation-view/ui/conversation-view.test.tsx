@@ -397,6 +397,27 @@ describe("ConversationView", () => {
     );
   });
 
+  it("paints the empty userpic glyph when the author has no photo", async () => {
+    await renderView({
+      messages: [
+        message({
+          id: "m1",
+          senderId: "peer-mina",
+          senderName: "Mina",
+          senderAvatarUrl: null,
+          senderAvatarPlaceholder: {
+            glyph: "M",
+            lightColors: ["#A695E7", "#BFA0F3"],
+            darkColors: ["#A695E7", "#BFA0F3"],
+          },
+        }),
+      ],
+    });
+
+    expect(within(avatarSlot("m1")).queryByRole("status")).toBeNull();
+    expect(avatarSlot("m1").textContent).toContain("M");
+  });
+
   it("opens the author profile when the transcript avatar is pressed", async () => {
     await renderView({
       messages: [message({ id: "m1", senderId: "peer-mina" })],

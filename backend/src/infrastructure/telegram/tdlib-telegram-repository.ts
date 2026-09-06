@@ -3,6 +3,7 @@ import path from "node:path";
 import type * as Td from "tdlib-types";
 
 import type {
+  AvatarPlaceholderDto,
   BotCallbackAnswerDto,
   ChatDto,
   ChatFolderDto,
@@ -50,6 +51,7 @@ import {
   fileIdFromMediaId,
   initials,
   mapAuthorizationStatus,
+  mapAvatarPlaceholder,
   mapChat,
   mapConnectionState,
   mapFolders,
@@ -58,6 +60,7 @@ import {
   mediaIdForFile,
   messageIdOf,
   minithumbnailDataUrl,
+  accentPaletteOf,
   type MessageMapContext,
 } from "./tdlib-mappers";
 import { copyIntoMediaCache } from "./file-telegram-account-database";
@@ -85,6 +88,7 @@ export class TdlibTelegramRepository implements TelegramRepository {
   private readonly filePaths = new Map<string, string>();
   private readonly avatarUrls = new Map<string, string | null>();
   private readonly avatarFilePeers = new Map<number, string>();
+  private readonly customAccentColors = new Map<number, Td.accentColor>();
   /** User ids that have been fetched with `getUser`, not a min `updateUser`. */
   private readonly fetchedUserIds = new Set<number>();
   private readonly typingTimers = new Map<
@@ -143,6 +147,11 @@ export class TdlibTelegramRepository implements TelegramRepository {
       initials: initials(name || "You"),
       avatarDataUrl: this.avatarUrls.get(id) ?? null,
       avatarPending: this.avatarIsPending(id),
+      avatarPlaceholder: mapAvatarPlaceholder(
+        name || "You",
+        me.accent_color_id ?? 0,
+        (colorId) => accentPaletteOf(colorId, this.customAccentColors),
+      ),
     };
   }
 
@@ -360,6 +369,11 @@ export class TdlibTelegramRepository implements TelegramRepository {
         kind: "direct",
         avatarDataUrl: this.avatarUrls.get(id) ?? null,
         avatarPending: this.avatarIsPending(id),
+        avatarPlaceholder: mapAvatarPlaceholder(
+          [user.first_name, user.last_name].filter(Boolean).join(" "),
+          user.accent_color_id ?? 0,
+          (colorId) => accentPaletteOf(colorId, this.customAccentColors),
+        ),
         bio: full?.bio?.text ?? null,
         phone: user.phone_number || null,
       };
@@ -374,6 +388,7 @@ export class TdlibTelegramRepository implements TelegramRepository {
       kind: this.toChat(chat).kind,
       avatarDataUrl: this.avatarUrls.get(peerId) ?? null,
       avatarPending: this.avatarIsPending(peerId),
+      avatarPlaceholder: this.avatarPlaceholderForPeer(peerId),
       bio: null,
       phone: null,
     };
@@ -1121,6 +1136,27 @@ export class TdlibTelegramRepository implements TelegramRepository {
     this.avatarUrls.set(peerId, null);
   }
 
+  private avatarPlaceholderForPeer(
+    peerId: string,
+  ): AvatarPlaceholderDto | null {
+    const user = this.users.get(Number(peerId));
+    if (user) {
+      const name = [user.first_name, user.last_name].filter(Boolean).join(" ");
+      return mapAvatarPlaceholder(
+        name || String(user.id),
+        user.accent_color_id ?? 0,
+        (colorId) => accentPaletteOf(colorId, this.customAccentColors),
+      );
+    }
+    const chat = this.chats.get(peerId);
+    if (!chat) return null;
+    return mapAvatarPlaceholder(
+      chat.title,
+      chat.accent_color_id ?? 0,
+      (colorId) => accentPaletteOf(colorId, this.customAccentColors),
+    );
+  }
+
   private hasInFlightAvatar(peerId: string): boolean {
     for (const mapped of this.avatarFilePeers.values()) {
       if (mapped === peerId) return true;
@@ -1292,6 +1328,7 @@ export class TdlibTelegramRepository implements TelegramRepository {
         username: user?.usernames?.active_usernames[0] ?? null,
         avatarDataUrl: this.avatarUrls.get(id) ?? null,
         avatarPending: this.avatarIsPending(id),
+        avatarPlaceholder: this.avatarPlaceholderForPeer(id),
       });
     }
     return items;
@@ -1533,6 +1570,19 @@ export class TdlibTelegramRepository implements TelegramRepository {
     if (update._ === "updateChatFolders") {
       this.folders.splice(0, this.folders.length, ...update.chat_folders);
       this.emit({ type: "folders", folders: this.folderDtos() });
+      return;
+    }
+    if (update._ === "updateAccentColors") {
+      this.customAccentColors.clear();
+      for (const color of update.colors) {
+        this.customAccentColors.set(color.id, color);
+      }
+      this.emit({
+        type: "chats",
+        chats: this.orderedChats(),
+        nextCursor: null,
+      });
+      return;
     }
   }
 
@@ -1633,11 +1683,27 @@ export class TdlibTelegramRepository implements TelegramRepository {
       selfUserId: this.selfUserId,
       avatarUrl: (peerId) => this.avatarUrls.get(peerId) ?? null,
       avatarPending: (peerId) => this.avatarIsPending(peerId),
+      accentPalette: (colorId) =>
+        accentPaletteOf(colorId, this.customAccentColors),
+      avatarPlaceholder: (peerId) => this.avatarPlaceholderForPeer(peerId),
     });
     const typing = this.typingTimers.has(chatIdOf(chat.id));
     let next: ChatDto = { ...mapped, typing };
     if (mapped.kind === "direct" && chat.type._ === "chatTypePrivate") {
       const user = this.users.get(chat.type.user_id);
+      if (user) {
+        const name = [user.first_name, user.last_name]
+          .filter(Boolean)
+          .join(" ");
+        next = {
+          ...next,
+          avatarPlaceholder: mapAvatarPlaceholder(
+            name || chat.title,
+            user.accent_color_id ?? 0,
+            (colorId) => accentPaletteOf(colorId, this.customAccentColors),
+          ),
+        };
+      }
       if (user?.status._ === "userStatusOnline") {
         next = { ...next, presence: "online" };
       }
@@ -1660,6 +1726,9 @@ export class TdlibTelegramRepository implements TelegramRepository {
       selfUserId: this.selfUserId,
       avatarUrl: (peerId) => this.avatarUrls.get(peerId) ?? null,
       avatarPending: (peerId) => this.avatarIsPending(peerId),
+      accentPalette: (colorId) =>
+        accentPaletteOf(colorId, this.customAccentColors),
+      avatarPlaceholder: (peerId) => this.avatarPlaceholderForPeer(peerId),
       senderName: (sender) => this.senderName(sender),
       senderId: (sender) =>
         sender._ === "messageSenderUser"

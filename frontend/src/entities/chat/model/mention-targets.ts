@@ -14,6 +14,7 @@ export interface MentionTarget {
   readonly handle: string | null;
   readonly avatarUrl: string | null;
   readonly avatarPending: boolean;
+  readonly avatarPlaceholder?: ChatDto["avatarPlaceholder"];
 }
 
 export interface MentionTargetSources {
@@ -49,11 +50,17 @@ export function buildMentionTargets({
     id: string,
     snapshot: string | null,
     pending: boolean | undefined,
-  ): Pick<MentionTarget, "avatarUrl" | "avatarPending"> => {
+    avatarPlaceholder: MentionTarget["avatarPlaceholder"],
+  ): Pick<
+    MentionTarget,
+    "avatarUrl" | "avatarPending" | "avatarPlaceholder"
+  > => {
     const settled = peerAvatars[id];
-    return settled === undefined
-      ? { avatarUrl: snapshot, avatarPending: pending ?? false }
-      : { avatarUrl: settled, avatarPending: false };
+    return {
+      avatarUrl: settled === undefined ? snapshot : settled,
+      avatarPending: settled === undefined ? (pending ?? false) : false,
+      ...(avatarPlaceholder ? { avatarPlaceholder } : {}),
+    };
   };
 
   for (const member of members) {
@@ -62,7 +69,12 @@ export function buildMentionTargets({
       id: member.id,
       name: member.displayName,
       handle: member.username,
-      ...settledAvatar(member.id, member.avatarDataUrl, member.avatarPending),
+      ...settledAvatar(
+        member.id,
+        member.avatarDataUrl,
+        member.avatarPending,
+        member.avatarPlaceholder,
+      ),
     });
   }
   for (const message of messages) {
@@ -77,6 +89,7 @@ export function buildMentionTargets({
         message.senderId,
         message.senderAvatarUrl,
         message.senderAvatarPending,
+        message.senderAvatarPlaceholder,
       ),
     });
   }
@@ -86,7 +99,12 @@ export function buildMentionTargets({
       id: chat.id,
       name: chat.title,
       handle: null,
-      ...settledAvatar(chat.id, chat.avatarDataUrl, chat.avatarPending),
+      ...settledAvatar(
+        chat.id,
+        chat.avatarDataUrl,
+        chat.avatarPending,
+        chat.avatarPlaceholder,
+      ),
     });
   }
   return [...byName.values()];

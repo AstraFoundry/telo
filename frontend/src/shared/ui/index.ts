@@ -1,7 +1,7 @@
 export { EASE_OUT, SPRING_PRESS } from "./motion";
 
 export { Avatar } from "./avatar";
-export type { AvatarProps } from "./avatar";
+export type { AvatarPlaceholder, AvatarProps } from "./avatar";
 export { LoadIndicator } from "./load-indicator";
 export type { LoadIndicatorProps } from "./load-indicator";
 export { LinkPreview } from "./link-preview";
