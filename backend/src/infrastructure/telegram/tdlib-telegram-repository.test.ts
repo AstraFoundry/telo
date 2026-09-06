@@ -613,6 +613,66 @@ describe("TdlibTelegramRepository", () => {
     expect(me.avatarDataUrl).toMatch(/telo-media:\/\/cache\/avatar_1\.jpg/);
   });
 
+  it("loads the current user photo from getUserFullInfo when getUser omits it", async () => {
+    const { repository, bridge } = setup();
+    const source = path.join(
+      os.tmpdir(),
+      `telo-avatar-me-full-${Date.now()}.jpg`,
+    );
+    writeFileSync(source, "jpeg");
+    bridge.handlers.set("getMe", () => tdUser(1));
+    bridge.handlers.set("getUser", () => tdUser(1));
+    bridge.handlers.set("getUserFullInfo", () => ({
+      _: "userFullInfo",
+      photo: {
+        _: "chatPhoto",
+        id: "9",
+        added_date: 1,
+        minithumbnail: {
+          _: "minithumbnail",
+          width: 8,
+          height: 8,
+          data: "bWU=",
+        },
+        sizes: [
+          {
+            _: "photoSize",
+            type: "s",
+            width: 160,
+            height: 160,
+            photo: {
+              id: 22,
+              size: 4,
+              local: {
+                is_downloading_completed: false,
+                is_downloading_active: false,
+                path: "",
+                downloaded_size: 0,
+              },
+            },
+          },
+        ],
+      },
+    }));
+    bridge.handlers.set("downloadFile", () => ({
+      id: 22,
+      size: 4,
+      local: {
+        is_downloading_completed: true,
+        is_downloading_active: false,
+        path: source,
+        downloaded_size: 4,
+      },
+    }));
+    const me = await repository.getCurrentUser();
+    expect(
+      bridge.invokes.some(
+        (item) => (item as { _: string })._ === "getUserFullInfo",
+      ),
+    ).toBe(true);
+    expect(me.avatarDataUrl).toMatch(/telo-media:\/\/cache\/avatar_1\.jpg/);
+  });
+
   it("downloads an unready sticker file and retries send", async () => {
     const { repository, bridge } = setup();
     const sticker = tdSticker(8);
