@@ -933,19 +933,26 @@ export class TdlibTelegramRepository implements TelegramRepository {
   }
 
   async setMessageReaction(input: SetMessageReactionInput): Promise<void> {
+    const emoji = normalizeReactionEmoji(input.emoji);
+    const reactionType = { _: "reactionTypeEmoji" as const, emoji };
+    if (input.remove) {
+      await this.client.invoke({
+        _: "removeMessageReaction",
+        chat_id: Number(input.chatId),
+        message_id: Number(input.messageId),
+        reaction_type: reactionType,
+      });
+      return;
+    }
+    // User accounts add/remove one reaction. `setMessageReactions` is bots-only
+    // and TDLib rejects it with "Only bots can use the method".
     await this.client.invoke({
-      _: "setMessageReactions",
+      _: "addMessageReaction",
       chat_id: Number(input.chatId),
       message_id: Number(input.messageId),
-      reaction_types: input.emoji
-        ? [
-            {
-              _: "reactionTypeEmoji",
-              emoji: normalizeReactionEmoji(input.emoji),
-            },
-          ]
-        : [],
+      reaction_type: reactionType,
       is_big: false,
+      update_recent_reactions: true,
     });
   }
 

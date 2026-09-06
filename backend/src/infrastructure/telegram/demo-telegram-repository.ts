@@ -1827,7 +1827,10 @@ export class DemoTelegramRepository implements TelegramRepository {
       input.chatId,
       input.messageId,
     );
-    const reactions = reactionsAfterSet(message.reactions ?? [], input.emoji);
+    const reactions = reactionsAfterSet(
+      message.reactions ?? [],
+      input.remove ? null : input.emoji,
+    );
     // A message nobody reacts to carries no buckets: the field settles back
     // to undefined, the shape the transcript reads as "no chip row".
     const reacted: MessageDto = {

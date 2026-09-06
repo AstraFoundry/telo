@@ -608,7 +608,8 @@ describe("DemoTelegramRepository", () => {
     await repository.setMessageReaction({
       chatId: "design",
       messageId: "design-1",
-      emoji: null,
+      emoji: "👍",
+      remove: true,
     });
 
     const messages = await listMessages(repository, "design");
@@ -633,7 +634,8 @@ describe("DemoTelegramRepository", () => {
     await repository.setMessageReaction({
       chatId: "design",
       messageId: "design-2",
-      emoji: null,
+      emoji: "🔥",
+      remove: true,
     });
 
     const messages = await listMessages(repository, "design");

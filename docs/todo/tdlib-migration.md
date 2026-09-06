@@ -189,7 +189,7 @@ Depends on: Wave 4.
 | `searchGlobal` / `searchMessages`                               | `searchMessages` / `searchChatMessages`                                                                                                                                   |
 | `listSharedMedia` / `listPinnedMessages`                        | `searchChatMessages` with `searchMessagesFilter*` / `getChatPinnedMessage`                                                                                                |
 | `listChatMembers` / `getPeerProfile`                            | `getSupergroupMembers` / `getUser` / `getUserFullInfo`                                                                                                                    |
-| `setMessageReaction` / `listAvailableReactions`                 | `setMessageReactions` / `getMessageAvailableReactions`                                                                                                                    |
+| `setMessageReaction` / `listAvailableReactions`                 | `addMessageReaction` / `removeMessageReaction` / `getMessageAvailableReactions`                                                                                           |
 | `answerBotCallback`                                             | `getCallbackQueryAnswer`                                                                                                                                                  |
 
 Keep [media-cache.ts](../../backend/src/infrastructure/telegram/media-cache.ts) LRU as a serving layer in front of TDLib local files, or point `telo-media:` at TDLib’s local file path if it already lives under userData. Do not copy large buffers across IPC.

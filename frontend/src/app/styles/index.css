@@ -169,11 +169,23 @@
   }
 
   /* Electron's Window Controls Overlay publishes the safe title-bar geometry.
-     Keep leading-edge chrome clear of macOS traffic lights and center its
-     content inside the native title-bar height without freezing OS-controlled
-     coordinates. Browsers and native-title-bar platforms retain the 56px bar. */
+     Keep leading-edge chrome clear of macOS traffic lights and trailing-edge
+     chrome clear of Windows/Linux min/max/close. Center content inside the
+     native title-bar height without freezing OS-controlled coordinates.
+     Browsers without overlay env vars keep the 56px bar. */
+  :root {
+    --window-overlay-end: max(
+      0px,
+      calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw))
+    );
+  }
+
   .window-titlebar-safe-leading {
     padding-inline-start: max(0.75rem, env(titlebar-area-x, 0px));
+  }
+
+  .window-titlebar-safe-trailing {
+    padding-inline-end: max(0.75rem, var(--window-overlay-end));
   }
 
   .window-titlebar-safe-content {

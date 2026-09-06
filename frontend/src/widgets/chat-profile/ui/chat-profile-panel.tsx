@@ -610,7 +610,7 @@ export function ChatProfilePanel() {
 
   return (
     <div className="flex h-full min-h-0 w-full flex-col">
-      <header className="flex h-14 shrink-0 items-center gap-1 border-b px-3">
+      <header className="window-titlebar-safe-trailing flex h-14 shrink-0 items-center gap-1 border-b pl-3">
         {stack.length > 1 ? (
           <Button
             size="icon"

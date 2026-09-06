@@ -177,9 +177,7 @@ export interface TelegramRepository {
     buttonId: string,
   ): Promise<BotCallbackAnswerDto>;
   /**
-   * Replaces the account's reaction on a message; `emoji: null` clears it.
-   * Telegram's `messages.sendReaction` is a whole-set write, not a delta, so
-   * a toggle is expressed by sending the new state (or nothing).
+   * Adds or removes this account's reaction on a message.
    */
   setMessageReaction(input: SetMessageReactionInput): Promise<void>;
   /**
