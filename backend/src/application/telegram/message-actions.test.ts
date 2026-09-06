@@ -61,6 +61,7 @@ function repository(): TelegramRepository {
     })),
     setMessageReaction: vi.fn(async () => undefined),
     listAvailableReactions: vi.fn(async () => ["👍", "🎉"]),
+    clickAnimatedEmoji: vi.fn(async () => null),
     setChatPinned: vi.fn(async () => undefined),
     setChatMuted: vi.fn(async () => undefined),
     setChatRead: vi.fn(async () => undefined),

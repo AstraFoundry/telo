@@ -4,6 +4,7 @@ import type * as Td from "tdlib-types";
 
 import type {
   AvatarPlaceholderDto,
+  AnimatedEmojiEffectDto,
   BotCallbackAnswerDto,
   ChatDto,
   ChatFolderDto,
@@ -64,6 +65,7 @@ import {
   messageIdOf,
   minithumbnailDataUrl,
   normalizeReactionEmoji,
+  stickerMedia,
   type MessageMapContext,
 } from "./tdlib-mappers";
 import { copyIntoMediaCache } from "./file-telegram-account-database";
@@ -988,6 +990,52 @@ export class TdlibTelegramRepository implements TelegramRepository {
     return this.activeEmojiReactions.map(normalizeReactionEmoji);
   }
 
+  /**
+   * Telegram's answer to a click on an animated emoji. A 404 is a real answer
+   * and not a failure: TDLib documents it as "usual animation needs to be
+   * played", so the caller replays the bubble's own sticker. Anything else is
+   * a genuine error and stays one.
+   */
+  async clickAnimatedEmoji(
+    chatId: string,
+    messageId: string,
+  ): Promise<AnimatedEmojiEffectDto | null> {
+    let sticker: Td.sticker;
+    try {
+      sticker = await this.client.invoke<Td.sticker>({
+        _: "clickAnimatedEmojiMessage",
+        chat_id: Number(chatId),
+        message_id: Number(messageId),
+      });
+    } catch (error) {
+      if (isNotFound(error)) return null;
+      throw error;
+    }
+    return this.toAnimatedEmojiEffect(chatId, messageId, sticker);
+  }
+
+  private async toAnimatedEmojiEffect(
+    chatId: string,
+    messageId: string,
+    sticker: Td.sticker,
+  ): Promise<AnimatedEmojiEffectDto> {
+    const media = stickerMedia(sticker, "emoji", sticker.emoji);
+    return {
+      chatId,
+      messageId,
+      mediaId: media.id,
+      sticker: {
+        emoji: media.sticker.emoji,
+        role: media.sticker.role,
+        format: media.sticker.format,
+        setReference: media.sticker.setReference,
+        outlinePath: await this.stickerOutlinePath(sticker.sticker.id),
+      },
+      width: media.width,
+      height: media.height,
+    };
+  }
+
   async logout(): Promise<void> {
     await this.client.invoke({ _: "logOut" });
     this.unsubscribe?.();
@@ -1576,6 +1624,21 @@ export class TdlibTelegramRepository implements TelegramRepository {
         type: "message-delete",
         chatId: chatIdOf(update.chat_id),
         messageIds: update.message_ids.map(messageIdOf),
+      });
+      return;
+    }
+    if (update._ === "updateAnimatedEmojiMessageClicked") {
+      // The peer clicked their own animated emoji; Telegram pushes the effect
+      // so both sides see the same burst. The renderer decides whether the
+      // message is on screen — a burst over a message scrolled out of view
+      // would be a jump-scare with no cause.
+      this.emit({
+        type: "animated-emoji-clicked",
+        effect: await this.toAnimatedEmojiEffect(
+          chatIdOf(update.chat_id),
+          messageIdOf(update.message_id),
+          update.sticker,
+        ),
       });
       return;
     }
@@ -2304,6 +2367,13 @@ export class TdlibClientCoordinator implements TelegramAccountClient {
     return this.repository.listAvailableReactions(chatId, messageId);
   }
 
+  clickAnimatedEmoji(
+    chatId: string,
+    messageId: string,
+  ): Promise<AnimatedEmojiEffectDto | null> {
+    return this.repository.clickAnimatedEmoji(chatId, messageId);
+  }
+
   private async openClient(apiId: number, apiHash: string): Promise<void> {
     configureTdlib(this.options.resolveTdjson());
     const encryptionKey = await this.options.database.encryptionKey();
@@ -2414,4 +2484,20 @@ function avatarFileFromChatPhoto(photo: Td.chatPhoto): Td.file | undefined {
     if (preferSmallest) return area < bestArea ? size : best;
     return area > bestArea ? size : best;
   }).photo;
+}
+
+/**
+ * TDLib reports "no such thing" as an error object carrying HTTP-shaped
+ * `code`/`message` fields. Some calls document a 404 as a normal answer -
+ * `clickAnimatedEmojiMessage` uses it for "this emoji has no big effect" -
+ * so those callers need to tell it apart from a real failure rather than
+ * swallowing every error alike.
+ */
+function isNotFound(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code: unknown }).code === 404
+  );
 }

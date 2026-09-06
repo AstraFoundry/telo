@@ -77,6 +77,7 @@ Designed from the ground up for strict privacy and security, Telo isolates crede
 - **Message Editing**: In-place edits with live updates and `edited` status indicators.
 - **Message Forwarding**: Forward any message across chats with preview updates.
 - **Message Deletion**: Safe deletion with confirmation dialogs.
+- **Animated Emoji**: A one-emoji message plays Telegram's own animation, once and then still. Clicking it asks Telegram for the oversized effect and plays it over the transcript — and the peer's click plays the same burst on your side. Emoji-only text with no animation is drawn large, up to Telegram's three-emoji cap.
 - **Chat Management**: Pin/unpin dialogs, mute/unmute notification states, and mark chats as read/unread.
 
 ---

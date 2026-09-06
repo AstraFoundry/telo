@@ -1,4 +1,5 @@
 import type {
+  AnimatedEmojiEffectDto,
   BotCallbackAnswerDto,
   DeleteMessageInput,
   EditMessageInput,
@@ -78,5 +79,14 @@ export class MessageActionsService {
       chatId,
       target ? target : undefined,
     );
+  }
+
+  clickAnimatedEmoji(
+    chatId: string,
+    messageId: string,
+  ): Promise<AnimatedEmojiEffectDto | null> {
+    if (!chatId.trim()) throw new Error("Chat id is required");
+    if (!messageId.trim()) throw new Error("Message id is required");
+    return this.repository.clickAnimatedEmoji(chatId, messageId);
   }
 }

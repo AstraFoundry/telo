@@ -2,6 +2,7 @@ import { EventType, type AGUIEvent } from "@ag-ui/core";
 import { create } from "zustand";
 
 import type {
+  AnimatedEmojiEffectDto,
   ChatDto,
   ChatFolderDto,
   ChatPageCursorDto,
@@ -414,6 +415,21 @@ interface ChatState {
   notificationSenderName: boolean;
   notificationPreview: boolean;
   countMutedChats: boolean;
+  /**
+   * Animated-emoji effects currently playing, keyed by message id. Telegram
+   * plays the burst for whoever clicked and for the peer watching, so this
+   * fills from both this account's own click and the workspace event the
+   * other side's click raises. An entry lives until the sticker finishes.
+   */
+  animatedEmojiEffects: Readonly<Record<string, AnimatedEmojiEffectDto>>;
+  /**
+   * Reports a click on an animated emoji. Answers true when Telegram had an
+   * effect to play — an entry is now in `animatedEmojiEffects` — and false
+   * when it had none and the bubble's own animation should replay instead.
+   */
+  clickAnimatedEmoji(chatId: string, messageId: string): Promise<boolean>;
+  /** Drops a finished effect, so the same emoji can be clicked again. */
+  clearAnimatedEmojiEffect(messageId: string): void;
   notifyDirectChats: boolean;
   notifyGroupChats: boolean;
   notifyChannels: boolean;
@@ -676,6 +692,27 @@ let loadingStickerSets = false;
 // first time, and only a chat switch makes the list stale.
 let availableReactionsChatId: string | null = null;
 
+/**
+ * Publishes an effect and makes sure its document is on disk. The effect is a
+ * different document from the one in the bubble, so it has its own download;
+ * the overlay paints the outline until it lands, exactly as a sticker does.
+ */
+function startAnimatedEmojiEffect(
+  set: (partial: (state: ChatState) => Partial<ChatState> | ChatState) => void,
+  get: () => ChatState,
+  effect: AnimatedEmojiEffectDto,
+): void {
+  set((state) => ({
+    animatedEmojiEffects: {
+      ...state.animatedEmojiEffects,
+      [effect.messageId]: effect,
+    },
+  }));
+  if (get().mediaDownloads[effect.mediaId] === undefined) {
+    void get().downloadMedia(effect.mediaId);
+  }
+}
+
 export const useChatStore = create<ChatState>((set, get) => ({
   chats: [],
   folders: [],
@@ -703,6 +740,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   notificationSenderName: true,
   notificationPreview: true,
   countMutedChats: false,
+  animatedEmojiEffects: {},
   notifyDirectChats: true,
   notifyGroupChats: true,
   notifyChannels: true,
@@ -1274,6 +1312,27 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }));
     }
   },
+  async clickAnimatedEmoji(chatId, messageId) {
+    const effect = await window.telo.workspace.clickAnimatedEmoji(
+      chatId,
+      messageId,
+    );
+    // Null is Telegram's honest "this emoji has no big effect", not a
+    // failure: the caller replays the bubble's own animation instead.
+    if (!effect) return false;
+    startAnimatedEmojiEffect(set, get, effect);
+    return true;
+  },
+
+  clearAnimatedEmojiEffect(messageId) {
+    set((state) => {
+      if (!(messageId in state.animatedEmojiEffects)) return state;
+      const next = { ...state.animatedEmojiEffects };
+      delete next[messageId];
+      return { animatedEmojiEffects: next };
+    });
+  },
+
   async downloadMedia(mediaId) {
     try {
       await window.telo.workspace.downloadMedia(mediaId);
@@ -1994,6 +2053,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
           presence: event.online ? "online" : null,
         }),
       );
+      return;
+    }
+    if (event.type === "animated-emoji-clicked") {
+      // Only the open transcript can show a burst; one for a chat nobody is
+      // looking at would fire, finish and be seen by no one.
+      if (get().activeChatId !== event.effect.chatId) return;
+      startAnimatedEmojiEffect(set, get, event.effect);
       return;
     }
     if (event.type === "message-reactions") {

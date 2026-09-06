@@ -2,6 +2,7 @@ import path from "node:path";
 import { copyFile, mkdir, stat, writeFile } from "node:fs/promises";
 
 import type {
+  AnimatedEmojiEffectDto,
   BotCallbackAnswerDto,
   ChatDto,
   ChatFolderDto,
@@ -670,6 +671,58 @@ const INITIAL_MESSAGES: Record<string, ReadonlyArray<MessageDto>> = {
       },
       groupedId: null,
       sentAt: "2026-08-26T10:27:00.000Z",
+      outgoing: false,
+      status: "read",
+    },
+    {
+      // What TDLib delivers as `messageAnimatedEmoji`: the text was one
+      // emoji, so the body keeps the emoji and the media carries Telegram's
+      // animation of it. The `"emoji"` role is what makes the transcript draw
+      // it at emoji size and play it once instead of looping a sticker.
+      id: "product-7",
+      chatId: "product",
+      senderName: "Telo",
+      senderId: "product",
+      senderAvatarUrl: null,
+      body: "🎉",
+      entities: [],
+      media: {
+        id: "product/7",
+        kind: "sticker",
+        fileName: "party.tgs",
+        mimeType: "application/x-tgsticker",
+        size: null,
+        width: 512,
+        height: 512,
+        duration: null,
+        spoiler: false,
+        sticker: {
+          emoji: "🎉",
+          role: "emoji",
+          format: "animated",
+          setReference: null,
+          outlinePath: DEMO_STICKER_OUTLINE_PATH,
+        },
+      },
+      groupedId: null,
+      sentAt: "2026-08-26T10:28:00.000Z",
+      outgoing: false,
+      status: "read",
+    },
+    {
+      // Two emoji and nothing else: Telegram leaves this as text and draws it
+      // large, with no animation. It is the other half of the same rule.
+      id: "product-8",
+      chatId: "product",
+      senderName: "Telo",
+      senderId: "product",
+      senderAvatarUrl: null,
+      body: "🚀🌘",
+      entities: [],
+      isolatedEmojiCount: 2,
+      media: null,
+      groupedId: null,
+      sentAt: "2026-08-26T10:29:00.000Z",
       outgoing: false,
       status: "read",
     },
@@ -1856,6 +1909,39 @@ export class DemoTelegramRepository implements TelegramRepository {
     // everywhere, but an unknown chat still fails like every other read.
     this.requireChat(chatId);
     return DEMO_AVAILABLE_REACTIONS;
+  }
+
+  async clickAnimatedEmoji(
+    chatId: string,
+    messageId: string,
+  ): Promise<AnimatedEmojiEffectDto | null> {
+    this.requireChat(chatId);
+    const message = (this.messages.get(chatId) ?? []).find(
+      (entry) => entry.id === messageId,
+    );
+    // Only an animated emoji has an effect. A sticker, a photo or a plain
+    // text message answers null the way Telegram's 404 does, rather than
+    // inventing a burst for something that never had one.
+    if (message?.media?.kind !== "sticker") return null;
+    if (message.media.sticker?.role !== "emoji") return null;
+    return {
+      chatId,
+      messageId,
+      // Telegram sends a second, larger document for the burst. The demo
+      // workspace has one animation to give, so the effect replays the
+      // message's own document at effect size — enough to exercise the
+      // download, the overlay and the completion handoff end to end.
+      mediaId: message.media.id,
+      sticker: {
+        emoji: message.media.sticker.emoji,
+        role: "emoji",
+        format: "animated",
+        setReference: null,
+        outlinePath: DEMO_STICKER_OUTLINE_PATH,
+      },
+      width: 512,
+      height: 512,
+    };
   }
 
   async setChatPinned(chatId: string, pinned: boolean): Promise<void> {

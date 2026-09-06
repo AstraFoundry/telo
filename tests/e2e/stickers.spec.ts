@@ -19,12 +19,15 @@ test("renders every sticker encoding without an attachment card", async ({
   ).toBeVisible();
 
   const conversation = window.getByRole("region", { name: "Conversation" });
-  // The bubble-less sticker messages; the chat also carries an inline custom
-  // emoji, which lives inside a bubble and is counted separately below.
+  // The bubble-less sticker messages. Four of them: one per encoding, plus
+  // the animated emoji seeded after them, which the same primitive draws but
+  // which is Telegram's rendering of a typed character rather than a fourth
+  // encoding. The chat also carries an inline custom emoji, which lives
+  // inside a bubble and is counted separately below.
   const stickers = conversation.locator(
     '[data-slot="message-sticker"] [data-slot="sticker"]',
   );
-  await expect(stickers).toHaveCount(3);
+  await expect(stickers).toHaveCount(4);
 
   // Still and video stickers resolve to their own elements; the Lottie one
   // renders an SVG once the player has gunzipped and parsed the document.
@@ -152,15 +155,14 @@ test("opens a received sticker's set and toggles it", async ({ window }) => {
     .getByRole("button", { name: /Product Notes/ })
     .click();
   const conversation = window.getByRole("region", { name: "Conversation" });
-  await expect(
-    conversation.locator('[data-slot="message-sticker"] [data-slot="sticker"]'),
-  ).toHaveCount(3);
 
-  // Telegram opens the set when you tap a sticker.
-  await conversation
+  // Telegram opens the set when you tap a sticker. What the chat holds
+  // besides that sticker is the encoding test's business, not this one's.
+  const openSet = conversation
     .getByRole("button", { name: "Open sticker set" })
-    .first()
-    .click();
+    .first();
+  await expect(openSet).toBeVisible();
+  await openSet.click();
   const sheet = window.getByRole("dialog", { name: "Telo Pack" });
   await expect(sheet).toBeVisible();
   await expect(sheet.locator('[data-slot="sticker"]')).toHaveCount(3);

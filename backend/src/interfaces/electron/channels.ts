@@ -39,6 +39,7 @@ export const channels = {
   botCallbackAnswer: "workspace:answer-bot-callback",
   messageReactionSet: "workspace:set-message-reaction",
   messageReactionsAvailable: "workspace:list-available-reactions",
+  animatedEmojiClick: "workspace:click-animated-emoji",
   chatPinSet: "workspace:set-chat-pinned",
   chatMuteSet: "workspace:set-chat-muted",
   chatReadSet: "workspace:set-chat-read",

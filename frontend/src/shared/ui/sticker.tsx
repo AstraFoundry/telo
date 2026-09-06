@@ -29,8 +29,13 @@ export interface StickerProps {
   readonly src: string | null;
   /** Accessible name for a sticker whose set carries no emoji. */
   readonly label: string;
-  /** Names the play control that reduced motion puts on a paused sticker. */
-  readonly playLabel: string;
+  /**
+   * Names the play control that reduced motion puts on a paused sticker.
+   * Null draws no control at all, for a caller that owns the click itself —
+   * an animated emoji does, because clicking it asks Telegram for a bigger
+   * effect before it settles for replaying in place.
+   */
+  readonly playLabel: string | null;
   /** Caps the longest side; the transcript keeps Telegram's cell size. */
   readonly maxSize?: number;
   /**
@@ -46,6 +51,11 @@ export interface StickerProps {
    * and then the same held frame and play control reduced motion produces.
    */
   readonly loop?: boolean;
+  /**
+   * Fires when a single-pass sticker reaches its end, or gives up on getting
+   * there. Only meaningful with `loop` off: a looping sticker never finishes.
+   */
+  onComplete?(): void;
   readonly className?: string;
 }
 
@@ -80,6 +90,7 @@ export function Sticker({
   maxSize = STICKER_MAX_PX,
   still = false,
   loop = true,
+  onComplete,
   className,
 }: StickerProps) {
   const reduce = useReducedMotionConfig() ?? false;
@@ -114,6 +125,7 @@ export function Sticker({
           frozen={frozen}
           loop={repeat}
           play={still ? null : playLabel}
+          onComplete={onComplete}
         />
       </StickerBox>
     );
@@ -128,6 +140,7 @@ export function Sticker({
           frozen={frozen}
           loop={repeat}
           play={still ? null : playLabel}
+          onComplete={onComplete}
         />
       </StickerBox>
     );
@@ -222,12 +235,14 @@ function VideoSticker({
   frozen,
   loop,
   play,
+  onComplete,
 }: {
   readonly src: string;
   readonly name: string;
   readonly frozen: boolean;
   readonly loop: boolean;
   readonly play: string | null;
+  onComplete?(): void;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [paused, setPaused] = useState(frozen);
@@ -273,7 +288,12 @@ function VideoSticker({
           // A sticker that does not loop gets one pass on demand: it holds
           // its last frame and offers the control again.
           if (!loop) setPaused(true);
+          onComplete?.();
         }}
+        // A document that will not decode has finished as far as the caller
+        // is concerned; an overlay waiting on the pass would otherwise sit
+        // there forever.
+        onError={() => onComplete?.()}
         className="size-full object-contain"
       />
       {paused && play ? <PlayOverlay label={play} onPlay={start} /> : null}
@@ -287,17 +307,26 @@ function LottieSticker({
   frozen,
   loop,
   play,
+  onComplete,
 }: {
   readonly src: string;
   readonly name: string;
   readonly frozen: boolean;
   readonly loop: boolean;
   readonly play: string | null;
+  onComplete?(): void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const playerRef = useRef<LottiePlayer | null>(null);
   const [paused, setPaused] = useState(frozen);
   const [failed, setFailed] = useState(false);
+  // Held in a ref so a new callback identity does not tear down and rebuild
+  // the player, which would restart the animation mid-pass. Written in an
+  // effect rather than during render, which is where refs are allowed to move.
+  const completeRef = useRef(onComplete);
+  useEffect(() => {
+    completeRef.current = onComplete;
+  }, [onComplete]);
 
   useEffect(() => {
     let cancelled = false;
@@ -324,14 +353,23 @@ function LottieSticker({
         if (frozen) player.goToAndStop(0, true);
         // The same hold the video sticker gets from `onEnded`: one pass, then
         // the last frame and the control that replays it.
-        if (!loop) player.addEventListener("complete", () => setPaused(true));
+        if (!loop) {
+          player.addEventListener("complete", () => {
+            setPaused(true);
+            completeRef.current?.();
+          });
+        }
         playerRef.current = player;
       } catch (error) {
         // A sticker that cannot be decoded falls back to its emoji rather
         // than leaving an empty hole in the transcript, but the reason still
         // belongs in the log — a silent catch would hide a broken player.
         console.error("Sticker animation failed to load", error);
-        if (!cancelled) setFailed(true);
+        if (cancelled) return;
+        setFailed(true);
+        // Same contract as a finished pass: a caller waiting on this sticker
+        // gets its answer instead of waiting on a player that never loaded.
+        completeRef.current?.();
       }
     })();
     return () => {

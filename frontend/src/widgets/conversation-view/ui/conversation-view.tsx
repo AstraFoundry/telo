@@ -37,9 +37,11 @@ import {
 } from "react";
 
 import type {
+  AnimatedEmojiEffectDto,
   MessageAgentActionTone,
   MessageButtonDto,
   MessageDto,
+  MessageFileMediaDto,
   MessageForwardDto,
   StickerSetReferenceDto,
   TimeFormatPreference,
@@ -105,6 +107,7 @@ import {
   MorphPopoverContent,
   MorphPopoverTrigger,
   PressableBlock,
+  Sticker,
   Tooltip,
   EASE_OUT,
 } from "shared/ui";
@@ -124,6 +127,20 @@ import {
   mediaDownloadKey,
   type AutoDownloadPolicy,
 } from "./media-groups";
+
+/**
+ * Telegram draws an animated emoji smaller than a sticker and larger than
+ * text: it is a character, not an attachment, but it is the only thing in the
+ * message. 112px is the desktop equivalent of what both reference clients
+ * settle on for a single animated emoji.
+ */
+const ANIMATED_EMOJI_PX = 112;
+/**
+ * The click effect is a deliberately oversized take on the same emoji, drawn
+ * over the transcript rather than inside the row. Three times is Telegram's
+ * proportion.
+ */
+const ANIMATED_EMOJI_EFFECT_SCALE = 3;
 
 const MEDIA_LABELS = {
   download: copy.downloadMedia,
@@ -825,12 +842,23 @@ function ConversationMessage({
     </div>
   ) : null;
 
+  // Telegram's animated rendering of an emoji-only message. The body still
+  // carries the emoji — a reply quote, a chat-list preview and a notification
+  // all have to say something — so it is not a caption on the sticker, it is
+  // the same content in text form and only one of the two is drawn.
+  const animatedEmoji =
+    fileMedia?.kind === "sticker" && fileMedia.sticker?.role === "emoji";
+  // The other half of the same rule: emoji-only text Telegram had no
+  // animation for still gets drawn large, up to its three-emoji cap.
+  const isolatedEmoji = !message.media && (message.isolatedEmojiCount ?? 0) > 0;
+
   // Telegram draws a sticker straight onto the background: no bubble, no
-  // padding, no tail. A sticker that also carries a caption, a reply quote or
-  // a forward header keeps the bubble, because that chrome needs a surface.
+  // padding, no tail, and both emoji renderings above are drawn the same way.
+  // Anything that also carries a caption, a reply quote or a forward header
+  // keeps the bubble, because that chrome needs a surface.
   const bubbleless =
-    fileMedia?.kind === "sticker" &&
-    !message.body &&
+    (isolatedEmoji ||
+      (fileMedia?.kind === "sticker" && (!message.body || animatedEmoji))) &&
     !message.replyTo &&
     !message.forwardedFrom;
 
@@ -911,7 +939,16 @@ function ConversationMessage({
           <ContextMenuTrigger>
             {bubbleless ? (
               <div data-slot="message-sticker" className="relative w-fit">
-                {mediaNode}
+                {animatedEmoji && fileMedia ? (
+                  <AnimatedEmojiMedia message={message} media={fileMedia} />
+                ) : isolatedEmoji ? (
+                  <IsolatedEmojiText
+                    body={message.body}
+                    count={message.isolatedEmojiCount ?? 1}
+                  />
+                ) : (
+                  mediaNode
+                )}
                 {/* Selection mode swaps the hover rail for per-row
                     checkboxes. */}
                 {selecting ? null : (
@@ -1153,6 +1190,166 @@ function ConversationMessage({
       </MessageContent>
       {message.outgoing ? selectionToggle : null}
     </Message>
+  );
+}
+
+/**
+ * How large Telegram draws an emoji-only text message, by how many emoji it
+ * is. The glyph shrinks as the count rises so three of them still fit the
+ * column at a size that reads as deliberate rather than as broken text.
+ */
+const ISOLATED_EMOJI_PX: Record<number, number> = { 1: 48, 2: 40, 3: 32 };
+
+/**
+ * Telegram's animated emoji: the single emoji a message was, drawn as its
+ * animation instead of as a glyph.
+ *
+ * Playback follows Telegram rather than the sticker rules one file over. A
+ * sticker loops, because the loop is the sticker. An animated emoji plays
+ * once and holds, because it stands in for a character someone typed and a
+ * character that never stops moving is noise in a transcript. The reader's
+ * sticker-looping preference does not reach it for the same reason.
+ *
+ * Clicking asks Telegram what to play. It answers either with a bigger,
+ * louder document — the effect, drawn over the transcript at three times the
+ * size and spilling out of the row the way it does everywhere else — or with
+ * nothing, which is its way of saying "replay the one you have". Both sides
+ * of a chat see the same burst: the peer's click arrives as a workspace event
+ * carrying the same document.
+ */
+function AnimatedEmojiMedia({
+  message,
+  media,
+}: {
+  readonly message: MessageDto;
+  readonly media: MessageFileMediaDto;
+}) {
+  const download = useChatStore(
+    (state) => state.mediaDownloads[media.id] ?? null,
+  );
+  const downloadMedia = useChatStore((state) => state.downloadMedia);
+  const effect = useChatStore(
+    (state) => state.animatedEmojiEffects[message.id] ?? null,
+  );
+  const clickAnimatedEmoji = useChatStore((state) => state.clickAnimatedEmoji);
+  const clearAnimatedEmojiEffect = useChatStore(
+    (state) => state.clearAnimatedEmojiEffect,
+  );
+  // Remounting the player is what replays it: the animation is stateful
+  // inside Lottie, and a key change restarts it from frame zero without the
+  // component having to reach into the player.
+  const [replays, setReplays] = useState(0);
+
+  const needsDownload = download === null;
+  useEffect(() => {
+    if (needsDownload) void downloadMedia(media.id);
+  }, [needsDownload, downloadMedia, media.id]);
+
+  const click = async () => {
+    const played = await clickAnimatedEmoji(message.chatId, message.id);
+    if (!played) setReplays((count) => count + 1);
+  };
+
+  return (
+    <div className="relative">
+      <PressableBlock
+        aria-label={copy.playAnimatedEmoji}
+        className="w-fit rounded-lg"
+        onClick={() => void click()}
+      >
+        <Sticker
+          key={replays}
+          sticker={media.sticker!}
+          width={media.width}
+          height={media.height}
+          src={download?.state === "ready" ? download.url : null}
+          label={copy.sticker}
+          // The row owns the click, so the sticker draws no control of its
+          // own: two overlapping targets on one emoji, one asking Telegram
+          // for an effect and one replaying locally, is one too many.
+          playLabel={null}
+          maxSize={ANIMATED_EMOJI_PX}
+          loop={false}
+        />
+      </PressableBlock>
+      {effect ? (
+        <AnimatedEmojiEffect
+          effect={effect}
+          onDone={() => clearAnimatedEmojiEffect(message.id)}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * The burst. It is a second document, downloaded on demand, drawn centred on
+ * the emoji and allowed to spill out of the row — which is the whole point of
+ * it, so nothing here clips. It never takes the pointer: the emoji underneath
+ * stays clickable while its own effect is still playing.
+ */
+function AnimatedEmojiEffect({
+  effect,
+  onDone,
+}: {
+  readonly effect: AnimatedEmojiEffectDto;
+  onDone(): void;
+}) {
+  const download = useChatStore(
+    (state) => state.mediaDownloads[effect.mediaId] ?? null,
+  );
+  const still = effect.sticker.format === "static";
+
+  // Telegram's effects are Lottie or WebM; a still document has no pass to
+  // finish, so it is retired immediately rather than left on screen waiting
+  // for an end that never comes.
+  useEffect(() => {
+    if (still) onDone();
+  }, [still, onDone]);
+  if (still) return null;
+
+  return (
+    // Centred with an explicit translate rather than a grid alignment: the
+    // effect is three times its box, and an overflowing grid item is aligned
+    // by rules that differ between engines. This one is unambiguous.
+    <div
+      data-slot="animated-emoji-effect"
+      className="pointer-events-none absolute top-1/2 left-1/2 z-10 -translate-x-1/2 -translate-y-1/2"
+    >
+      <Sticker
+        sticker={effect.sticker}
+        width={effect.width}
+        height={effect.height}
+        src={download?.state === "ready" ? download.url : null}
+        label={copy.sticker}
+        playLabel={null}
+        maxSize={ANIMATED_EMOJI_PX * ANIMATED_EMOJI_EFFECT_SCALE}
+        loop={false}
+        onComplete={onDone}
+      />
+    </div>
+  );
+}
+
+/**
+ * Emoji-only text Telegram left as text. No animation to play, so this is
+ * plain content at a larger size — and it stays selectable text, which an
+ * image of the same emoji would not be.
+ */
+function IsolatedEmojiText({
+  body,
+  count,
+}: {
+  readonly body: string;
+  readonly count: number;
+}) {
+  return (
+    <p
+      style={{ fontSize: ISOLATED_EMOJI_PX[count] ?? ISOLATED_EMOJI_PX[3] }}
+      className="leading-none"
+    >
+      {body}
+    </p>
   );
 }
 

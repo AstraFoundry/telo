@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { rm } from "node:fs/promises";
 
 import type {
+  AnimatedEmojiEffectDto,
   BotCallbackAnswerDto,
   ChatDto,
   ChatFolderDto,
@@ -517,6 +518,13 @@ export class TelegramAccountCoordinator implements TelegramRepository {
     messageId?: string,
   ): Promise<ReadonlyArray<string>> {
     return this.delegate().listAvailableReactions(chatId, messageId);
+  }
+
+  clickAnimatedEmoji(
+    chatId: string,
+    messageId: string,
+  ): Promise<AnimatedEmojiEffectDto | null> {
+    return this.delegate().clickAnimatedEmoji(chatId, messageId);
   }
 
   private delegate(): TelegramAccountClient {
