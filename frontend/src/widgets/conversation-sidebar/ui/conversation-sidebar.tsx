@@ -153,6 +153,7 @@ function ChatListRow({
           <Avatar
             src={chat.avatarDataUrl}
             pending={chat.avatarPending}
+            mark={chat.kind === "saved" ? "saved" : undefined}
             className="size-10"
           />
           <span className="min-w-0 flex-1">
@@ -255,6 +256,7 @@ function MessageSearchResultRow({
       <Avatar
         src={chat?.avatarDataUrl ?? null}
         pending={chat?.avatarPending}
+        mark={chat?.kind === "saved" ? "saved" : undefined}
         className="size-10"
       />
       <span className="min-w-0 flex-1">
@@ -371,6 +373,7 @@ function RecentSearchRow({
           <Avatar
             src={chat.avatarDataUrl}
             pending={chat.avatarPending}
+            mark={chat.kind === "saved" ? "saved" : undefined}
             className="size-10"
           />
           <span className="min-w-0 flex-1">
