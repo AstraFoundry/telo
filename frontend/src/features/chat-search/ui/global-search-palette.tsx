@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import type { GlobalSearchResultDto } from "../../../../../contracts/src/ipc";
-import { useChatStore } from "entities/chat";
+import { displayChatTitle, useChatStore } from "entities/chat";
 import { copy } from "shared/config/copy";
 import { useHotkeys } from "shared/lib/use-hotkeys";
 import {
@@ -129,7 +129,7 @@ function PaletteSurface({ onClose }: { onClose(): void }) {
               <ComboboxItem
                 key={chat.id}
                 value={`chat:${chat.id}`}
-                textValue={chat.title}
+                textValue={displayChatTitle(chat)}
               >
                 <span className="flex min-w-0 items-center gap-2">
                   <Avatar
@@ -137,7 +137,9 @@ function PaletteSurface({ onClose }: { onClose(): void }) {
                     pending={chat.avatarPending}
                     className="size-6"
                   />
-                  <span className="min-w-0 flex-1 truncate">{chat.title}</span>
+                  <span className="min-w-0 flex-1 truncate">
+                    {displayChatTitle(chat)}
+                  </span>
                 </span>
               </ComboboxItem>
             ))}

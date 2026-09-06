@@ -203,6 +203,17 @@ describe("ConversationView", () => {
     );
   });
 
+  it("labels Saved Messages even when TDLib titled the chat with the account name", async () => {
+    await renderView({
+      chats: [chat({ id: "chat-1", title: "Rafa K93", kind: "saved" })],
+    });
+
+    expect(
+      screen.getByRole("heading", { name: copy.savedMessages }),
+    ).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "Rafa K93" })).toBeNull();
+  });
+
   it("labels forwarded bubbles with their original sender", async () => {
     await renderView({
       messages: [
