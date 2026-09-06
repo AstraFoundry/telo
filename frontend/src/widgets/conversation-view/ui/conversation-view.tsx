@@ -59,7 +59,11 @@ import {
 import { useTelegramStore } from "entities/telegram";
 import { AddToAgentButton } from "features/add-to-agent";
 import { InChatSearchBar } from "features/chat-search";
-import { ReactionBar, ReactionPicker } from "features/react-to-message";
+import {
+  ReactionBar,
+  ReactionMenuStrip,
+  ReactionPicker,
+} from "features/react-to-message";
 import { MessageComposer } from "features/send-message";
 import { AgentToggle } from "features/toggle-agent";
 import { ChatProfileToggle } from "features/toggle-chat-profile";
@@ -183,9 +187,9 @@ function dayKey(value: string): string {
 // 56px gutter beside every bubble (`msgMargin`) so hover actions never cover
 // content, and Telegram Web A's `.quick-reaction` is a 28px disc at the
 // bubble's edge. Here the 28px disc is the visual while the button around it
-// keeps the full 40px pointer target. It appears on hover (precise pointers
-// only) and focus-within with at most a 100ms opacity fade — no springs. The
-// right-click context menu stays the full action list.
+// keeps the full 40px pointer target. It appears on hover and focus-within
+// with at most a 100ms opacity fade — no springs. The right-click menu also
+// leads with the same allowed emoji, matching Telegram Desktop.
 function MessageHoverRail({
   message,
   agentActionsAvailable,
@@ -224,7 +228,7 @@ function MessageHoverRail({
       className={`absolute bottom-0 z-10 flex items-center transition-opacity duration-100 motion-reduce:transition-none ${side} ${
         railHeld
           ? "pointer-events-auto opacity-100"
-          : "pointer-events-none opacity-0 group-focus-within/message:pointer-events-auto group-focus-within/message:opacity-100 pointer-fine:group-hover/message:pointer-events-auto pointer-fine:group-hover/message:opacity-100"
+          : "pointer-events-none opacity-0 group-focus-within/message:pointer-events-auto group-focus-within/message:opacity-100 group-hover/message:pointer-events-auto group-hover/message:opacity-100"
       }`}
     >
       {message.status !== "failed" ? (
@@ -991,6 +995,7 @@ function ConversationMessage({
             )}
           </ContextMenuTrigger>
           <ContextMenuContent ariaLabel={copy.messageActions}>
+            <ReactionMenuStrip message={message} />
             {/* A failed send never reached Telegram, so Reply/Edit/Forward —
                 which reference a server-side message — stay hidden; Resend and
                 Delete are the meaningful actions. */}
