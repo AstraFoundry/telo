@@ -2,7 +2,7 @@ import { Check, CircleNotch } from "@phosphor-icons/react";
 import { useEffect, useMemo, useState } from "react";
 
 import type { MessageDto } from "../../../../../contracts/src/ipc";
-import { useChatStore } from "entities/chat";
+import { chatsForPicker, displayChatTitle, useChatStore } from "entities/chat";
 import { copy } from "shared/config/copy";
 import {
   Avatar,
@@ -19,11 +19,12 @@ interface ForwardPickerDialogProps {
   onClose(): void;
 }
 
-// The picker filters the already-loaded chat list by title; the sidebar's
-// server search stays scoped to navigation. Telegram allows forwarding back
-// into the source chat, so the list keeps every conversation. Rows reuse the
-// sidebar chat-row visual (avatar + title) plus a selection indicator: a
-// forward can target several chats at once.
+// The picker filters the already-loaded chat list by display title (Saved
+// Messages, not the TDLib self-chat name). The sidebar's server search stays
+// scoped to navigation. Telegram allows forwarding back into the source
+// chat, so the list keeps every conversation. Rows reuse the sidebar chat-row
+// visual (avatar + title) plus a selection indicator: a forward can target
+// several chats at once.
 export function ForwardPickerDialog({
   message,
   onClose,
@@ -56,14 +57,7 @@ export function ForwardPickerDialog({
     setError(null);
   }
 
-  const term = query.trim().toLocaleLowerCase();
-  const visible = useMemo(
-    () =>
-      term
-        ? chats.filter((chat) => chat.title.toLocaleLowerCase().includes(term))
-        : chats,
-    [chats, term],
-  );
+  const visible = useMemo(() => chatsForPicker(chats, query), [chats, query]);
 
   const toggle = (chatId: string) => {
     setSelected((current) =>
@@ -133,7 +127,7 @@ export function ForwardPickerDialog({
                     className="size-10 shrink-0"
                   />
                   <span className="min-w-0 flex-1 truncate text-left text-sm font-semibold">
-                    {chat.title}
+                    {displayChatTitle(chat)}
                   </span>
                   {/* Selection indicator: static color change, no motion —
                       forwarding is a routine action. */}

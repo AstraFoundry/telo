@@ -477,6 +477,21 @@ describe("chat-store", () => {
     expect(useChatStore.getState().chatCursor).toBeNull();
   });
 
+  it("receive() keeps an opened Saved Messages chat missing from a dialog page", () => {
+    useChatStore.setState({
+      chats: [{ ...chat("saved"), kind: "saved", title: "Rafa K93" }],
+    });
+    useChatStore.getState().receive({
+      type: "chats",
+      chats: [chat("1")],
+      nextCursor: null,
+    });
+    expect(useChatStore.getState().chats.map((entry) => entry.id)).toEqual([
+      "saved",
+      "1",
+    ]);
+  });
+
   it("load() keeps the chat list when folder unread fails", async () => {
     const telo = installTeloApiMock();
     telo.workspace.listChatPage.mockResolvedValue({

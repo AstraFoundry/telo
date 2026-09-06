@@ -9,6 +9,7 @@ import type {
   TimeFormatPreference,
 } from "../../../../../contracts/src/ipc";
 import {
+  displayChatTitle,
   secretChatStatus,
   useChatProfileStore,
   useChatStore,
@@ -660,7 +661,7 @@ export function ChatProfilePanel() {
             <ProfileIdentity
               avatarDataUrl={chat.avatarDataUrl}
               avatarPending={chat.avatarPending}
-              title={chat.title}
+              title={displayChatTitle(chat)}
               status={subtitle(chat)}
             />
             {visualNewestFirst.length || fileMedia.length ? (

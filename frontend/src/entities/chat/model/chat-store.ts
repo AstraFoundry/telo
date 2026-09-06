@@ -1730,7 +1730,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
     if (event.type === "chats") {
       set((state) => {
-        const chats = orderChatsByListOrder(event.chats);
+        // A full dialog page can omit Saved Messages (it is often not in the
+        // first 200). Keep a chat we opened via createPrivateChat.
+        const retainedSaved = state.chats.filter(
+          (chat) =>
+            chat.kind === "saved" &&
+            !event.chats.some((entry) => entry.id === chat.id),
+        );
+        const chats = orderChatsByListOrder([...retainedSaved, ...event.chats]);
         return {
           chats,
           chatCursor: event.nextCursor,

@@ -17,7 +17,12 @@ import type {
   TimeFormatPreference,
 } from "../../../../../contracts/src/ipc";
 import { ARCHIVE_FOLDER_ID } from "../../../../../contracts/src/ipc";
-import { chatsForFolder, folderUnread, useChatStore } from "entities/chat";
+import {
+  chatsForFolder,
+  displayChatTitle,
+  folderUnread,
+  useChatStore,
+} from "entities/chat";
 import { useRecentSearches, useTimeFormat } from "entities/preferences";
 import { AccountMenu } from "features/account-menu";
 import { ChatSearch } from "features/chat-search";
@@ -159,7 +164,7 @@ function ChatListRow({
                 />
               ) : null}
               <span className="min-w-0 flex-1 truncate text-sm font-semibold">
-                {chat.title}
+                {displayChatTitle(chat)}
               </span>
               <time className="text-[11px] font-normal text-muted-foreground tabular-nums">
                 {shortTime(chat.updatedAt, timeFormat)}
@@ -371,7 +376,7 @@ function RecentSearchRow({
           <span className="min-w-0 flex-1">
             <span className="flex items-center gap-2">
               <span className="min-w-0 flex-1 truncate text-sm font-semibold">
-                {chat.title}
+                {displayChatTitle(chat)}
               </span>
               <time className="text-[11px] font-normal text-muted-foreground tabular-nums">
                 {shortTime(chat.updatedAt, timeFormat)}
@@ -450,7 +455,7 @@ function ArchiveRow({
         <span className="mt-0.5 block truncate text-xs font-normal text-muted-foreground">
           {archived
             .slice(0, ARCHIVE_PREVIEW_CHATS)
-            .map((chat) => chat.title)
+            .map((chat) => displayChatTitle(chat))
             .join(", ")}
         </span>
       </span>
