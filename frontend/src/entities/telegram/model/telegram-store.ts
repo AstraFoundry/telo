@@ -32,23 +32,38 @@ interface TelegramState {
   logout(): Promise<void>;
 }
 
-export const useTelegramStore = create<TelegramState>((set) => ({
+export const useTelegramStore = create<TelegramState>((set, get) => ({
   auth: null,
   configuration: null,
   accounts: [],
   addingAccount: false,
   currentUser: null,
   start() {
-    const unsubscribe = window.telo.telegram.onAuthState((auth) =>
+    const unsubscribeAuth = window.telo.telegram.onAuthState((auth) =>
       set({ auth: sanitizeAuth(auth) }),
     );
+    const unsubscribeAvatars = window.telo.workspace.onEvent((event) => {
+      if (event.type !== "chat-avatar") return;
+      const currentUser = get().currentUser;
+      if (!currentUser || currentUser.id !== event.chatId) return;
+      set({
+        currentUser: {
+          ...currentUser,
+          avatarDataUrl: event.avatarDataUrl,
+          avatarPending: false,
+        },
+      });
+    });
     void Promise.all([
       window.telo.telegram.getAuthState(),
       window.telo.telegram.getLoginConfiguration(),
     ]).then(([auth, configuration]) =>
       set({ auth: sanitizeAuth(auth), configuration }),
     );
-    return unsubscribe;
+    return () => {
+      unsubscribeAuth();
+      unsubscribeAvatars();
+    };
   },
   async loadCurrentUser() {
     // Unlike the other startup loaders, this hits a live Telegram RPC
