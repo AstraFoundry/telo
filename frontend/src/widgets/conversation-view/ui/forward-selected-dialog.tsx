@@ -68,6 +68,7 @@ export function ForwardSelectedDialog({
                 <Avatar
                   src={chat.avatarDataUrl}
                   pending={chat.avatarPending}
+                  mark={chat.kind === "saved" ? "saved" : undefined}
                   className="size-10"
                 />
                 <span className="min-w-0 flex-1 truncate text-left text-sm font-semibold">

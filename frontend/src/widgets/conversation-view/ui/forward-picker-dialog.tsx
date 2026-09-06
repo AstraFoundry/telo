@@ -124,6 +124,7 @@ export function ForwardPickerDialog({
                   <Avatar
                     src={chat.avatarDataUrl}
                     pending={chat.avatarPending}
+                    mark={chat.kind === "saved" ? "saved" : undefined}
                     className="size-10 shrink-0"
                   />
                   <span className="min-w-0 flex-1 truncate text-left text-sm font-semibold">

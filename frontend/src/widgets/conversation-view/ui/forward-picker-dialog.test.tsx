@@ -155,9 +155,11 @@ describe("ForwardPickerDialog", () => {
     await vi.waitFor(() => {
       expect(telo.workspace.openSavedMessages).toHaveBeenCalledOnce();
     });
-    expect(
-      within(dialog).getByRole("button", { name: copy.savedMessages }),
-    ).toBeTruthy();
+    const saved = within(dialog).getByRole("button", {
+      name: copy.savedMessages,
+    });
+    expect(saved.querySelector("svg")).not.toBeNull();
+    expect(saved.querySelector("img")).toBeNull();
 
     await user.type(
       within(dialog).getByRole("textbox", { name: copy.searchChats }),

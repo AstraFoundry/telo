@@ -30,4 +30,15 @@ describe("Avatar", () => {
     expect(container.querySelector("img")).toBeNull();
     expect(container.textContent).toBe("");
   });
+
+  it("paints the Saved Messages bookmark instead of a photo or skeleton", () => {
+    const src = "data:image/gif;base64,R0lGODlhAQABAAAAACw=";
+    const { container } = render(
+      <Avatar mark="saved" src={src} pending className="size-10" />,
+    );
+
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(container.querySelector("img")).toBeNull();
+    expect(container.querySelector("svg")).not.toBeNull();
+  });
 });

@@ -131,17 +131,24 @@ function SectionHeader({
 function ProfileIdentity({
   avatarDataUrl,
   avatarPending,
+  mark,
   title,
   status,
 }: {
   readonly avatarDataUrl: string | null;
   readonly avatarPending?: boolean;
+  readonly mark?: "saved";
   readonly title: string;
   readonly status: string | null;
 }) {
   return (
     <div className="flex flex-col items-center gap-2 px-2 pb-3 text-center">
-      <Avatar src={avatarDataUrl} pending={avatarPending} className="size-20" />
+      <Avatar
+        src={avatarDataUrl}
+        pending={avatarPending}
+        mark={mark}
+        className="size-20"
+      />
       {/* deslop-ignore-next-line 12 — the name outranks body text here, and
           larger type wants its tracking pulled back in. */}
       <div className="text-lg leading-tight font-semibold tracking-[-0.01em] text-balance">
@@ -661,6 +668,7 @@ export function ChatProfilePanel() {
             <ProfileIdentity
               avatarDataUrl={chat.avatarDataUrl}
               avatarPending={chat.avatarPending}
+              mark={chat.kind === "saved" ? "saved" : undefined}
               title={displayChatTitle(chat)}
               status={subtitle(chat)}
             />

@@ -1786,6 +1786,7 @@ export function ConversationView() {
             <Avatar
               src={activeChat.avatarDataUrl}
               pending={activeChat.avatarPending}
+              mark={activeChat.kind === "saved" ? "saved" : undefined}
               className="size-full"
             />
           </PressableBlock>
