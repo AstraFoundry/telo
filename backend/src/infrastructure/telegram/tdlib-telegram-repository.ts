@@ -84,6 +84,8 @@ export class TdlibTelegramRepository implements TelegramRepository {
   private readonly filePaths = new Map<string, string>();
   private readonly avatarUrls = new Map<string, string | null>();
   private readonly avatarFilePeers = new Map<number, string>();
+  /** User ids that have been fetched with `getUser`, not a min `updateUser`. */
+  private readonly fetchedUserIds = new Set<number>();
   private readonly typingTimers = new Map<
     string,
     ReturnType<typeof setTimeout>
@@ -114,6 +116,7 @@ export class TdlibTelegramRepository implements TelegramRepository {
     const me = await this.client.invoke<Td.user>({ _: "getMe" });
     this.selfUserId = me.id;
     this.users.set(me.id, me);
+    this.fetchedUserIds.add(me.id);
     this.scheduleUserAvatar(me);
     await this.loadList({ _: "chatListMain" });
     await this.loadList({ _: "chatListArchive" });
@@ -128,7 +131,8 @@ export class TdlibTelegramRepository implements TelegramRepository {
     const me = await this.client.invoke<Td.user>({ _: "getMe" });
     this.selfUserId = me.id;
     this.users.set(me.id, me);
-    await this.scheduleUserAvatar(me);
+    this.fetchedUserIds.add(me.id);
+    await this.scheduleUserAvatar(me, true);
     const name = [me.first_name, me.last_name].filter(Boolean).join(" ");
     const id = String(me.id);
     return {
@@ -1018,29 +1022,34 @@ export class TdlibTelegramRepository implements TelegramRepository {
 
   private scheduleChatAvatar(chat: Td.chat): void {
     const peerId = chatIdOf(chat.id);
+    const small = chat.photo?.small;
+    if (small?.id) {
+      void this.downloadAvatar(peerId, small);
+      return;
+    }
+    if (chat.type._ === "chatTypePrivate") {
+      // Private-chat photos live on the user. A missing chat.photo is not
+      // "confirmed empty" — hydrateUser / getUser owns that settlement.
+      return;
+    }
     if (chat.photo === null) {
       this.settleEmptyAvatar(peerId);
       return;
     }
-    const small = chat.photo?.small;
-    if (!small) {
-      // Min chats omit photo.small; keep avatarPending rather than an empty disc.
-      return;
-    }
-    void this.downloadAvatar(peerId, small);
   }
 
-  private scheduleUserAvatar(user: Td.user): Promise<void> {
+  private scheduleUserAvatar(user: Td.user, wait = false): Promise<void> {
     const peerId = String(user.id);
-    if (user.profile_photo === null) {
+    const photo = user.profile_photo;
+    if (photo === null || photo?.id === "0") {
       if (this.hasInFlightAvatar(peerId)) return Promise.resolve();
-      if (this.chats.get(peerId)?.photo?.small) return Promise.resolve();
+      if (this.chats.get(peerId)?.photo?.small?.id) return Promise.resolve();
       this.settleEmptyAvatar(peerId);
       return Promise.resolve();
     }
-    const small = user.profile_photo?.small;
-    if (!small) return Promise.resolve();
-    return this.downloadAvatar(peerId, small);
+    const small = photo?.small;
+    if (!small?.id) return Promise.resolve();
+    return this.downloadAvatar(peerId, small, wait);
   }
 
   private settleEmptyAvatar(peerId: string): void {
@@ -1056,7 +1065,12 @@ export class TdlibTelegramRepository implements TelegramRepository {
     return false;
   }
 
-  private async downloadAvatar(peerId: string, file: Td.file): Promise<void> {
+  private async downloadAvatar(
+    peerId: string,
+    file: Td.file,
+    wait = false,
+  ): Promise<void> {
+    if (!file.id) return;
     if (this.avatarUrls.get(peerId)) return;
     this.avatarFilePeers.set(file.id, peerId);
     try {
@@ -1067,10 +1081,10 @@ export class TdlibTelegramRepository implements TelegramRepository {
       const downloaded = await this.client.invoke<Td.file>({
         _: "downloadFile",
         file_id: file.id,
-        priority: 1,
+        priority: 32,
         offset: 0,
         limit: 0,
-        synchronous: false,
+        synchronous: wait,
       });
       this.avatarFilePeers.set(downloaded.id, peerId);
       if (downloaded.local.is_downloading_completed && downloaded.local.path) {
@@ -1132,23 +1146,26 @@ export class TdlibTelegramRepository implements TelegramRepository {
   }
 
   private async hydrateUser(userId: number): Promise<void> {
-    if (this.users.has(userId)) {
-      this.scheduleUserAvatar(this.users.get(userId)!);
-      return;
+    const alreadyFetched = this.fetchedUserIds.has(userId);
+    if (!alreadyFetched) {
+      this.fetchedUserIds.add(userId);
+      try {
+        const user = await this.client.invoke<Td.user>({
+          _: "getUser",
+          user_id: userId,
+        });
+        if (user._ === "user") {
+          this.users.set(user.id, user);
+        }
+      } catch (error) {
+        console.error("TDLib getUser failed", { userId, error });
+      }
     }
-    try {
-      const user = await this.client.invoke<Td.user>({
-        _: "getUser",
-        user_id: userId,
-      });
-      if (user._ !== "user") return;
-      this.users.set(user.id, user);
-      this.scheduleUserAvatar(user);
-      const chat = this.chats.get(String(userId));
-      if (chat) this.emit({ type: "chat-upsert", chat: this.toChat(chat) });
-    } catch (error) {
-      console.error("TDLib getUser failed", { userId, error });
-    }
+    const user = this.users.get(userId);
+    if (user) this.scheduleUserAvatar(user);
+    if (alreadyFetched) return;
+    const chat = this.chats.get(String(userId));
+    if (chat) this.emit({ type: "chat-upsert", chat: this.toChat(chat) });
   }
 
   private async hydrateSender(sender: Td.MessageSender): Promise<void> {
