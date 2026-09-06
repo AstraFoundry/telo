@@ -7,6 +7,7 @@ import {
   dialog,
   shell,
   Notification,
+  BrowserWindow,
   type WebContents,
 } from "electron";
 
@@ -319,6 +320,18 @@ export function registerIpc(container: ApplicationContainer): void {
   );
   ipcMain.handle(channels.storageMediaCacheClear, () =>
     container.mediaCacheStorage.clear(),
+  );
+  ipcMain.handle(
+    channels.windowControl,
+    (event, action: "minimize" | "maximize" | "close") => {
+      const win = BrowserWindow.fromWebContents(event.sender);
+      if (!win) return;
+      if (action === "minimize") win.minimize();
+      else if (action === "maximize") {
+        if (win.isMaximized()) win.unmaximize();
+        else win.maximize();
+      } else if (action === "close") win.close();
+    },
   );
   ipcMain.handle(
     channels.notify,

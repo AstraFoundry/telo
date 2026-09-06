@@ -2,7 +2,7 @@ import type { BrowserWindowConstructorOptions } from "electron";
 
 type WindowChromeOptions = Pick<
   BrowserWindowConstructorOptions,
-  "titleBarStyle" | "titleBarOverlay" | "autoHideMenuBar"
+  "titleBarStyle" | "titleBarOverlay" | "autoHideMenuBar" | "frame"
 >;
 
 /**
@@ -12,9 +12,9 @@ type WindowChromeOptions = Pick<
  * and `BrowserWindow.setMenu(null)`.
  *
  * macOS uses `hiddenInset` so the traffic lights sit in the content. Windows
- * and Linux use a hidden title bar plus Window Controls Overlay so the OS
- * close/min/max buttons sit in the same 56px header band instead of a second
- * system bar above the workspace.
+ * uses a hidden title bar plus Window Controls Overlay. Linux GTK ignores
+ * `titleBarStyle: "hidden"` and would keep a native "Telo" bar, so the window
+ * is frameless and the renderer paints close/min/max.
  */
 export function windowChromeOptions(
   platform: NodeJS.Platform,
@@ -27,9 +27,13 @@ export function windowChromeOptions(
     };
   }
 
-  return {
-    titleBarStyle: "hidden",
-    titleBarOverlay: { height: 56 },
-    autoHideMenuBar: true,
-  };
+  if (platform === "win32") {
+    return {
+      titleBarStyle: "hidden",
+      titleBarOverlay: { height: 56 },
+      autoHideMenuBar: true,
+    };
+  }
+
+  return { frame: false, autoHideMenuBar: true };
 }

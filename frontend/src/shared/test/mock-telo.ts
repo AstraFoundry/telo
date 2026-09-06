@@ -245,8 +245,10 @@ export function installTeloApiMock(): TeloApiMock {
       onAuthState: vi.fn(() => () => {}),
     },
     shell: {
+      frameless: false,
       notify: vi.fn(),
       onNotificationClick: vi.fn(() => () => {}),
+      windowControl: vi.fn(),
     },
     preferences: {
       get: vi.fn(async () => ({

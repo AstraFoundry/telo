@@ -40,6 +40,9 @@ vi.mock("electron", () => ({
   shell: {
     openPath: ipc.openPath,
   },
+  BrowserWindow: {
+    fromWebContents: vi.fn(() => null),
+  },
   Notification: class {
     static isSupported(): boolean {
       return false;
@@ -1114,5 +1117,34 @@ describe("registerIpc agent automation", () => {
     ).rejects.toThrow("Scheduled task prompt template is required");
     expect(container.agentAutomation.saveRule).not.toHaveBeenCalled();
     expect(container.agentAutomation.saveTask).not.toHaveBeenCalled();
+  });
+
+  it("minimizes, toggles maximize, and closes the sender window", async () => {
+    const { BrowserWindow } = await import("electron");
+    const win = {
+      minimize: vi.fn(),
+      maximize: vi.fn(),
+      unmaximize: vi.fn(),
+      close: vi.fn(),
+      isMaximized: vi.fn(() => false),
+    };
+    vi.mocked(BrowserWindow.fromWebContents).mockReturnValue(
+      win as unknown as never,
+    );
+    registerIpc(automationContainer());
+    const event = { sender: {} };
+
+    await handler(channels.windowControl)(event, "minimize");
+    expect(win.minimize).toHaveBeenCalledTimes(1);
+
+    await handler(channels.windowControl)(event, "maximize");
+    expect(win.maximize).toHaveBeenCalledTimes(1);
+
+    win.isMaximized.mockReturnValue(true);
+    await handler(channels.windowControl)(event, "maximize");
+    expect(win.unmaximize).toHaveBeenCalledTimes(1);
+
+    await handler(channels.windowControl)(event, "close");
+    expect(win.close).toHaveBeenCalledTimes(1);
   });
 });

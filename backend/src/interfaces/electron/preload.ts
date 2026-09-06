@@ -182,10 +182,13 @@ const api: TeloDesktopApi = {
       ipcRenderer.invoke(channels.telegramAccountActivate, accountId),
   },
   shell: {
+    frameless: process.platform === "linux",
     notify: (title, body, tag) =>
       ipcRenderer.invoke(channels.notify, title, body, tag),
     onNotificationClick: (listener) =>
       subscribe<string>(channels.notifyClick, listener),
+    windowControl: (action) =>
+      ipcRenderer.invoke(channels.windowControl, action),
   },
   preferences: {
     get: () => ipcRenderer.invoke(channels.preferencesGet),

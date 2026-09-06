@@ -11,14 +11,18 @@ describe("windowChromeOptions", () => {
     });
   });
 
-  it.each(["win32", "linux"] satisfies NodeJS.Platform[])(
-    "hides the native title bar on %s and overlays window controls",
-    (platform) => {
-      expect(windowChromeOptions(platform)).toEqual({
-        titleBarStyle: "hidden",
-        titleBarOverlay: { height: 56 },
-        autoHideMenuBar: true,
-      });
-    },
-  );
+  it("hides the native title bar on win32 and overlays window controls", () => {
+    expect(windowChromeOptions("win32")).toEqual({
+      titleBarStyle: "hidden",
+      titleBarOverlay: { height: 56 },
+      autoHideMenuBar: true,
+    });
+  });
+
+  it("uses a frameless window on linux because GTK keeps a native title bar", () => {
+    expect(windowChromeOptions("linux")).toEqual({
+      frame: false,
+      autoHideMenuBar: true,
+    });
+  });
 });
