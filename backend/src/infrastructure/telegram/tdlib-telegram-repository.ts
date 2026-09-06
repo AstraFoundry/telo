@@ -57,6 +57,7 @@ import {
   mapReactions,
   mediaIdForFile,
   messageIdOf,
+  minithumbnailDataUrl,
   type MessageMapContext,
 } from "./tdlib-mappers";
 import { copyIntoMediaCache } from "./file-telegram-account-database";
@@ -113,11 +114,11 @@ export class TdlibTelegramRepository implements TelegramRepository {
 
   async hydrate(): Promise<void> {
     await this.hydrateAvatarsFromDisk();
-    const me = await this.client.invoke<Td.user>({ _: "getMe" });
+    const me = await this.resolveFullUser(
+      await this.client.invoke<Td.user>({ _: "getMe" }),
+    );
     this.selfUserId = me.id;
-    this.users.set(me.id, me);
-    this.fetchedUserIds.add(me.id);
-    this.scheduleUserAvatar(me);
+    await this.scheduleUserAvatar(me, true);
     await this.loadList({ _: "chatListMain" });
     await this.loadList({ _: "chatListArchive" });
     this.emit({
@@ -128,10 +129,10 @@ export class TdlibTelegramRepository implements TelegramRepository {
   }
 
   async getCurrentUser(): Promise<CurrentUserDto> {
-    const me = await this.client.invoke<Td.user>({ _: "getMe" });
+    const me = await this.resolveFullUser(
+      await this.client.invoke<Td.user>({ _: "getMe" }),
+    );
     this.selfUserId = me.id;
-    this.users.set(me.id, me);
-    this.fetchedUserIds.add(me.id);
     await this.scheduleUserAvatar(me, true);
     const name = [me.first_name, me.last_name].filter(Boolean).join(" ");
     const id = String(me.id);
@@ -177,7 +178,7 @@ export class TdlibTelegramRepository implements TelegramRepository {
   async openSavedMessages(): Promise<ChatDto> {
     const me = await this.client.invoke<Td.user>({ _: "getMe" });
     this.selfUserId = me.id;
-    this.users.set(me.id, me);
+    this.rememberUser(me);
     const chat = await this.client.invoke<Td.chat>({
       _: "createPrivateChat",
       user_id: me.id,
@@ -346,7 +347,7 @@ export class TdlibTelegramRepository implements TelegramRepository {
       .invoke<Td.user>({ _: "getUser", user_id: Number(peerId) })
       .catch(() => null);
     if (user) {
-      this.users.set(user.id, user);
+      this.rememberUser(user);
       this.scheduleUserAvatar(user);
       const full = await this.client
         .invoke<Td.userFullInfo>({ _: "getUserFullInfo", user_id: user.id })
@@ -1020,10 +1021,15 @@ export class TdlibTelegramRepository implements TelegramRepository {
     return !this.avatarUrls.has(peerId);
   }
 
+  private hasCachedAvatarFile(peerId: string): boolean {
+    return Boolean(this.avatarUrls.get(peerId)?.startsWith("telo-media:"));
+  }
+
   private scheduleChatAvatar(chat: Td.chat): void {
     const peerId = chatIdOf(chat.id);
+    this.paintMinithumbnail(peerId, chat.photo?.minithumbnail);
     const small = chat.photo?.small;
-    if (small?.id) {
+    if (small && fileIdOf(small) !== null) {
       void this.downloadAvatar(peerId, small);
       return;
     }
@@ -1034,22 +1040,33 @@ export class TdlibTelegramRepository implements TelegramRepository {
     }
     if (chat.photo === null) {
       this.settleEmptyAvatar(peerId);
-      return;
     }
   }
 
   private scheduleUserAvatar(user: Td.user, wait = false): Promise<void> {
     const peerId = String(user.id);
     const photo = user.profile_photo;
+    this.paintMinithumbnail(peerId, photo?.minithumbnail);
     if (photo === null || photo?.id === "0") {
       if (this.hasInFlightAvatar(peerId)) return Promise.resolve();
-      if (this.chats.get(peerId)?.photo?.small?.id) return Promise.resolve();
+      if (fileIdOf(this.chats.get(peerId)?.photo?.small)) {
+        return Promise.resolve();
+      }
       this.settleEmptyAvatar(peerId);
       return Promise.resolve();
     }
     const small = photo?.small;
-    if (!small?.id) return Promise.resolve();
+    if (!small || fileIdOf(small) === null) return Promise.resolve();
     return this.downloadAvatar(peerId, small, wait);
+  }
+
+  private paintMinithumbnail(
+    peerId: string,
+    mini: Td.minithumbnail | undefined,
+  ): void {
+    if (this.hasCachedAvatarFile(peerId)) return;
+    const url = minithumbnailDataUrl(mini);
+    if (url) this.settleAvatarUrl(peerId, url);
   }
 
   private settleEmptyAvatar(peerId: string): void {
@@ -1070,53 +1087,56 @@ export class TdlibTelegramRepository implements TelegramRepository {
     file: Td.file,
     wait = false,
   ): Promise<void> {
-    if (!file.id) return;
-    if (this.avatarUrls.get(peerId)) return;
-    this.avatarFilePeers.set(file.id, peerId);
+    const fileId = fileIdOf(file);
+    if (fileId === null) return;
+    if (this.hasCachedAvatarFile(peerId)) return;
+    this.avatarFilePeers.set(fileId, peerId);
     try {
-      if (file.local.is_downloading_completed && file.local.path) {
+      if (file.local?.is_downloading_completed && file.local.path) {
         await this.settleAvatar(peerId, file);
         return;
       }
       const downloaded = await this.client.invoke<Td.file>({
         _: "downloadFile",
-        file_id: file.id,
+        file_id: fileId,
         priority: 32,
         offset: 0,
         limit: 0,
         synchronous: wait,
       });
-      this.avatarFilePeers.set(downloaded.id, peerId);
-      if (downloaded.local.is_downloading_completed && downloaded.local.path) {
+      const downloadedId = fileIdOf(downloaded) ?? fileId;
+      this.avatarFilePeers.set(downloadedId, peerId);
+      if (downloaded.local?.is_downloading_completed && downloaded.local.path) {
         await this.settleAvatar(peerId, downloaded);
       }
     } catch (error) {
       console.error("TDLib avatar download failed", {
         peerId,
-        fileId: file.id,
+        fileId,
         error,
       });
-      this.settleAvatarUrl(peerId, null);
+      if (!this.avatarUrls.get(peerId)) this.settleAvatarUrl(peerId, null);
     }
   }
 
   private async settleAvatar(peerId: string, file: Td.file): Promise<void> {
-    if (!file.local.path) return;
+    const sourcePath = file.local?.path;
+    if (!sourcePath) return;
     try {
       const fileName = avatarCacheFileName(peerId);
-      await copyIntoMediaCache(
-        file.local.path,
-        this.mediaCacheDirectory,
-        fileName,
-      );
+      await copyIntoMediaCache(sourcePath, this.mediaCacheDirectory, fileName);
       this.settleAvatarUrl(peerId, avatarMediaUrl(fileName));
     } catch (error) {
       console.error("TDLib avatar cache copy failed", { peerId, error });
-      this.settleAvatarUrl(peerId, null);
+      if (!this.avatarUrls.get(peerId)) this.settleAvatarUrl(peerId, null);
     }
   }
 
   private settleAvatarUrl(peerId: string, url: string | null): void {
+    const previous = this.avatarUrls.get(peerId);
+    if (previous?.startsWith("telo-media:") && url !== previous) {
+      if (url === null || url.startsWith("data:")) return;
+    }
     this.avatarUrls.set(peerId, url);
     this.emit({ type: "chat-avatar", chatId: peerId, avatarDataUrl: url });
   }
@@ -1145,26 +1165,59 @@ export class TdlibTelegramRepository implements TelegramRepository {
     await this.hydrateUser(userId);
   }
 
-  private async hydrateUser(userId: number): Promise<void> {
-    const alreadyFetched = this.fetchedUserIds.has(userId);
-    if (!alreadyFetched) {
-      this.fetchedUserIds.add(userId);
-      try {
-        const user = await this.client.invoke<Td.user>({
-          _: "getUser",
-          user_id: userId,
-        });
-        if (user._ === "user") {
-          this.users.set(user.id, user);
-        }
-      } catch (error) {
-        console.error("TDLib getUser failed", { userId, error });
-      }
+  private rememberUser(user: Td.user): void {
+    const id = Number(user.id);
+    const existing = this.users.get(id);
+    if (
+      fileIdOf(existing?.profile_photo?.small) &&
+      !fileIdOf(user.profile_photo?.small)
+    ) {
+      return;
     }
-    const user = this.users.get(userId);
+    this.users.set(id, user);
+  }
+
+  private async resolveFullUser(user: Td.user): Promise<Td.user> {
+    const id = Number(user.id);
+    this.rememberUser(user);
+    if (user.profile_photo === null || fileIdOf(user.profile_photo?.small)) {
+      this.fetchedUserIds.add(id);
+      return this.users.get(id) ?? user;
+    }
+    if (this.fetchedUserIds.has(id)) {
+      return this.users.get(id) ?? user;
+    }
+    return (await this.fetchUser(id)) ?? user;
+  }
+
+  private async fetchUser(userId: number): Promise<Td.user | null> {
+    const id = Number(userId);
+    this.fetchedUserIds.add(id);
+    try {
+      const user = await this.client.invoke<Td.user>({
+        _: "getUser",
+        user_id: id,
+      });
+      if (user._ === "user") {
+        this.rememberUser(user);
+        return user;
+      }
+    } catch (error) {
+      console.error("TDLib getUser failed", { userId: id, error });
+    }
+    return this.users.get(id) ?? null;
+  }
+
+  private async hydrateUser(userId: number): Promise<void> {
+    const id = Number(userId);
+    const alreadyFetched = this.fetchedUserIds.has(id);
+    if (!alreadyFetched) {
+      await this.fetchUser(id);
+    }
+    const user = this.users.get(id);
     if (user) this.scheduleUserAvatar(user);
     if (alreadyFetched) return;
-    const chat = this.chats.get(String(userId));
+    const chat = this.chats.get(String(id));
     if (chat) this.emit({ type: "chat-upsert", chat: this.toChat(chat) });
   }
 
@@ -1405,7 +1458,7 @@ export class TdlibTelegramRepository implements TelegramRepository {
       return;
     }
     if (update._ === "updateUser") {
-      this.users.set(update.user.id, update.user);
+      this.rememberUser(update.user);
       this.scheduleUserAvatar(update.user);
       const chat = this.chats.get(String(update.user.id));
       if (chat) this.emit({ type: "chat-upsert", chat: this.toChat(chat) });
@@ -1438,9 +1491,11 @@ export class TdlibTelegramRepository implements TelegramRepository {
   }
 
   private async handleFile(file: Td.file): Promise<void> {
-    const avatarPeerId = this.avatarFilePeers.get(file.id);
+    const fileId = fileIdOf(file);
+    const avatarPeerId =
+      fileId === null ? undefined : this.avatarFilePeers.get(fileId);
     if (avatarPeerId) {
-      if (file.local.is_downloading_completed && file.local.path) {
+      if (file.local?.is_downloading_completed && file.local.path) {
         await this.settleAvatar(avatarPeerId, file);
       }
       return;
@@ -1497,6 +1552,7 @@ export class TdlibTelegramRepository implements TelegramRepository {
       chat_list: chatList,
       limit: 200,
     });
+    const pendingUsers: Promise<void>[] = [];
     for (const id of chats.chat_ids) {
       const chat = await this.client.invoke<Td.chat>({
         _: "getChat",
@@ -1505,12 +1561,13 @@ export class TdlibTelegramRepository implements TelegramRepository {
       this.chats.set(chatIdOf(chat.id), chat);
       this.scheduleChatAvatar(chat);
       if (chat.type._ === "chatTypePrivate") {
-        void this.hydratePrivateUser(chat.type.user_id);
+        pendingUsers.push(this.hydratePrivateUser(chat.type.user_id));
       }
       if (chat.type._ === "chatTypeSecret") {
         void this.hydrateSecretChat(chat.type.secret_chat_id);
       }
     }
+    await Promise.all(pendingUsers);
   }
 
   private orderedChats(): ChatDto[] {
@@ -2137,4 +2194,10 @@ export class TdlibClientCoordinator implements TelegramAccountClient {
     this.state = state;
     this.options.onState(state);
   }
+}
+
+function fileIdOf(file: Td.file | undefined): number | null {
+  if (file?.id == null || file.id === 0) return null;
+  const id = Number(file.id);
+  return Number.isFinite(id) && id !== 0 ? id : null;
 }

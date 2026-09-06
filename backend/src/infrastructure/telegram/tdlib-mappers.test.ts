@@ -17,6 +17,7 @@ import {
   mapFolders,
   mapMessage,
   mediaIdForFile,
+  minithumbnailDataUrl,
 } from "./tdlib-mappers";
 
 const goldenRoot = path.dirname(fileURLToPath(import.meta.url));
@@ -443,5 +444,17 @@ describe("tdlib mappers", () => {
       emptyContext,
     );
     expect(mapped.preview).toBe("Photo");
+  });
+
+  it("turns a TDLib minithumbnail into a JPEG data URL", () => {
+    expect(
+      minithumbnailDataUrl({
+        _: "minithumbnail",
+        width: 8,
+        height: 8,
+        data: "YQ==",
+      }),
+    ).toBe("data:image/jpeg;base64,YQ==");
+    expect(minithumbnailDataUrl(undefined)).toBeNull();
   });
 });
