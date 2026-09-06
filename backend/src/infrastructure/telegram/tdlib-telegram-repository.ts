@@ -1056,8 +1056,40 @@ export class TdlibTelegramRepository implements TelegramRepository {
       return Promise.resolve();
     }
     const small = photo?.small;
-    if (!small || fileIdOf(small) === null) return Promise.resolve();
-    return this.downloadAvatar(peerId, small, wait);
+    if (small && fileIdOf(small) !== null) {
+      return this.downloadAvatar(peerId, small, wait);
+    }
+    return this.scheduleUserAvatarFromFullInfo(user, wait);
+  }
+
+  private async scheduleUserAvatarFromFullInfo(
+    user: Td.user,
+    wait: boolean,
+  ): Promise<void> {
+    const peerId = String(user.id);
+    try {
+      const full = await this.client.invoke<Td.userFullInfo>({
+        _: "getUserFullInfo",
+        user_id: user.id,
+      });
+      if (full._ !== "userFullInfo") return;
+      const photo =
+        full.personal_photo ?? full.photo ?? full.public_photo ?? undefined;
+      if (!photo) {
+        if (full.photo === null && user.profile_photo == null) {
+          this.settleEmptyAvatar(peerId);
+        }
+        return;
+      }
+      this.paintMinithumbnail(peerId, photo.minithumbnail);
+      const file = smallestPhotoFile(photo);
+      if (file) await this.downloadAvatar(peerId, file, wait);
+    } catch (error) {
+      console.error("TDLib getUserFullInfo failed", {
+        userId: user.id,
+        error,
+      });
+    }
   }
 
   private paintMinithumbnail(
@@ -1215,7 +1247,7 @@ export class TdlibTelegramRepository implements TelegramRepository {
       await this.fetchUser(id);
     }
     const user = this.users.get(id);
-    if (user) this.scheduleUserAvatar(user);
+    if (user) await this.scheduleUserAvatar(user);
     if (alreadyFetched) return;
     const chat = this.chats.get(String(id));
     if (chat) this.emit({ type: "chat-upsert", chat: this.toChat(chat) });
@@ -2200,4 +2232,12 @@ function fileIdOf(file: Td.file | undefined): number | null {
   if (file?.id == null || file.id === 0) return null;
   const id = Number(file.id);
   return Number.isFinite(id) && id !== 0 ? id : null;
+}
+
+function smallestPhotoFile(photo: Td.chatPhoto): Td.file | undefined {
+  const sizes = photo.sizes;
+  if (!sizes.length) return undefined;
+  return sizes.reduce((best, size) =>
+    size.width * size.height < best.width * best.height ? size : best,
+  ).photo;
 }
