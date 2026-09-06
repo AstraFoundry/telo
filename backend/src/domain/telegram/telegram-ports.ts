@@ -33,6 +33,11 @@ export interface TelegramRepository {
   /** Starts a device-local E2EE secret chat with the given user. */
   createSecretChat(userId: string): Promise<ChatDto>;
   /**
+   * Opens Saved Messages even when that chat is not in the loaded dialog
+   * page. TDLib's Saved Messages chat id is `getMe().id`.
+   */
+  openSavedMessages(): Promise<ChatDto>;
+  /**
    * Lists the chat folders (custom folders plus the Archive when it holds
    * chats) with server-computed unread counts.
    */
@@ -74,7 +79,11 @@ export interface TelegramRepository {
   clearRecentStickers(): Promise<void>;
   searchStickers(query: string): Promise<ReadonlyArray<StickerItemDto>>;
   /** Sends one sticker from an installed set into a chat. */
-  sendSticker(chatId: string, stickerId: string): Promise<MessageDto>;
+  sendSticker(
+    chatId: string,
+    stickerId: string,
+    clientId?: string,
+  ): Promise<MessageDto>;
   /**
    * One set by short name, for the sheet a received sticker opens. Unlike
    * the picker's list this can return a set the account has not installed.

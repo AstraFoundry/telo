@@ -420,6 +420,16 @@ interface ChatState {
   loadMoreChats(): Promise<void>;
   loadOlderMessages(): Promise<void>;
   select(chatId: string): Promise<void>;
+  /**
+   * Opens Saved Messages, creating the private chat when it is not in the
+   * loaded dialog page.
+   */
+  openSavedMessages(): Promise<void>;
+  /**
+   * Ensures Saved Messages is in the loaded chat list without selecting it,
+   * so the forward picker can target it.
+   */
+  includeSavedMessages(): Promise<void>;
   send(body: string, options?: SendOptions): Promise<void>;
   /** Sends one sticker from the composer picker into the active chat. */
   sendSticker(sticker: StickerItemDto): Promise<void>;
@@ -807,6 +817,24 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }
     }
   },
+  async openSavedMessages() {
+    const existing = get().chats.find((chat) => chat.kind === "saved");
+    if (existing) {
+      await get().select(existing.id);
+      return;
+    }
+    await get().includeSavedMessages();
+    const saved = get().chats.find((chat) => chat.kind === "saved");
+    if (saved) await get().select(saved.id);
+  },
+  async includeSavedMessages() {
+    if (get().chats.some((chat) => chat.kind === "saved")) return;
+    const chat = await window.telo.workspace.openSavedMessages();
+    set((state) => ({
+      chats: upsertChat(state.chats, chat),
+      drafts: hydrateDrafts(state.drafts, [chat]),
+    }));
+  },
   async loadOlderMessages() {
     const { activeChatId, messageCursor, loadingOlderMessages } = get();
     if (!activeChatId || !messageCursor || loadingOlderMessages) return;
@@ -901,12 +929,21 @@ export const useChatStore = create<ChatState>((set, get) => ({
               replyToId: target.messageId,
             })
           : await window.telo.workspace.sendMessage(chatId, body, sendInput);
-      set((state) => ({
-        messages: upsertMessage(
-          state.messages.filter((entry) => entry.id !== clientId),
-          message,
-        ),
-      }));
+      set((state) => {
+        const alreadyReconciled = state.messages.some(
+          (entry) =>
+            entry.clientId === clientId &&
+            entry.id !== clientId &&
+            entry.id !== message.id,
+        );
+        if (alreadyReconciled) return state;
+        return {
+          messages: upsertMessage(
+            state.messages.filter((entry) => entry.id !== clientId),
+            message,
+          ),
+        };
+      });
     } catch {
       // Native Telegram semantics: the undelivered bubble stays in the
       // transcript as `failed` instead of bouncing the body back into the
@@ -1098,17 +1135,34 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const message = await window.telo.workspace.sendSticker(
         chatId,
         sticker.id,
+        clientId,
       );
-      set((state) => ({
-        messages: upsertMessage(
-          state.messages.filter((entry) => entry.id !== clientId),
-          message,
-        ),
-        recentStickers: [
-          sticker,
-          ...state.recentStickers.filter((item) => item.id !== sticker.id),
-        ],
-      }));
+      set((state) => {
+        const alreadyReconciled = state.messages.some(
+          (entry) =>
+            entry.clientId === clientId &&
+            entry.id !== clientId &&
+            entry.id !== message.id,
+        );
+        if (alreadyReconciled) {
+          return {
+            recentStickers: [
+              sticker,
+              ...state.recentStickers.filter((item) => item.id !== sticker.id),
+            ],
+          };
+        }
+        return {
+          messages: upsertMessage(
+            state.messages.filter((entry) => entry.id !== clientId),
+            message,
+          ),
+          recentStickers: [
+            sticker,
+            ...state.recentStickers.filter((item) => item.id !== sticker.id),
+          ],
+        };
+      });
     } catch {
       // Same as a failed text send: the bubble stays as `failed` in the
       // transcript rather than vanishing.
@@ -2180,10 +2234,29 @@ function upsertMessage(
   messages: ReadonlyArray<MessageDto>,
   updated: MessageDto,
 ): ReadonlyArray<MessageDto> {
-  const existing = messages.some((message) => message.id === updated.id);
-  const next = existing
-    ? messages.map((message) => (message.id === updated.id ? updated : message))
-    : [...messages, updated];
+  const byId = messages.findIndex((message) => message.id === updated.id);
+  if (byId >= 0) {
+    const next = messages.map((message) =>
+      message.id === updated.id ? updated : message,
+    );
+    return [...next].sort((left, right) =>
+      left.sentAt.localeCompare(right.sentAt),
+    );
+  }
+  // Optimistic text/sticker bubbles use the clientId as their id. Replace
+  // that placeholder when the server (or a temp TDLib id) arrives. Album
+  // placeholders share a clientId but keep distinct ids, so they must not
+  // collapse into one row.
+  const optimisticIndex =
+    updated.clientId && updated.id !== updated.clientId
+      ? messages.findIndex((message) => message.id === updated.clientId)
+      : -1;
+  const next =
+    optimisticIndex >= 0
+      ? messages.map((message, index) =>
+          index === optimisticIndex ? updated : message,
+        )
+      : [...messages, updated];
   return [...next].sort((left, right) =>
     left.sentAt.localeCompare(right.sentAt),
   );

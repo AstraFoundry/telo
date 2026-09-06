@@ -13,7 +13,7 @@ export interface HotkeyBinding {
   handler(event: KeyboardEvent): void;
 }
 
-function isEditableTarget(target: EventTarget | null): boolean {
+export function isEditableTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
   return (
     target.closest('input, textarea, select, [contenteditable="true"]') !== null

@@ -32,6 +32,7 @@ import {
   SPRING_PRESS,
 } from "@beui-lib/ease";
 import { cn } from "@/shared/lib/cn";
+import { isEditableTarget } from "@/shared/lib/use-hotkeys";
 
 type SidebarState = "expanded" | "collapsed";
 type SidebarSide = "left" | "right";
@@ -251,6 +252,8 @@ export function AnimatedSidebarProvider({
 
   useEffect(() => {
     const handleShortcut = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) return;
+      if (isEditableTarget(event.target)) return;
       if (
         event.key.toLowerCase() === SIDEBAR_KEYBOARD_SHORTCUT &&
         (event.metaKey || event.ctrlKey)

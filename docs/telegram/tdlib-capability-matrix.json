@@ -30,7 +30,8 @@
         "setChatNotificationSettings",
         "toggleChatIsMarkedAsUnread",
         "addChatToList",
-        "updateChatFolders"
+        "updateChatFolders",
+        "createPrivateChat"
       ],
       "evidence": [
         "backend/src/infrastructure/telegram/tdlib-telegram-repository.ts",

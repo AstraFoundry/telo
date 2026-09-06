@@ -8,6 +8,7 @@ function repository(): TelegramRepository {
     subscribe: vi.fn(() => () => {}),
     listChatPage: vi.fn(async () => ({ items: [], nextCursor: null })),
     createSecretChat: vi.fn(),
+    openSavedMessages: vi.fn(),
     listFolders: vi.fn(async () => []),
     listMessagePage: vi.fn(async () => ({ items: [], nextCursor: null })),
     listSharedMedia: vi.fn(async () => ({ items: [], nextCursor: null })),

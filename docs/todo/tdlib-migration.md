@@ -156,8 +156,8 @@ Depends on: Wave 3.
 
 | Port                                            | TDLib                                                                                                                                                                                 |
 | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `listMessagePage`                               | `getChatHistory` (`from_message_id` = opaque/numeric id)                                                                                                                              |
-| `sendMessage`                                   | `sendMessage` + `inputMessageText`; `clientId` ↔ `message.sending_id`                                                                                                                 |
+| `listMessagePage`                               | `getChatHistory` (`from_message_id` = cursor; drop the cursor row; `nextCursor` = oldest id if the page is non-empty)                                                                 |
+| `sendMessage`                                   | `sendMessage` + `inputMessageText`; `clientId` stored as `sid:<sending_id>`, copied onto the temp id, reconciled on `updateMessageSendSucceeded`                                      |
 | `editMessage`                                   | `editMessageText`                                                                                                                                                                     |
 | `deleteMessage`                                 | `deleteMessages` (`revoke` from `scope`)                                                                                                                                              |
 | `forwardMessage`                                | `forwardMessages` (`dropAuthor` = `hideSender`)                                                                                                                                       |
