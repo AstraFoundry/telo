@@ -1038,7 +1038,7 @@ export class TdlibTelegramRepository implements TelegramRepository {
       // "confirmed empty" — hydrateUser / getUser owns that settlement.
       return;
     }
-    if (chat.photo === null) {
+    if (!chat.photo) {
       this.settleEmptyAvatar(peerId);
     }
   }
@@ -1072,20 +1072,34 @@ export class TdlibTelegramRepository implements TelegramRepository {
         _: "getUserFullInfo",
         user_id: user.id,
       });
-      if (full._ !== "userFullInfo") return;
-      const photo =
-        full.personal_photo ?? full.photo ?? full.public_photo ?? undefined;
-      if (!photo) {
-        if (full.photo === null && user.profile_photo == null) {
-          this.settleEmptyAvatar(peerId);
-        }
+      const fromFull =
+        full._ === "userFullInfo"
+          ? (full.personal_photo ?? full.photo ?? full.public_photo)
+          : undefined;
+      if (fromFull) {
+        this.paintMinithumbnail(peerId, fromFull.minithumbnail);
+        const file = smallestPhotoFile(fromFull);
+        if (file) await this.downloadAvatar(peerId, file, wait);
         return;
       }
-      this.paintMinithumbnail(peerId, photo.minithumbnail);
-      const file = smallestPhotoFile(photo);
-      if (file) await this.downloadAvatar(peerId, file, wait);
+      const photos = await this.client.invoke<Td.chatPhotos>({
+        _: "getUserProfilePhotos",
+        user_id: user.id,
+        offset: 0,
+        limit: 1,
+      });
+      const listed = photos._ === "chatPhotos" ? photos.photos[0] : undefined;
+      if (listed) {
+        this.paintMinithumbnail(peerId, listed.minithumbnail);
+        const file = smallestPhotoFile(listed);
+        if (file) await this.downloadAvatar(peerId, file, wait);
+        return;
+      }
+      if (photos._ === "chatPhotos" && photos.total_count === 0) {
+        this.settleEmptyAvatar(peerId);
+      }
     } catch (error) {
-      console.error("TDLib getUserFullInfo failed", {
+      console.error("TDLib user photo lookup failed", {
         userId: user.id,
         error,
       });
