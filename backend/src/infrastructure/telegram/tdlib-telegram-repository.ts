@@ -1328,7 +1328,11 @@ export class TdlibTelegramRepository implements TelegramRepository {
         username: user?.usernames?.active_usernames[0] ?? null,
         avatarDataUrl: this.avatarUrls.get(id) ?? null,
         avatarPending: this.avatarIsPending(id),
-        avatarPlaceholder: this.avatarPlaceholderForPeer(id),
+        avatarPlaceholder:
+          this.avatarPlaceholderForPeer(id) ??
+          mapAvatarPlaceholder(name, 0, (colorId) =>
+            accentPaletteOf(colorId, this.customAccentColors),
+          ),
       });
     }
     return items;

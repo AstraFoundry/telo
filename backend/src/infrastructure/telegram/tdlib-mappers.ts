@@ -286,7 +286,11 @@ export function mapMessage(
     senderAvatarPlaceholder: outgoing
       ? null
       : (context.avatarPlaceholder?.(context.senderId(message.sender_id)) ??
-        null),
+        mapAvatarPlaceholder(
+          context.senderName(message.sender_id),
+          0,
+          context.accentPalette,
+        )),
     body: text?.text ?? "",
     entities: text ? mapEntities(text) : [],
     media: mapMedia(message),
