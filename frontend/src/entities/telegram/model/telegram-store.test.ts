@@ -121,7 +121,7 @@ describe("telegram-store", () => {
 
   it("start() loads the initial auth state and subscribes to updates", async () => {
     const telo = installTeloApiMock();
-    const unsubscribe = () => {};
+    const unsubscribe = vi.fn();
     telo.telegram.onAuthState.mockReturnValue(unsubscribe);
     telo.telegram.getAuthState.mockResolvedValue({ status: "idle" });
     telo.telegram.getLoginConfiguration.mockResolvedValue({
@@ -130,7 +130,8 @@ describe("telegram-store", () => {
 
     const stop = useTelegramStore.getState().start();
 
-    expect(stop).toBe(unsubscribe);
+    expect(telo.telegram.onAuthState).toHaveBeenCalled();
+    expect(telo.workspace.onEvent).toHaveBeenCalled();
     await vi.waitFor(() => {
       expect(useTelegramStore.getState().auth).toEqual({ status: "idle" });
     });
@@ -143,6 +144,8 @@ describe("telegram-store", () => {
     expect(useTelegramStore.getState().auth).toEqual({
       status: "code-required",
     });
+    stop();
+    expect(unsubscribe).toHaveBeenCalled();
   });
 
   it("start() hides TDLib jargon from a main-process auth error", async () => {
@@ -180,6 +183,38 @@ describe("telegram-store", () => {
     await useTelegramStore.getState().loadCurrentUser();
 
     expect(useTelegramStore.getState().currentUser).toEqual(currentUser);
+  });
+
+  it("start() applies a later chat-avatar to the current user", () => {
+    const telo = installTeloApiMock();
+    telo.telegram.onAuthState.mockReturnValue(() => {});
+    telo.telegram.getAuthState.mockResolvedValue({ status: "ready" });
+    telo.telegram.getLoginConfiguration.mockResolvedValue({
+      applicationCredentialsConfigured: true,
+    });
+    useTelegramStore.setState({
+      currentUser: {
+        id: "u1",
+        displayName: "Ada Lovelace",
+        username: "ada",
+        initials: "AL",
+        avatarDataUrl: null,
+        avatarPending: true,
+      },
+    });
+
+    const stop = useTelegramStore.getState().start();
+    telo.emitWorkspaceEvent({
+      type: "chat-avatar",
+      chatId: "u1",
+      avatarDataUrl: "telo-media://cache/avatar_u1.jpg",
+    });
+
+    expect(useTelegramStore.getState().currentUser).toMatchObject({
+      avatarDataUrl: "telo-media://cache/avatar_u1.jpg",
+      avatarPending: false,
+    });
+    stop();
   });
 
   it("loadCurrentUser() logs and leaves currentUser null when the preload API rejects", async () => {
