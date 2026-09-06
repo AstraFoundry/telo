@@ -249,6 +249,20 @@ describe("tdlib mappers", () => {
     });
   });
 
+  it("derives an empty userpic from the sender name when the peer is unknown", () => {
+    const message = loadGolden<Td.message>("message-text.json");
+    const mapped = mapMessage(message, {
+      ...emptyContext,
+      senderName: () => "boldcheck",
+      senderId: () => "99",
+    });
+    expect(mapped.senderAvatarPlaceholder).toEqual({
+      glyph: "B",
+      lightColors: ["#E17076", "#FF885E"],
+      darkColors: ["#E17076", "#FF885E"],
+    });
+  });
+
   it("maps media kinds and file ids", () => {
     expect(mediaIdForFile(8)).toBe("tdfile:8");
     expect(fileIdFromMediaId("tdfile:8")).toBe(8);
