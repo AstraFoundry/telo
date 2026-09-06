@@ -701,16 +701,16 @@ export interface DeleteMessageInput {
 }
 
 /**
- * The account's reaction on one message after the call, not a delta:
- * Telegram's `messages.sendReaction` replaces the whole set this account
- * holds on a message, and `null` clears it. Telegram's own clients hold one
- * emoji per message outside premium multi-reactions, which is the shape the
- * renderer toggles against.
+ * Adds or removes one emoji on a message. User accounts cannot call
+ * TDLib's `setMessageReactions` (bots only); the adapter uses
+ * `addMessageReaction` / `removeMessageReaction` instead. `emoji` is always
+ * the pressed glyph. `remove: true` takes that glyph back.
  */
 export interface SetMessageReactionInput {
   readonly chatId: string;
   readonly messageId: string;
-  readonly emoji: string | null;
+  readonly emoji: string;
+  readonly remove?: boolean;
 }
 
 export interface ForwardMessageInput {

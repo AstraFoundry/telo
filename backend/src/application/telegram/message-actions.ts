@@ -54,18 +54,17 @@ export class MessageActionsService {
   }
 
   /**
-   * Sets the account's reaction on a message, or clears it with a null
-   * emoji. The input names the state after the call, so the renderer's
-   * toggle sends null for the emoji it already holds.
+   * Adds or removes this account's reaction on a message. `remove` takes
+   * the named emoji back; otherwise it is added.
    */
   setMessageReaction(input: SetMessageReactionInput): Promise<void> {
     if (!input.chatId.trim()) throw new Error("Chat id is required");
     if (!input.messageId.trim()) throw new Error("Message id is required");
-    if (input.emoji !== null && !input.emoji.trim())
-      throw new Error("Reaction emoji is required");
+    if (!input.emoji.trim()) throw new Error("Reaction emoji is required");
     return this.repository.setMessageReaction({
       ...input,
-      emoji: input.emoji === null ? null : input.emoji.trim(),
+      emoji: input.emoji.trim(),
+      remove: Boolean(input.remove),
     });
   }
 

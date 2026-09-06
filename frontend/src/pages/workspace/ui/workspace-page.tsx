@@ -139,10 +139,15 @@ export function WorkspacePage({
       >
         {copy.skipToContent}
       </a>
-      <ConversationSidebar
-        onOpenSettings={onOpenSettings}
-        onSelectChat={onSelectChat}
-      />
+      <div
+        className="flex min-h-0 min-w-0 flex-col overflow-hidden"
+        style={{ "--window-overlay-end": "0px" } as CSSProperties}
+      >
+        <ConversationSidebar
+          onOpenSettings={onOpenSettings}
+          onSelectChat={onSelectChat}
+        />
+      </div>
       {/* The grid wrapper relays the stretch constraints to the surface's own
           <main> so the skip-link anchor never changes the layout. It is also
           the floating central column: the card shadow carries the separation
@@ -155,6 +160,11 @@ export function WorkspacePage({
           "grid min-h-0 min-w-0 overflow-hidden rounded-l-2xl bg-card shadow-column",
           (agentOpen || profileOpen) && "rounded-r-2xl",
         )}
+        style={
+          agentOpen || profileOpen
+            ? ({ "--window-overlay-end": "0px" } as CSSProperties)
+            : undefined
+        }
       >
         {children}
       </div>

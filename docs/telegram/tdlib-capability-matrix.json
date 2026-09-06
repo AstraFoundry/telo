@@ -101,7 +101,8 @@
       "id": "reactions-bots",
       "workflow": "Reactions and bot callback",
       "methods": [
-        "setMessageReactions",
+        "addMessageReaction",
+        "removeMessageReaction",
         "getMessageAvailableReactions",
         "getCallbackQueryAnswer"
       ],

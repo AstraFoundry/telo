@@ -582,7 +582,7 @@ function mapButton(
 /**
  * Telegram's reaction identity is the emoji without U+FE0F. A picker that
  * offers "❤️" while the wire uses "❤" looks chosen-wrong and
- * `setMessageReactions` rejects the variant as `REACTION_INVALID`.
+ * `addMessageReaction` rejects the variant as `REACTION_INVALID`.
  */
 export function normalizeReactionEmoji(emoji: string): string {
   return emoji.replaceAll("\uFE0F", "");

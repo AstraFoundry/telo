@@ -1033,11 +1033,42 @@ describe("TdlibTelegramRepository", () => {
       emoji: "❤️",
     });
     expect(bridge.invokes).toContainEqual({
-      _: "setMessageReactions",
+      _: "addMessageReaction",
       chat_id: 11,
       message_id: 1,
-      reaction_types: [{ _: "reactionTypeEmoji", emoji: "❤" }],
+      reaction_type: { _: "reactionTypeEmoji", emoji: "❤" },
       is_big: false,
+      update_recent_reactions: true,
+    });
+  });
+
+  it("adds and removes a reaction through the user-account TDLib methods", async () => {
+    const { repository, bridge } = setup();
+    await repository.hydrate();
+    await repository.setMessageReaction({
+      chatId: "11",
+      messageId: "1",
+      emoji: "👍",
+    });
+    await repository.setMessageReaction({
+      chatId: "11",
+      messageId: "1",
+      emoji: "👍",
+      remove: true,
+    });
+    expect(bridge.invokes).toContainEqual({
+      _: "addMessageReaction",
+      chat_id: 11,
+      message_id: 1,
+      reaction_type: { _: "reactionTypeEmoji", emoji: "👍" },
+      is_big: false,
+      update_recent_reactions: true,
+    });
+    expect(bridge.invokes).toContainEqual({
+      _: "removeMessageReaction",
+      chat_id: 11,
+      message_id: 1,
+      reaction_type: { _: "reactionTypeEmoji", emoji: "👍" },
     });
   });
 

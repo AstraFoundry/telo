@@ -52,6 +52,7 @@ function createWindow(): void {
     },
   });
   mainWindow.setMenuBarVisibility(false);
+  mainWindow.setMenu(null);
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (isSafeExternalUrl(url)) void shell.openExternal(url);

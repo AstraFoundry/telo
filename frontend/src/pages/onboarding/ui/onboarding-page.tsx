@@ -86,7 +86,7 @@ export function OnboardingPage() {
             className="absolute inset-0 flex flex-col"
           >
             {shellStep === "auth" || addingAccount ? (
-              <header className="flex h-14 shrink-0 items-center px-3">
+              <header className="window-titlebar-safe-trailing flex h-14 shrink-0 items-center pl-3">
                 <Button
                   size="icon"
                   variant="ghost"
