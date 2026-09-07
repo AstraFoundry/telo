@@ -96,6 +96,54 @@ function clearDraftState(chatId: string): void {
   void window.telo.workspace.saveDraft(chatId, "");
 }
 
+export function chatSendCapabilities(chat: ChatDto | undefined): {
+  text: boolean;
+  stickers: boolean;
+  media: boolean;
+} {
+  // A chat missing from the local list is treated as writable so a stale
+  // renderer still lets TDLib be the authority, matching the main process.
+  if (!chat) return { text: true, stickers: true, media: true };
+  const textAllowed = chat.canSendMessages !== false;
+  return {
+    text: textAllowed,
+    stickers: (chat.canSendStickers ?? textAllowed) !== false,
+    media: (chat.canSendMedia ?? textAllowed) !== false,
+  };
+}
+
+function chatAllowsSending(
+  chats: ReadonlyArray<ChatDto>,
+  chatId: string,
+): boolean {
+  return chatSendCapabilities(chats.find((entry) => entry.id === chatId)).text;
+}
+
+function chatAllowsStickers(
+  chats: ReadonlyArray<ChatDto>,
+  chatId: string,
+): boolean {
+  return chatSendCapabilities(chats.find((entry) => entry.id === chatId))
+    .stickers;
+}
+
+function chatAllowsMedia(
+  chats: ReadonlyArray<ChatDto>,
+  chatId: string,
+): boolean {
+  return chatSendCapabilities(chats.find((entry) => entry.id === chatId)).media;
+}
+
+function cancelReadOnlyChatSideEffects(chatId: string): void {
+  const draftTimer = draftSaveTimers.get(chatId);
+  if (draftTimer) clearTimeout(draftTimer);
+  draftSaveTimers.delete(chatId);
+  const typingTimer = typingIdleTimers.get(chatId);
+  if (typingTimer) clearTimeout(typingTimer);
+  typingIdleTimers.delete(chatId);
+  typingSignalSent.delete(chatId);
+}
+
 // A remote draft only seeds the local composer for a chat that has not been
 // typed into yet; an existing entry (even an empty string) is the user's own
 // edit and must win.
@@ -951,7 +999,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
   async send(body, options) {
     const chatId = get().activeChatId;
-    if (!chatId) return;
+    if (!chatId || !chatAllowsSending(get().chats, chatId)) return;
     const target = get().composerTarget;
     if (target?.mode === "edit") {
       await window.telo.workspace.editMessage({
@@ -1184,7 +1232,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
   async sendSticker(sticker) {
     const chatId = get().activeChatId;
-    if (!chatId) return;
+    if (!chatId || !chatAllowsStickers(get().chats, chatId)) return;
     const clientId = crypto.randomUUID();
     const optimistic: MessageDto = {
       id: clientId,
@@ -1356,7 +1404,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
   async sendMedia(files, caption, uploadId) {
     const chatId = get().activeChatId;
-    if (!chatId) return;
+    if (!chatId || !chatAllowsMedia(get().chats, chatId)) return;
     const target = get().composerTarget;
     if (target?.mode === "edit") throw new Error(copy.attachmentsInEdit);
     // One optimistic bubble per file; a multi-file send shares a groupedId so
@@ -1577,6 +1625,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
   setDraft(chatId, text) {
+    if (!chatAllowsSending(get().chats, chatId)) return;
     set((state) => ({ drafts: { ...state.drafts, [chatId]: text } }));
     scheduleDraftSave(chatId, text);
     signalTyping(chatId, text.trim().length > 0);
@@ -1883,6 +1932,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
       return;
     }
     if (event.type === "chat-upsert") {
+      if (!chatSendCapabilities(event.chat).text) {
+        cancelReadOnlyChatSideEffects(event.chat.id);
+      }
       set((state) => {
         const previousIndex = state.chats.findIndex(
           (chat) => chat.id === event.chat.id,

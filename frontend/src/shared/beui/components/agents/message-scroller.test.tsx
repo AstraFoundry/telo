@@ -76,6 +76,82 @@ describe("MessageScroller live-edge following", () => {
     expect(scrollTo).toHaveBeenCalledWith({ top: 500, behavior: "auto" });
   });
 
+  async function settleProgrammaticScroll() {
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+  }
+
+  it("stays following when the viewport shrinks without a user gesture", async () => {
+    const onFollowChange = vi.fn();
+    render(
+      <MessageScroller
+        label="Test conversation"
+        onFollowChange={onFollowChange}
+      >
+        <p>Growing output</p>
+      </MessageScroller>,
+    );
+    const viewport = screen.getByRole("region", {
+      name: "Test conversation",
+    });
+    Object.defineProperties(viewport, {
+      clientHeight: { configurable: true, value: 400 },
+      scrollHeight: { configurable: true, value: 500 },
+      scrollTop: { configurable: true, writable: true, value: 100 },
+    });
+    const scrollTo = vi.fn();
+    viewport.scrollTo = scrollTo;
+    act(flushFrames);
+    await settleProgrammaticScroll();
+    scrollTo.mockClear();
+    onFollowChange.mockClear();
+    fireEvent.scroll(viewport);
+
+    Object.defineProperty(viewport, "clientHeight", {
+      configurable: true,
+      value: 120,
+    });
+    fireEvent.scroll(viewport);
+    expect(onFollowChange).not.toHaveBeenCalledWith(false);
+
+    act(() => resize([], {} as ResizeObserver));
+    act(flushFrames);
+    expect(scrollTo).toHaveBeenCalledWith({ top: 500, behavior: "auto" });
+  });
+
+  it("stops following when the reader drags the scrollbar", async () => {
+    const onFollowChange = vi.fn();
+    render(
+      <MessageScroller
+        label="Test conversation"
+        onFollowChange={onFollowChange}
+      >
+        <p>Growing output</p>
+      </MessageScroller>,
+    );
+    const viewport = screen.getByRole("region", {
+      name: "Test conversation",
+    });
+    Object.defineProperties(viewport, {
+      clientHeight: { configurable: true, value: 200 },
+      scrollHeight: { configurable: true, value: 500 },
+      scrollTop: { configurable: true, writable: true, value: 300 },
+    });
+    act(flushFrames);
+    await settleProgrammaticScroll();
+    fireEvent.scroll(viewport);
+    onFollowChange.mockClear();
+
+    Object.defineProperty(viewport, "scrollTop", {
+      configurable: true,
+      writable: true,
+      value: 40,
+    });
+    fireEvent.scroll(viewport);
+    expect(onFollowChange).toHaveBeenCalledWith(false);
+  });
+
   it("stops following as soon as the reader scrolls manually", () => {
     render(
       <MessageScroller label="Test conversation">

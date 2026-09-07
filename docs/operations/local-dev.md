@@ -1,5 +1,7 @@
 # Local development
 
+On macOS, `make dev` creates a local copy-on-write `Telo.app` development runtime under `.workspace/electron-runtime/`, applies the product bundle name and icon, ad-hoc signs the modified bundle, and asks electron-vite to launch that executable. This preserves electron-vite hot reload while making the Dock identity match packaged builds. Other platforms use the installed Electron development runtime directly. Packaged builds receive their branding from Electron Builder.
+
 ## Requirements
 
 - Node.js 22 or newer

@@ -180,18 +180,24 @@
      native title-bar height without freezing OS-controlled coordinates.
      Browsers without overlay env vars keep the 56px bar. */
   :root {
+    --window-overlay-start: env(titlebar-area-x, 0px);
     --window-overlay-end: max(
       0px,
       calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw))
     );
   }
 
-  .window-titlebar-safe-leading {
-    padding-inline-start: max(0.75rem, env(titlebar-area-x, 0px));
+  /* Use on every toolbar that can touch a window edge. Multi-column shells
+     set the irrelevant edge variable to 0px on interior columns, so the same
+     contract works when a surface moves between wide and narrow layouts. */
+  .window-titlebar-safe {
+    padding-inline-start: max(0.75rem, var(--window-overlay-start));
+    padding-inline-end: max(0.75rem, var(--window-overlay-end));
   }
 
-  .window-titlebar-safe-trailing {
-    padding-inline-end: max(0.75rem, var(--window-overlay-end));
+  .window-titlebar-safe-skip-link {
+    inset-block-start: max(0.5rem, env(titlebar-area-y, 0px));
+    inset-inline-start: max(0.5rem, var(--window-overlay-start));
   }
 
   .window-titlebar-safe-content {

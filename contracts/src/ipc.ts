@@ -13,7 +13,67 @@ export interface AvatarPlaceholderDto {
   readonly darkColors: ReadonlyArray<string>;
 }
 
+export interface TelegramContactDto {
+  readonly id: string;
+  readonly displayName: string;
+  readonly username: string | null;
+  readonly phone: string | null;
+  readonly avatarDataUrl: string | null;
+  readonly avatarPending?: boolean;
+  readonly avatarPlaceholder?: AvatarPlaceholderDto | null;
+}
+
+export interface CreateTelegramGroupInput {
+  readonly title: string;
+  readonly userIds: ReadonlyArray<string>;
+}
+
+export interface CreateTelegramChannelInput {
+  readonly title: string;
+  readonly description?: string;
+}
+
+export type TelegramCallKind = "incoming" | "outgoing" | "missed";
+
+export interface TelegramCallDto {
+  readonly id: string;
+  readonly chatId: string;
+  readonly title: string;
+  readonly avatarDataUrl: string | null;
+  readonly avatarPlaceholder?: AvatarPlaceholderDto | null;
+  readonly kind: TelegramCallKind;
+  readonly video: boolean;
+  readonly occurredAt: string;
+  readonly durationSeconds: number;
+}
+
+export interface TelegramCallPageDto {
+  readonly items: ReadonlyArray<TelegramCallDto>;
+  readonly nextCursor: string | null;
+}
+
+export type StoryPrivacy = "everyone" | "contacts" | "close-friends";
+
+export type StoryActivePeriod = 21600 | 43200 | 86400 | 172800;
+
+export interface PostStoryInput {
+  readonly caption?: string;
+  readonly privacy: StoryPrivacy;
+  readonly activePeriod: StoryActivePeriod;
+  readonly protectContent?: boolean;
+  readonly durationSeconds?: number;
+}
+
+export interface PostedStoryDto {
+  readonly id: string;
+  readonly posterChatId: string;
+  readonly postedAt: string;
+  readonly expiresAt: string;
+  readonly video: boolean;
+}
+
 export interface ChatDto {
+
   readonly id: string;
   readonly title: string;
   readonly preview: string;
@@ -28,6 +88,22 @@ export interface ChatDto {
   readonly muted: boolean;
   readonly pinned: boolean;
   readonly kind: ChatKind;
+  /**
+   * False when the account cannot send plain text (channel subscriber, left
+   * group, restricted member, deleted user, unready secret chat). Omitted
+   * means writable, matching demo fixtures and older events.
+   */
+  readonly canSendMessages?: boolean;
+  /**
+   * False when stickers/GIFs/`can_send_other_messages` is off. Omitted
+   * follows `canSendMessages`.
+   */
+  readonly canSendStickers?: boolean;
+  /**
+   * False when photos, videos, and documents are all disallowed. Omitted
+   * follows `canSendMessages`.
+   */
+  readonly canSendMedia?: boolean;
   readonly initials: string;
   /**
    * Profile photo URL (`telo-media://` or a data URL). Null when Telegram has
@@ -1501,6 +1577,12 @@ export interface TeloDesktopApi {
      * Starts a device-local end-to-end encrypted secret chat with `userId`.
      */
     createSecretChat(userId: string): Promise<ChatDto>;
+    listContacts(): Promise<ReadonlyArray<TelegramContactDto>>;
+    openPrivateChat(userId: string): Promise<ChatDto>;
+    createGroup(input: CreateTelegramGroupInput): Promise<ChatDto>;
+    createChannel(input: CreateTelegramChannelInput): Promise<ChatDto>;
+    listCalls(cursor?: string | null): Promise<TelegramCallPageDto>;
+    postStory(file: File, input: PostStoryInput): Promise<PostedStoryDto>;
     /**
      * Opens Saved Messages even when that chat is not in the loaded dialog
      * page. The Saved Messages chat id is the current account's user id.

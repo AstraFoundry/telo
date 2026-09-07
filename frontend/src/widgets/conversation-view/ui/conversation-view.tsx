@@ -48,6 +48,7 @@ import type {
 } from "../../../../../contracts/src/ipc";
 import {
   chatsForFolder,
+  chatSendCapabilities,
   displayChatTitle,
   secretChatStatus,
   useChatProfileStore,
@@ -1635,6 +1636,7 @@ export function ConversationView() {
   const messageActionError = useChatStore((state) => state.messageActionError);
   const openChatProfile = useChatProfileStore((state) => state.openPanel);
   const activeChat = chats.find((chat) => chat.id === activeChatId);
+  const sendCaps = chatSendCapabilities(activeChat);
   const { value: timeFormat } = useTimeFormat();
   const { value: textSize } = useMessageTextSize();
   const { value: loopStickers } = useLoopStickers();
@@ -2331,7 +2333,17 @@ export function ConversationView() {
               </Button>
             </div>
           ) : (
-            <MessageComposer disabled={!activeChatId} onSend={send} />
+            <MessageComposer
+              disabled={!activeChatId || !sendCaps.text}
+              stickersDisabled={!sendCaps.stickers}
+              mediaDisabled={!sendCaps.media}
+              placeholder={
+                !activeChatId || !sendCaps.text
+                  ? copy.readOnlyChat
+                  : copy.messagePlaceholder
+              }
+              onSend={send}
+            />
           )}
         </div>
       </div>

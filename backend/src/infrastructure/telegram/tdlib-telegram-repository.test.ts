@@ -108,6 +108,7 @@ function tdUser(id: number, extra: Record<string, unknown> = {}): Td.user {
     usernames: { active_usernames: ["ada"] },
     phone_number: "+1555",
     status: { _: "userStatusOnline", expires: 1 },
+    type: { _: "userTypeRegular" },
     ...extra,
   } as unknown as Td.user;
 }
@@ -219,6 +220,151 @@ describe("TdlibTelegramRepository", () => {
     expect(created.kind).toBe("secret");
     expect(events).toContainEqual(
       expect.objectContaining({ type: "chat-upsert", chat: created }),
+    );
+  });
+
+  it("lists contacts and opens a private chat", async () => {
+    const { repository, bridge, events } = setup();
+    bridge.handlers.set("getContacts", () => ({
+      _: "users",
+      total_count: 1,
+      user_ids: [11],
+    }));
+    bridge.handlers.set("createPrivateChat", () => tdChat(11));
+
+    await expect(repository.listContacts()).resolves.toEqual([
+      expect.objectContaining({
+        id: "11",
+        displayName: "Ada Byron",
+        username: "ada",
+      }),
+    ]);
+    const chat = await repository.openPrivateChat("11");
+    expect(chat.id).toBe("11");
+    expect(events).toContainEqual({ type: "chat-upsert", chat });
+  });
+
+  it("creates basic groups and channels through TDLib", async () => {
+    const { repository, bridge } = setup();
+    bridge.handlers.set("createNewBasicGroupChat", () => ({
+      _: "createdBasicGroupChat",
+      chat_id: 22,
+      failed_to_add_members: {
+        _: "failedToAddMembers",
+        failed_to_add_members: [],
+      },
+    }));
+    bridge.handlers.set("getChat", (request) =>
+      tdChat(Number(request.chat_id), {
+        type: { _: "chatTypeBasicGroup", basic_group_id: 22 },
+        title: "Design",
+      }),
+    );
+    bridge.handlers.set("createNewSupergroupChat", () =>
+      tdChat(33, {
+        type: {
+          _: "chatTypeSupergroup",
+          supergroup_id: 33,
+          is_channel: true,
+        },
+        title: "Announcements",
+      }),
+    );
+
+    await expect(
+      repository.createGroup({ title: "Design", userIds: ["11"] }),
+    ).resolves.toMatchObject({ kind: "group", title: "Design" });
+    await expect(
+      repository.createChannel({
+        title: "Announcements",
+        description: "Product updates",
+      }),
+    ).resolves.toMatchObject({ kind: "channel", title: "Announcements" });
+
+    expect(bridge.invokes).toContainEqual(
+      expect.objectContaining({
+        _: "createNewBasicGroupChat",
+        user_ids: [11],
+      }),
+    );
+    expect(bridge.invokes).toContainEqual(
+      expect.objectContaining({
+        _: "createNewSupergroupChat",
+        is_channel: true,
+      }),
+    );
+  });
+
+  it("maps TDLib call history", async () => {
+    const { repository, bridge } = setup();
+    bridge.handlers.set("searchCallMessages", () => ({
+      _: "foundMessages",
+      total_count: 1,
+      next_offset: "next",
+      messages: [
+        {
+          ...tdMessage(7, 11),
+          is_outgoing: false,
+          content: {
+            _: "messageCall",
+            unique_id: "call-7",
+            is_video: true,
+            discard_reason: { _: "callDiscardReasonMissed" },
+            duration: 0,
+          },
+        },
+      ],
+    }));
+
+    await expect(repository.listCalls()).resolves.toEqual({
+      items: [
+        expect.objectContaining({
+          id: "7",
+          chatId: "11",
+          kind: "missed",
+          video: true,
+        }),
+      ],
+      nextCursor: "next",
+    });
+  });
+
+  it("posts a photo story on behalf of the current user", async () => {
+    const { repository, bridge } = setup();
+    bridge.handlers.set("createPrivateChat", () =>
+      tdChat(1, { type: { _: "chatTypePrivate", user_id: 1 } }),
+    );
+    bridge.handlers.set("postStory", () => ({
+      _: "story",
+      id: 9,
+      poster_chat_id: 1,
+      date: 1_700_000_000,
+      content: { _: "storyContentPhoto", photo: {} },
+    }));
+
+    await expect(
+      repository.postStory(
+        {
+          source: "/tmp/story.jpg",
+          name: "story.jpg",
+          mimeType: "image/jpeg",
+          size: 1024,
+        },
+        { privacy: "contacts", activePeriod: 86400 },
+      ),
+    ).resolves.toMatchObject({
+      id: "9",
+      posterChatId: "1",
+      video: false,
+    });
+    expect(bridge.invokes).toContainEqual(
+      expect.objectContaining({
+        _: "postStory",
+        chat_id: 1,
+        privacy_settings: expect.objectContaining({
+          _: "storyPrivacySettingsContacts",
+        }),
+      }),
     );
   });
 
@@ -1517,5 +1663,190 @@ describe("TdlibTelegramRepository", () => {
         username: "ada",
       }),
     ]);
+  });
+
+  it("disables sending in a channel the account cannot post to", async () => {
+    const { repository, bridge, events } = setup();
+    const channel = tdChat(-100, {
+      type: {
+        _: "chatTypeSupergroup",
+        supergroup_id: 9,
+        is_channel: true,
+      },
+      title: "News",
+      permissions: {
+        _: "chatPermissions",
+        can_send_basic_messages: false,
+      },
+    });
+    bridge.handlers.set("getChat", () => channel);
+    bridge.handlers.set("getChats", () => ({
+      _: "chats",
+      chat_ids: [-100],
+      total_count: 1,
+    }));
+    bridge.handlers.set("getSupergroup", () => ({
+      _: "supergroup",
+      id: 9,
+      is_channel: true,
+      status: { _: "chatMemberStatusMember", member_until_date: 0 },
+    }));
+    await repository.hydrate();
+    const page = await repository.listChatPage({ limit: 50 });
+    expect(page.items[0]?.canSendMessages).toBe(false);
+    expect(page.items[0]?.canSendStickers).toBe(false);
+    expect(page.items[0]?.canSendMedia).toBe(false);
+    await expect(repository.sendMessage("-100", "hello")).rejects.toThrow(
+      "The current account can't write to this chat",
+    );
+    await expect(repository.saveDraft("-100", "later")).rejects.toThrow(
+      "The current account can't write to this chat",
+    );
+    const beforeTyping = bridge.invokes.length;
+    await repository.setTyping("-100", true);
+    expect(bridge.invokes.slice(beforeTyping)).toEqual([]);
+    expect(
+      bridge.invokes.some(
+        (item) => (item as { _: string })._ === "sendMessage",
+      ),
+    ).toBe(false);
+    expect(
+      bridge.invokes.some(
+        (item) => (item as { _: string })._ === "setChatDraftMessage",
+      ),
+    ).toBe(false);
+
+    events.length = 0;
+    bridge.emit({
+      _: "updateSupergroup",
+      supergroup: {
+        _: "supergroup",
+        id: 9,
+        is_channel: true,
+        status: { _: "chatMemberStatusCreator", is_anonymous: false },
+      },
+    } as Td.Update);
+    const upsert = events.find(
+      (event) => event.type === "chat-upsert" && event.chat.id === "-100",
+    );
+    expect(upsert).toMatchObject({
+      type: "chat-upsert",
+      chat: { id: "-100", canSendMessages: true },
+    });
+  });
+
+  it("recomputes write access when chat permissions change", async () => {
+    const { repository, bridge, events } = setup();
+    const group = tdChat(-5, {
+      type: { _: "chatTypeBasicGroup", basic_group_id: 5 },
+      title: "Design",
+      permissions: {
+        _: "chatPermissions",
+        can_send_basic_messages: true,
+      },
+    });
+    bridge.handlers.set("getChat", () => group);
+    bridge.handlers.set("getChats", () => ({
+      _: "chats",
+      chat_ids: [-5],
+      total_count: 1,
+    }));
+    bridge.handlers.set("getBasicGroup", () => ({
+      _: "basicGroup",
+      id: 5,
+      member_count: 2,
+      status: { _: "chatMemberStatusMember", member_until_date: 0 },
+      is_active: true,
+      upgraded_to_supergroup_id: 0,
+    }));
+    await repository.hydrate();
+    expect(
+      (await repository.listChatPage({ limit: 50 })).items[0]?.canSendMessages,
+    ).toBe(true);
+    events.length = 0;
+    bridge.emit({
+      _: "updateChatPermissions",
+      chat_id: -5,
+      permissions: {
+        _: "chatPermissions",
+        can_send_basic_messages: false,
+      },
+    } as Td.Update);
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "chat-upsert",
+        chat: expect.objectContaining({
+          id: "-5",
+          canSendMessages: false,
+        }),
+      }),
+    );
+  });
+
+  it("keeps text sending when stickers and media are restricted", async () => {
+    const { repository, bridge } = setup();
+    const group = tdChat(-5, {
+      type: { _: "chatTypeBasicGroup", basic_group_id: 5 },
+      title: "Design",
+      permissions: {
+        _: "chatPermissions",
+        can_send_basic_messages: true,
+        can_send_other_messages: false,
+        can_send_photos: false,
+        can_send_videos: false,
+        can_send_documents: false,
+      },
+    });
+    bridge.handlers.set("getChat", () => group);
+    bridge.handlers.set("getChats", () => ({
+      _: "chats",
+      chat_ids: [-5],
+      total_count: 1,
+    }));
+    bridge.handlers.set("getBasicGroup", () => ({
+      _: "basicGroup",
+      id: 5,
+      member_count: 2,
+      status: { _: "chatMemberStatusMember", member_until_date: 0 },
+      is_active: true,
+      upgraded_to_supergroup_id: 0,
+    }));
+    bridge.handlers.set("sendMessage", () => tdMessage(40, -5));
+    await repository.hydrate();
+    const item = (await repository.listChatPage({ limit: 50 })).items[0];
+    expect(item).toMatchObject({
+      id: "-5",
+      canSendMessages: true,
+      canSendStickers: false,
+      canSendMedia: false,
+    });
+    await expect(repository.sendMessage("-5", "hello")).resolves.toMatchObject({
+      id: "40",
+    });
+    await expect(repository.sendSticker("-5", "tdfile:8")).rejects.toThrow(
+      "The current account can't send stickers to this chat",
+    );
+    await expect(
+      repository.sendMedia(
+        "-5",
+        [
+          {
+            source: "/tmp/a.jpg",
+            name: "a.jpg",
+            mimeType: "image/jpeg",
+            size: 10,
+          },
+        ],
+        "",
+        undefined,
+        "cid",
+        "up1",
+      ),
+    ).rejects.toThrow("The current account can't send media to this chat");
+    expect(
+      bridge.invokes.filter(
+        (item) => (item as { _: string })._ === "sendMessage",
+      ),
+    ).toHaveLength(1);
   });
 });

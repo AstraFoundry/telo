@@ -8,6 +8,7 @@ import {
   MorphPopover,
   MorphPopoverContent,
   MorphPopoverTrigger,
+  Tooltip,
 } from "shared/ui";
 
 import { EmojiPanel } from "./emoji-panel";
@@ -24,6 +25,7 @@ const SECTION_LABELS: Record<MediaSection, string> = {
 
 export interface MediaPickerProps {
   readonly disabled: boolean;
+  readonly stickersDisabled?: boolean;
   readonly recentEmojis: ReadonlyArray<string>;
   onPickEmoji(glyph: string): void;
   onPickSticker(sticker: StickerItemDto): void;
@@ -39,6 +41,7 @@ export interface MediaPickerProps {
  */
 export function MediaPicker({
   disabled,
+  stickersDisabled = false,
   recentEmojis,
   onPickEmoji,
   onPickSticker,
@@ -52,12 +55,18 @@ export function MediaPicker({
   };
 
   const pickSticker = (sticker: StickerItemDto) => {
+    if (stickersDisabled) return;
     onPickSticker(sticker);
     setOpen(false);
   };
 
+  const openPicker = (next: boolean) => {
+    if (next && stickersDisabled) setSection("emoji");
+    setOpen(next);
+  };
+
   return (
-    <MorphPopover open={open} onOpenChange={setOpen}>
+    <MorphPopover open={open} onOpenChange={openPicker}>
       <MorphPopoverTrigger>
         <Button
           type="button"
@@ -83,25 +92,53 @@ export function MediaPicker({
       >
         <div className="flex flex-col gap-2">
           <div className="flex items-center gap-1">
-            {SECTIONS.map((id) => (
-              <Button
-                key={id}
-                size="sm"
-                variant={id === section ? "secondary" : "ghost"}
-                aria-pressed={id === section}
-                className="rounded-full px-3"
-                onClick={() => setSection(id)}
-              >
-                {SECTION_LABELS[id]}
-              </Button>
-            ))}
+            {SECTIONS.map((id) => {
+              const stickerTabLocked = id === "stickers" && stickersDisabled;
+              const tab = (
+                <Button
+                  size="sm"
+                  variant={id === section ? "secondary" : "ghost"}
+                  aria-pressed={id === section}
+                  aria-label={
+                    stickerTabLocked
+                      ? copy.stickersDisabled
+                      : SECTION_LABELS[id]
+                  }
+                  disabled={stickerTabLocked}
+                  className="rounded-full px-3"
+                  onClick={() => setSection(id)}
+                >
+                  {SECTION_LABELS[id]}
+                </Button>
+              );
+              if (stickerTabLocked) {
+                return (
+                  <Tooltip key={id} content={copy.stickersDisabled} side="top">
+                    {tab}
+                  </Tooltip>
+                );
+              }
+              return (
+                <Button
+                  key={id}
+                  size="sm"
+                  variant={id === section ? "secondary" : "ghost"}
+                  aria-pressed={id === section}
+                  aria-label={SECTION_LABELS[id]}
+                  className="rounded-full px-3"
+                  onClick={() => setSection(id)}
+                >
+                  {SECTION_LABELS[id]}
+                </Button>
+              );
+            })}
           </div>
           <div hidden={section !== "emoji"}>
             <EmojiPanel recentEmojis={recentEmojis} onPick={pickEmoji} />
           </div>
           <div hidden={section !== "stickers"}>
             <StickerPanel
-              active={open && section === "stickers"}
+              active={open && section === "stickers" && !stickersDisabled}
               onPick={pickSticker}
             />
           </div>

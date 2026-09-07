@@ -7,6 +7,7 @@ import {
   ConnectionStepContent,
   useConnectionForm,
 } from "features/connect-telegram";
+import { AgentConfigurationForm } from "features/configure-agent";
 import { copy } from "shared/config/copy";
 import {
   Button,
@@ -25,16 +26,28 @@ const STEP_ORDER: Record<string, number> = {
   password: 3,
   ready: 4,
   "credentials-missing": 4,
+  agent: 5,
 };
 
 export function OnboardingPage() {
   const [shellStep, setShellStep] = useState<ShellStep>("welcome");
   const addingAccount = useTelegramStore((state) => state.addingAccount);
+  const agentSetupPending = useTelegramStore(
+    (state) => state.agentSetupPending,
+  );
+  const completeAgentSetup = useTelegramStore(
+    (state) => state.completeAgentSetup,
+  );
   const cancelAddingAccount = useTelegramStore(
     (state) => state.cancelAddingAccount,
   );
   const form = useConnectionForm();
-  const viewId = shellStep === "welcome" ? "welcome" : form.viewId;
+  const showAgentSetup = !addingAccount && agentSetupPending && form.ready;
+  const viewId = showAgentSetup
+    ? "agent"
+    : shellStep === "welcome"
+      ? "welcome"
+      : form.viewId;
   const [prevViewId, setPrevViewId] = useState(viewId);
   const [direction, setDirection] = useState<1 | -1>(1);
   const reduce = useReducedMotionConfig();
@@ -63,7 +76,7 @@ export function OnboardingPage() {
   return (
     <>
       <a
-        className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:rounded-md focus:bg-popover focus:px-3 focus:py-2 focus:text-sm"
+        className="window-titlebar-safe-skip-link sr-only focus:not-sr-only focus:absolute focus:z-50 focus:rounded-md focus:bg-popover focus:px-3 focus:py-2 focus:text-sm"
         href="#main"
       >
         {copy.skipToContent}
@@ -91,21 +104,15 @@ export function OnboardingPage() {
             transition={{ duration: 0.3, ease: EASE_OUT }}
             className="absolute inset-0 flex flex-col"
           >
-            {window.telo.shell.frameless ||
-            shellStep === "auth" ||
-            addingAccount ? (
-              <header className="flex h-14 shrink-0 items-center gap-1 px-3 [app-region:drag]">
+            {window.telo.shell.frameless || addingAccount ? (
+              <header className="window-titlebar-safe flex h-14 shrink-0 items-center gap-1 [app-region:drag]">
                 <WindowControls />
-                {shellStep === "auth" || addingAccount ? (
+                {addingAccount && shellStep === "welcome" ? (
                   <Button
                     size="icon"
                     variant="ghost"
-                    aria-label={
-                      shellStep === "auth" ? copy.back : copy.cancelAddAccount
-                    }
-                    onClick={
-                      shellStep === "auth" ? handleBack : cancelAddingAccount
-                    }
+                    aria-label={copy.cancelAddAccount}
+                    onClick={cancelAddingAccount}
                     className="size-11 rounded-full [app-region:no-drag]"
                   >
                     <ArrowLeft />
@@ -115,13 +122,28 @@ export function OnboardingPage() {
             ) : null}
             <div className="grid flex-1 place-items-center px-6">
               <div className="w-full max-w-[420px]">
-                {shellStep === "welcome" ? (
+                {showAgentSetup ? (
+                  <AgentConfigurationForm
+                    variant="onboarding"
+                    onComplete={completeAgentSetup}
+                    onSkip={completeAgentSetup}
+                  />
+                ) : shellStep === "welcome" ? (
                   <WelcomeStep
                     onStart={goToAuth}
                     addingAccount={addingAccount}
                   />
                 ) : (
-                  <ConnectionStepContent form={form} />
+                  <div className="flex flex-col gap-2">
+                    <ConnectionStepContent form={form} />
+                    <Button
+                      variant="ghost"
+                      onClick={handleBack}
+                      className="w-full"
+                    >
+                      {copy.back}
+                    </Button>
+                  </div>
                 )}
               </div>
             </div>

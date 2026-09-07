@@ -179,7 +179,7 @@ export function GlobalAgentPanel({ onOpenSettings }: GlobalAgentPanelProps) {
 
   return (
     <div className="flex h-full min-h-0 w-full flex-col">
-      <header className="window-titlebar-safe-trailing flex h-14 shrink-0 items-center gap-2 border-b pl-3">
+      <header className="window-titlebar-safe flex h-14 shrink-0 items-center gap-2 border-b">
         <Sparkle className="size-5 text-muted-foreground" />
         {/* deslop-ignore-next-line 12 */}
         <h2 className="min-w-0 flex-1 text-base font-semibold">{copy.agent}</h2>

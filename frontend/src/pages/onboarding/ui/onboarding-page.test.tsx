@@ -1,4 +1,5 @@
 import {
+  act,
   render,
   screen,
   waitForElementToBeRemoved,
@@ -57,6 +58,7 @@ describe("OnboardingPage", () => {
       currentUser: null,
       accounts: [],
       addingAccount: false,
+      agentSetupPending: false,
     });
   });
 
@@ -97,8 +99,14 @@ describe("OnboardingPage", () => {
     await user.click(screen.getByRole("button", { name: copy.startMessaging }));
 
     expect(screen.getByLabelText(copy.phoneNumber)).toBeTruthy();
-    expect(screen.getByRole("button", { name: copy.continue })).toBeTruthy();
-    expect(screen.getByRole("button", { name: copy.back })).toBeTruthy();
+    const continueButton = screen.getByRole("button", { name: copy.continue });
+    const backButton = screen.getByRole("button", { name: copy.back });
+    expect(continueButton).toBeTruthy();
+    expect(backButton.closest("header")).toBeNull();
+    expect(
+      continueButton.compareDocumentPosition(backButton) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   it("returns to the welcome step from the phone step back button", async () => {
@@ -115,6 +123,33 @@ describe("OnboardingPage", () => {
     await waitForElementToBeRemoved(() =>
       screen.queryByLabelText(copy.phoneNumber),
     );
+  });
+
+  it("moves from Telegram login to optional AI setup and can skip it", async () => {
+    const user = userEvent.setup();
+    render(<OnboardingPage />);
+
+    await user.click(screen.getByRole("button", { name: copy.startMessaging }));
+    await user.type(screen.getByLabelText(copy.phoneNumber), "5555550100");
+    await user.click(screen.getByRole("button", { name: copy.continue }));
+    expect(useTelegramStore.getState().agentSetupPending).toBe(true);
+
+    act(() => useTelegramStore.setState({ auth: { status: "ready" } }));
+
+    await screen.findByRole("heading");
+    expect(screen.getByRole("heading").textContent).toBe(copy.connectAiTitle);
+    await waitForElementToBeRemoved(() =>
+      screen.queryByLabelText(copy.phoneNumber),
+    );
+    const skip = screen.getByRole("button", { name: copy.skipForNow });
+    const continueButton = screen.getByRole("button", { name: copy.continue });
+    expect(
+      continueButton.compareDocumentPosition(skip) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+
+    await user.click(skip);
+    expect(useTelegramStore.getState().agentSetupPending).toBe(false);
   });
 
   it("keeps Start Messaging on the welcome step instead of a connecting gate", () => {

@@ -12,9 +12,11 @@ describe("countries", () => {
     expect(COUNTRIES.length).toBeGreaterThan(200);
 
     const us = getCountry("US");
+    expect(us.flag).toBe("🇺🇸");
     expect(us.name).toBe("United States");
     expect(us.dialCode).toBe("1");
 
+    expect(getCountry("CN").flag).toBe("🇨🇳");
     expect(getCountry("CN").dialCode).toBe("86");
     expect(getCountry("GB").dialCode).toBe("44");
   });

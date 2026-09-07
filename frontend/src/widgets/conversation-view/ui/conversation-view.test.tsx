@@ -1672,6 +1672,59 @@ describe("ConversationView Wave 4 message interaction", () => {
     ).toBeTruthy();
   });
 
+  it("disables the composer when the chat cannot be written", async () => {
+    await renderView({
+      chats: [
+        chat({
+          id: "chat-1",
+          title: "News",
+          kind: "channel",
+          canSendMessages: false,
+        }),
+      ],
+    });
+
+    const composer = screen.getByLabelText(copy.readOnlyChat);
+    expect(composer).toHaveProperty("disabled", true);
+    expect(screen.queryByLabelText(copy.messagePlaceholder)).toBeNull();
+  });
+
+  it("keeps the composer and disables stickers and attachments when only those are restricted", async () => {
+    window.ResizeObserver = class {
+      observe(): void {}
+      unobserve(): void {}
+      disconnect(): void {}
+    } as unknown as typeof ResizeObserver;
+
+    await renderView({
+      chats: [
+        chat({
+          id: "chat-1",
+          title: "Design",
+          kind: "group",
+          canSendMessages: true,
+          canSendStickers: false,
+          canSendMedia: false,
+        }),
+      ],
+    });
+
+    const composer = screen.getByLabelText(copy.messagePlaceholder);
+    expect(composer).toHaveProperty("disabled", false);
+    expect(screen.getByLabelText(copy.mediaDisabled)).toHaveProperty(
+      "disabled",
+      true,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: copy.mediaPicker }));
+    expect(
+      screen.getByRole("button", { name: copy.stickersDisabled }),
+    ).toHaveProperty("disabled", true);
+    expect(
+      screen.getByRole("button", { name: copy.emojiPicker }),
+    ).toHaveProperty("disabled", false);
+  });
+
   it("edits the last outgoing message with ArrowUp in an empty composer", async () => {
     const { useChatStore } = await renderView({
       messages: [

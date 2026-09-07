@@ -13,7 +13,14 @@ reports/
 .env
 .DS_Store
 dist/
-build/
+build/*
+!build/icon-source.png
+!build/icon-artwork.png
+!build/icon.png
+!build/icon.icns
+!build/icon.ico
+!build/icons/
+!build/icons/*.png
 out/
 *.log
 *.tmp

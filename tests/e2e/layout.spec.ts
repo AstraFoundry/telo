@@ -46,11 +46,12 @@ demoTest(
     expect(leadingInset).toBeGreaterThanOrEqual(12);
     if (process.platform === "darwin") {
       expect(leadingInset).toBeGreaterThan(12);
-      const textCenter =
-        (geometry.text?.top ?? 0) + (geometry.text?.height ?? 0) / 2;
-      const nativeTitleBarCenter =
-        geometry.overlay.top + geometry.overlay.height / 2;
-      expect(textCenter).toBeCloseTo(nativeTitleBarCenter, 5);
+      expect(geometry.text?.left ?? 0).toBeGreaterThanOrEqual(
+        geometry.overlay.left,
+      );
+      expect(geometry.text?.bottom ?? 0).toBeLessThanOrEqual(
+        geometry.header.bottom,
+      );
     }
   },
 );

@@ -9,6 +9,8 @@ import type {
   ChatMemberDto,
   ChatPageDto,
   ChatPageInput,
+  CreateTelegramChannelInput,
+  CreateTelegramGroupInput,
   CurrentUserDto,
   DeleteMessageInput,
   EditMessageInput,
@@ -24,12 +26,16 @@ import type {
   MessageSearchPageDto,
   MessageSearchPageInput,
   PeerProfileDto,
+  PostedStoryDto,
+  PostStoryInput,
   SetMessageReactionInput,
   StickerFormat,
   StickerCatalogDto,
   StickerItemDto,
   StickerSetDto,
   StickerSetReferenceDto,
+  TelegramCallPageDto,
+  TelegramContactDto,
   TelegramWorkspaceEvent,
 } from "../../../../contracts/src/ipc";
 import { ARCHIVE_FOLDER_ID } from "../../../../contracts/src/ipc";
@@ -1098,6 +1104,114 @@ export class DemoTelegramRepository implements TelegramRepository {
     return chat;
   }
 
+  async listContacts(): Promise<ReadonlyArray<TelegramContactDto>> {
+    return [...this.chats.values()]
+      .filter((chat) => chat.kind === "direct")
+      .map((chat) => {
+        const peer = DEMO_PEERS[`demo-${chat.id}`] ?? DEMO_PEERS[chat.id];
+        return {
+          id: chat.id,
+          displayName: chat.title,
+          username: peer?.username ?? null,
+          phone: peer?.phone ?? null,
+          avatarDataUrl: chat.avatarDataUrl,
+          avatarPlaceholder: chat.avatarPlaceholder,
+        };
+      });
+  }
+
+  async openPrivateChat(userId: string): Promise<ChatDto> {
+    const existing = this.chats.get(userId);
+    if (existing && existing.kind === "direct") return existing;
+    const title = DEMO_PEERS[userId]?.displayName ?? userId;
+    const chat = this.createdChat(userId, title, "direct");
+    this.chats.set(chat.id, chat);
+    this.messages.set(chat.id, []);
+    this.emit({ type: "chat-upsert", chat });
+    return chat;
+  }
+
+  async createGroup(input: CreateTelegramGroupInput): Promise<ChatDto> {
+    const id = `group-${this.chats.size + 1}`;
+    const chat = this.createdChat(id, input.title, "group");
+    this.chats.set(id, chat);
+    this.messages.set(id, []);
+    this.emit({ type: "chat-upsert", chat });
+    return chat;
+  }
+
+  async createChannel(input: CreateTelegramChannelInput): Promise<ChatDto> {
+    const id = `channel-${this.chats.size + 1}`;
+    const chat = this.createdChat(id, input.title, "channel");
+    this.chats.set(id, chat);
+    this.messages.set(id, []);
+    this.emit({ type: "chat-upsert", chat });
+    return chat;
+  }
+
+  async listCalls(cursor: string | null = null): Promise<TelegramCallPageDto> {
+    if (cursor) return { items: [], nextCursor: null };
+    const peer = this.chats.get("mina");
+    return {
+      items: peer
+        ? [
+            {
+              id: "demo-call-1",
+              chatId: peer.id,
+              title: peer.title,
+              avatarDataUrl: peer.avatarDataUrl,
+              avatarPlaceholder: peer.avatarPlaceholder,
+              kind: "incoming",
+              video: false,
+              occurredAt: "2026-08-23T17:30:00.000Z",
+              durationSeconds: 184,
+            },
+          ]
+        : [],
+      nextCursor: null,
+    };
+  }
+
+  async postStory(
+    file: TelegramUploadFile,
+    input: PostStoryInput,
+  ): Promise<PostedStoryDto> {
+    const postedAt = new Date();
+    return {
+      id: `story-${postedAt.getTime()}`,
+      posterChatId: "saved",
+      postedAt: postedAt.toISOString(),
+      expiresAt: new Date(
+        postedAt.getTime() + input.activePeriod * 1000,
+      ).toISOString(),
+      video: file.mimeType.startsWith("video/"),
+    };
+  }
+
+  private createdChat(
+    id: string,
+    title: string,
+    kind: ChatDto["kind"],
+  ): ChatDto {
+    return {
+      id,
+      title,
+      preview: "",
+      updatedAt: new Date().toISOString(),
+      unreadCount: 0,
+      lastReadMessageId: null,
+      muted: false,
+      pinned: false,
+      kind,
+      initials: title.slice(0, 2).toUpperCase(),
+      avatarDataUrl: null,
+      avatarPlaceholder: mapAvatarPlaceholder(title, 5),
+      draftPreview: null,
+      typing: false,
+      folderId: null,
+    };
+  }
+
   async openSavedMessages(): Promise<ChatDto> {
     const existing = [...this.chats.values()].find(
       (chat) => chat.kind === "saved",
@@ -1208,6 +1322,19 @@ export class DemoTelegramRepository implements TelegramRepository {
   // dialog resolves from the demo peer table. Demo photos are settled by
   // construction, so the lookup never reports a pending avatar.
   async getPeerProfile(peerId: string): Promise<PeerProfileDto> {
+    if (peerId === "demo-user") {
+      const user = await this.getCurrentUser();
+      return {
+        id: user.id,
+        title: user.displayName,
+        username: user.username,
+        kind: "direct",
+        avatarDataUrl: user.avatarDataUrl,
+        avatarPlaceholder: user.avatarPlaceholder,
+        bio: null,
+        phone: null,
+      };
+    }
     const chat = this.chats.get(peerId);
     if (chat) {
       return {

@@ -19,6 +19,26 @@ const api: TeloDesktopApi = {
     listChatPage: (input) => ipcRenderer.invoke(channels.chatPageList, input),
     createSecretChat: (userId) =>
       ipcRenderer.invoke(channels.secretChatCreate, userId),
+    listContacts: () => ipcRenderer.invoke(channels.contactsList),
+    openPrivateChat: (userId) =>
+      ipcRenderer.invoke(channels.privateChatOpen, userId),
+    createGroup: (input) => ipcRenderer.invoke(channels.groupCreate, input),
+    createChannel: (input) => ipcRenderer.invoke(channels.channelCreate, input),
+    listCalls: (cursor) => ipcRenderer.invoke(channels.callsList, cursor),
+    postStory: async (file, input) => {
+      const source = webUtils.getPathForFile(file);
+      return ipcRenderer.invoke(
+        channels.storyPost,
+        {
+          source,
+          bytes: source ? undefined : new Uint8Array(await file.arrayBuffer()),
+          name: file.name,
+          mimeType: file.type,
+          size: file.size,
+        },
+        input,
+      );
+    },
     openSavedMessages: () => ipcRenderer.invoke(channels.savedMessagesOpen),
     listFolders: () => ipcRenderer.invoke(channels.folderList),
     createKeywordFolder: (input) =>

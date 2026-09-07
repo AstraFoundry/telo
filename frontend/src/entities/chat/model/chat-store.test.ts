@@ -629,6 +629,92 @@ describe("chat-store", () => {
     });
   });
 
+  it("setDraft() does not persist or signal typing in a read-only chat", () => {
+    const telo = installTeloApiMock();
+    useChatStore.setState({
+      chats: [{ ...chat("a"), canSendMessages: false }],
+      drafts: {},
+    });
+
+    useChatStore.getState().setDraft("a", "hello");
+
+    expect(useChatStore.getState().drafts.a).toBeUndefined();
+    expect(telo.workspace.saveDraft).not.toHaveBeenCalled();
+    expect(telo.workspace.setTyping).not.toHaveBeenCalled();
+  });
+
+  it("send() is a no-op when the active chat cannot be written", async () => {
+    const telo = installTeloApiMock();
+    useChatStore.setState({
+      chats: [{ ...chat("a"), canSendMessages: false }],
+      activeChatId: "a",
+      messages: [],
+    });
+
+    await useChatStore.getState().send("hello");
+
+    expect(useChatStore.getState().messages).toEqual([]);
+    expect(telo.workspace.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it("sendSticker() is a no-op when stickers are restricted", async () => {
+    const telo = installTeloApiMock();
+    useChatStore.setState({
+      chats: [{ ...chat("a"), canSendStickers: false }],
+      activeChatId: "a",
+      messages: [],
+    });
+
+    await useChatStore.getState().sendSticker({
+      id: "sticker/12345",
+      emoji: "🐱",
+      format: "static",
+      width: 512,
+      height: 512,
+      outlinePath: null,
+    });
+
+    expect(useChatStore.getState().messages).toEqual([]);
+    expect(telo.workspace.sendSticker).not.toHaveBeenCalled();
+  });
+
+  it("sendMedia() is a no-op when media is restricted", async () => {
+    const telo = installTeloApiMock();
+    useChatStore.setState({
+      chats: [{ ...chat("a"), canSendMedia: false }],
+      activeChatId: "a",
+      messages: [],
+    });
+
+    await useChatStore
+      .getState()
+      .sendMedia(
+        [new File(["a"], "photo.png", { type: "image/png" })],
+        "",
+        "upload-restricted",
+      );
+
+    expect(useChatStore.getState().messages).toEqual([]);
+    expect(telo.workspace.sendMedia).not.toHaveBeenCalled();
+  });
+
+  it("receive() cancels pending draft saves when a chat becomes read-only", () => {
+    vi.useFakeTimers();
+    const telo = installTeloApiMock();
+    useChatStore.setState({
+      chats: [chat("a")],
+      drafts: {},
+    });
+    useChatStore.getState().setDraft("a", "hello");
+    useChatStore.getState().receive({
+      type: "chat-upsert",
+      chat: { ...chat("a"), canSendMessages: false },
+    });
+    vi.advanceTimersByTime(1000);
+    expect(telo.workspace.saveDraft).not.toHaveBeenCalled();
+    vi.useRealTimers();
+  });
+
   it("send() inserts an optimistic bubble immediately and clears the draft", async () => {
     const telo = installTeloApiMock();
     let resolveSend: ((message: MessageDto) => void) | undefined;

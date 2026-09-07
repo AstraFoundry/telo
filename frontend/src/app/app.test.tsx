@@ -64,6 +64,7 @@ describe("App", () => {
       currentUser: null,
       accounts: [],
       addingAccount: false,
+      agentSetupPending: false,
     });
   });
 
@@ -94,6 +95,26 @@ describe("App", () => {
       expect(telo.workspace.listChatPage).toHaveBeenCalled();
       expect(telo.telegram.listAccounts).toHaveBeenCalled();
     });
+  });
+
+  it("keeps a fresh login in onboarding until optional AI setup is completed", async () => {
+    const telo = installTeloApiMock();
+    telo.telegram.getAuthState.mockResolvedValue({ status: "ready" });
+    telo.telegram.getLoginConfiguration.mockResolvedValue({
+      applicationCredentialsConfigured: true,
+    });
+    useTelegramStore.setState({
+      auth: { status: "ready" },
+      agentSetupPending: true,
+    });
+
+    render(<App />);
+
+    expect(await screen.findByTestId("onboarding-page")).toBeTruthy();
+    expect(screen.queryByTestId("workspace-page")).toBeNull();
+
+    act(() => useTelegramStore.getState().completeAgentSetup());
+    expect(await screen.findByTestId("workspace-page")).toBeTruthy();
   });
 
   it("keeps onboarding up for the add-account flow while signed in", async () => {

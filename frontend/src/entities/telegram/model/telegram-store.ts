@@ -21,12 +21,15 @@ interface TelegramState {
    * what registers the new account main-side.
    */
   addingAccount: boolean;
+  /** A fresh first-account login pauses on optional AI setup before entry. */
+  agentSetupPending: boolean;
   start(): () => void;
   loadCurrentUser(): Promise<void>;
   loadAccounts(): Promise<void>;
   switchAccount(accountId: string): Promise<void>;
   startAddingAccount(): void;
   cancelAddingAccount(): void;
+  completeAgentSetup(): void;
   beginLogin(input: TelegramLoginInput): Promise<void>;
   submitChallenge(value: string): Promise<void>;
   logout(): Promise<void>;
@@ -37,6 +40,7 @@ export const useTelegramStore = create<TelegramState>((set, get) => ({
   configuration: null,
   accounts: [],
   addingAccount: false,
+  agentSetupPending: false,
   currentUser: null,
   start() {
     const unsubscribeAuth = window.telo.telegram.onAuthState((auth) =>
@@ -100,12 +104,18 @@ export const useTelegramStore = create<TelegramState>((set, get) => ({
     }
   },
   startAddingAccount() {
-    set({ addingAccount: true });
+    set({ addingAccount: true, agentSetupPending: false });
   },
   cancelAddingAccount() {
     set({ addingAccount: false });
   },
+  completeAgentSetup() {
+    set({ agentSetupPending: false });
+  },
   async beginLogin(input) {
+    if (!get().addingAccount && get().accounts.length === 0) {
+      set({ agentSetupPending: true });
+    }
     try {
       await window.telo.telegram.beginLogin(input);
     } catch (error) {
@@ -123,7 +133,11 @@ export const useTelegramStore = create<TelegramState>((set, get) => ({
     try {
       await window.telo.telegram.logout();
       // The post-logout state is known — idle, not "not loaded yet" (null).
-      set({ auth: { status: "idle" }, currentUser: null });
+      set({
+        auth: { status: "idle" },
+        currentUser: null,
+        agentSetupPending: false,
+      });
     } catch (error) {
       set({ auth: { status: "error", message: safeMessage(error) } });
     }

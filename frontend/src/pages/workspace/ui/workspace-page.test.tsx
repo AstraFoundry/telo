@@ -212,6 +212,7 @@ describe("WorkspacePage", () => {
 
     const back = screen.getByRole("button", { name: copy.backToChats });
     const close = screen.getByRole("button", { name: copy.windowClose });
+    expect(back.parentElement?.className).toContain("window-titlebar-safe");
     expect(back.parentElement?.contains(close)).toBe(true);
     expect(
       close.compareDocumentPosition(back) & Node.DOCUMENT_POSITION_FOLLOWING,

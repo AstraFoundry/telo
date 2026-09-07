@@ -70,7 +70,7 @@ describe("ReactionBar", () => {
     const chips = screen.getAllByRole("button");
     expect(chips).toHaveLength(2);
     expect(chips[0].textContent).toBe("👍3");
-    expect(chips[1].textContent).toBe("❤1");
+    expect(chips[1].textContent).toBe("❤️1");
     expect(chips[0].getAttribute("aria-pressed")).toBe("false");
     expect(chips[1].getAttribute("aria-pressed")).toBe("true");
     expect(chips[1].dataset.chosen).toBe("true");

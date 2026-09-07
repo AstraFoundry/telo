@@ -7,7 +7,7 @@
   "main": "out/main/index.js",
   "scripts": {
     "postinstall": "install-electron && electron-rebuild -f -w tdl",
-    "dev": "install-electron && electron-vite dev",
+    "dev": "install-electron && node scripts/dev.mjs",
     "build": "electron-vite build",
     "package": "pnpm build && node scripts/stage-tdlib-native.mjs && electron-builder --dir",
     "release": "pnpm build && node scripts/stage-tdlib-native.mjs && electron-builder --publish never",
@@ -41,6 +41,7 @@
     ],
     "npmRebuild": true,
     "directories": {
+      "buildResources": "build",
       "output": "release"
     },
     "extraResources": [
@@ -64,15 +65,18 @@
     ],
     "mac": {
       "category": "public.app-category.social-networking",
+      "icon": "build/icon.icns",
       "target": [
         "dmg",
         "zip"
       ]
     },
     "win": {
+      "icon": "build/icon.ico",
       "target": "nsis"
     },
     "linux": {
+      "icon": "build/icons",
       "target": [
         "AppImage",
         "deb"

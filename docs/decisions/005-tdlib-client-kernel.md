@@ -24,7 +24,7 @@ Packaging is a go/no-go in front of the adapter rewrite: electron-vite must exte
 
 Existing accounts re-authenticate. A GramJS/Teleproto string session cannot import into TDLib.
 
-Wave 7 items that are **not** pulled in by this decision: VoIP and group calls (still need `tgcalls`), Stories, forum topics, channel comments, bots / Mini Apps, Stars, wallets.
+Wave 7 items that are **not** pulled in by this decision: VoIP and group calls (still need `tgcalls`), story browsing, forum topics, channel comments, bots / Mini Apps, Stars, wallets. A later product change added TDLib story posting and call-message history without adding call media or a story viewer.
 
 ## Consequences
 
@@ -71,7 +71,7 @@ Rejected. Two MTProto sessions split updates and double flood risk. A temporary 
 
 ## References
 
-- [`../todo/gaps.md`](../todo/gaps.md) — secret chats and client-kernel persistence are in scope; VoIP/Stories/Mini Apps stay Wave 7.
+- [`../todo/gaps.md`](../todo/gaps.md) — secret chats, call-message history, story posting, and client-kernel persistence are in scope; VoIP, story browsing, and Mini Apps stay Wave 7.
 - [`../todo/tdlib-migration.md`](../todo/tdlib-migration.md) — packaging gate, adapter waves, verification pyramid, cutover.
 - [`../project/architecture.md`](../project/architecture.md) — main-process Telegram; IPC DTOs.
 - [`001-electron-ipc-boundary.md`](001-electron-ipc-boundary.md) — secrets stay in main.

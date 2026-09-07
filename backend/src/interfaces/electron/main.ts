@@ -18,6 +18,17 @@ import { runTdlibSmoke } from "../../infrastructure/telegram/tdlib-probe";
 
 registerMediaScheme();
 
+const PRODUCT_NAME = "Telo";
+const DEVELOPMENT_ICON_PATH = path.resolve(__dirname, "../../build/icon.png");
+
+// electron-vite launches the stock Electron.app during development, so the
+// bundle metadata still says "Electron" even though packaged builds are
+// branded by electron-builder. Set the process title for macOS' Dock label;
+// the packaged app already carries the correct bundle name and icon.
+if (!app.isPackaged) {
+  process.title = PRODUCT_NAME;
+}
+
 let mainWindow: BrowserWindow | null = null;
 // Stops the trigger engine (unsubscribes workspace events) and the
 // scheduler (clears pending timers); set once the container exists.
@@ -96,6 +107,10 @@ function createWindow(): void {
 }
 
 app.whenReady().then(async () => {
+  if (!app.isPackaged) {
+    app.dock?.setIcon(DEVELOPMENT_ICON_PATH);
+  }
+
   if (process.env.TELO_TDLIB_SMOKE === "1") {
     const result = await runTdlibSmoke({
       isPackaged: app.isPackaged,

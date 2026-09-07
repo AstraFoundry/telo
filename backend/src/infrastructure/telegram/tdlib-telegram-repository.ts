@@ -11,6 +11,8 @@ import type {
   ChatMemberDto,
   ChatPageDto,
   ChatPageInput,
+  CreateTelegramChannelInput,
+  CreateTelegramGroupInput,
   CurrentUserDto,
   DeleteMessageInput,
   EditMessageInput,
@@ -23,6 +25,8 @@ import type {
   MessageSearchPageDto,
   MessageSearchPageInput,
   PeerProfileDto,
+  PostedStoryDto,
+  PostStoryInput,
   SetMessageReactionInput,
   StickerCatalogDto,
   StickerItemDto,
@@ -31,6 +35,9 @@ import type {
   TelegramAuthState,
   TelegramLoginConfigurationDto,
   TelegramLoginInput,
+  TelegramCallDto,
+  TelegramCallPageDto,
+  TelegramContactDto,
   TelegramWorkspaceEvent,
 } from "../../../../contracts/src/ipc";
 import type {
@@ -87,6 +94,8 @@ export class TdlibTelegramRepository implements TelegramRepository {
   >();
   private readonly chats = new Map<string, Td.chat>();
   private readonly users = new Map<number, Td.user>();
+  private readonly basicGroups = new Map<number, Td.basicGroup>();
+  private readonly supergroups = new Map<number, Td.supergroup>();
   private readonly folders: Td.chatFolderInfo[] = [];
   private readonly clientIds = new Map<string, string>();
   private readonly stickersByFileId = new Map<number, Td.sticker>();
@@ -182,14 +191,167 @@ export class TdlibTelegramRepository implements TelegramRepository {
       _: "createNewSecretChat",
       user_id: Number(userId),
     });
-    this.chats.set(chatIdOf(chat.id), chat);
-    this.scheduleChatAvatar(chat);
-    if (chat.type._ === "chatTypeSecret") {
-      await this.hydrateSecretChat(chat.type.secret_chat_id);
+    return this.acceptCreatedChat(chat);
+  }
+
+  async listContacts(): Promise<ReadonlyArray<TelegramContactDto>> {
+    const result = await this.client.invoke<Td.users>({ _: "getContacts" });
+    await Promise.all(
+      result.user_ids.map(async (userId) => {
+        if (!this.users.has(userId)) await this.fetchUser(userId);
+      }),
+    );
+    return result.user_ids.flatMap((userId) => {
+      const user = this.users.get(userId);
+      if (!user || user.type._ === "userTypeDeleted") return [];
+      void this.scheduleUserAvatar(user);
+      const peerId = String(user.id);
+      const displayName = [user.first_name, user.last_name]
+        .filter(Boolean)
+        .join(" ");
+      return [
+        {
+          id: peerId,
+          displayName: displayName || peerId,
+          username: user.usernames?.active_usernames[0] ?? null,
+          phone: user.phone_number || null,
+          avatarDataUrl: this.avatarUrls.get(peerId) ?? null,
+          avatarPending: this.avatarIsPending(peerId),
+          avatarPlaceholder: this.avatarPlaceholderForPeer(peerId),
+        },
+      ];
+    });
+  }
+
+  async openPrivateChat(userId: string): Promise<ChatDto> {
+    const chat = await this.client.invoke<Td.chat>({
+      _: "createPrivateChat",
+      user_id: Number(userId),
+      force: false,
+    });
+    return this.acceptCreatedChat(chat);
+  }
+
+  async createGroup(input: CreateTelegramGroupInput): Promise<ChatDto> {
+    const created = await this.client.invoke<Td.createdBasicGroupChat>({
+      _: "createNewBasicGroupChat",
+      user_ids: input.userIds.map(Number),
+      title: input.title,
+      message_auto_delete_time: 0,
+    });
+    const chat = await this.client.invoke<Td.chat>({
+      _: "getChat",
+      chat_id: created.chat_id,
+    });
+    return this.acceptCreatedChat(chat);
+  }
+
+  async createChannel(input: CreateTelegramChannelInput): Promise<ChatDto> {
+    const chat = await this.client.invoke<Td.chat>({
+      _: "createNewSupergroupChat",
+      title: input.title,
+      is_forum: false,
+      is_channel: true,
+      description: input.description ?? "",
+      message_auto_delete_time: 0,
+      for_import: false,
+    });
+    return this.acceptCreatedChat(chat);
+  }
+
+  async listCalls(cursor: string | null = null): Promise<TelegramCallPageDto> {
+    const result = await this.client.invoke<Td.foundMessages>({
+      _: "searchCallMessages",
+      offset: cursor ?? "",
+      limit: 50,
+      only_missed: false,
+    });
+    const items: TelegramCallDto[] = [];
+    for (const message of result.messages) {
+      const content = message.content;
+      if (content._ !== "messageCall" && content._ !== "messageGroupCall") {
+        continue;
+      }
+      const chatId = chatIdOf(message.chat_id);
+      let chat = this.chats.get(chatId);
+      if (!chat) {
+        chat = await this.client.invoke<Td.chat>({
+          _: "getChat",
+          chat_id: message.chat_id,
+        });
+        this.chats.set(chatId, chat);
+        this.scheduleChatAvatar(chat);
+      }
+      const missed =
+        content._ === "messageCall"
+          ? !message.is_outgoing &&
+            (content.discard_reason._ === "callDiscardReasonMissed" ||
+              content.discard_reason._ === "callDiscardReasonDeclined")
+          : content.was_missed;
+      const chatDto = this.toChat(chat);
+      items.push({
+        id: messageIdOf(message.id),
+        chatId,
+        title: chat.title,
+        avatarDataUrl: chatDto.avatarDataUrl,
+        avatarPlaceholder: chatDto.avatarPlaceholder,
+        kind: missed ? "missed" : message.is_outgoing ? "outgoing" : "incoming",
+        video: content.is_video,
+        occurredAt: new Date(message.date * 1000).toISOString(),
+        durationSeconds: content.duration,
+      });
     }
-    const dto = this.toChat(chat);
-    this.emit({ type: "chat-upsert", chat: dto });
-    return dto;
+    return { items, nextCursor: result.next_offset || null };
+  }
+
+  async postStory(
+    file: TelegramUploadFile,
+    input: PostStoryInput,
+  ): Promise<PostedStoryDto> {
+    const saved = await this.openSavedMessages();
+    const video = file.mimeType.startsWith("video/");
+    const content: Td.InputStoryContent$Input = video
+      ? {
+          _: "inputStoryContentVideo",
+          video: { _: "inputFileLocal", path: file.source },
+          duration: input.durationSeconds ?? 0,
+          cover_frame_timestamp: 0,
+          is_animation: false,
+        }
+      : {
+          _: "inputStoryContentPhoto",
+          photo: { _: "inputFileLocal", path: file.source },
+        };
+    const privacy: Td.StoryPrivacySettings$Input =
+      input.privacy === "everyone"
+        ? { _: "storyPrivacySettingsEveryone", except_user_ids: [] }
+        : input.privacy === "contacts"
+          ? { _: "storyPrivacySettingsContacts", except_user_ids: [] }
+          : { _: "storyPrivacySettingsCloseFriends" };
+    const story = await this.client.invoke<Td.story>({
+      _: "postStory",
+      chat_id: Number(saved.id),
+      content,
+      caption: {
+        _: "formattedText",
+        text: input.caption ?? "",
+        entities: [],
+      },
+      privacy_settings: privacy,
+      album_ids: [],
+      active_period: input.activePeriod,
+      is_posted_to_chat_page: true,
+      protect_content: input.protectContent ?? false,
+    });
+    return {
+      id: String(story.id),
+      posterChatId: String(story.poster_chat_id),
+      postedAt: new Date(story.date * 1000).toISOString(),
+      expiresAt: new Date(
+        (story.date + input.activePeriod) * 1000,
+      ).toISOString(),
+      video: story.content._ === "storyContentVideo",
+    };
   }
 
   async openSavedMessages(): Promise<ChatDto> {
@@ -487,6 +649,7 @@ export class TdlibTelegramRepository implements TelegramRepository {
     stickerId: string,
     clientId?: string,
   ): Promise<MessageDto> {
+    this.assertCanWrite(chatId, "stickers");
     const fileId = fileIdFromMediaId(stickerId);
     if (fileId === null) throw new Error("Sticker id is required");
     const cached = this.stickersByFileId.get(fileId);
@@ -641,6 +804,7 @@ export class TdlibTelegramRepository implements TelegramRepository {
     silent?: boolean,
     entities?: ReadonlyArray<MessageEntityDto>,
   ): Promise<MessageDto> {
+    this.assertCanWrite(chatId);
     const sendingId = this.nextSendingId();
     this.rememberClientId(sendingId, clientId);
     const message = await this.client.invoke<Td.message>({
@@ -729,6 +893,7 @@ export class TdlibTelegramRepository implements TelegramRepository {
     clientId: string | undefined,
     uploadId: string,
   ): Promise<ReadonlyArray<MessageDto>> {
+    this.assertCanWrite(chatId, "media");
     this.emit({
       type: "media-upload",
       uploadId,
@@ -807,6 +972,7 @@ export class TdlibTelegramRepository implements TelegramRepository {
   }
 
   async editMessage(input: EditMessageInput): Promise<void> {
+    this.assertCanWrite(input.chatId);
     await this.client.invoke({
       _: "editMessageText",
       chat_id: Number(input.chatId),
@@ -832,6 +998,7 @@ export class TdlibTelegramRepository implements TelegramRepository {
   }
 
   async forwardMessage(input: ForwardMessageInput): Promise<void> {
+    this.assertCanWrite(input.toChatId, "any");
     await this.client.invoke({
       _: "forwardMessages",
       chat_id: Number(input.toChatId),
@@ -892,6 +1059,8 @@ export class TdlibTelegramRepository implements TelegramRepository {
   }
 
   async setTyping(chatId: string, typing: boolean): Promise<void> {
+    const chat = this.chats.get(chatId);
+    if (chat && !this.writeAccess(chat).text) return;
     await this.client.invoke({
       _: "sendChatAction",
       chat_id: Number(chatId),
@@ -900,6 +1069,7 @@ export class TdlibTelegramRepository implements TelegramRepository {
   }
 
   async saveDraft(chatId: string, text: string): Promise<void> {
+    this.assertCanWrite(chatId);
     await this.client.invoke({
       _: "setChatDraftMessage",
       chat_id: Number(chatId),
@@ -1431,6 +1601,40 @@ export class TdlibTelegramRepository implements TelegramRepository {
     return items;
   }
 
+  private async hydrateBasicGroup(
+    groupId: number,
+    emit: boolean,
+  ): Promise<void> {
+    try {
+      const group = await this.client.invoke<Td.basicGroup>({
+        _: "getBasicGroup",
+        basic_group_id: groupId,
+      });
+      if (group._ !== "basicGroup") return;
+      this.basicGroups.set(group.id, group);
+      if (emit) this.emitGroupChat(groupId, "chatTypeBasicGroup");
+    } catch (error) {
+      console.error("TDLib getBasicGroup failed", { groupId, error });
+    }
+  }
+
+  private async hydrateSupergroup(
+    supergroupId: number,
+    emit: boolean,
+  ): Promise<void> {
+    try {
+      const group = await this.client.invoke<Td.supergroup>({
+        _: "getSupergroup",
+        supergroup_id: supergroupId,
+      });
+      if (group._ !== "supergroup") return;
+      this.supergroups.set(group.id, group);
+      if (emit) this.emitGroupChat(supergroupId, "chatTypeSupergroup");
+    } catch (error) {
+      console.error("TDLib getSupergroup failed", { supergroupId, error });
+    }
+  }
+
   private async hydrateSecretChat(secretChatId: number): Promise<void> {
     if (this.secretChats.has(secretChatId)) return;
     try {
@@ -1492,6 +1696,12 @@ export class TdlibTelegramRepository implements TelegramRepository {
       if (update.chat.type._ === "chatTypeSecret") {
         void this.hydrateSecretChat(update.chat.type.secret_chat_id);
       }
+      if (update.chat.type._ === "chatTypeBasicGroup") {
+        await this.hydrateBasicGroup(update.chat.type.basic_group_id, false);
+      }
+      if (update.chat.type._ === "chatTypeSupergroup") {
+        await this.hydrateSupergroup(update.chat.type.supergroup_id, false);
+      }
       this.emit({ type: "chat-upsert", chat: this.toChat(update.chat) });
       return;
     }
@@ -1513,6 +1723,13 @@ export class TdlibTelegramRepository implements TelegramRepository {
           entry.type.secret_chat_id === update.secret_chat.id,
       );
       if (chat) this.emit({ type: "chat-upsert", chat: this.toChat(chat) });
+      return;
+    }
+    if (update._ === "updateChatPermissions") {
+      const chat = this.chats.get(chatIdOf(update.chat_id));
+      if (!chat) return;
+      chat.permissions = update.permissions;
+      this.emit({ type: "chat-upsert", chat: this.toChat(chat) });
       return;
     }
     if (update._ === "updateChatPosition") {
@@ -1669,6 +1886,16 @@ export class TdlibTelegramRepository implements TelegramRepository {
       if (chat) this.emit({ type: "chat-upsert", chat: this.toChat(chat) });
       return;
     }
+    if (update._ === "updateBasicGroup") {
+      this.basicGroups.set(update.basic_group.id, update.basic_group);
+      this.emitGroupChat(update.basic_group.id, "chatTypeBasicGroup");
+      return;
+    }
+    if (update._ === "updateSupergroup") {
+      this.supergroups.set(update.supergroup.id, update.supergroup);
+      this.emitGroupChat(update.supergroup.id, "chatTypeSupergroup");
+      return;
+    }
     if (update._ === "updateChatAction") {
       const chat = this.chats.get(chatIdOf(update.chat_id));
       if (!chat) return;
@@ -1784,6 +2011,16 @@ export class TdlibTelegramRepository implements TelegramRepository {
       if (chat.type._ === "chatTypeSecret") {
         void this.hydrateSecretChat(chat.type.secret_chat_id);
       }
+      if (chat.type._ === "chatTypeBasicGroup") {
+        pendingUsers.push(
+          this.hydrateBasicGroup(chat.type.basic_group_id, false),
+        );
+      }
+      if (chat.type._ === "chatTypeSupergroup") {
+        pendingUsers.push(
+          this.hydrateSupergroup(chat.type.supergroup_id, false),
+        );
+      }
     }
     await Promise.all(pendingUsers);
   }
@@ -1796,6 +2033,19 @@ export class TdlibTelegramRepository implements TelegramRepository {
       );
   }
 
+  private async acceptCreatedChat(chat: Td.chat): Promise<ChatDto> {
+    this.chats.set(chatIdOf(chat.id), chat);
+    this.scheduleChatAvatar(chat);
+    if (chat.type._ === "chatTypePrivate") {
+      await this.hydratePrivateUser(chat.type.user_id);
+    } else if (chat.type._ === "chatTypeSecret") {
+      await this.hydrateSecretChat(chat.type.secret_chat_id);
+    }
+    const dto = this.toChat(chat);
+    this.emit({ type: "chat-upsert", chat: dto });
+    return dto;
+  }
+
   private folderDtos(): ReadonlyArray<ChatFolderDto> {
     return mapFolders(this.folders, this.orderedChats());
   }
@@ -1805,6 +2055,9 @@ export class TdlibTelegramRepository implements TelegramRepository {
       selfUserId: this.selfUserId,
       avatarUrl: (peerId) => this.avatarUrls.get(peerId) ?? null,
       avatarPending: (peerId) => this.avatarIsPending(peerId),
+      canSendMessages: (entry) => this.writeAccess(entry).text,
+      canSendStickers: (entry) => this.writeAccess(entry).stickers,
+      canSendMedia: (entry) => this.writeAccess(entry).media,
       accentPalette: (colorId) =>
         accentPaletteOf(colorId, this.customAccentColors),
       avatarPlaceholder: (peerId) => this.avatarPlaceholderForPeer(peerId),
@@ -1834,6 +2087,94 @@ export class TdlibTelegramRepository implements TelegramRepository {
       next = { ...next, secretState: this.secretStateOf(chat) };
     }
     return next;
+  }
+
+  private emitGroupChat(
+    groupId: number,
+    type: "chatTypeBasicGroup" | "chatTypeSupergroup",
+  ): void {
+    const chat = [...this.chats.values()].find(
+      (entry) =>
+        entry.type._ === type &&
+        (type === "chatTypeBasicGroup"
+          ? entry.type._ === "chatTypeBasicGroup" &&
+            entry.type.basic_group_id === groupId
+          : entry.type._ === "chatTypeSupergroup" &&
+            entry.type.supergroup_id === groupId),
+    );
+    if (chat) this.emit({ type: "chat-upsert", chat: this.toChat(chat) });
+  }
+
+  private writeAccess(chat: Td.chat): {
+    text: boolean;
+    stickers: boolean;
+    media: boolean;
+  } {
+    const none = { text: false, stickers: false, media: false };
+    const all = { text: true, stickers: true, media: true };
+    if (chat.type._ === "chatTypePrivate") {
+      return this.users.get(chat.type.user_id)?.type._ === "userTypeDeleted"
+        ? none
+        : all;
+    }
+    if (chat.type._ === "chatTypeSecret") {
+      return this.secretStateOf(chat) === "ready" ? all : none;
+    }
+    const channel =
+      chat.type._ === "chatTypeSupergroup" && chat.type.is_channel;
+    const status =
+      chat.type._ === "chatTypeBasicGroup"
+        ? this.basicGroups.get(chat.type.basic_group_id)?.status
+        : this.supergroups.get(chat.type.supergroup_id)?.status;
+    if (!status) return none;
+    if (status._ === "chatMemberStatusCreator") return all;
+    if (status._ === "chatMemberStatusAdministrator") {
+      return !channel || status.rights.can_post_messages === true ? all : none;
+    }
+    if (status._ === "chatMemberStatusRestricted") {
+      return status.is_member
+        ? this.permissionsAccess(status.permissions)
+        : none;
+    }
+    return status._ === "chatMemberStatusMember" && !channel
+      ? this.permissionsAccess(chat.permissions)
+      : none;
+  }
+
+  private permissionsAccess(permissions: Td.chatPermissions | undefined): {
+    text: boolean;
+    stickers: boolean;
+    media: boolean;
+  } {
+    return {
+      text: permissions?.can_send_basic_messages === true,
+      stickers: permissions?.can_send_other_messages === true,
+      media:
+        permissions?.can_send_photos === true ||
+        permissions?.can_send_videos === true ||
+        permissions?.can_send_documents === true,
+    };
+  }
+
+  private assertCanWrite(
+    chatId: string,
+    kind: "text" | "stickers" | "media" | "any" = "text",
+  ): void {
+    const chat = this.chats.get(chatId);
+    if (!chat) return;
+    const access = this.writeAccess(chat);
+    const allowed =
+      kind === "any"
+        ? access.text || access.stickers || access.media
+        : access[kind];
+    if (allowed) return;
+    throw new Error(
+      kind === "stickers"
+        ? "The current account can't send stickers to this chat"
+        : kind === "media"
+          ? "The current account can't send media to this chat"
+          : "The current account can't write to this chat",
+    );
   }
 
   private async toMessage(message: Td.message): Promise<MessageDto> {
@@ -2200,6 +2541,27 @@ export class TdlibClientCoordinator implements TelegramAccountClient {
   }
   createSecretChat(userId: string): Promise<ChatDto> {
     return this.repository.createSecretChat(userId);
+  }
+  listContacts(): Promise<ReadonlyArray<TelegramContactDto>> {
+    return this.repository.listContacts();
+  }
+  openPrivateChat(userId: string): Promise<ChatDto> {
+    return this.repository.openPrivateChat(userId);
+  }
+  createGroup(input: CreateTelegramGroupInput): Promise<ChatDto> {
+    return this.repository.createGroup(input);
+  }
+  createChannel(input: CreateTelegramChannelInput): Promise<ChatDto> {
+    return this.repository.createChannel(input);
+  }
+  listCalls(cursor: string | null = null): Promise<TelegramCallPageDto> {
+    return this.repository.listCalls(cursor);
+  }
+  postStory(
+    file: TelegramUploadFile,
+    input: PostStoryInput,
+  ): Promise<PostedStoryDto> {
+    return this.repository.postStory(file, input);
   }
   openSavedMessages(): Promise<ChatDto> {
     return this.repository.openSavedMessages();

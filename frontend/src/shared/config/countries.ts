@@ -14,6 +14,8 @@ import metadata from "libphonenumber-js/metadata.min.json";
 export interface Country {
   /** ISO 3166-1 alpha-2 code. */
   code: CountryCode;
+  /** Unicode regional-indicator flag derived from the ISO code. */
+  flag: string;
   /** English display name (project copy is English-only). */
   name: string;
   /** International dialing code without the leading "+". */
@@ -25,10 +27,18 @@ const displayNames = new Intl.DisplayNames(["en"], { type: "region" });
 export const COUNTRIES: readonly Country[] = getCountries()
   .map((code) => ({
     code,
+    flag: countryFlag(code),
     name: displayNames.of(code) ?? code,
     dialCode: getCountryCallingCode(code),
   }))
   .sort((a, b) => a.name.localeCompare(b.name, "en"));
+
+/** Converts an ISO alpha-2 code into its Unicode flag sequence. */
+function countryFlag(code: CountryCode): string {
+  return [...code]
+    .map((letter) => String.fromCodePoint(0x1f1e6 + letter.charCodeAt(0) - 65))
+    .join("");
+}
 
 const COUNTRY_BY_CODE: ReadonlyMap<string, Country> = new Map(
   COUNTRIES.map((country) => [country.code, country]),

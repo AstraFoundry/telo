@@ -7,7 +7,7 @@ Telo stays a DDD desktop app. The renderer never imports `tdl` or `td_api`. `Tel
 ## Non-goals
 
 - VoIP, group calls, screen share (`tgcalls` is a separate stack)
-- Stories, forum topics, channel comments, Mini Apps, Stars, wallets
+- Story browsing, forum topics, channel comments, Mini Apps, Stars, wallets
 - Importing existing Teleproto `StringSession` files (users re-login)
 - `tdweb` in the renderer
 - Two live MTProto sessions on one account

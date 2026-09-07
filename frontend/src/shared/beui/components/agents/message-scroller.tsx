@@ -139,6 +139,11 @@ export function MessageScroller({
   const railIdRef = useRef(new WeakMap<HTMLElement, string>());
   const railIdCounterRef = useRef(0);
   const railTargetsRef = useRef(new Map<string, HTMLElement>());
+  const metricsRef = useRef({
+    clientHeight: 0,
+    scrollTop: 0,
+    scrollHeight: 0,
+  });
   const [railItems, setRailItems] = useState<PreviewRailItem[]>([]);
   const [activeRailId, setActiveRailId] = useState("");
   const [railOverflowing, setRailOverflowing] = useState(false);
@@ -153,6 +158,13 @@ export function MessageScroller({
   const setViewportRef = useCallback(
     (node: HTMLElement | null) => {
       viewportRef.current = node;
+      if (node) {
+        metricsRef.current = {
+          clientHeight: node.clientHeight,
+          scrollTop: node.scrollTop,
+          scrollHeight: node.scrollHeight,
+        };
+      }
       if (typeof externalViewportRef === "function") {
         externalViewportRef(node);
       } else if (externalViewportRef) {
@@ -292,11 +304,31 @@ export function MessageScroller({
 
   const handleScroll = useCallback(() => {
     const viewport = viewportRef.current;
-    if (!viewport || programmaticScrollRef.current) return;
+    if (!viewport) return;
 
-    const distance =
-      viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight;
-    setFollowing(distance <= followThreshold);
+    const clientHeight = viewport.clientHeight;
+    const scrollTop = viewport.scrollTop;
+    const scrollHeight = viewport.scrollHeight;
+    const previous = metricsRef.current;
+    const viewportResized = previous.clientHeight !== clientHeight;
+    metricsRef.current = { clientHeight, scrollTop, scrollHeight };
+
+    if (programmaticScrollRef.current) return;
+
+    const distance = scrollHeight - scrollTop - clientHeight;
+    if (distance <= followThreshold) {
+      setFollowing(true);
+      updateActiveRailItem();
+      return;
+    }
+    // Shrinking the viewport clips the live edge without a user gesture.
+    // Wheel/touch/keys already call leaveLiveEdge; keep following here so
+    // streamed output can re-pin instead of parking a jump control.
+    if (followingRef.current && viewportResized) {
+      updateActiveRailItem();
+      return;
+    }
+    setFollowing(false);
     updateActiveRailItem();
   }, [followThreshold, setFollowing, updateActiveRailItem]);
 
@@ -328,16 +360,26 @@ export function MessageScroller({
     const observer = new ResizeObserver(() => {
       scheduleRailSync();
       if (!followOutput || !followingRef.current) return;
+      // Mark the coming scroll as programmatic before the browser delivers
+      // the resize-induced scroll event, otherwise handleScroll would treat
+      // a clipped live edge as the reader leaving.
+      programmaticScrollRef.current = true;
       // Native smooth scrolling restarts whenever its target changes. Streamed
       // content can resize many times per second, so keep the live edge locked
       // with one immediate update per frame instead.
       if (followFrameRef.current !== undefined) return;
       followFrameRef.current = requestAnimationFrame(() => {
         followFrameRef.current = undefined;
-        if (followingRef.current) scrollToEnd("auto");
+        if (followingRef.current) {
+          scrollToEnd("auto");
+          return;
+        }
+        programmaticScrollRef.current = false;
       });
     });
     observer.observe(content);
+    const viewport = viewportRef.current;
+    if (viewport) observer.observe(viewport);
 
     return () => observer.disconnect();
   }, [followOutput, scheduleRailSync, scrollToEnd]);

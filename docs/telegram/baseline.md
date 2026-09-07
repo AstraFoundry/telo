@@ -1,6 +1,6 @@
 # Daily-client baseline
 
-Standard Telo workflows that must be `covered` in [`tdlib-capability-matrix.json`](tdlib-capability-matrix.json) and exercised before cutover. Compared against Telegram Desktop on the same account. Not in this baseline: calls, Stories, Mini Apps, Stars, wallets.
+Standard Telo workflows that must be `covered` in [`tdlib-capability-matrix.json`](tdlib-capability-matrix.json) and exercised before cutover. Compared against Telegram Desktop on the same account. Not in this baseline: VoIP media, story browsing, Mini Apps, Stars, wallets.
 
 Live runs are secret-gated (`make test-live`). Demo Playwright remains the PR merge gate for UI.
 
@@ -48,3 +48,11 @@ Live runs are secret-gated (`make test-live`). Demo Playwright remains the PR me
 - [ ] Create from Telo to an official client
 - [ ] Device-local history after kill
 - [ ] Lock UI on sidebar and header
+
+## Account menu actions
+
+- [ ] Open My Profile and Contacts
+- [ ] Create a basic group and channel
+- [ ] Start a secret chat from a contact
+- [ ] Page call-message history
+- [ ] Post a normalized photo story and a TDLib-compatible video story

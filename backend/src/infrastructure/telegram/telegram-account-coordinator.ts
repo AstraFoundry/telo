@@ -10,6 +10,8 @@ import type {
   ChatPageCursorDto,
   ChatPageDto,
   ChatPageInput,
+  CreateTelegramChannelInput,
+  CreateTelegramGroupInput,
   CurrentUserDto,
   DeleteMessageInput,
   EditMessageInput,
@@ -22,6 +24,8 @@ import type {
   MessageSearchPageDto,
   MessageSearchPageInput,
   PeerProfileDto,
+  PostedStoryDto,
+  PostStoryInput,
   SetMessageReactionInput,
   StickerItemDto,
   StickerCatalogDto,
@@ -31,6 +35,8 @@ import type {
   TelegramAuthState,
   TelegramLoginConfigurationDto,
   TelegramLoginInput,
+  TelegramCallPageDto,
+  TelegramContactDto,
   TelegramWorkspaceEvent,
 } from "../../../../contracts/src/ipc";
 import type {
@@ -315,6 +321,33 @@ export class TelegramAccountCoordinator implements TelegramRepository {
 
   createSecretChat(userId: string): Promise<ChatDto> {
     return this.delegate().createSecretChat(userId);
+  }
+
+  listContacts(): Promise<ReadonlyArray<TelegramContactDto>> {
+    return this.delegate().listContacts();
+  }
+
+  openPrivateChat(userId: string): Promise<ChatDto> {
+    return this.delegate().openPrivateChat(userId);
+  }
+
+  createGroup(input: CreateTelegramGroupInput): Promise<ChatDto> {
+    return this.delegate().createGroup(input);
+  }
+
+  createChannel(input: CreateTelegramChannelInput): Promise<ChatDto> {
+    return this.delegate().createChannel(input);
+  }
+
+  listCalls(cursor: string | null = null): Promise<TelegramCallPageDto> {
+    return this.delegate().listCalls(cursor);
+  }
+
+  postStory(
+    file: TelegramUploadFile,
+    input: PostStoryInput,
+  ): Promise<PostedStoryDto> {
+    return this.delegate().postStory(file, input);
   }
 
   openSavedMessages(): Promise<ChatDto> {

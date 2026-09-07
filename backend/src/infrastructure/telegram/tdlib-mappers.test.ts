@@ -184,6 +184,27 @@ describe("tdlib mappers", () => {
     });
   });
 
+  it("maps canSendMessages from the chat context", () => {
+    expect(mapChat(chat({}), emptyContext).canSendMessages).toBe(true);
+    expect(
+      mapChat(chat({}), {
+        ...emptyContext,
+        canSendMessages: () => false,
+      }).canSendMessages,
+    ).toBe(false);
+  });
+
+  it("maps sticker and media send flags from the chat context", () => {
+    const mapped = mapChat(chat({}), {
+      ...emptyContext,
+      canSendStickers: () => false,
+      canSendMedia: () => false,
+    });
+    expect(mapped.canSendMessages).toBe(true);
+    expect(mapped.canSendStickers).toBe(false);
+    expect(mapped.canSendMedia).toBe(false);
+  });
+
   it("sorts TDLib list-order strings highest first", () => {
     expect(compareListOrder("9", "10")).toBeGreaterThan(0);
     expect(compareListOrder("100", "20")).toBeLessThan(0);
