@@ -10,6 +10,11 @@ import { copy } from "shared/config/copy";
  * the OS buttons. They sit in the header's document flow — never `position:
  * fixed` over the title — matching Electron's custom title-bar guidance
  * (`-webkit-app-region: no-drag` on the controls, drag on the bar).
+ *
+ * They keep the icon button's own 40px box rather than shrinking to the 28px
+ * an OS titlebar draws: this is a web surface, the pointer floor applies to it
+ * like every other control, and the glyphs inside stay small so the bar still
+ * reads as chrome.
  */
 export function WindowControls() {
   if (!window.telo.shell.frameless) return null;
@@ -43,7 +48,6 @@ function Control({
       size="icon"
       variant="ghost"
       aria-label={label}
-      className="size-7"
       onClick={() => void window.telo.shell.windowControl(action)}
     >
       {children}

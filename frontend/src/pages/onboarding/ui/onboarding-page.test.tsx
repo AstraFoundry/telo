@@ -44,8 +44,13 @@ describe("OnboardingPage", () => {
     } as unknown as typeof IntersectionObserver;
   });
 
+  // Held for the whole suite so a test can shape the double it renders
+  // against; writing `window.telo` directly would fight the contract, which
+  // marks these fields readonly for the renderer on purpose.
+  let telo: ReturnType<typeof installTeloApiMock>;
+
   beforeEach(() => {
-    installTeloApiMock();
+    telo = installTeloApiMock();
     useTelegramStore.setState({
       auth: null,
       configuration: null,
@@ -76,7 +81,7 @@ describe("OnboardingPage", () => {
   });
 
   it("offers window controls on the welcome step when the window is frameless", () => {
-    window.telo.shell.frameless = true;
+    telo.shell.frameless = true;
     render(<OnboardingPage />);
 
     expect(screen.getByRole("button", { name: copy.windowClose })).toBeTruthy();

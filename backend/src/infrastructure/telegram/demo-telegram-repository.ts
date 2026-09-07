@@ -69,7 +69,12 @@ const SHARED_MEDIA_KINDS = new Set(["photo", "video", "file"]);
 const DEMO_BLURRED_THUMBNAIL =
   "data:image/jpeg;base64,/9j/2wBDAAEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/wAALCAACAAIBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAAAP/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AP//Z";
 
-const INITIAL_CHATS: ReadonlyArray<ChatDto> = [
+/**
+ * Seeds typed before the placeholder pass. An array literal sitting in front
+ * of `.map` gets no contextual type, so `kind: "saved"` would widen to
+ * `string` and the mapped result would no longer be a `ChatDto`.
+ */
+const INITIAL_CHAT_SEEDS: ReadonlyArray<Omit<ChatDto, "avatarPlaceholder">> = [
   {
     id: "saved",
     title: "Saved Messages",
@@ -192,10 +197,14 @@ const INITIAL_CHATS: ReadonlyArray<ChatDto> = [
     folderId: null,
     secretState: "ready",
   },
-].map((chat, index) => ({
-  ...chat,
-  avatarPlaceholder: mapAvatarPlaceholder(chat.title, index % 7),
-}));
+];
+
+const INITIAL_CHATS: ReadonlyArray<ChatDto> = INITIAL_CHAT_SEEDS.map(
+  (chat, index) => ({
+    ...chat,
+    avatarPlaceholder: mapAvatarPlaceholder(chat.title, index % 7),
+  }),
+);
 
 // Demo auto-reply copy, keyed by chat id; falls back to a generic reply for
 // any chat added later (e.g. by forwardMessage into a new target).
