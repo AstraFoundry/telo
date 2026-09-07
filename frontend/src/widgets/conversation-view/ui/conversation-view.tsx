@@ -345,6 +345,13 @@ function MessageHoverRail({
 
 const DELIVERY_CROSSFADE = { duration: 0.14, ease: EASE_OUT } as const;
 
+// The author line above a run. Telegram sets it in the message font, medium
+// weight and peer colour, flush with the bubble's text edge (tdesktop
+// msgNameStyle / Web K .name); the registry's 11px muted header is a
+// timestamp style, not a name.
+const MESSAGE_AUTHOR_CLASS =
+  "px-[var(--message-bubble-padding-x)] text-callout leading-none font-medium text-primary";
+
 function ChatTypingIndicator({ className }: { className?: string }) {
   const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   if (reduce) {
@@ -930,7 +937,9 @@ function ConversationMessage({
       <MessageContent className="relative gap-1">
         {/* Telegram names the author once per run, on its first row. */}
         {!message.outgoing && groupStart ? (
-          <MessageHeader>{message.senderName}</MessageHeader>
+          <MessageHeader className={MESSAGE_AUTHOR_CLASS}>
+            {message.senderName}
+          </MessageHeader>
         ) : null}
         <ContextMenu
           onOpenChange={(open) => {
@@ -969,7 +978,7 @@ function ConversationMessage({
                     metrics, which live as tokens in app/styles/index.css. */}
                 <MessageBubbleContent
                   ref={bubbleContentRef}
-                  className={`max-w-[var(--message-bubble-max-width)] rounded-[var(--message-bubble-radius)] px-[var(--message-bubble-padding-x)] py-[var(--message-bubble-padding-y)] text-[length:var(--message-font-size,14px)] leading-[var(--message-line-height)] ${groupedCorners}`}
+                  className={`max-w-[var(--message-bubble-max-width)] rounded-[var(--message-bubble-radius)] px-[var(--message-bubble-padding-x)] py-[var(--message-bubble-padding-y)] text-[length:var(--message-font-size,14px)] leading-[var(--message-line-height)] text-pretty ${groupedCorners}`}
                 >
                   {message.forwardedFrom ? (
                     <ForwardedAttribution forward={message.forwardedFrom} />
@@ -1426,10 +1435,12 @@ function AlbumMessage({
       <MessageAuthorAvatar message={first} visible={showAvatar} footerHeight />
       <MessageContent className="gap-1">
         {!first.outgoing && groupStart ? (
-          <MessageHeader>{first.senderName}</MessageHeader>
+          <MessageHeader className={MESSAGE_AUTHOR_CLASS}>
+            {first.senderName}
+          </MessageHeader>
         ) : null}
         <MessageBubble variant={first.outgoing ? "tint" : "soft"}>
-          <MessageBubbleContent className="max-w-[var(--message-bubble-max-width)] rounded-[var(--message-bubble-radius)] px-[var(--message-bubble-padding-x)] py-[var(--message-bubble-padding-y)] text-[length:var(--message-font-size,14px)] leading-[var(--message-line-height)]">
+          <MessageBubbleContent className="max-w-[var(--message-bubble-max-width)] rounded-[var(--message-bubble-radius)] px-[var(--message-bubble-padding-x)] py-[var(--message-bubble-padding-y)] text-[length:var(--message-font-size,14px)] leading-[var(--message-line-height)] text-pretty">
             {first.forwardedFrom ? (
               <ForwardedAttribution forward={first.forwardedFrom} />
             ) : null}
@@ -2028,20 +2039,22 @@ export function ConversationView() {
         ) : null}
         <div className="min-w-0 flex-1">
           {/* deslop-ignore-next-line 12 */}
-          <h1 className="truncate text-base font-semibold">
+          <h1 className="truncate text-base font-semibold tracking-title">
             {activeChat ? displayChatTitle(activeChat) : ""}
           </h1>
           {activeChat?.kind === "secret" ? (
-            <span className="flex items-center gap-1 text-xs text-muted-foreground">
+            <span className="flex items-center gap-1 text-callout text-muted-foreground">
               <Lock aria-hidden="true" className="size-3" />
               {secretChatStatus(activeChat.secretState)}
             </span>
           ) : activeChat?.typing ? (
-            <span className="block text-xs text-muted-foreground">
+            <span className="block text-callout text-muted-foreground">
               <ChatTypingIndicator />
             </span>
           ) : activeChat?.presence === "online" ? (
-            <span className="block text-xs text-primary">{copy.online}</span>
+            <span className="block text-callout text-primary">
+              {copy.online}
+            </span>
           ) : null}
         </div>
         <div className="flex gap-1 [app-region:no-drag]">

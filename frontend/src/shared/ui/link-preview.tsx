@@ -40,7 +40,7 @@ export function LinkPreview({
         ) : null}
         <span className="block truncate text-sm font-medium">{heading}</span>
         {preview.description ? (
-          <span className="mt-0.5 line-clamp-2 block text-xs text-muted-foreground">
+          <span className="mt-0.5 line-clamp-2 block text-callout text-pretty text-muted-foreground">
             {preview.description}
           </span>
         ) : null}
