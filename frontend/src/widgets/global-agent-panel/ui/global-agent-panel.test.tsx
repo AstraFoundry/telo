@@ -4,7 +4,15 @@ import "../../../shared/test/test-environment";
 
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 
 import type {
   AgentConfigurationDto,
@@ -16,6 +24,7 @@ import { AGENT_OAUTH_PROVIDERS } from "../../../../../contracts/src/ipc";
 import { useAgentStore } from "../../../entities/agent";
 import { useChatStore } from "../../../entities/chat";
 import { installTeloApiMock } from "../../../shared/test/mock-telo";
+import { stubViewportMetrics } from "../../../shared/test/viewport-metrics";
 
 import { GlobalAgentPanel } from "./global-agent-panel";
 
@@ -421,8 +430,14 @@ describe("GlobalAgentPanel", () => {
 });
 
 describe("GlobalAgentPanel suggestions and citations", () => {
+  let restoreViewportMetrics: (() => void) | null = null;
+
   beforeAll(installBrowserStubs);
   beforeEach(resetStores);
+  afterEach(() => {
+    restoreViewportMetrics?.();
+    restoreViewportMetrics = null;
+  });
 
   function unreadDesignChat(): void {
     useChatStore.setState({
@@ -614,6 +629,13 @@ describe("GlobalAgentPanel suggestions and citations", () => {
       messages: [{ id: "a-1", from: "assistant", body: "Done." }],
     });
 
+    // The geometry has to exist before the scroller seeds its metrics on
+    // mount; defining it afterwards reads as a viewport resize, which the
+    // scroller deliberately ignores.
+    restoreViewportMetrics = stubViewportMetrics({
+      clientHeight: 300,
+      scrollHeight: 1000,
+    });
     render(<GlobalAgentPanel onOpenSettings={vi.fn()} />);
     expect(
       screen.queryByRole("button", { name: "Jump to latest messages" }),
@@ -622,8 +644,6 @@ describe("GlobalAgentPanel suggestions and citations", () => {
     const viewport = screen.getByRole("region", {
       name: "Agent conversation",
     });
-    Object.defineProperty(viewport, "scrollHeight", { value: 1000 });
-    Object.defineProperty(viewport, "clientHeight", { value: 300 });
     viewport.scrollTop = 100;
     viewport.dispatchEvent(new Event("scroll"));
 

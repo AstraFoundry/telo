@@ -321,10 +321,15 @@ export function MessageScroller({
       updateActiveRailItem();
       return;
     }
-    // Shrinking the viewport clips the live edge without a user gesture.
-    // Wheel/touch/keys already call leaveLiveEdge; keep following here so
-    // streamed output can re-pin instead of parking a jump control.
-    if (followingRef.current && viewportResized) {
+    // Growing the content pushes the live edge away from a scroll position
+    // that was pinned to it a moment ago, exactly like shrinking the viewport
+    // clips it — neither is a user gesture. Streamed text grows every frame,
+    // so the scroll event this re-pin schedules routinely lands after the
+    // next growth and reports a distance the reader never opened. Wheel,
+    // touch and keys call leaveLiveEdge themselves, so keep following here
+    // and let the follow frame re-pin instead of parking a jump control.
+    const contentGrew = scrollHeight > previous.scrollHeight;
+    if (followingRef.current && (viewportResized || contentGrew)) {
       updateActiveRailItem();
       return;
     }

@@ -73,7 +73,6 @@ export interface PostedStoryDto {
 }
 
 export interface ChatDto {
-
   readonly id: string;
   readonly title: string;
   readonly preview: string;

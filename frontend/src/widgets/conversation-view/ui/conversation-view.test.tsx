@@ -22,6 +22,7 @@ import {
   installTeloApiMock,
   testPreferences,
 } from "../../../shared/test/mock-telo";
+import { stubViewportMetrics } from "../../../shared/test/viewport-metrics";
 
 function stubMatchMedia(dark: boolean, reducedMotion = false): void {
   // jsdom does not implement matchMedia, which the preferences slice applies
@@ -158,6 +159,8 @@ function avatarSlot(messageId: string): HTMLElement {
 }
 
 describe("ConversationView", () => {
+  let restoreViewportMetrics: (() => void) | null = null;
+
   beforeEach(() => {
     vi.resetModules();
     stubMatchMedia(false);
@@ -165,6 +168,8 @@ describe("ConversationView", () => {
   });
 
   afterEach(() => {
+    restoreViewportMetrics?.();
+    restoreViewportMetrics = null;
     vi.restoreAllMocks();
   });
 
@@ -1137,14 +1142,17 @@ describe("ConversationView", () => {
   });
 
   it("shows a BEUI page-down control away from the live edge", async () => {
+    // Seeded before the render: the scroller records its viewport metrics
+    // when the ref attaches, and a clientHeight that changes afterwards is
+    // read as a resize, which never drops the live edge.
+    restoreViewportMetrics = stubViewportMetrics({
+      clientHeight: 400,
+      scrollHeight: 1_000,
+    });
     await renderView({
       messages: [message({ id: "m1", body: "Message body" })],
     });
     const viewport = screen.getByRole("region", { name: copy.conversation });
-    Object.defineProperties(viewport, {
-      scrollHeight: { configurable: true, value: 1_000 },
-      clientHeight: { configurable: true, value: 400 },
-    });
     const scrollTo = vi.fn(({ top }: ScrollToOptions) => {
       viewport.scrollTop = Number(top);
     });
