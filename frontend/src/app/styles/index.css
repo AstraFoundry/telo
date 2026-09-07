@@ -152,10 +152,6 @@
     text-size-adjust: 100%;
   }
 
-  html.frameless {
-    --window-controls-start: 5.25rem;
-  }
-
   body {
     margin: 0;
     height: 100vh;
@@ -185,11 +181,7 @@
   }
 
   .window-titlebar-safe-leading {
-    padding-inline-start: max(
-      0.75rem,
-      env(titlebar-area-x, 0px),
-      var(--window-controls-start, 0px)
-    );
+    padding-inline-start: max(0.75rem, env(titlebar-area-x, 0px));
   }
 
   .window-titlebar-safe-trailing {

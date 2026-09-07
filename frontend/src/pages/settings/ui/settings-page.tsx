@@ -6,7 +6,7 @@ import { AgentConfigurationForm } from "features/configure-agent";
 import { AgentAutomationSettings } from "features/manage-agent-automation";
 import { KeywordFoldersSettings } from "features/manage-keyword-folders";
 import { copy } from "shared/config/copy";
-import { Button, EASE_OUT, Tooltip } from "shared/ui";
+import { Button, EASE_OUT, Tooltip, WindowControls } from "shared/ui";
 
 import { AccountSection } from "./sections/account-section";
 import { AppearanceSection } from "./sections/appearance-section";
@@ -24,12 +24,19 @@ interface SettingsPageProps {
   onLoggedOut?(): void;
   /** Pane to open on, for callers that link to one setting in particular. */
   initialSection?: SettingsSectionId;
+  /**
+   * Narrow workspace only: the chat list (and its window controls) is hidden,
+   * so close/min/max move into this header. Wide layout keeps them in the
+   * sidebar — putting them here would paint Close in the centre column.
+   */
+  includeWindowControls?: boolean;
 }
 
 export function SettingsPage({
   onBack,
   onLoggedOut,
   initialSection = "account",
+  includeWindowControls = false,
 }: SettingsPageProps) {
   const [section, setSection] = useState<SettingsSectionId>(initialSection);
   const [query, setQuery] = useState("");
@@ -41,6 +48,7 @@ export function SettingsPage({
     // no way to reach the bottom.
     <main className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
       <header className="window-titlebar-safe-trailing flex h-14 shrink-0 items-center gap-2 pl-3 [app-region:drag]">
+        {includeWindowControls ? <WindowControls /> : null}
         <Tooltip content={copy.backToConversation}>
           <Button
             size="icon"

@@ -6,9 +6,8 @@ import { useTelegramStore } from "entities/telegram";
 import { GlobalSearchPalette } from "features/chat-search";
 import { OnboardingPage } from "pages/onboarding";
 import { SettingsPage, type SettingsSectionId } from "pages/settings";
-import { WorkspacePage } from "pages/workspace";
+import { WorkspacePage, useNarrowWorkspace } from "pages/workspace";
 import { ConversationView } from "widgets/conversation-view";
-import { WindowControls } from "shared/ui";
 
 import { useChatPreferenceSync } from "./chat-preference-sync";
 import { MotionPreferences } from "./motion-preferences";
@@ -17,7 +16,6 @@ import { useTeloLinks } from "./telo-links";
 export function App() {
   return (
     <MotionPreferences>
-      <WindowControls />
       <AppSurfaces />
     </MotionPreferences>
   );
@@ -25,13 +23,6 @@ export function App() {
 
 function AppSurfaces() {
   useChatPreferenceSync();
-  useEffect(() => {
-    document.documentElement.classList.toggle(
-      "frameless",
-      window.telo.shell.frameless,
-    );
-    return () => document.documentElement.classList.remove("frameless");
-  }, []);
   const load = useChatStore((state) => state.load);
   const connectionState = useChatStore((state) => state.connectionState);
   const auth = useTelegramStore((state) => state.auth);
@@ -56,6 +47,7 @@ function AppSurfaces() {
     demo === true || auth?.status === "ready" || auth?.status === "restoring";
   const workspaceReady = demo === true || auth?.status === "ready";
 
+  const narrow = useNarrowWorkspace();
   const [settingsSection, setSettingsSection] =
     useState<SettingsSectionId>("account");
   const showConversation = useCallback(() => setSurface("conversation"), []);
@@ -165,6 +157,7 @@ function AppSurfaces() {
         {surface === "settings" ? (
           <SettingsPage
             initialSection={settingsSection}
+            includeWindowControls={narrow}
             onBack={() => setSurface("conversation")}
             onLoggedOut={() => {
               setDemo(false);

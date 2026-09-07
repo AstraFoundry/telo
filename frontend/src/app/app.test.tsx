@@ -32,6 +32,7 @@ vi.mock("pages/workspace", () => ({
   WorkspacePage: ({ children }: { readonly children?: ReactNode }) => (
     <div data-testid="workspace-page">{children}</div>
   ),
+  useNarrowWorkspace: () => false,
 }));
 vi.mock("pages/settings", () => ({
   SettingsPage: () => <div data-testid="settings-page" />,
