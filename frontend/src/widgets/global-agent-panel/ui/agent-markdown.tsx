@@ -227,6 +227,9 @@ export function AgentMarkdown({
       <CitationIndexesContext.Provider value={citationIndexes}>
         <StreamingContext.Provider value={streaming}>
           <Streamdown
+            // Block rhythm of one half-line between paragraphs; the rest of
+            // the reply typography lives on the StreamingResponse container.
+            className="space-y-2"
             mode={streaming ? "streaming" : "static"}
             isAnimating={streaming}
             animated={false}

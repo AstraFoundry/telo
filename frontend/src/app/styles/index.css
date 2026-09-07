@@ -29,6 +29,21 @@
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
   --shadow-column: var(--shadow-column);
+
+  /* Type scale below Tailwind's text-sm (14/20). The body is 14px, one step
+     above tdesktop's 13px base and two below the 16px of Telegram Web, so
+     its secondary sizes scale with it: 13px carries the chat-list preview
+     and header status (Web K sets these one step under the title), 11px
+     carries meta — times, badges, footers — which tdesktop draws at fsize-2.
+     Line heights stay near 1.3 so dense rows keep their rhythm. */
+  --text-callout: 13px;
+  --text-callout--line-height: 18px;
+  --text-caption: 11px;
+  --text-caption--line-height: 14px;
+
+  /* Titles from 16px up close their tracking slightly, the way SF Pro's
+     size-specific tracking table does. Body and meta sizes keep 0. */
+  --tracking-title: -0.01em;
 }
 
 :root {

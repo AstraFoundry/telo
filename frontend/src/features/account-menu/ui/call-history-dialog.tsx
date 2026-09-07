@@ -155,7 +155,7 @@ export function CallHistoryDialog({
                             : null}
                         </span>
                       </span>
-                      <span className="flex flex-col items-end gap-1 text-[11px] text-muted-foreground">
+                      <span className="flex flex-col items-end gap-1 text-caption text-muted-foreground">
                         <Media aria-hidden="true" className="size-4" />
                         {new Intl.DateTimeFormat(undefined, {
                           month: "short",

@@ -79,7 +79,7 @@ export function PinnedMessageBar({ chatId }: PinnedMessageBarProps) {
         className="size-4 shrink-0 text-primary"
       />
       {count > 1 ? (
-        <span className="shrink-0 text-[11px] font-medium text-primary tabular-nums">
+        <span className="shrink-0 text-caption font-medium text-primary tabular-nums">
           {index + 1}/{count}
         </span>
       ) : null}

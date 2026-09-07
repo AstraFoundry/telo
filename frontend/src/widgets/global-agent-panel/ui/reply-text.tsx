@@ -59,7 +59,7 @@ export function CitationMark({ index, href }: { index: number; href: string }) {
         // The mark is 16px tall and sits on the baseline; the pseudo-element
         // grows the hit area to a comfortable target without moving text.
         // `no-underline!` outranks the response body's descendant `a` rule.
-        className="relative mx-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded-[5px] bg-foreground/8 px-1 text-[10px] leading-none font-medium tabular-nums text-muted-foreground no-underline! transition-colors hover:bg-foreground/14 hover:text-foreground after:absolute after:-inset-1.5 after:content-['']"
+        className="relative mx-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded-[5px] bg-foreground/8 px-1 text-caption leading-none font-medium tabular-nums text-muted-foreground no-underline! transition-colors hover:bg-foreground/14 hover:text-foreground after:absolute after:-inset-1.5 after:content-['']"
       >
         {index}
       </a>
