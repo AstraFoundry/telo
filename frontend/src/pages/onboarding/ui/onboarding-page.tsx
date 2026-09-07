@@ -8,7 +8,13 @@ import {
   useConnectionForm,
 } from "features/connect-telegram";
 import { copy } from "shared/config/copy";
-import { Button, EASE_OUT, StatefulButton, TextReveal } from "shared/ui";
+import {
+  Button,
+  EASE_OUT,
+  StatefulButton,
+  TextReveal,
+  WindowControls,
+} from "shared/ui";
 
 type ShellStep = "welcome" | "auth";
 
@@ -85,21 +91,26 @@ export function OnboardingPage() {
             transition={{ duration: 0.3, ease: EASE_OUT }}
             className="absolute inset-0 flex flex-col"
           >
-            {shellStep === "auth" || addingAccount ? (
-              <header className="window-titlebar-safe-trailing flex h-14 shrink-0 items-center pl-3">
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  aria-label={
-                    shellStep === "auth" ? copy.back : copy.cancelAddAccount
-                  }
-                  onClick={
-                    shellStep === "auth" ? handleBack : cancelAddingAccount
-                  }
-                  className="size-11 rounded-full"
-                >
-                  <ArrowLeft />
-                </Button>
+            {window.telo.shell.frameless ||
+            shellStep === "auth" ||
+            addingAccount ? (
+              <header className="flex h-14 shrink-0 items-center gap-1 px-3 [app-region:drag]">
+                <WindowControls />
+                {shellStep === "auth" || addingAccount ? (
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    aria-label={
+                      shellStep === "auth" ? copy.back : copy.cancelAddAccount
+                    }
+                    onClick={
+                      shellStep === "auth" ? handleBack : cancelAddingAccount
+                    }
+                    className="size-11 rounded-full [app-region:no-drag]"
+                  >
+                    <ArrowLeft />
+                  </Button>
+                ) : null}
               </header>
             ) : null}
             <div className="grid flex-1 place-items-center px-6">

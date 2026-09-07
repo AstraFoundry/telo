@@ -118,6 +118,7 @@ async function renderSidebar({
   activeFolderId = null,
   activeChatId = null,
   loading = false,
+  frameless = false,
 }: {
   prefs?: Partial<UserPreferencesDto>;
   chats?: ChatDto[];
@@ -125,8 +126,10 @@ async function renderSidebar({
   activeFolderId?: number | null;
   activeChatId?: string | null;
   loading?: boolean;
+  frameless?: boolean;
 } = {}) {
   const telo = installTeloApiMock();
+  telo.shell.frameless = frameless;
   telo.preferences.get.mockResolvedValue(preferences(prefs));
   telo.preferences.update.mockResolvedValue(preferences(prefs));
   const { useChatStore } = await import("../../../entities/chat");
@@ -228,6 +231,20 @@ describe("ConversationSidebar", () => {
 
     act(() => useChatStore.setState({ connectionState: "connected" }));
     expect(screen.getByText(copy.appName)).toBeTruthy();
+  });
+
+  it("places frameless window controls in the header before the app title", async () => {
+    await renderSidebar({ frameless: true });
+
+    const header = screen.getByText(copy.appName).closest("header");
+    expect(header).not.toBeNull();
+    const close = within(header!).getByRole("button", {
+      name: copy.windowClose,
+    });
+    const title = within(header!).getByText(copy.appName);
+    expect(
+      close.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   it("notifies the parent even when the chat is already active", async () => {

@@ -198,4 +198,18 @@ describe("WorkspacePage", () => {
     ).not.toBeNull();
     expect(screen.queryByText("Conversation surface")).toBeNull();
   });
+
+  it("keeps frameless window controls next to the back control on the narrow conversation", () => {
+    window.telo.shell.frameless = true;
+    stubMatchMedia(true);
+    useChatStore.setState({ activeChatId: "chat-1" });
+    renderPage(true);
+
+    const back = screen.getByRole("button", { name: copy.backToChats });
+    const close = screen.getByRole("button", { name: copy.windowClose });
+    expect(back.parentElement?.contains(close)).toBe(true);
+    expect(
+      close.compareDocumentPosition(back) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
 });

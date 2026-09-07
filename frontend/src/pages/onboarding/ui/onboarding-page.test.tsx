@@ -75,6 +75,16 @@ describe("OnboardingPage", () => {
     expect(screen.queryByLabelText(copy.phoneNumber)).toBeNull();
   });
 
+  it("offers window controls on the welcome step when the window is frameless", () => {
+    window.telo.shell.frameless = true;
+    render(<OnboardingPage />);
+
+    expect(screen.getByRole("button", { name: copy.windowClose })).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: copy.startMessaging }),
+    ).toBeTruthy();
+  });
+
   it("swaps to the phone step in place from the primary action", async () => {
     const user = userEvent.setup();
     render(<OnboardingPage />);
