@@ -50,6 +50,7 @@ import {
   MessageTyping,
   Skeleton,
   SkeletonGroup,
+  WindowControls,
 } from "shared/ui";
 
 // "system" defers to the locale's hour12 default, while 12h/24h pin it
@@ -656,8 +657,9 @@ export function ConversationSidebar({
       className="flex h-full min-h-0 min-w-0 flex-col"
       aria-label={copy.chats}
     >
-      <header className="window-titlebar-safe-leading window-titlebar-safe-trailing h-14 [app-region:drag]">
-        <div className="window-titlebar-safe-content">
+      <header className="window-titlebar-safe-leading window-titlebar-safe-trailing flex h-14 items-center gap-1 [app-region:drag]">
+        <WindowControls />
+        <div className="window-titlebar-safe-content min-w-0 flex-1">
           <strong
             className="truncate text-base tracking-tight"
             aria-live="polite"

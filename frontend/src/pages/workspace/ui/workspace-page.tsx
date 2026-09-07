@@ -19,7 +19,7 @@ import {
 } from "entities/preferences";
 import { copy } from "shared/config/copy";
 import { cn } from "shared/lib/cn";
-import { Button } from "shared/ui";
+import { Button, WindowControls } from "shared/ui";
 
 import { useNarrowWorkspace } from "../model/layout";
 import { ColumnResizeHandle } from "./column-resize-handle";
@@ -103,15 +103,18 @@ export function WorkspacePage({
                 avatar spot; the layout owns it because conversation-view
                 internals must stay untouched. */}
             {showBackToChats ? (
-              <Button
-                size="icon"
-                variant="ghost"
-                aria-label={copy.backToChats}
-                className="absolute top-2 left-2 z-30 size-10 bg-card [app-region:no-drag]"
-                onClick={() => setChatListVisible(true)}
-              >
-                <ArrowLeft />
-              </Button>
+              <div className="absolute top-2 left-2 z-30 flex items-center gap-0.5">
+                <WindowControls />
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  aria-label={copy.backToChats}
+                  className="size-10 bg-card [app-region:no-drag]"
+                  onClick={() => setChatListVisible(true)}
+                >
+                  <ArrowLeft />
+                </Button>
+              </div>
             ) : null}
             {/* The narrow shell has no right column, so the chat profile
                 replaces the conversation instead (list↔detail convention). */}
