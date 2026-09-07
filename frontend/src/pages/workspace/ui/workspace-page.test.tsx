@@ -42,9 +42,14 @@ describe("WorkspacePage", () => {
     window.HTMLElement.prototype.releasePointerCapture = () => {};
   });
 
+  // Held for the whole suite so a test can shape the double it renders
+  // against; writing `window.telo` directly would fight the contract, which
+  // marks these fields readonly for the renderer on purpose.
+  let telo: ReturnType<typeof installTeloApiMock>;
+
   beforeEach(async () => {
     stubMatchMedia(false);
-    const telo = installTeloApiMock();
+    telo = installTeloApiMock();
     telo.preferences.update.mockResolvedValue(await telo.preferences.get());
     telo.agent.listThreads.mockResolvedValue({
       threads: [],
@@ -200,7 +205,7 @@ describe("WorkspacePage", () => {
   });
 
   it("keeps frameless window controls next to the back control on the narrow conversation", () => {
-    window.telo.shell.frameless = true;
+    telo.shell.frameless = true;
     stubMatchMedia(true);
     useChatStore.setState({ activeChatId: "chat-1" });
     renderPage(true);
