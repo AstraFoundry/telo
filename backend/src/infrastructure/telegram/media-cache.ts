@@ -97,18 +97,38 @@ export async function touchMediaCacheFile(filePath: string): Promise<void> {
   await utimes(filePath, now, now);
 }
 
-const AVATAR_FILE_PREFIX = "avatar_";
+/** Current on-disk generation: 640px `big` (or ≥320px `chatPhoto` size). */
+const SHARP_AVATAR_PREFIX = "avatar2_";
+/** Pre-sharp 160px `small` files; still painted until the 640px copy lands. */
+const LEGACY_AVATAR_PREFIX = "avatar_";
+
+function sanitizeAvatarPeerId(chatId: string): string {
+  return chatId.replace(/[^A-Za-z0-9_-]/g, "_");
+}
 
 /** Flat cache file for a dialog photo; the media protocol rejects nested paths. */
 export function avatarCacheFileName(chatId: string): string {
-  return `${AVATAR_FILE_PREFIX}${chatId.replace(/[^A-Za-z0-9_-]/g, "_")}.jpg`;
+  return `${SHARP_AVATAR_PREFIX}${sanitizeAvatarPeerId(chatId)}.jpg`;
 }
 
 export function chatIdFromAvatarFileName(fileName: string): string | null {
-  if (!fileName.startsWith(AVATAR_FILE_PREFIX) || !fileName.endsWith(".jpg")) {
-    return null;
+  if (!fileName.endsWith(".jpg")) return null;
+  if (fileName.startsWith(SHARP_AVATAR_PREFIX)) {
+    return fileName.slice(SHARP_AVATAR_PREFIX.length, -".jpg".length);
   }
-  return fileName.slice(AVATAR_FILE_PREFIX.length, -".jpg".length);
+  if (fileName.startsWith(LEGACY_AVATAR_PREFIX)) {
+    return fileName.slice(LEGACY_AVATAR_PREFIX.length, -".jpg".length);
+  }
+  return null;
+}
+
+export function isSharpAvatarCacheFile(fileName: string): boolean {
+  return fileName.startsWith(SHARP_AVATAR_PREFIX) && fileName.endsWith(".jpg");
+}
+
+/** True when the protocol URL points at a 640px-generation cache file. */
+export function isSharpAvatarCacheUrl(url: string): boolean {
+  return url.includes(SHARP_AVATAR_PREFIX);
 }
 
 export function avatarMediaUrl(fileName: string): string {
@@ -130,6 +150,14 @@ export async function listCachedAvatarUrls(
   for (const entry of entries) {
     const chatId = chatIdFromAvatarFileName(entry);
     if (!chatId) continue;
+    const existing = urls.get(chatId);
+    if (
+      existing &&
+      isSharpAvatarCacheUrl(existing) &&
+      !isSharpAvatarCacheFile(entry)
+    ) {
+      continue;
+    }
     urls.set(chatId, avatarMediaUrl(entry));
   }
   return urls;
