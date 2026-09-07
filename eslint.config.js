@@ -143,13 +143,16 @@ export default tseslint.config(
     },
   },
   {
-    // The shared/ui barrel and its motion seam are the only modules allowed to
-    // re-export from the vendored beui registry; every other module goes through
-    // them. The seam exists because the barrel re-exports the primitives that need
-    // these constants, so those primitives cannot import the barrel back.
+    // Only modules the shared/ui barrel itself exports may reach the vendored
+    // beui registry; every other module goes through the barrel. They are
+    // exempt for one reason: the barrel re-exports them, so importing it back
+    // would be a cycle. That covers the barrel, the motion seam that carries
+    // the constants those primitives need, and the window controls, which are
+    // three sized `Button`s and cannot express that as a `PressableBlock`.
     files: [
       "frontend/src/shared/ui/index.ts",
       "frontend/src/shared/ui/motion.ts",
+      "frontend/src/shared/ui/window-controls.tsx",
     ],
     rules: {
       "no-restricted-imports": "off",

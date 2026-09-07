@@ -9,8 +9,15 @@ import type {
   UserPreferencesDto,
 } from "../../../../contracts/src/ipc";
 
+/**
+ * The contract's shape with every function swapped for a vitest mock, and
+ * `readonly` stripped. The contract marks its value fields readonly because
+ * the renderer must not write them; a test double exists precisely to be
+ * written — `telo.shell.frameless = true` is how a suite picks the platform
+ * it is exercising.
+ */
 type MockedFunctions<T> = {
-  [K in keyof T]: T[K] extends (...args: never[]) => unknown
+  -readonly [K in keyof T]: T[K] extends (...args: never[]) => unknown
     ? Mock<T[K]>
     : MockedFunctions<T[K]>;
 };
