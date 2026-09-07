@@ -123,6 +123,38 @@ function tdSticker(id: number): Td.sticker {
   } as unknown as Td.sticker;
 }
 
+function tdFile(
+  id: number,
+  extra: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return {
+    id,
+    size: 4,
+    local: {
+      is_downloading_completed: false,
+      is_downloading_active: false,
+      path: "",
+      downloaded_size: 0,
+    },
+    ...extra,
+  };
+}
+
+function tdPhotoSize(
+  type: string,
+  width: number,
+  height: number,
+  fileId: number,
+): Record<string, unknown> {
+  return {
+    _: "photoSize",
+    type,
+    width,
+    height,
+    photo: tdFile(fileId),
+  };
+}
+
 describe("TdlibTelegramRepository", () => {
   function setup() {
     const bridge = new FakeBridge();
@@ -459,7 +491,7 @@ describe("TdlibTelegramRepository", () => {
       };
     });
     const me = await repository.getCurrentUser();
-    expect(me.avatarDataUrl).toMatch(/telo-media:\/\/cache\/avatar_1\.jpg/);
+    expect(me.avatarDataUrl).toMatch(/telo-media:\/\/cache\/avatar2_1\.jpg/);
     expect(me.avatarPending).toBe(false);
   });
 
@@ -610,7 +642,7 @@ describe("TdlibTelegramRepository", () => {
           (item as { user_id?: number }).user_id === 1,
       ),
     ).toBe(true);
-    expect(me.avatarDataUrl).toMatch(/telo-media:\/\/cache\/avatar_1\.jpg/);
+    expect(me.avatarDataUrl).toMatch(/telo-media:\/\/cache\/avatar2_1\.jpg/);
   });
 
   it("loads the current user photo from getUserFullInfo when getUser omits it", async () => {
@@ -670,7 +702,61 @@ describe("TdlibTelegramRepository", () => {
         (item) => (item as { _: string })._ === "getUserFullInfo",
       ),
     ).toBe(true);
-    expect(me.avatarDataUrl).toMatch(/telo-media:\/\/cache\/avatar_1\.jpg/);
+    expect(me.avatarDataUrl).toMatch(/telo-media:\/\/cache\/avatar2_1\.jpg/);
+  });
+
+  it("skips the 40px thumbnail when getUserFullInfo lists larger sizes", async () => {
+    const { repository, bridge } = setup();
+    const source = path.join(
+      os.tmpdir(),
+      `telo-avatar-me-full-sizes-${Date.now()}.jpg`,
+    );
+    writeFileSync(source, "jpeg");
+    bridge.handlers.set("getMe", () => tdUser(1));
+    bridge.handlers.set("getUser", () => tdUser(1));
+    bridge.handlers.set("getUserFullInfo", () => ({
+      _: "userFullInfo",
+      photo: {
+        _: "chatPhoto",
+        id: "9",
+        added_date: 1,
+        sizes: [
+          tdPhotoSize("s", 40, 40, 21),
+          tdPhotoSize("a", 160, 160, 22),
+          tdPhotoSize("c", 640, 640, 23),
+        ],
+      },
+    }));
+    bridge.handlers.set("downloadFile", (request) => {
+      expect(request.file_id).toBe(23);
+      return {
+        id: 23,
+        size: 4,
+        local: {
+          is_downloading_completed: true,
+          is_downloading_active: false,
+          path: source,
+          downloaded_size: 4,
+        },
+      };
+    });
+    const me = await repository.getCurrentUser();
+    expect(
+      bridge.invokes.some(
+        (item) =>
+          (item as { _: string; file_id?: number })._ === "downloadFile" &&
+          (item as { file_id?: number }).file_id === 23,
+      ),
+    ).toBe(true);
+    expect(
+      bridge.invokes.some(
+        (item) =>
+          (item as { _: string; file_id?: number })._ === "downloadFile" &&
+          ((item as { file_id?: number }).file_id === 21 ||
+            (item as { file_id?: number }).file_id === 22),
+      ),
+    ).toBe(false);
+    expect(me.avatarDataUrl).toMatch(/telo-media:\/\/cache\/avatar2_1\.jpg/);
   });
 
   it("loads a profile photo list when getUserFullInfo has no photo object", async () => {
@@ -734,7 +820,7 @@ describe("TdlibTelegramRepository", () => {
         (item) => (item as { _: string })._ === "getUserProfilePhotos",
       ),
     ).toBe(true);
-    expect(me.avatarDataUrl).toMatch(/telo-media:\/\/cache\/avatar_1\.jpg/);
+    expect(me.avatarDataUrl).toMatch(/telo-media:\/\/cache\/avatar2_1\.jpg/);
   });
 
   it("downloads an unready sticker file and retries send", async () => {
@@ -1173,15 +1259,60 @@ describe("TdlibTelegramRepository", () => {
         events.some(
           (event) =>
             event.type === "chat-avatar" &&
-            event.avatarDataUrl?.includes("avatar_11"),
+            event.avatarDataUrl?.includes("avatar2_11"),
         ),
       ).toBe(true);
     });
     const page = await repository.listChatPage({ limit: 50 });
     expect(page.items[0]?.avatarDataUrl).toMatch(
-      /telo-media:\/\/cache\/avatar_11\.jpg/,
+      /telo-media:\/\/cache\/avatar2_11\.jpg/,
     );
     expect(page.items[0]?.avatarPending).toBe(false);
+  });
+
+  it("downloads the 640px chat photo when both small and big are present", async () => {
+    const { repository, bridge } = setup();
+    const source = path.join(os.tmpdir(), `telo-avatar-big-${Date.now()}.jpg`);
+    writeFileSync(source, "jpeg");
+    bridge.handlers.set("getChat", () =>
+      tdChat(11, {
+        photo: {
+          _: "chatPhotoInfo",
+          small: tdFile(44),
+          big: tdFile(99),
+        },
+      }),
+    );
+    bridge.handlers.set("downloadFile", (request) => {
+      expect(request.file_id).toBe(99);
+      return {
+        id: 99,
+        size: 4,
+        local: {
+          is_downloading_completed: true,
+          is_downloading_active: false,
+          path: source,
+          downloaded_size: 4,
+        },
+      };
+    });
+    await repository.hydrate();
+    await vi.waitFor(() => {
+      expect(
+        bridge.invokes.some(
+          (item) =>
+            (item as { _: string; file_id?: number })._ === "downloadFile" &&
+            (item as { file_id?: number }).file_id === 99,
+        ),
+      ).toBe(true);
+    });
+    expect(
+      bridge.invokes.some(
+        (item) =>
+          (item as { _: string; file_id?: number })._ === "downloadFile" &&
+          (item as { file_id?: number }).file_id === 44,
+      ),
+    ).toBe(false);
   });
 
   it("downloads an incomplete chat photo and stays pending until updateFile", async () => {
