@@ -15,7 +15,7 @@ export function WindowControls() {
   if (!window.telo.shell.frameless) return null;
 
   return (
-    <div className="flex shrink-0 items-center gap-0.5 [app-region:no-drag]">
+    <div className="flex shrink-0 items-center gap-0.5 pr-1 [app-region:no-drag]">
       <Control action="close" label={copy.windowClose}>
         <X aria-hidden="true" className="size-3.5" />
       </Control>
