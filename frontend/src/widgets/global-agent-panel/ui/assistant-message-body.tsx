@@ -4,7 +4,7 @@ import type { AgentMessage } from "entities/agent";
 import type { MentionTarget } from "entities/chat";
 import { StreamingResponse } from "shared/ui";
 
-import { useFrameCoalescedValue } from "../lib/use-frame-coalesced-value";
+import { usePacedStreamText } from "../lib/use-paced-stream-text";
 import {
   collectReplyCitations,
   replyMarkdownPlainText,
@@ -39,7 +39,9 @@ export function AssistantMessageBody({
     () => withoutTrailingTeloLink(message.body, streaming),
     [message.body, streaming],
   );
-  const body = useFrameCoalescedValue(incomingBody, streaming);
+  // The store holds the arrival clock; the display clock meters the reply
+  // onto the screen at a rate set by its backlog (see `StreamPacer`).
+  const body = usePacedStreamText(incomingBody, streaming);
   const citations = useMemo(() => collectReplyCitations(body), [body]);
   // Completion actions are hidden while streaming, so their plain-text value
   // does not need a second full Markdown parse for every incoming frame.
