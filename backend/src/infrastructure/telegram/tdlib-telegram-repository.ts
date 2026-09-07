@@ -71,6 +71,7 @@ import {
   avatarCacheFileName,
   avatarMediaUrl,
   enforceMediaCacheLimit,
+  isSharpAvatarCacheUrl,
   listCachedAvatarUrls,
 } from "./media-cache";
 import type { TelegramAccountClient } from "./telegram-account-coordinator";
@@ -1076,12 +1077,17 @@ export class TdlibTelegramRepository implements TelegramRepository {
     return Boolean(this.avatarUrls.get(peerId)?.startsWith("telo-media:"));
   }
 
+  private hasSharpCachedAvatar(peerId: string): boolean {
+    const url = this.avatarUrls.get(peerId);
+    return Boolean(url && isSharpAvatarCacheUrl(url));
+  }
+
   private scheduleChatAvatar(chat: Td.chat): void {
     const peerId = chatIdOf(chat.id);
     this.paintMinithumbnail(peerId, chat.photo?.minithumbnail);
-    const small = chat.photo?.small;
-    if (small && fileIdOf(small) !== null) {
-      void this.downloadAvatar(peerId, small);
+    const file = avatarFileFromPhotoInfo(chat.photo);
+    if (file) {
+      void this.downloadAvatar(peerId, file);
       return;
     }
     if (chat.type._ === "chatTypePrivate") {
@@ -1100,15 +1106,15 @@ export class TdlibTelegramRepository implements TelegramRepository {
     this.paintMinithumbnail(peerId, photo?.minithumbnail);
     if (photo === null || photo?.id === "0") {
       if (this.hasInFlightAvatar(peerId)) return Promise.resolve();
-      if (fileIdOf(this.chats.get(peerId)?.photo?.small)) {
+      if (avatarFileFromPhotoInfo(this.chats.get(peerId)?.photo)) {
         return Promise.resolve();
       }
       this.settleEmptyAvatar(peerId);
       return Promise.resolve();
     }
-    const small = photo?.small;
-    if (small && fileIdOf(small) !== null) {
-      return this.downloadAvatar(peerId, small, wait);
+    const file = avatarFileFromPhotoInfo(photo);
+    if (file) {
+      return this.downloadAvatar(peerId, file, wait);
     }
     return this.scheduleUserAvatarFromFullInfo(user, wait);
   }
@@ -1129,7 +1135,7 @@ export class TdlibTelegramRepository implements TelegramRepository {
           : undefined;
       if (fromFull) {
         this.paintMinithumbnail(peerId, fromFull.minithumbnail);
-        const file = smallestPhotoFile(fromFull);
+        const file = avatarFileFromChatPhoto(fromFull);
         if (file) await this.downloadAvatar(peerId, file, wait);
         return;
       }
@@ -1142,7 +1148,7 @@ export class TdlibTelegramRepository implements TelegramRepository {
       const listed = photos._ === "chatPhotos" ? photos.photos[0] : undefined;
       if (listed) {
         this.paintMinithumbnail(peerId, listed.minithumbnail);
-        const file = smallestPhotoFile(listed);
+        const file = avatarFileFromChatPhoto(listed);
         if (file) await this.downloadAvatar(peerId, file, wait);
         return;
       }
@@ -1207,7 +1213,7 @@ export class TdlibTelegramRepository implements TelegramRepository {
   ): Promise<void> {
     const fileId = fileIdOf(file);
     if (fileId === null) return;
-    if (this.hasCachedAvatarFile(peerId)) return;
+    if (this.hasSharpCachedAvatar(peerId)) return;
     this.avatarFilePeers.set(fileId, peerId);
     try {
       if (file.local?.is_downloading_completed && file.local.path) {
@@ -1287,8 +1293,8 @@ export class TdlibTelegramRepository implements TelegramRepository {
     const id = Number(user.id);
     const existing = this.users.get(id);
     if (
-      fileIdOf(existing?.profile_photo?.small) &&
-      !fileIdOf(user.profile_photo?.small)
+      avatarFileFromPhotoInfo(existing?.profile_photo) &&
+      !avatarFileFromPhotoInfo(user.profile_photo)
     ) {
       return;
     }
@@ -1298,7 +1304,10 @@ export class TdlibTelegramRepository implements TelegramRepository {
   private async resolveFullUser(user: Td.user): Promise<Td.user> {
     const id = Number(user.id);
     this.rememberUser(user);
-    if (user.profile_photo === null || fileIdOf(user.profile_photo?.small)) {
+    if (
+      user.profile_photo === null ||
+      avatarFileFromPhotoInfo(user.profile_photo)
+    ) {
       this.fetchedUserIds.add(id);
       return this.users.get(id) ?? user;
     }
@@ -2370,10 +2379,39 @@ function fileIdOf(file: Td.file | undefined): number | null {
   return Number.isFinite(id) && id !== 0 ? id : null;
 }
 
-function smallestPhotoFile(photo: Td.chatPhoto): Td.file | undefined {
+function avatarFileFromPhotoInfo(
+  photo: { small?: Td.file; big?: Td.file } | undefined | null,
+): Td.file | undefined {
+  if (!photo) return undefined;
+  if (fileIdOf(photo.big) !== null) return photo.big;
+  if (fileIdOf(photo.small) !== null) return photo.small;
+  return undefined;
+}
+
+/** Covers an 80px profile disc at 2–3× device pixel ratio. */
+const AVATAR_SHARP_EDGE_PX = 320;
+const AVATAR_USABLE_EDGE_PX = 160;
+
+/**
+ * Smallest square that still meets the sharp floor; otherwise the smallest
+ * size of at least 160px; otherwise the largest available file. Never the
+ * 40–90px `s` thumbnail that a min-area pick would choose.
+ */
+function avatarFileFromChatPhoto(photo: Td.chatPhoto): Td.file | undefined {
   const sizes = photo.sizes;
   if (!sizes.length) return undefined;
-  return sizes.reduce((best, size) =>
-    size.width * size.height < best.width * best.height ? size : best,
-  ).photo;
+  const sharp = sizes.filter(
+    (size) => Math.min(size.width, size.height) >= AVATAR_SHARP_EDGE_PX,
+  );
+  const usable = sizes.filter(
+    (size) => Math.min(size.width, size.height) >= AVATAR_USABLE_EDGE_PX,
+  );
+  const pool = sharp.length > 0 ? sharp : usable.length > 0 ? usable : sizes;
+  const preferSmallest = sharp.length > 0 || usable.length > 0;
+  return pool.reduce((best, size) => {
+    const area = size.width * size.height;
+    const bestArea = best.width * best.height;
+    if (preferSmallest) return area < bestArea ? size : best;
+    return area > bestArea ? size : best;
+  }).photo;
 }

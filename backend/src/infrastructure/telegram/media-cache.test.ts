@@ -168,11 +168,12 @@ describe("touchMediaCacheFile", () => {
 
 describe("avatar cache files", () => {
   it("names a flat jpeg and maps it back to the chat id", () => {
-    expect(avatarCacheFileName("123")).toBe("avatar_123.jpg");
+    expect(avatarCacheFileName("123")).toBe("avatar2_123.jpg");
+    expect(chatIdFromAvatarFileName("avatar2_123.jpg")).toBe("123");
     expect(chatIdFromAvatarFileName("avatar_123.jpg")).toBe("123");
     expect(chatIdFromAvatarFileName("photo.bin")).toBeNull();
-    expect(avatarMediaUrl("avatar_123.jpg")).toBe(
-      "telo-media://cache/avatar_123.jpg",
+    expect(avatarMediaUrl("avatar2_123.jpg")).toBe(
+      "telo-media://cache/avatar2_123.jpg",
     );
   });
 
@@ -184,6 +185,20 @@ describe("avatar cache files", () => {
       const urls = await listCachedAvatarUrls(directory);
       expect([...urls.entries()]).toEqual([
         ["9", "telo-media://cache/avatar_9.jpg"],
+      ]);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("prefers the sharp generation when both cache files exist", async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), "telo-avatars-"));
+    try {
+      await writeFile(path.join(directory, "avatar_9.jpg"), Buffer.from("x"));
+      await writeFile(path.join(directory, "avatar2_9.jpg"), Buffer.from("y"));
+      const urls = await listCachedAvatarUrls(directory);
+      expect([...urls.entries()]).toEqual([
+        ["9", "telo-media://cache/avatar2_9.jpg"],
       ]);
     } finally {
       await rm(directory, { recursive: true, force: true });
