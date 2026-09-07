@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useState, type CSSProperties, type ReactNode } from "react";
 
 import { RIGHT_PANEL_WIDTH_CSS } from "entities/preferences";
 import { AnimatedSidebar, AnimatedSidebarProvider } from "shared/ui";
@@ -48,7 +48,15 @@ export function WorkspaceSidePanel({
       openMobile={open}
       onOpenChange={changeOpen}
       onOpenMobileChange={changeOpen}
-      style={{ "--sidebar-width": RIGHT_PANEL_WIDTH_CSS }}
+      style={
+        {
+          "--sidebar-width": RIGHT_PANEL_WIDTH_CSS,
+          // This column can touch the trailing window edge, but never the
+          // leading traffic-light edge. Its surfaces use the shared two-sided
+          // title-bar contract and inherit this local boundary.
+          "--window-overlay-start": "0px",
+        } as CSSProperties
+      }
     >
       <AnimatedSidebar
         side="right"

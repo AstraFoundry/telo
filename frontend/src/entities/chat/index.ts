@@ -2,6 +2,7 @@ export { chatsForPicker, displayChatTitle } from "./model/display-chat-title";
 export {
   buildWorkspaceContext,
   chatsForFolder,
+  chatSendCapabilities,
   folderUnread,
   subscribeToWorkspaceEvents,
   useChatStore,

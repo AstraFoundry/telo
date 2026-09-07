@@ -8,6 +8,8 @@ import type {
   ChatPageDto,
   ChatPageInput,
   CurrentUserDto,
+  CreateTelegramChannelInput,
+  CreateTelegramGroupInput,
   DeleteMessageInput,
   EditMessageInput,
   ForwardMessageInput,
@@ -19,12 +21,16 @@ import type {
   MessageSearchPageDto,
   MessageSearchPageInput,
   PeerProfileDto,
+  PostedStoryDto,
+  PostStoryInput,
   SetMessageReactionInput,
   StickerItemDto,
   StickerCatalogDto,
   StickerSetDto,
   StickerSetReferenceDto,
   TelegramWorkspaceEvent,
+  TelegramCallPageDto,
+  TelegramContactDto,
 } from "../../../../contracts/src/ipc";
 
 export interface TelegramRepository {
@@ -33,6 +39,15 @@ export interface TelegramRepository {
   listChatPage(input: ChatPageInput): Promise<ChatPageDto>;
   /** Starts a device-local E2EE secret chat with the given user. */
   createSecretChat(userId: string): Promise<ChatDto>;
+  listContacts(): Promise<ReadonlyArray<TelegramContactDto>>;
+  openPrivateChat(userId: string): Promise<ChatDto>;
+  createGroup(input: CreateTelegramGroupInput): Promise<ChatDto>;
+  createChannel(input: CreateTelegramChannelInput): Promise<ChatDto>;
+  listCalls(cursor?: string | null): Promise<TelegramCallPageDto>;
+  postStory(
+    file: TelegramUploadFile,
+    input: PostStoryInput,
+  ): Promise<PostedStoryDto>;
   /**
    * Opens Saved Messages even when that chat is not in the loaded dialog
    * page. TDLib's Saved Messages chat id is `getMe().id`.

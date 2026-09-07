@@ -27,6 +27,9 @@ export interface ChatMapContext {
   readonly selfUserId: number | null;
   readonly avatarUrl: (peerId: string) => string | null;
   readonly avatarPending: (peerId: string) => boolean;
+  readonly canSendMessages?: (chat: Td.chat) => boolean;
+  readonly canSendStickers?: (chat: Td.chat) => boolean;
+  readonly canSendMedia?: (chat: Td.chat) => boolean;
   readonly accentPalette?: AccentPaletteLookup;
   readonly avatarPlaceholder?: (peerId: string) => AvatarPlaceholderDto | null;
 }
@@ -217,6 +220,9 @@ export function mapChat(chat: Td.chat, context: ChatMapContext): ChatDto {
     muted: chat.notification_settings.mute_for > 0,
     pinned: position?.is_pinned ?? false,
     kind,
+    canSendMessages: context.canSendMessages?.(chat) ?? true,
+    canSendStickers: context.canSendStickers?.(chat) ?? true,
+    canSendMedia: context.canSendMedia?.(chat) ?? true,
     initials: initials(chat.title),
     avatarDataUrl,
     avatarPending: context.avatarPending(id),
@@ -624,7 +630,9 @@ function mapButton(
 /**
  * Telegram's reaction identity is the emoji without U+FE0F. A picker that
  * offers "❤️" while the wire uses "❤" looks chosen-wrong and
- * `addMessageReaction` rejects the variant as `REACTION_INVALID`.
+ * `addMessageReaction` rejects the variant as `REACTION_INVALID`. The
+ * renderer puts the selector back only when painting
+ * (`reactionEmojiForDisplay`).
  */
 export function normalizeReactionEmoji(emoji: string): string {
   return emoji.replaceAll("\uFE0F", "");

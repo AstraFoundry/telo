@@ -118,6 +118,33 @@ describe("MediaPicker", () => {
     ).toBeTruthy();
   });
 
+  it("disables the stickers tab when stickers cannot be sent", async () => {
+    const user = userEvent.setup();
+    const onPickSticker = vi.fn();
+    installTeloApiMock();
+
+    render(
+      <MediaPicker
+        disabled={false}
+        stickersDisabled
+        recentEmojis={[]}
+        onPickEmoji={vi.fn()}
+        onPickSticker={onPickSticker}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: copy.mediaPicker }));
+    const stickersTab = screen.getByRole("button", {
+      name: copy.stickersDisabled,
+    });
+    expect(stickersTab).toHaveProperty("disabled", true);
+    await user.click(stickersTab);
+    expect(onPickSticker).not.toHaveBeenCalled();
+    expect(
+      screen.queryByRole("button", { name: copy.stickerPicker }),
+    ).toBeNull();
+  });
+
   it("loads the sets when the sticker tab is first shown, not on open", async () => {
     const user = userEvent.setup();
     const telo = installTeloApiMock();

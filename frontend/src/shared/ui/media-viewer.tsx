@@ -124,7 +124,7 @@ export function MediaViewer({
           onClick={onClose}
         >
           <div
-            className="flex items-center justify-end gap-1 p-3"
+            className="window-titlebar-safe flex min-h-14 items-center justify-end gap-1"
             onClick={(event) => event.stopPropagation()}
           >
             {error ? (

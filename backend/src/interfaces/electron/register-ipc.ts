@@ -17,6 +17,8 @@ import type {
   AgentScheduledTaskDto,
   ChatPageInput,
   ConnectAgentAccountInput,
+  CreateTelegramChannelInput,
+  CreateTelegramGroupInput,
   ListAgentModelsInput,
   EditMessageInput,
   ForwardMessageInput,
@@ -24,6 +26,7 @@ import type {
   MessageSearchPageInput,
   KeywordFolderInput,
   LocalMediaFileInput,
+  PostStoryInput,
   RunAgentInput,
   RunChatAgentInput,
   SaveAgentConfigurationInput,
@@ -57,6 +60,54 @@ export function registerIpc(container: ApplicationContainer): void {
   );
   ipcMain.handle(channels.secretChatCreate, (_event, userId: string) =>
     container.workspace.createSecretChat(userId),
+  );
+  ipcMain.handle(channels.contactsList, () =>
+    container.workspace.listContacts(),
+  );
+  ipcMain.handle(channels.privateChatOpen, (_event, userId: string) =>
+    container.workspace.openPrivateChat(userId),
+  );
+  ipcMain.handle(
+    channels.groupCreate,
+    (_event, input: CreateTelegramGroupInput) =>
+      container.workspace.createGroup(input),
+  );
+  ipcMain.handle(
+    channels.channelCreate,
+    (_event, input: CreateTelegramChannelInput) =>
+      container.workspace.createChannel(input),
+  );
+  ipcMain.handle(channels.callsList, (_event, cursor?: string | null) =>
+    container.workspace.listCalls(cursor),
+  );
+  ipcMain.handle(
+    channels.storyPost,
+    async (_event, file: LocalMediaFileInput, input: PostStoryInput) => {
+      const staged = await stageUploadFiles([file]);
+      try {
+        const [validated] = await validateUploadFiles(staged.files);
+        if (!validated) throw new Error("Story media is required");
+        if (
+          !validated.mimeType.startsWith("image/") &&
+          !validated.mimeType.startsWith("video/")
+        ) {
+          throw new Error("Stories require a photo or video");
+        }
+        if (
+          validated.mimeType.startsWith("image/") &&
+          validated.size > 10 * 1024 * 1024
+        ) {
+          throw new Error("Story photos must be at most 10 MB");
+        }
+        return await container.workspace.postStory(validated, input);
+      } finally {
+        await Promise.all(
+          staged.temporaryDirectories.map((directory) =>
+            rm(directory, { recursive: true, force: true }),
+          ),
+        );
+      }
+    },
   );
   ipcMain.handle(channels.savedMessagesOpen, () =>
     container.workspace.openSavedMessages(),

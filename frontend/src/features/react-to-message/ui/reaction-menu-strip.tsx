@@ -9,6 +9,8 @@ import {
   LoadIndicator,
 } from "shared/ui";
 
+import { reactionEmojiForDisplay } from "../model/reaction-emoji";
+
 /** Telegram Desktop and Web A put a first row of reactions on the menu. */
 const MENU_REACTION_MAX = 8;
 
@@ -58,9 +60,9 @@ export function ReactionMenuStrip({ message }: ReactionMenuStripProps) {
             onSelect={() => {
               void toggleReaction(message.id, emoji).catch(() => undefined);
             }}
-            className="size-10 justify-center p-0 text-lg"
+            className="size-10 justify-center p-0 text-lg [font-variant-emoji:emoji]"
           >
-            {emoji}
+            {reactionEmojiForDisplay(emoji)}
           </ContextMenuItem>
         ))}
       </div>

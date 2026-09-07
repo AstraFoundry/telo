@@ -1,5 +1,7 @@
 import { Button } from "shared/ui";
 
+import { reactionEmojiForDisplay } from "../model/reaction-emoji";
+
 /**
  * The reaction pill: a full-round chip carrying an 18px glyph and, on the
  * bubble's own bar, a tabular counter. Its 28px height matches this surface's
@@ -44,8 +46,8 @@ export function ReactionChip({
             : "border border-border bg-card text-foreground group-hover/chip:bg-primary/5"
         }`}
       >
-        <span className="text-[length:var(--message-reaction-emoji-size)] leading-none">
-          {emoji}
+        <span className="text-[length:var(--message-reaction-emoji-size)] leading-none [font-variant-emoji:emoji]">
+          {reactionEmojiForDisplay(emoji)}
         </span>
         {count === undefined ? null : <span>{count}</span>}
       </span>

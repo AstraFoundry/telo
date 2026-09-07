@@ -13,6 +13,7 @@ describe("telegram-store", () => {
       currentUser: null,
       accounts: [],
       addingAccount: false,
+      agentSetupPending: false,
     });
   });
 
@@ -28,6 +29,7 @@ describe("telegram-store", () => {
       phoneNumber: "+12025550123",
     });
     expect(useTelegramStore.getState().auth).toBeNull();
+    expect(useTelegramStore.getState().agentSetupPending).toBe(true);
   });
 
   it("beginLogin() maps a rejection to the error auth state", async () => {
@@ -361,5 +363,42 @@ describe("telegram-store", () => {
 
     useTelegramStore.getState().cancelAddingAccount();
     expect(useTelegramStore.getState().addingAccount).toBe(false);
+  });
+
+  it("does not repeat AI onboarding for another Telegram account", async () => {
+    const telo = installTeloApiMock();
+    telo.telegram.beginLogin.mockResolvedValue(undefined);
+    useTelegramStore.setState({
+      accounts: [
+        {
+          id: "account-1",
+          displayName: "Mina",
+          username: null,
+          avatarDataUrl: null,
+          avatarPlaceholder: null,
+          unreadCount: 0,
+          active: true,
+        },
+      ],
+      addingAccount: true,
+    });
+
+    await useTelegramStore
+      .getState()
+      .beginLogin({ phoneNumber: "+12025550123" });
+
+    expect(useTelegramStore.getState().agentSetupPending).toBe(false);
+  });
+
+  it("completes the optional AI setup without changing Telegram auth", () => {
+    useTelegramStore.setState({
+      auth: { status: "ready" },
+      agentSetupPending: true,
+    });
+
+    useTelegramStore.getState().completeAgentSetup();
+
+    expect(useTelegramStore.getState().agentSetupPending).toBe(false);
+    expect(useTelegramStore.getState().auth).toEqual({ status: "ready" });
   });
 });

@@ -28,6 +28,7 @@ import {
 import { copy } from "shared/config/copy";
 import {
   Button,
+  Tooltip,
   ContextMenu,
   ContextMenuCheckboxItem,
   ContextMenuContent,
@@ -72,6 +73,9 @@ interface SelectedFile {
 
 interface MessageComposerProps {
   disabled?: boolean;
+  stickersDisabled?: boolean;
+  mediaDisabled?: boolean;
+  placeholder?: string;
   onSend(body: string, options?: SendOptions): Promise<void>;
 }
 
@@ -96,7 +100,13 @@ const FORMAT_SHORTCUTS: Record<ComposerFormatType, string> = {
   spoiler: "Ctrl+Shift+P",
 };
 
-export function MessageComposer({ disabled, onSend }: MessageComposerProps) {
+export function MessageComposer({
+  disabled,
+  stickersDisabled,
+  mediaDisabled,
+  placeholder = copy.messagePlaceholder,
+  onSend,
+}: MessageComposerProps) {
   const [value, setValue] = useState("");
   const [entities, setEntities] = useState<MessageEntityDto[]>([]);
   const [selection, setSelection] = useState({ start: 0, end: 0 });
@@ -159,7 +169,10 @@ export function MessageComposer({ disabled, onSend }: MessageComposerProps) {
   // Attachments mirror the attach button's disabled state: the picker, drag
   // and drop, and paste all share one gate.
   const attachmentsBlocked =
-    disabled || uploadId !== null || composerTarget?.mode === "edit";
+    disabled ||
+    mediaDisabled ||
+    uploadId !== null ||
+    composerTarget?.mode === "edit";
 
   // Edit mode prefills the input with the original body and takes focus with
   // the caret behind it. Leaving edit mode — cancel through the global Escape
@@ -744,8 +757,8 @@ export function MessageComposer({ disabled, onSend }: MessageComposerProps) {
               minRows={1}
               maxRows={5}
               disabled={disabled}
-              placeholder={copy.messagePlaceholder}
-              aria-label={copy.messagePlaceholder}
+              placeholder={placeholder}
+              aria-label={placeholder}
               // The suggestions are a sibling listbox and focus never leaves the
               // textarea, so the active option has to be named here or a screen
               // reader never hears the `@` query narrow down. `aria-expanded` is
@@ -820,18 +833,34 @@ export function MessageComposer({ disabled, onSend }: MessageComposerProps) {
                     className="hidden"
                     onChange={selectFiles}
                   />
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    className="size-10 rounded-full"
-                    aria-label={copy.attachFiles}
-                    disabled={attachmentsBlocked}
-                    onClick={() => fileInputRef.current?.click()}
-                  >
-                    <Paperclip aria-hidden="true" className="size-4" />
-                  </Button>
+                  {mediaDisabled && !disabled ? (
+                    <Tooltip content={copy.mediaDisabled} side="top">
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="size-10 rounded-full"
+                        aria-label={copy.mediaDisabled}
+                        disabled={attachmentsBlocked}
+                        onClick={() => fileInputRef.current?.click()}
+                      >
+                        <Paperclip aria-hidden="true" className="size-4" />
+                      </Button>
+                    </Tooltip>
+                  ) : (
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="size-10 rounded-full"
+                      aria-label={copy.attachFiles}
+                      disabled={attachmentsBlocked}
+                      onClick={() => fileInputRef.current?.click()}
+                    >
+                      <Paperclip aria-hidden="true" className="size-4" />
+                    </Button>
+                  )}
                   <MediaPicker
                     disabled={disabled || uploadId !== null}
+                    stickersDisabled={Boolean(stickersDisabled)}
                     recentEmojis={recentEmojis}
                     onPickEmoji={insertEmoji}
                     onPickSticker={(sticker) => void sendSticker(sticker)}

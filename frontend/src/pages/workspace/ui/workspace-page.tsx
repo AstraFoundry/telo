@@ -81,7 +81,7 @@ export function WorkspacePage({
     return (
       <div className="grid h-screen grid-cols-1 grid-rows-[minmax(0,1fr)] overflow-hidden bg-background">
         <a
-          className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:rounded-md focus:bg-popover focus:px-3 focus:py-2 focus:text-sm"
+          className="window-titlebar-safe-skip-link sr-only focus:not-sr-only focus:absolute focus:z-50 focus:rounded-md focus:bg-popover focus:px-3 focus:py-2 focus:text-sm"
           href="#main"
         >
           {copy.skipToContent}
@@ -103,7 +103,7 @@ export function WorkspacePage({
                 avatar spot; the layout owns it because conversation-view
                 internals must stay untouched. */}
             {showBackToChats ? (
-              <div className="absolute top-2 left-2 z-30 flex items-center gap-0.5">
+              <div className="window-titlebar-safe absolute inset-x-0 top-0 z-30 flex h-14 items-center gap-0.5 [app-region:drag]">
                 <WindowControls />
                 <Button
                   size="icon"
@@ -137,7 +137,7 @@ export function WorkspacePage({
       }
     >
       <a
-        className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:rounded-md focus:bg-popover focus:px-3 focus:py-2 focus:text-sm"
+        className="window-titlebar-safe-skip-link sr-only focus:not-sr-only focus:absolute focus:z-50 focus:rounded-md focus:bg-popover focus:px-3 focus:py-2 focus:text-sm"
         href="#main"
       >
         {copy.skipToContent}
@@ -164,9 +164,12 @@ export function WorkspacePage({
           (agentOpen || profileOpen) && "rounded-r-2xl",
         )}
         style={
-          agentOpen || profileOpen
-            ? ({ "--window-overlay-end": "0px" } as CSSProperties)
-            : undefined
+          {
+            "--window-overlay-start": "0px",
+            ...(agentOpen || profileOpen
+              ? { "--window-overlay-end": "0px" }
+              : undefined),
+          } as CSSProperties
         }
       >
         {children}

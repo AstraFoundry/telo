@@ -1,6 +1,6 @@
 import { EventType, type AGUIEvent } from "@ag-ui/core";
 import type { WebContents } from "electron";
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
@@ -490,6 +490,78 @@ describe("registerIpc workspace search", () => {
       "report",
       input,
     );
+  });
+});
+
+describe("registerIpc account menu actions", () => {
+  it("registers and forwards contact, creation, and call-history actions", async () => {
+    const workspace = {
+      listContacts: vi.fn().mockResolvedValue([]),
+      openPrivateChat: vi.fn().mockResolvedValue({ id: "private" }),
+      createSecretChat: vi.fn().mockResolvedValue({ id: "secret" }),
+      createGroup: vi.fn().mockResolvedValue({ id: "group" }),
+      createChannel: vi.fn().mockResolvedValue({ id: "channel" }),
+      listCalls: vi.fn().mockResolvedValue({ items: [], nextCursor: null }),
+    };
+    registerIpc({ workspace } as unknown as ApplicationContainer);
+
+    await ipc.handlers.get(channels.contactsList)?.({});
+    await ipc.handlers.get(channels.privateChatOpen)?.({}, "user-1");
+    await ipc.handlers.get(channels.secretChatCreate)?.({}, "user-1");
+    await ipc.handlers.get(channels.groupCreate)?.(
+      {},
+      { title: "Design", userIds: ["user-1"] },
+    );
+    await ipc.handlers.get(channels.channelCreate)?.(
+      {},
+      { title: "News", description: "Updates" },
+    );
+    await ipc.handlers.get(channels.callsList)?.({}, "next");
+
+    expect(workspace.listContacts).toHaveBeenCalledOnce();
+    expect(workspace.openPrivateChat).toHaveBeenCalledWith("user-1");
+    expect(workspace.createSecretChat).toHaveBeenCalledWith("user-1");
+    expect(workspace.createGroup).toHaveBeenCalledWith({
+      title: "Design",
+      userIds: ["user-1"],
+    });
+    expect(workspace.createChannel).toHaveBeenCalledWith({
+      title: "News",
+      description: "Updates",
+    });
+    expect(workspace.listCalls).toHaveBeenCalledWith("next");
+  });
+
+  it("validates and forwards one story file", async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), "telo-story-test-"));
+    const source = path.join(directory, "story.jpg");
+    await writeFile(source, "story");
+    const workspace = {
+      postStory: vi.fn().mockResolvedValue({ id: "story-1" }),
+    };
+    registerIpc({ workspace } as unknown as ApplicationContainer);
+    const handler = ipc.handlers.get(channels.storyPost);
+    if (!handler) throw new Error("story handler was not registered");
+
+    try {
+      await handler(
+        {},
+        {
+          source,
+          name: "story.jpg",
+          mimeType: "image/jpeg",
+          size: 5,
+        },
+        { privacy: "contacts", activePeriod: 86400 },
+      );
+
+      expect(workspace.postStory).toHaveBeenCalledWith(
+        expect.objectContaining({ source, mimeType: "image/jpeg" }),
+        { privacy: "contacts", activePeriod: 86400 },
+      );
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
   });
 });
 

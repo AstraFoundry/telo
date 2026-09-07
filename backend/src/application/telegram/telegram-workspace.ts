@@ -4,6 +4,8 @@ import type {
   ChatMemberDto,
   ChatPageDto,
   ChatPageInput,
+  CreateTelegramChannelInput,
+  CreateTelegramGroupInput,
   CurrentUserDto,
   GlobalSearchResultDto,
   KeywordFolderInput,
@@ -13,6 +15,8 @@ import type {
   MessageSearchPageDto,
   MessageSearchPageInput,
   PeerProfileDto,
+  PostedStoryDto,
+  PostStoryInput,
   SendMessageInput,
   SendMediaInput,
   StickerItemDto,
@@ -20,6 +24,8 @@ import type {
   StickerSetDto,
   StickerSetReferenceDto,
   TelegramWorkspaceEvent,
+  TelegramCallPageDto,
+  TelegramContactDto,
   UpdateKeywordFolderInput,
 } from "../../../../contracts/src/ipc";
 import type {
@@ -109,6 +115,63 @@ export class TelegramWorkspaceService {
   createSecretChat(userId: string): Promise<ChatDto> {
     if (!userId.trim()) throw new Error("User id is required");
     return this.repository.createSecretChat(userId.trim());
+  }
+
+  listContacts(): Promise<ReadonlyArray<TelegramContactDto>> {
+    return this.repository.listContacts();
+  }
+
+  openPrivateChat(userId: string): Promise<ChatDto> {
+    if (!userId.trim()) throw new Error("User id is required");
+    return this.repository.openPrivateChat(userId.trim());
+  }
+
+  createGroup(input: CreateTelegramGroupInput): Promise<ChatDto> {
+    const title = validateChatTitle(input.title);
+    if (input.userIds.length === 0) {
+      throw new Error("Select at least one group member");
+    }
+    const userIds = input.userIds.map((id) => id.trim());
+    if (userIds.some((id) => !id)) throw new Error("User id is required");
+    if (new Set(userIds).size !== userIds.length) {
+      throw new Error("Group members contain duplicates");
+    }
+    return this.repository.createGroup({ title, userIds });
+  }
+
+  createChannel(input: CreateTelegramChannelInput): Promise<ChatDto> {
+    const title = validateChatTitle(input.title);
+    const description = input.description?.trim() ?? "";
+    if (description.length > 255) {
+      throw new Error("Channel description must be at most 255 characters");
+    }
+    return this.repository.createChannel({ title, description });
+  }
+
+  listCalls(cursor: string | null = null): Promise<TelegramCallPageDto> {
+    return this.repository.listCalls(cursor?.trim() || null);
+  }
+
+  postStory(
+    file: TelegramUploadFile,
+    input: PostStoryInput,
+  ): Promise<PostedStoryDto> {
+    if (
+      !file.mimeType.startsWith("image/") &&
+      !file.mimeType.startsWith("video/")
+    ) {
+      throw new Error("Stories require a photo or video");
+    }
+    if (file.mimeType.startsWith("video/")) {
+      const duration = input.durationSeconds ?? 0;
+      if (duration <= 0 || duration > 60) {
+        throw new Error("Story videos must be between 1 and 60 seconds");
+      }
+    }
+    return this.repository.postStory(file, {
+      ...input,
+      caption: input.caption?.trim() ?? "",
+    });
   }
 
   openSavedMessages(): Promise<ChatDto> {
@@ -349,6 +412,15 @@ export class TelegramWorkspaceService {
     if (!chatId.trim()) throw new Error("Chat id is required");
     return this.repository.saveDraft(chatId, text);
   }
+}
+
+function validateChatTitle(value: string): string {
+  const title = value.trim();
+  if (!title) throw new Error("Chat title is required");
+  if (title.length > 128) {
+    throw new Error("Chat title must be at most 128 characters");
+  }
+  return title;
 }
 
 function validateChatCursor(

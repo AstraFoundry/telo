@@ -75,7 +75,7 @@ export function SettingsPage({
     // column has to bound its own height or the settings body is cut off with
     // no way to reach the bottom.
     <main className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
-      <header className="window-titlebar-safe-trailing flex h-14 shrink-0 items-center gap-2 pl-3 [app-region:drag]">
+      <header className="window-titlebar-safe flex h-14 shrink-0 items-center gap-2 [app-region:drag]">
         {includeWindowControls ? <WindowControls /> : null}
         <Tooltip content={copy.backToConversation}>
           <Button

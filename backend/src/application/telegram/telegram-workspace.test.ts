@@ -31,6 +31,12 @@ function repository(): TelegramRepository {
       typing: false,
       secretState: "pending" as const,
     })),
+    listContacts: vi.fn(async () => []),
+    openPrivateChat: vi.fn(),
+    createGroup: vi.fn(),
+    createChannel: vi.fn(),
+    listCalls: vi.fn(async () => ({ items: [], nextCursor: null })),
+    postStory: vi.fn(),
     openSavedMessages: vi.fn(async () => ({
       id: "saved",
       title: "Saved Messages",
@@ -462,6 +468,50 @@ describe("TelegramWorkspaceService", () => {
 
     await service.openSavedMessages();
     expect(port.openSavedMessages).toHaveBeenCalledOnce();
+  });
+
+  it("validates and normalizes account-menu creation inputs", async () => {
+    const port = repository();
+    port.createGroup = vi.fn(async () => ({ id: "group" }) as ChatDto);
+    port.createChannel = vi.fn(async () => ({ id: "channel" }) as ChatDto);
+    const service = new TelegramWorkspaceService(port);
+
+    await service.createGroup({ title: "  Design  ", userIds: [" mina "] });
+    await service.createChannel({
+      title: "  News  ",
+      description: "  Product updates  ",
+    });
+
+    expect(port.createGroup).toHaveBeenCalledWith({
+      title: "Design",
+      userIds: ["mina"],
+    });
+    expect(port.createChannel).toHaveBeenCalledWith({
+      title: "News",
+      description: "Product updates",
+    });
+    expect(() => service.createGroup({ title: "Design", userIds: [] })).toThrow(
+      "Select at least one",
+    );
+    expect(() =>
+      service.createChannel({ title: " ", description: "" }),
+    ).toThrow("Chat title");
+  });
+
+  it("rejects invalid story media before reaching the adapter", async () => {
+    const port = repository();
+    const service = new TelegramWorkspaceService(port);
+    const file = {
+      source: "/tmp/story.txt",
+      name: "story.txt",
+      mimeType: "text/plain",
+      size: 5,
+    };
+
+    expect(() =>
+      service.postStory(file, { privacy: "contacts", activePeriod: 86400 }),
+    ).toThrow("photo or video");
+    expect(port.postStory).not.toHaveBeenCalled();
   });
 
   it.each([

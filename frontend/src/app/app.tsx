@@ -30,6 +30,9 @@ function AppSurfaces() {
   const loadCurrentUser = useTelegramStore((state) => state.loadCurrentUser);
   const loadAccounts = useTelegramStore((state) => state.loadAccounts);
   const addingAccount = useTelegramStore((state) => state.addingAccount);
+  const agentSetupPending = useTelegramStore(
+    (state) => state.agentSetupPending,
+  );
   const cancelAddingAccount = useTelegramStore(
     (state) => state.cancelAddingAccount,
   );
@@ -142,7 +145,7 @@ function AppSurfaces() {
     }
   }, [workspaceReady, connectionState, currentUser, loadCurrentUser]);
 
-  if (!workspaceEnabled || addingAccount) {
+  if (!workspaceEnabled || addingAccount || agentSetupPending) {
     return <OnboardingPage />;
   }
 

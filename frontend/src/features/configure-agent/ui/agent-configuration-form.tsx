@@ -17,6 +17,7 @@ import {
 import { useAgentStore } from "entities/agent";
 import { copy } from "shared/config/copy";
 import {
+  Button,
   Input,
   RangeSlider,
   SettingsGroup,
@@ -24,6 +25,7 @@ import {
   SettingsStackedRow,
   StatefulButton,
   Switch,
+  TextReveal,
 } from "shared/ui";
 
 import { canListAgentModels, useAgentModels } from "../lib/use-agent-models";
@@ -32,10 +34,20 @@ import { ProviderPicker } from "./provider-picker";
 
 type SaveState = "idle" | "loading" | "success" | "error";
 
+interface AgentConfigurationFormProps {
+  variant?: "settings" | "onboarding";
+  onComplete?(): void;
+  onSkip?(): void;
+}
+
 /** One decimal is the finest step worth exposing for sampling temperature. */
 const TEMPERATURE_STEP = 0.1;
 
-export function AgentConfigurationForm() {
+export function AgentConfigurationForm({
+  variant = "settings",
+  onComplete,
+  onSkip,
+}: AgentConfigurationFormProps = {}) {
   const configuration = useAgentStore((state) => state.configuration);
   const load = useAgentStore((state) => state.loadConfiguration);
   const save = useAgentStore((state) => state.saveConfiguration);
@@ -124,6 +136,7 @@ export function AgentConfigurationForm() {
       });
       setApiKey("");
       setSaveState("success");
+      if (variant === "onboarding") onComplete?.();
       window.setTimeout(() => setSaveState("idle"), 1200);
     } catch {
       setSaveState("error");
@@ -143,6 +156,116 @@ export function AgentConfigurationForm() {
       setConnectState("error");
     }
   };
+
+  const storedCredential =
+    configuration?.provider === provider && configuration.hasCredential;
+  const credentialReady = oauthPath
+    ? connected
+    : Boolean(apiKey.trim()) || storedCredential;
+  const onboardingReady =
+    Boolean(configuration) &&
+    Boolean(model.trim()) &&
+    Boolean(instructions.trim()) &&
+    (!compatible || Boolean(baseUrl.trim())) &&
+    credentialReady;
+
+  if (variant === "onboarding") {
+    return (
+      <form
+        className="flex flex-col gap-4"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (onboardingReady) void submit();
+        }}
+      >
+        <div className="mb-2">
+          <TextReveal
+            as="h1"
+            text={copy.connectAiTitle}
+            className="text-balance text-3xl font-semibold tracking-tight"
+          />
+          <TextReveal
+            as="p"
+            text={copy.connectAiBody}
+            delay={0.1}
+            className="mt-2 text-pretty text-sm text-muted-foreground"
+          />
+        </div>
+
+        <OnboardingField label={copy.provider}>
+          <ProviderPicker value={provider} onValueChange={changeProvider} />
+        </OnboardingField>
+        <OnboardingField
+          label={copy.model}
+          hint={modelsError ? copy.modelsUnavailable : undefined}
+        >
+          <ModelPicker value={model} models={models} onValueChange={setModel} />
+        </OnboardingField>
+        {compatible ? (
+          <OnboardingField label={copy.baseUrl}>
+            <Input
+              value={baseUrl}
+              onChange={setBaseUrl}
+              aria-label={copy.baseUrl}
+              required
+            />
+          </OnboardingField>
+        ) : null}
+        {oauthPath ? (
+          <div className="flex items-center gap-3 rounded-xl bg-muted/50 px-3 py-2">
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium">{copy.account}</p>
+              {connected && configuration?.accountLabel ? (
+                <p className="truncate text-xs text-muted-foreground">
+                  {configuration.accountLabel}
+                </p>
+              ) : null}
+            </div>
+            <StatefulButton
+              type="button"
+              state={connectState}
+              loadingText={copy.connectingAccount}
+              successText={connectSuccess}
+              errorText={copy.failed}
+              onClick={() => void connect()}
+            >
+              {connected ? copy.disconnectAccount : copy.connectAccount}
+            </StatefulButton>
+          </div>
+        ) : (
+          <OnboardingField label={copy.apiKey}>
+            <Input
+              type="password"
+              value={apiKey}
+              onChange={setApiKey}
+              aria-label={copy.apiKey}
+              autoComplete="off"
+              required={!storedCredential}
+            />
+          </OnboardingField>
+        )}
+
+        <StatefulButton
+          type="submit"
+          state={saveState}
+          loadingText={copy.saving}
+          errorText={copy.failed}
+          disabled={!onboardingReady}
+          className="mt-2 w-full"
+        >
+          {copy.continue}
+        </StatefulButton>
+        <Button
+          type="button"
+          variant="ghost"
+          className="w-full"
+          onClick={onSkip}
+        >
+          {copy.skipForNow}
+        </Button>
+      </form>
+    );
+  }
 
   return (
     // Credentials and a system prompt are not a switch: they are a coherent
@@ -297,5 +420,25 @@ export function AgentConfigurationForm() {
         </StatefulButton>
       </div>
     </form>
+  );
+}
+
+function OnboardingField({
+  label,
+  hint,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <label className="flex flex-col gap-1.5">
+      <span className="px-1 text-sm font-medium">{label}</span>
+      {children}
+      {hint ? (
+        <span className="px-1 text-xs text-muted-foreground">{hint}</span>
+      ) : null}
+    </label>
   );
 }

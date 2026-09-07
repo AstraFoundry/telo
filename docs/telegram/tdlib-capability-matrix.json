@@ -56,13 +56,15 @@
     },
     {
       "id": "composer",
-      "workflow": "Entities, media album, stickers, drafts, typing",
+      "workflow": "Entities, media album, stickers, drafts, typing, content-type write-access gating",
       "methods": [
         "sendMessage",
         "sendMessageAlbum",
         "sendChatAction",
         "setChatDraftMessage",
-        "getStickers"
+        "getStickers",
+        "getBasicGroup",
+        "getSupergroup"
       ],
       "evidence": [
         "backend/src/infrastructure/telegram/tdlib-telegram-repository.ts"
@@ -113,10 +115,27 @@
     },
     {
       "id": "reconnect",
-      "workflow": "Offline → synchronizing → connected, no dup/miss",
+      "workflow": "Offline \u2192 synchronizing \u2192 connected, no dup/miss",
       "methods": ["updateConnectionState"],
       "evidence": [
         "backend/src/infrastructure/telegram/tdlib-telegram-repository.ts"
+      ],
+      "state": "covered"
+    },
+    {
+      "id": "account-actions",
+      "workflow": "Contacts, private chats, basic groups, and channels from the account avatar menu",
+      "methods": [
+        "getContacts",
+        "createPrivateChat",
+        "createNewBasicGroupChat",
+        "createNewSupergroupChat"
+      ],
+      "evidence": [
+        "backend/src/infrastructure/telegram/tdlib-telegram-repository.ts",
+        "frontend/src/features/account-menu/ui/account-menu.tsx",
+        "frontend/src/features/account-menu/ui/contact-action-dialog.tsx",
+        "frontend/src/features/account-menu/ui/create-channel-dialog.tsx"
       ],
       "state": "covered"
     },
@@ -131,6 +150,16 @@
       "state": "covered"
     },
     {
+      "id": "call-history",
+      "workflow": "Paged incoming, outgoing, missed, voice, and video call-message history",
+      "methods": ["searchCallMessages"],
+      "evidence": [
+        "backend/src/infrastructure/telegram/tdlib-telegram-repository.ts",
+        "frontend/src/features/account-menu/ui/call-history-dialog.tsx"
+      ],
+      "state": "covered"
+    },
+    {
       "id": "voip-calls",
       "workflow": "One-to-one and group calls",
       "methods": [],
@@ -138,8 +167,18 @@
       "state": "not-applicable"
     },
     {
-      "id": "stories",
-      "workflow": "Stories",
+      "id": "story-posting",
+      "workflow": "Post normalized photo and TDLib-compatible video stories with privacy, active period, caption, and content protection",
+      "methods": ["createPrivateChat", "postStory"],
+      "evidence": [
+        "backend/src/infrastructure/telegram/tdlib-telegram-repository.ts",
+        "frontend/src/features/account-menu/ui/post-story-dialog.tsx"
+      ],
+      "state": "covered"
+    },
+    {
+      "id": "story-browsing",
+      "workflow": "Browse and interact with stories",
       "methods": [],
       "evidence": [],
       "state": "not-applicable"

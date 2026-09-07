@@ -13,7 +13,7 @@
 - [ ] ~~AI Token 经济 / Agent Marketplace~~
 - [ ] ~~通话录音 / 替代通话通道~~
 - [ ] ~~隐藏账号 / 隐藏会话（P0）~~ — 工作区定位可后置，不当第一批
-- [ ] ~~通话、群组通话、屏幕共享、Stories、论坛 Topics、频道评论、机器人 / Mini Apps~~ — 默认 P2，见 Wave 7。Secret Chats 已升为客户端内核
+- [ ] ~~通话、群组通话、屏幕共享、Stories 浏览、论坛 Topics、频道评论、机器人 / Mini Apps~~ — 默认 P2，见 Wave 7。Secret Chats、通话记录、Story 发布已升为客户端能力
 
 ## Wave 1 — 同步与文本会话正确性
 
@@ -125,7 +125,7 @@ Rejected (gate): chat-row / folder-tab springs (100+/day nav; `pressScale={1}` s
 需要明确产品决策后再开。不要混进前面的波次。
 
 - [ ] 一对一 / 群组通话、屏幕共享
-- [ ] Stories、论坛 Topics、频道评论
+- [ ] Stories 浏览、论坛 Topics、频道评论（Story 发布已完成）
 - [ ] 机器人、Mini Apps、Stars
 - [ ] 隐藏账号、隐藏会话
 - [ ] 钱包 / Web3 / 托管

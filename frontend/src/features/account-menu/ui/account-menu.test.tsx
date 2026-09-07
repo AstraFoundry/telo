@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ChatDto, CurrentUserDto } from "../../../../../contracts/src/ipc";
-import { useChatStore } from "entities/chat";
+import { useChatProfileStore, useChatStore } from "entities/chat";
 import { useTelegramStore } from "entities/telegram";
 import { copy } from "shared/config/copy";
 import { installTeloApiMock } from "shared/test/mock-telo";
@@ -47,6 +47,7 @@ describe("AccountMenu", () => {
       addingAccount: false,
     });
     useChatStore.setState({ chats: [], activeChatId: null });
+    useChatProfileStore.setState({ open: false, peerId: null });
     // jsdom does not implement ResizeObserver, which the popover positioning
     // hook uses to re-measure the trigger and panel.
     window.ResizeObserver = class {
@@ -76,7 +77,7 @@ describe("AccountMenu", () => {
     expect(screen.getByText("@ada")).toBeTruthy();
   });
 
-  it("opens the menu with Saved Messages and Settings actions", async () => {
+  it("opens the complete account menu", async () => {
     useTelegramStore.setState({ currentUser });
     const onOpenSettings = vi.fn();
     const user = userEvent.setup();
@@ -89,7 +90,124 @@ describe("AccountMenu", () => {
     expect(
       await screen.findByRole("button", { name: copy.savedMessages }),
     ).toBeTruthy();
+    for (const label of [
+      copy.myProfile,
+      copy.newStory,
+      copy.newGroup,
+      copy.newChannel,
+      copy.startSecretChat,
+      copy.contacts,
+      copy.calls,
+    ]) {
+      expect(screen.getByRole("button", { name: label })).toBeTruthy();
+    }
     expect(screen.getByRole("button", { name: copy.settings })).toBeTruthy();
+  });
+
+  it("opens the current user's profile from My Profile", async () => {
+    useTelegramStore.setState({ currentUser });
+    const user = userEvent.setup();
+    render(<AccountMenu onOpenSettings={vi.fn()} />);
+
+    await user.click(
+      screen.getByRole("button", { name: copy.openAccountMenu }),
+    );
+    await user.click(
+      await screen.findByRole("button", { name: copy.myProfile }),
+    );
+
+    expect(useChatProfileStore.getState()).toMatchObject({
+      open: true,
+      peerId: currentUser.id,
+    });
+  });
+
+  it("opens a contact's private chat from the account menu", async () => {
+    useTelegramStore.setState({ currentUser });
+    const telo = installTeloApiMock();
+    telo.workspace.listContacts.mockResolvedValue([
+      {
+        id: "mina",
+        displayName: "Mina",
+        username: "mina",
+        phone: null,
+        avatarDataUrl: null,
+      },
+    ]);
+    telo.workspace.openPrivateChat.mockResolvedValue(
+      chat({ id: "mina", kind: "direct", title: "Mina" }),
+    );
+    const user = userEvent.setup();
+    render(<AccountMenu onOpenSettings={vi.fn()} />);
+
+    await user.click(
+      screen.getByRole("button", { name: copy.openAccountMenu }),
+    );
+    await user.click(screen.getByRole("button", { name: copy.contacts }));
+    await user.click(await screen.findByRole("button", { name: /Mina/ }));
+
+    expect(telo.workspace.openPrivateChat).toHaveBeenCalledWith("mina");
+    expect(useChatStore.getState().activeChatId).toBe("mina");
+  });
+
+  it("creates a group from selected contacts", async () => {
+    useTelegramStore.setState({ currentUser });
+    const telo = installTeloApiMock();
+    telo.workspace.listContacts.mockResolvedValue([
+      {
+        id: "mina",
+        displayName: "Mina",
+        username: "mina",
+        phone: null,
+        avatarDataUrl: null,
+      },
+    ]);
+    telo.workspace.createGroup.mockResolvedValue(
+      chat({ id: "design", kind: "group", title: "Design" }),
+    );
+    const user = userEvent.setup();
+    render(<AccountMenu onOpenSettings={vi.fn()} />);
+
+    await user.click(
+      screen.getByRole("button", { name: copy.openAccountMenu }),
+    );
+    await user.click(screen.getByRole("button", { name: copy.newGroup }));
+    await user.type(await screen.findByLabelText(copy.groupName), "Design");
+    await user.click(await screen.findByRole("button", { name: /Mina/ }));
+    await user.click(screen.getByRole("button", { name: copy.createGroup }));
+
+    expect(telo.workspace.createGroup).toHaveBeenCalledWith({
+      title: "Design",
+      userIds: ["mina"],
+    });
+    expect(useChatStore.getState().activeChatId).toBe("design");
+  });
+
+  it("creates a channel from the account menu", async () => {
+    useTelegramStore.setState({ currentUser });
+    const telo = installTeloApiMock();
+    telo.workspace.createChannel.mockResolvedValue(
+      chat({ id: "news", kind: "channel", title: "News" }),
+    );
+    const user = userEvent.setup();
+    render(<AccountMenu onOpenSettings={vi.fn()} />);
+
+    await user.click(
+      screen.getByRole("button", { name: copy.openAccountMenu }),
+    );
+    await user.click(screen.getByRole("button", { name: copy.newChannel }));
+    await user.type(await screen.findByLabelText(copy.channelName), "News");
+    await user.type(
+      screen.getByLabelText(copy.channelDescription),
+      "Product updates",
+    );
+    await user.click(screen.getByRole("button", { name: copy.createChannel }));
+
+    expect(telo.workspace.createChannel).toHaveBeenCalledWith({
+      title: "News",
+      description: "Product updates",
+    });
+    expect(useChatStore.getState().activeChatId).toBe("news");
   });
 
   it("selects the Saved Messages chat and closes the menu", async () => {

@@ -85,7 +85,9 @@ describe("TelegramConnectionForm", () => {
       screen.getByLabelText(copy.countryOrRegion),
       "united kingdom",
     );
-    await user.click(screen.getByRole("option", { name: /United Kingdom/ }));
+    const option = screen.getByRole("option", { name: /United Kingdom/ });
+    expect(option.textContent).toContain("🇬🇧");
+    await user.click(option);
 
     const picker = screen.getByLabelText(
       copy.countryOrRegion,

@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AgentConfigurationDto } from "../../../../../contracts/src/ipc";
 import { AGENT_OAUTH_PROVIDERS } from "../../../../../contracts/src/ipc";
@@ -45,6 +45,14 @@ describe("AgentConfigurationForm", () => {
       unobserve(): void {}
       disconnect(): void {}
     } as unknown as typeof ResizeObserver;
+    window.IntersectionObserver = class {
+      observe(): void {}
+      unobserve(): void {}
+      disconnect(): void {}
+      takeRecords(): IntersectionObserverEntry[] {
+        return [];
+      }
+    } as unknown as typeof IntersectionObserver;
   });
 
   beforeEach(() => {
@@ -94,6 +102,74 @@ describe("AgentConfigurationForm", () => {
     expect(
       screen.getByRole("button", { name: copy.connectAccount }),
     ).toBeTruthy();
+  });
+
+  it("uses the compact onboarding path with Continue followed by Skip", async () => {
+    const user = userEvent.setup();
+    const onComplete = vi.fn();
+    const onSkip = vi.fn();
+    render(
+      <AgentConfigurationForm
+        variant="onboarding"
+        onComplete={onComplete}
+        onSkip={onSkip}
+      />,
+    );
+    await waitFor(() => {
+      expect(
+        (
+          screen.getByRole("combobox", {
+            name: copy.model,
+          }) as HTMLInputElement
+        ).value,
+      ).toBe("gpt-4.1-mini");
+    });
+
+    expect(screen.getByRole("heading").textContent).toBe(copy.connectAiTitle);
+    const continueButton = screen.getByRole("button", { name: copy.continue });
+    const skipButton = screen.getByRole("button", { name: copy.skipForNow });
+    expect(continueButton.hasAttribute("disabled")).toBe(true);
+    expect(
+      continueButton.compareDocumentPosition(skipButton) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+
+    await user.click(skipButton);
+    expect(onSkip).toHaveBeenCalledOnce();
+    expect(onComplete).not.toHaveBeenCalled();
+  });
+
+  it("continues from onboarding after an OAuth account is connected", async () => {
+    const user = userEvent.setup();
+    const onComplete = vi.fn();
+    render(
+      <AgentConfigurationForm
+        variant="onboarding"
+        onComplete={onComplete}
+        onSkip={vi.fn()}
+      />,
+    );
+    await waitFor(() => {
+      expect(
+        (
+          screen.getByRole("combobox", {
+            name: copy.model,
+          }) as HTMLInputElement
+        ).value,
+      ).toBe("gpt-4.1-mini");
+    });
+
+    await user.click(screen.getByRole("button", { name: copy.connectAccount }));
+    await waitFor(() => {
+      expect(
+        screen
+          .getByRole("button", { name: copy.continue })
+          .hasAttribute("disabled"),
+      ).toBe(false);
+    });
+    await user.click(screen.getByRole("button", { name: copy.continue }));
+
+    await waitFor(() => expect(onComplete).toHaveBeenCalledOnce());
   });
 
   it("fills the Anthropic default model and offers Connect instead of a key", async () => {

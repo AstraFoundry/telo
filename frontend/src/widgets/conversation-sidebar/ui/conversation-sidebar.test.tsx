@@ -196,7 +196,7 @@ describe("ConversationSidebar", () => {
     const title = screen.getByText(copy.appName);
     expect(title).toBeTruthy();
     expect(title.closest("header")?.className).toContain(
-      "window-titlebar-safe-leading",
+      "window-titlebar-safe",
     );
 
     act(() => useChatStore.setState({ connectionState: "offline" }));

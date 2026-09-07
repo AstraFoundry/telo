@@ -123,6 +123,23 @@ export function installTeloApiMock(): TeloApiMock {
         typing: false,
         secretState: "pending" as const,
       })),
+      listContacts: vi.fn(async () => []),
+      openPrivateChat: vi.fn(),
+      createGroup: vi.fn(),
+      createChannel: vi.fn(),
+      listCalls: vi.fn(async () => ({ items: [], nextCursor: null })),
+      postStory: vi.fn(async (_file, input) => {
+        const postedAt = new Date(0);
+        return {
+          id: "story-1",
+          posterChatId: "saved",
+          postedAt: postedAt.toISOString(),
+          expiresAt: new Date(
+            postedAt.getTime() + input.activePeriod * 1000,
+          ).toISOString(),
+          video: false,
+        };
+      }),
       openSavedMessages: vi.fn(async () => ({
         id: "saved",
         title: "Saved Messages",

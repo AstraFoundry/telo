@@ -657,7 +657,7 @@ export function ConversationSidebar({
       className="flex h-full min-h-0 min-w-0 flex-col"
       aria-label={copy.chats}
     >
-      <header className="window-titlebar-safe-leading window-titlebar-safe-trailing flex h-14 items-center gap-2 [app-region:drag]">
+      <header className="window-titlebar-safe flex h-14 items-center gap-2 [app-region:drag]">
         <WindowControls />
         <div className="window-titlebar-safe-content min-w-0 flex-1">
           <strong

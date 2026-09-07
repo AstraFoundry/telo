@@ -49,8 +49,16 @@ export function CountryCombobox({
                 textValue={country.name}
                 keywords={[country.dialCode, `+${country.dialCode}`]}
               >
-                <span className="flex min-w-0 flex-1 items-center justify-between gap-3">
-                  <span className="truncate">{country.name}</span>
+                <span className="flex min-w-0 flex-1 items-center gap-3">
+                  <span
+                    aria-hidden="true"
+                    className="w-6 shrink-0 text-center text-lg leading-none"
+                  >
+                    {country.flag}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate">
+                    {country.name}
+                  </span>
                   <span className="shrink-0 tabular-nums text-muted-foreground">
                     +{country.dialCode}
                   </span>
