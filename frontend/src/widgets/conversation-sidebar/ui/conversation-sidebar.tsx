@@ -95,7 +95,7 @@ function FolderTab({ label, selected, unread, onSelect }: FolderTabProps) {
           {" "}
           <span
             aria-label={`${unread} ${copy.unread}`}
-            className="grid min-w-4 place-items-center rounded-full bg-primary px-1 py-0.5 text-[10px] text-primary-foreground tabular-nums"
+            className="grid h-4 min-w-4 place-items-center rounded-full bg-primary px-1 text-caption font-semibold text-primary-foreground tabular-nums"
           >
             {unread}
           </span>
@@ -147,7 +147,7 @@ function ChatListRow({
           aria-current={active ? "page" : undefined}
           data-promote={promoted ? "true" : undefined}
           /* deslop-ignore-next-line 21 — compact chat-row radius is a messaging convention */
-          className={`mb-0.5 h-auto w-full justify-start rounded-xl px-2.5 py-2 text-left ${
+          className={`mb-0.5 h-auto w-full justify-start gap-2.5 rounded-xl px-2.5 py-2 text-left ${
             active ? "bg-accent text-foreground" : ""
           }`}
         >
@@ -156,7 +156,7 @@ function ChatListRow({
             pending={chat.avatarPending}
             mark={chat.kind === "saved" ? "saved" : undefined}
             placeholder={chat.avatarPlaceholder}
-            className="size-10"
+            className="size-12"
           />
           <span className="min-w-0 flex-1">
             <span className="flex items-center gap-2">
@@ -166,14 +166,14 @@ function ChatListRow({
                   className="size-3.5 shrink-0 text-muted-foreground"
                 />
               ) : null}
-              <span className="min-w-0 flex-1 truncate text-sm font-semibold">
+              <span className="min-w-0 flex-1 truncate text-sm leading-5 font-semibold">
                 {displayChatTitle(chat)}
               </span>
-              <time className="text-[11px] font-normal text-muted-foreground tabular-nums">
+              <time className="shrink-0 text-xs font-normal text-muted-foreground tabular-nums">
                 {shortTime(chat.updatedAt, timeFormat)}
               </time>
             </span>
-            <span className="mt-0.5 flex items-center gap-1.5 text-xs font-normal text-muted-foreground">
+            <span className="mt-px flex items-center gap-1.5 text-callout font-normal text-muted-foreground">
               <span className="min-w-0 flex-1 truncate">
                 {chat.typing ? (
                   <ChatTypingIndicator className="text-primary" />
@@ -191,7 +191,7 @@ function ChatListRow({
                 <span
                   aria-label={`${chat.unreadCount} ${copy.unread}`}
                   /* deslop-ignore-next-line 19 */
-                  className="grid min-w-5 place-items-center rounded-full bg-primary px-1.5 py-0.5 text-[10px] text-primary-foreground tabular-nums"
+                  className="grid h-5 min-w-5 shrink-0 place-items-center rounded-full bg-primary px-1.5 text-caption font-semibold text-primary-foreground tabular-nums"
                 >
                   {chat.unreadCount}
                 </span>
@@ -253,25 +253,25 @@ function MessageSearchResultRow({
       pressScale={1}
       onClick={onSelect}
       /* deslop-ignore-next-line 21 — matches the chat-row shape above */
-      className="mb-0.5 h-auto w-full justify-start rounded-xl px-2.5 py-2 text-left"
+      className="mb-0.5 h-auto w-full justify-start gap-2.5 rounded-xl px-2.5 py-2 text-left"
     >
       <Avatar
         src={chat?.avatarDataUrl ?? null}
         pending={chat?.avatarPending}
         mark={chat?.kind === "saved" ? "saved" : undefined}
         placeholder={chat?.avatarPlaceholder}
-        className="size-10"
+        className="size-12"
       />
       <span className="min-w-0 flex-1">
         <span className="flex items-center gap-2">
-          <span className="min-w-0 flex-1 truncate text-sm font-semibold">
+          <span className="min-w-0 flex-1 truncate text-sm leading-5 font-semibold">
             {message.senderName}
           </span>
-          <time className="text-[11px] font-normal text-muted-foreground tabular-nums">
+          <time className="shrink-0 text-xs font-normal text-muted-foreground tabular-nums">
             {shortTime(message.sentAt, timeFormat)}
           </time>
         </span>
-        <span className="mt-0.5 block truncate text-xs font-normal text-muted-foreground">
+        <span className="mt-px block truncate text-callout font-normal text-muted-foreground">
           {message.body}
         </span>
       </span>
@@ -371,25 +371,25 @@ function RecentSearchRow({
           variant="ghost"
           pressScale={1}
           onClick={onSelect}
-          className="mb-0.5 h-auto w-full justify-start rounded-xl px-2.5 py-2 text-left"
+          className="mb-0.5 h-auto w-full justify-start gap-2.5 rounded-xl px-2.5 py-2 text-left"
         >
           <Avatar
             src={chat.avatarDataUrl}
             pending={chat.avatarPending}
             mark={chat.kind === "saved" ? "saved" : undefined}
             placeholder={chat.avatarPlaceholder}
-            className="size-10"
+            className="size-12"
           />
           <span className="min-w-0 flex-1">
             <span className="flex items-center gap-2">
-              <span className="min-w-0 flex-1 truncate text-sm font-semibold">
+              <span className="min-w-0 flex-1 truncate text-sm leading-5 font-semibold">
                 {displayChatTitle(chat)}
               </span>
-              <time className="text-[11px] font-normal text-muted-foreground tabular-nums">
+              <time className="shrink-0 text-xs font-normal text-muted-foreground tabular-nums">
                 {shortTime(chat.updatedAt, timeFormat)}
               </time>
             </span>
-            <span className="mt-0.5 block truncate text-xs font-normal text-muted-foreground">
+            <span className="mt-px block truncate text-callout font-normal text-muted-foreground">
               {chat.preview}
             </span>
           </span>
@@ -437,29 +437,29 @@ function ArchiveRow({
           ? `${copy.archivedChats}, ${unread} ${copy.unread}`
           : copy.archivedChats
       }
-      className="mb-0.5 h-auto w-full justify-start rounded-xl px-2.5 py-2 text-left"
+      className="mb-0.5 h-auto w-full justify-start gap-2.5 rounded-xl px-2.5 py-2 text-left"
     >
       <span
         aria-hidden="true"
-        className="grid size-10 shrink-0 place-items-center rounded-full bg-gradient-to-b from-[#5CAFFA] to-[#408ACF] text-white"
+        className="grid size-12 shrink-0 place-items-center rounded-full bg-gradient-to-b from-[#5CAFFA] to-[#408ACF] text-white"
       >
         <Archive weight="fill" className="size-5" />
       </span>
       <span className="min-w-0 flex-1">
         <span className="flex items-center gap-2">
-          <span className="min-w-0 flex-1 truncate text-sm font-semibold">
+          <span className="min-w-0 flex-1 truncate text-sm leading-5 font-semibold">
             {copy.archivedChats}
           </span>
           {unread > 0 ? (
             <span
               aria-hidden="true"
-              className="grid min-w-5 shrink-0 place-items-center rounded-full bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground tabular-nums"
+              className="grid h-5 min-w-5 shrink-0 place-items-center rounded-full bg-muted px-1.5 text-caption font-semibold text-muted-foreground tabular-nums"
             >
               {unread}
             </span>
           ) : null}
         </span>
-        <span className="mt-0.5 block truncate text-xs font-normal text-muted-foreground">
+        <span className="mt-px block truncate text-callout font-normal text-muted-foreground">
           {archived
             .slice(0, ARCHIVE_PREVIEW_CHATS)
             .map((chat) => displayChatTitle(chat))
@@ -530,11 +530,11 @@ function ChatListSkeleton() {
       {CHAT_SKELETON_ROWS.map((row, index) => (
         <div
           key={index}
-          className="mb-0.5 flex items-center gap-2 px-2.5 py-2"
-          // Matches ChatListRow: 8px block padding around a 40px avatar.
+          className="mb-0.5 flex items-center gap-2.5 px-2.5 py-2"
+          // Matches ChatListRow: 8px block padding around a 48px avatar.
         >
-          <Skeleton circle className="size-10 shrink-0" />
-          <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+          <Skeleton circle className="size-12 shrink-0" />
+          <div className="flex min-w-0 flex-1 flex-col gap-2">
             <div className="flex items-center gap-2">
               <Skeleton className={`h-3.5 ${row.title}`} />
               <Skeleton className="ml-auto h-3 w-8" />
@@ -661,7 +661,7 @@ export function ConversationSidebar({
         <WindowControls />
         <div className="window-titlebar-safe-content min-w-0 flex-1">
           <strong
-            className="truncate text-base tracking-tight"
+            className="truncate text-base font-semibold tracking-title"
             aria-live="polite"
           >
             {connectionState === "offline"

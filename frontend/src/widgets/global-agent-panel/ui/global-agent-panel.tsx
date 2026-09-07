@@ -182,7 +182,9 @@ export function GlobalAgentPanel({ onOpenSettings }: GlobalAgentPanelProps) {
       <header className="window-titlebar-safe flex h-14 shrink-0 items-center gap-2 border-b">
         <Sparkle className="size-5 text-muted-foreground" />
         {/* deslop-ignore-next-line 12 */}
-        <h2 className="min-w-0 flex-1 text-base font-semibold">{copy.agent}</h2>
+        <h2 className="min-w-0 flex-1 text-base font-semibold tracking-title">
+          {copy.agent}
+        </h2>
         {/* Session-level controls only; provider configuration stays in
               Settings. They are disabled mid-run so a thread switch cannot
               reroute the live event stream into another transcript. */}
@@ -301,7 +303,10 @@ export function GlobalAgentPanel({ onOpenSettings }: GlobalAgentPanelProps) {
                         />
                       ) : (
                         <MessageBubble variant="tint">
-                          <MessageBubbleContent>
+                          {/* The same bubble metrics as the chat transcript
+                              (app/styles/index.css), so a prompt reads as a
+                              message and not as a roomier registry card. */}
+                          <MessageBubbleContent className="rounded-[var(--message-bubble-radius)] px-[var(--message-bubble-padding-x)] py-[var(--message-bubble-padding-y)] leading-[var(--message-line-height)] text-pretty">
                             <ReplyText
                               segments={
                                 parseReply(message.body, [

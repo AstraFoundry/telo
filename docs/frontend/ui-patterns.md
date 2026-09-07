@@ -55,6 +55,23 @@ import { t } from "shared/i18n";
 - Elevation is expressed with layered transparent shadows, not hairlines. The workspace shell paints `bg-background`; the central column floats on it as a card (`bg-card rounded-l-2xl shadow-column`, token defined per theme in `frontend/src/app/styles/index.css`), and its shadow carries the separation. When the agent panel is open the card's right corners round too (`rounded-r-2xl`) and the panel sits borderless on the shell background, mirroring the left sidebar. Reserve `border-*` for structural separations inside content (Settings section dividers, the sidebar account row) — never to partition the app shell, and never doubled against a shadowed edge.
 - Outgoing chat bubbles use the beui `MessageBubble` `tint` variant (accent-tinted surface, foreground text), matching Telegram's accent-family outgoing bubbles. The `solid` variant inverts `bg-foreground`/`text-background`, which reads as near-black in light theme and glaring white in dark theme; do not use it for chat bubbles.
 
+## Type scale and spacing
+
+The body size is 14px (`text-sm`). Everything smaller comes from two theme tokens in `frontend/src/app/styles/index.css`, not from arbitrary values:
+
+| Utility        | Size  | Use                                                                                                                  |
+| -------------- | ----- | -------------------------------------------------------------------------------------------------------------------- |
+| `text-sm`      | 14/20 | Body, row titles, message text, header titles at `text-base`                                                         |
+| `text-callout` | 13/18 | Secondary line under a title: chat-list preview, header status, author line above a bubble, link-preview description |
+| `text-xs`      | 12/16 | Section labels, helper copy, chat-list times                                                                         |
+| `text-caption` | 11/14 | Meta: message footers, unread badges, citation marks                                                                 |
+
+- ❌ Avoid `text-[11px]`, `text-[10px]` and similar. Reach for the token that names the role.
+- Titles at 16px and above use `tracking-title` (`-0.01em`). Body and meta text keep the default tracking.
+- Running text wraps with `text-pretty`; headings use `text-balance`.
+- Chat-list rows are a 48px avatar with 8px block padding and a 10px gap, so the avatar-to-text ratio matches Telegram's clients at this body size. Badges are a fixed 20px tall, never padded to height.
+- Chat bubbles read their geometry from the `--message-*` tokens (padding, radius, line height). The agent panel's prompt bubble uses the same tokens; the assistant reply is running text on a 1.5 leading with half-line block spacing, overriding Streamdown's document-sized defaults.
+
 ## Deslop scan suppressions
 
 The `kill-ai-slop` project skill ships a scanner (`.agents/skills/kill-ai-slop/scripts/scan.mjs`) that flags AI-slop visual and copy tells in source. It runs on demand through the skill; it is not wired into `package.json` scripts or CI.

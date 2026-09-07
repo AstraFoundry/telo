@@ -154,7 +154,7 @@ function ProfileIdentity({
       />
       {/* deslop-ignore-next-line 12 — the name outranks body text here, and
           larger type wants its tracking pulled back in. */}
-      <div className="text-lg leading-tight font-semibold tracking-[-0.01em] text-balance">
+      <div className="text-lg leading-tight font-semibold tracking-title text-balance">
         {title}
       </div>
       {status ? (
@@ -317,11 +317,11 @@ function PinnedRow({
           <span className="min-w-0 flex-1 truncate text-sm font-semibold">
             {message.senderName}
           </span>
-          <time className="text-[11px] font-normal text-muted-foreground tabular-nums">
+          <time className="shrink-0 text-xs font-normal text-muted-foreground tabular-nums">
             {time(message.sentAt, timeFormat)}
           </time>
         </span>
-        <span className="mt-0.5 block truncate text-xs font-normal text-muted-foreground">
+        <span className="mt-px block truncate text-callout font-normal text-muted-foreground">
           {preview}
         </span>
       </span>

@@ -89,7 +89,7 @@ export function SettingsPage({
           </Button>
         </Tooltip>
         {/* deslop-ignore-next-line 12 — compact toolbar title is an app chrome convention */}
-        <h1 className="text-base font-semibold text-balance">
+        <h1 className="text-base font-semibold tracking-title text-balance">
           {copy.settings}
         </h1>
       </header>
@@ -125,7 +125,7 @@ export function SettingsPage({
               <div className="flex flex-col gap-1">
                 <h2
                   id="settings-section-title"
-                  className="text-xl font-semibold text-balance"
+                  className="text-xl font-semibold tracking-title text-balance"
                 >
                   {SECTION_TITLES[section]}
                 </h2>
