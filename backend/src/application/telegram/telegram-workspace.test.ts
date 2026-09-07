@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import type {
   ChatDto,
   MessageDto,
+  PostedStoryDto,
   StickerSetReferenceDto,
 } from "../../../../contracts/src/ipc";
 import { KeywordFolder } from "../../domain/keyword-folder/keyword-folder";
@@ -512,6 +513,104 @@ describe("TelegramWorkspaceService", () => {
       service.postStory(file, { privacy: "contacts", activePeriod: 86400 }),
     ).toThrow("photo or video");
     expect(port.postStory).not.toHaveBeenCalled();
+  });
+
+  // A story video is bounded at both ends: Telegram rejects an empty clip and
+  // caps a story at 60 seconds, so the service refuses both before upload
+  // rather than spending the transfer to be told no.
+  it.each([
+    [0, "a clip with no duration"],
+    [61, "a clip past the 60 second cap"],
+  ])("rejects %i-second story video (%s)", async (durationSeconds) => {
+    const port = repository();
+    const service = new TelegramWorkspaceService(port);
+    const file = {
+      source: "/tmp/story.mp4",
+      name: "story.mp4",
+      mimeType: "video/mp4",
+      size: 128,
+    };
+
+    expect(() =>
+      service.postStory(file, {
+        privacy: "contacts",
+        activePeriod: 86400,
+        durationSeconds,
+      }),
+    ).toThrow("between 1 and 60 seconds");
+    expect(port.postStory).not.toHaveBeenCalled();
+  });
+
+  it("posts a story video inside the duration bounds and trims its caption", async () => {
+    const port = repository();
+    port.postStory = vi.fn(async () => ({ id: "story-1" }) as PostedStoryDto);
+    const service = new TelegramWorkspaceService(port);
+    const file = {
+      source: "/tmp/story.mp4",
+      name: "story.mp4",
+      mimeType: "video/mp4",
+      size: 128,
+    };
+
+    await service.postStory(file, {
+      privacy: "contacts",
+      activePeriod: 86400,
+      durationSeconds: 30,
+      caption: "  Ship day  ",
+    });
+
+    expect(port.postStory).toHaveBeenCalledWith(
+      file,
+      expect.objectContaining({ caption: "Ship day", durationSeconds: 30 }),
+    );
+  });
+
+  // Every member of a new group has to be a real peer. A blank entry and a
+  // repeated one both produce a group that does not match what was asked for,
+  // so they are refused rather than silently normalized away.
+  it.each([
+    [[" mina ", "  "], "User id is required"],
+    [["mina", " mina "], "Group members contain duplicates"],
+  ])("refuses group members %j", async (userIds, message) => {
+    const port = repository();
+    const service = new TelegramWorkspaceService(port);
+
+    expect(() => service.createGroup({ title: "Design", userIds })).toThrow(
+      message,
+    );
+    expect(port.createGroup).not.toHaveBeenCalled();
+  });
+
+  it("bounds a chat title and a channel description", async () => {
+    const port = repository();
+    const service = new TelegramWorkspaceService(port);
+
+    expect(() =>
+      service.createGroup({ title: "T".repeat(129), userIds: ["mina"] }),
+    ).toThrow("at most 128 characters");
+    expect(() =>
+      service.createChannel({ title: "News", description: "D".repeat(256) }),
+    ).toThrow("at most 255 characters");
+    expect(port.createGroup).not.toHaveBeenCalled();
+    expect(port.createChannel).not.toHaveBeenCalled();
+  });
+
+  it("requires a user id to open a private chat", async () => {
+    const port = repository();
+    const service = new TelegramWorkspaceService(port);
+
+    expect(() => service.openPrivateChat("  ")).toThrow("User id is required");
+    expect(port.openPrivateChat).not.toHaveBeenCalled();
+  });
+
+  // A blank cursor is the first page, not a page named " ".
+  it("reads a blank call cursor as the first page", async () => {
+    const port = repository();
+    const service = new TelegramWorkspaceService(port);
+
+    await service.listCalls("  ");
+
+    expect(port.listCalls).toHaveBeenCalledWith(null);
   });
 
   it.each([
