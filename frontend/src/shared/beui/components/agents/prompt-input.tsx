@@ -289,7 +289,7 @@ export function PromptInput({
               side="top"
               align="start"
               sideOffset={8}
-              radius={12}
+              radius={16}
               className="w-56 p-1.5"
             >
               {actions.map((action) => (
