@@ -572,7 +572,7 @@ function ResourceRow({
             side="bottom"
             align="end"
             sideOffset={8}
-            radius={12}
+            radius={16}
             className="w-40 p-1.5"
           >
             <div data-sidebar-resource-menu={row.item.id}>{menu}</div>

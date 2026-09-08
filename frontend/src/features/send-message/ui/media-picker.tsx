@@ -83,12 +83,12 @@ export function MediaPicker({
         side="top"
         align="start"
         sideOffset={8}
-        radius={12}
+        radius={16}
         // Eight 40px emoji cells plus seven 2px gaps need 334px of content box;
         // at w-84 the grid and the category row both compressed their buttons
         // to 38px to fit, quietly undercutting the 40px pointer target. The
         // sticker grid shares the width so the panel never resizes on a tab.
-        className="w-88 p-2"
+        className="w-88 p-1.5"
       >
         <div className="flex flex-col gap-2">
           <div className="flex items-center gap-1">

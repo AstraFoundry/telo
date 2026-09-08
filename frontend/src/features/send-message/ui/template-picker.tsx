@@ -90,8 +90,8 @@ export function TemplatePicker({
         side="top"
         align="start"
         sideOffset={8}
-        radius={12}
-        className="w-72 p-2"
+        radius={16}
+        className="w-72 p-1.5"
       >
         {draft ? (
           <div className="flex flex-col gap-2">
