@@ -1,3 +1,4 @@
+import { motion, useReducedMotionConfig } from "motion/react";
 import {
   ArrowLeft,
   CaretRight,
@@ -31,6 +32,7 @@ import { userFacingErrorDetail } from "shared/lib/user-facing-error";
 import {
   Avatar,
   Button,
+  EASE_OUT,
   MediaViewer,
   MessageMedia,
   OptionRow,
@@ -442,6 +444,7 @@ export function ChatProfilePanel({
   }
   const stack = navigation.stack;
   const current = stack[stack.length - 1] ?? MAIN_ENTRY;
+  const reduce = useReducedMotionConfig();
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const navigate = (view: ProfileView) => {
@@ -730,83 +733,101 @@ export function ChatProfilePanel({
         </Tooltip>
       </header>
       <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
-        {loadError ? (
-          <p role="alert" className="px-4 py-3 text-sm text-destructive">
-            {loadError}
-          </p>
-        ) : null}
-        {!showChatProfile ? (
-          peerCard.error ? (
+        {/* The stack's views are one keyed surface: pushing enters from the
+            trailing edge, popping from the leading one, so the reader keeps
+            the direction they just moved. Enter-only — an exit would delay
+            the incoming view past the scroll restore, and Back has to land
+            on the offset it left. */}
+        <motion.div
+          key={`${stack.length}:${current.view}`}
+          initial={
+            reduce
+              ? { opacity: 0 }
+              : { opacity: 0, x: stack.length > 1 ? 16 : -16 }
+          }
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: reduce ? 0.1 : 0.18, ease: EASE_OUT }}
+        >
+          {loadError ? (
             <p role="alert" className="px-4 py-3 text-sm text-destructive">
-              {peerCard.error}
+              {loadError}
             </p>
-          ) : peerCard.profile === null ? (
-            <ProfileSkeleton />
+          ) : null}
+          {!showChatProfile ? (
+            peerCard.error ? (
+              <p role="alert" className="px-4 py-3 text-sm text-destructive">
+                {peerCard.error}
+              </p>
+            ) : peerCard.profile === null ? (
+              <ProfileSkeleton />
+            ) : (
+              <PeerCard
+                profile={peerCard.profile}
+                onEdit={isSelf ? onEditProfile : undefined}
+              />
+            )
+          ) : sharedMedia === null || pinned === null ? (
+            loadError ? null : (
+              <ProfileSkeleton />
+            )
+          ) : current.view === "shared-media" ? (
+            <div className="flex flex-col gap-4 px-4 py-4">
+              {renderGrid(visualNewestFirst)}
+              {renderFiles(fileMedia)}
+            </div>
+          ) : current.view === "pinned" ? (
+            <div className="flex flex-col px-2 py-2">
+              {renderPinnedRows(pinned)}
+            </div>
           ) : (
-            <PeerCard
-              profile={peerCard.profile}
-              onEdit={isSelf ? onEditProfile : undefined}
-            />
-          )
-        ) : sharedMedia === null || pinned === null ? (
-          loadError ? null : (
-            <ProfileSkeleton />
-          )
-        ) : current.view === "shared-media" ? (
-          <div className="flex flex-col gap-4 px-4 py-4">
-            {renderGrid(visualNewestFirst)}
-            {renderFiles(fileMedia)}
-          </div>
-        ) : current.view === "pinned" ? (
-          <div className="flex flex-col px-2 py-2">
-            {renderPinnedRows(pinned)}
-          </div>
-        ) : (
-          <div className="flex flex-col gap-2 px-2 py-4">
-            <ProfileIdentity
-              avatarDataUrl={chat.avatarDataUrl}
-              avatarPending={chat.avatarPending}
-              mark={chat.kind === "saved" ? "saved" : undefined}
-              placeholder={chat.avatarPlaceholder}
-              title={displayChatTitle(chat)}
-              status={subtitle(chat)}
-            />
-            {/* Direct chats get the user card's rows too: bio, phone and
+            <div className="flex flex-col gap-2 px-2 py-4">
+              <ProfileIdentity
+                avatarDataUrl={chat.avatarDataUrl}
+                avatarPending={chat.avatarPending}
+                mark={chat.kind === "saved" ? "saved" : undefined}
+                placeholder={chat.avatarPlaceholder}
+                title={displayChatTitle(chat)}
+                status={subtitle(chat)}
+              />
+              {/* Direct chats get the user card's rows too: bio, phone and
                 username live on UserFullInfo, not on ChatDto — tdesktop's
                 user info column shows them for every 1:1 dialog. */}
-            {chat.kind === "direct" && peerCard.profile ? (
-              <>
-                <PeerContactAction
-                  profile={peerCard.profile}
-                  onChanged={() => setPeerReload((count) => count + 1)}
-                />
-                <PeerInfoRows profile={peerCard.profile} />
-              </>
-            ) : null}
-            {visualNewestFirst.length || fileMedia.length ? (
-              <section aria-label={copy.sharedMedia}>
-                <SectionHeader
-                  label={copy.sharedMedia}
-                  count={visualNewestFirst.length + fileMedia.length}
-                  onOpen={() => navigate("shared-media")}
-                />
-                <div className="px-2">
-                  {renderGrid(visualNewestFirst.slice(0, SHARED_MEDIA_PREVIEW))}
-                </div>
-              </section>
-            ) : null}
-            {pinned.length ? (
-              <section aria-label={copy.pinnedMessages}>
-                <SectionHeader
-                  label={copy.pinnedMessages}
-                  count={pinned.length}
-                  onOpen={() => navigate("pinned")}
-                />
-                {renderPinnedRows(pinned.slice(0, PINNED_PREVIEW))}
-              </section>
-            ) : null}
-          </div>
-        )}
+              {chat.kind === "direct" && peerCard.profile ? (
+                <>
+                  <PeerContactAction
+                    profile={peerCard.profile}
+                    onChanged={() => setPeerReload((count) => count + 1)}
+                  />
+                  <PeerInfoRows profile={peerCard.profile} />
+                </>
+              ) : null}
+              {visualNewestFirst.length || fileMedia.length ? (
+                <section aria-label={copy.sharedMedia}>
+                  <SectionHeader
+                    label={copy.sharedMedia}
+                    count={visualNewestFirst.length + fileMedia.length}
+                    onOpen={() => navigate("shared-media")}
+                  />
+                  <div className="px-2">
+                    {renderGrid(
+                      visualNewestFirst.slice(0, SHARED_MEDIA_PREVIEW),
+                    )}
+                  </div>
+                </section>
+              ) : null}
+              {pinned.length ? (
+                <section aria-label={copy.pinnedMessages}>
+                  <SectionHeader
+                    label={copy.pinnedMessages}
+                    count={pinned.length}
+                    onOpen={() => navigate("pinned")}
+                  />
+                  {renderPinnedRows(pinned.slice(0, PINNED_PREVIEW))}
+                </section>
+              ) : null}
+            </div>
+          )}
+        </motion.div>
       </div>
       <MediaViewer
         item={

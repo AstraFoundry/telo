@@ -33,9 +33,9 @@ export function MessageAttachmentTray({
         {items.map((item) => (
           <motion.div
             key={item.id}
-            initial={reduce ? { opacity: 0 } : { opacity: 0, scale: 0.95 }}
+            initial={reduce ? { opacity: 0 } : { opacity: 0, scale: 0.96 }}
             animate={{ opacity: 1, scale: 1 }}
-            exit={reduce ? { opacity: 0 } : { opacity: 0, scale: 0.97 }}
+            exit={reduce ? { opacity: 0 } : { opacity: 0, scale: 0.98 }}
             transition={{ duration: reduce ? 0.12 : 0.18, ease: EASE_OUT }}
             style={{ transformOrigin: "0% 100%" }}
             className="relative flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-muted outline outline-1 -outline-offset-1 outline-black/10 dark:outline-white/10"

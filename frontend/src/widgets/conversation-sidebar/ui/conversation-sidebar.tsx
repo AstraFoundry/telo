@@ -32,7 +32,7 @@ import {
   removeRecentSearch,
 } from "features/chat-search/model/recent-searches";
 import { StartSecretChatMenuItem } from "features/start-secret-chat";
-import { AnimatePresence } from "motion/react";
+import { AnimatePresence, motion, useReducedMotionConfig } from "motion/react";
 
 import { copy } from "shared/config/copy";
 import { useEdgeSentinel } from "shared/lib/use-edge-sentinel";
@@ -47,6 +47,7 @@ import {
   ContextMenuContent,
   ContextMenuItem,
   ContextMenuTrigger,
+  EASE_OUT,
   LoadIndicator,
   MessageTyping,
   Skeleton,
@@ -107,7 +108,10 @@ function FolderTab({ label, selected, unread, onSelect }: FolderTabProps) {
 }
 
 function ChatTypingIndicator({ className }: { className?: string }) {
-  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  // Reads the app's own reduced-motion preference through MotionConfig like
+  // the rest of the tree; a direct `matchMedia` read misses the in-app setting
+  // and never updates when it changes mid-session.
+  const reduce = useReducedMotionConfig();
   if (reduce) {
     return <span className={className}>{copy.typing}</span>;
   }
@@ -330,15 +334,17 @@ function SearchHistory({
               {copy.clearSearchHistory}
             </button>
           </div>
-          {entries.map((chat) => (
-            <RecentSearchRow
-              key={chat.id}
-              chat={chat}
-              timeFormat={timeFormat}
-              onSelect={() => onOpen(chat.id)}
-              onRemove={() => onRemove(chat.id)}
-            />
-          ))}
+          <AnimatePresence initial={false}>
+            {entries.map((chat) => (
+              <RecentSearchRow
+                key={chat.id}
+                chat={chat}
+                timeFormat={timeFormat}
+                onSelect={() => onOpen(chat.id)}
+                onRemove={() => onRemove(chat.id)}
+              />
+            ))}
+          </AnimatePresence>
         </>
       ) : (
         <div className="grid h-full place-items-center px-3 text-center text-sm text-muted-foreground">
@@ -365,44 +371,57 @@ function RecentSearchRow({
   onSelect(): void;
   onRemove(): void;
 }) {
+  const reduce = useReducedMotionConfig();
   return (
-    <ContextMenu>
-      <ContextMenuTrigger>
-        <Button
-          variant="ghost"
-          pressScale={1}
-          onClick={onSelect}
-          className="mb-0.5 h-auto w-full justify-start gap-2.5 rounded-xl px-2.5 py-2 text-left"
-        >
-          <Avatar
-            src={chat.avatarDataUrl}
-            pending={chat.avatarPending}
-            mark={chat.kind === "saved" ? "saved" : undefined}
-            placeholder={chat.avatarPlaceholder}
-            className="size-12"
-          />
-          <span className="min-w-0 flex-1">
-            <span className="flex items-center gap-2">
-              <span className="min-w-0 flex-1 truncate text-sm leading-5 font-semibold">
-                {displayChatTitle(chat)}
+    // Removal happens from the row's context menu, so the exit has to live on
+    // the row itself: without it the list closes the gap in one frame and the
+    // removal reads as a repaint rather than as that row leaving.
+    <motion.div
+      layout="position"
+      initial={reduce ? { opacity: 0 } : { opacity: 0, height: 0 }}
+      animate={reduce ? { opacity: 1 } : { opacity: 1, height: "auto" }}
+      exit={reduce ? { opacity: 0 } : { opacity: 0, height: 0 }}
+      transition={{ duration: reduce ? 0.1 : 0.16, ease: EASE_OUT }}
+      className="overflow-hidden"
+    >
+      <ContextMenu>
+        <ContextMenuTrigger>
+          <Button
+            variant="ghost"
+            pressScale={1}
+            onClick={onSelect}
+            className="mb-0.5 h-auto w-full justify-start gap-2.5 rounded-xl px-2.5 py-2 text-left"
+          >
+            <Avatar
+              src={chat.avatarDataUrl}
+              pending={chat.avatarPending}
+              mark={chat.kind === "saved" ? "saved" : undefined}
+              placeholder={chat.avatarPlaceholder}
+              className="size-12"
+            />
+            <span className="min-w-0 flex-1">
+              <span className="flex items-center gap-2">
+                <span className="min-w-0 flex-1 truncate text-sm leading-5 font-semibold">
+                  {displayChatTitle(chat)}
+                </span>
+                <time className="shrink-0 text-xs font-normal text-muted-foreground tabular-nums">
+                  {shortTime(chat.updatedAt, timeFormat)}
+                </time>
               </span>
-              <time className="shrink-0 text-xs font-normal text-muted-foreground tabular-nums">
-                {shortTime(chat.updatedAt, timeFormat)}
-              </time>
+              <span className="mt-px block truncate text-callout font-normal text-muted-foreground">
+                {chat.preview}
+              </span>
             </span>
-            <span className="mt-px block truncate text-callout font-normal text-muted-foreground">
-              {chat.preview}
-            </span>
-          </span>
-        </Button>
-      </ContextMenuTrigger>
-      <ContextMenuContent ariaLabel={copy.recentSearches}>
-        <ContextMenuItem onSelect={onRemove}>
-          <X aria-hidden="true" className="size-4" />
-          {copy.removeFromHistory}
-        </ContextMenuItem>
-      </ContextMenuContent>
-    </ContextMenu>
+          </Button>
+        </ContextMenuTrigger>
+        <ContextMenuContent ariaLabel={copy.recentSearches}>
+          <ContextMenuItem onSelect={onRemove}>
+            <X aria-hidden="true" className="size-4" />
+            {copy.removeFromHistory}
+          </ContextMenuItem>
+        </ContextMenuContent>
+      </ContextMenu>
+    </motion.div>
   );
 }
 

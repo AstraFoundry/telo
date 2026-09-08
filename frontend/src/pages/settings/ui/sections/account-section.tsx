@@ -145,7 +145,9 @@ export function AccountSection({ onLoggedOut }: AccountSectionProps) {
           errorText={copy.failed}
           icon={<SignOut />}
           onClick={() => void handleLogOut()}
-          className={`h-auto w-full justify-start rounded-none px-4 py-3 text-sm font-medium text-destructive hover:bg-destructive/10 ${
+          // Same floor as the cache row: py-3 with 14px type is 38px, and this
+          // one is destructive, so a mis-aimed click is the expensive kind.
+          className={`min-h-10 w-full justify-start rounded-none px-4 py-3 text-sm font-medium text-destructive hover:bg-destructive/10 ${
             confirmingLogOut ? "bg-destructive/10" : ""
           }`}
         >
