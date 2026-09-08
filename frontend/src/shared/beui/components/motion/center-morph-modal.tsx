@@ -173,9 +173,12 @@ const CENTER_OPEN_CLIP = "inset(0% 0% 0% 0% round 30px)";
 // Complex clip-path strings can snap when a spring resolves its final distance.
 // Keep the radius constant so the whole duration reads as surface unfolding,
 // rather than finishing early and spending its last frames rounding corners.
+// 0.3s stays inside the large-surface budget: past ~300ms a surface this size
+// stops reading as a response to the click and starts reading as a
+// transition the user waits for.
 const CENTER_UNFOLD_EASE = [0.2, 0, 0.2, 1] as const;
 const CENTER_UNFOLD_TRANSITION = {
-  duration: 0.43,
+  duration: 0.3,
   ease: CENTER_UNFOLD_EASE,
 } as const;
 

@@ -196,7 +196,12 @@ describe("MessageComposer", () => {
     fireEvent.click(screen.getByRole("button", { name: copy.cancel }));
 
     expect(useChatStore.getState().composerTarget).toBeNull();
-    expect(screen.queryByText(`${copy.replyingTo} Sender`)).toBeNull();
+    // The bar now leaves with an exit animation, so it is still mounted on
+    // the frame after the click; the contract is that it goes away, not that
+    // it goes away synchronously.
+    await waitFor(() =>
+      expect(screen.queryByText(`${copy.replyingTo} Sender`)).toBeNull(),
+    );
   });
 
   it("prefills the input in edit mode and clears it on cancel", async () => {
@@ -281,7 +286,11 @@ describe("MessageComposer", () => {
       body: "Rewritten",
     });
     expect(useChatStore.getState().composerTarget).toBeNull();
-    expect(screen.queryByText(copy.editingMessage)).toBeNull();
+    // Same as cancel: the bar's exit animation keeps it mounted for a few
+    // frames after the submit clears the store.
+    await waitFor(() =>
+      expect(screen.queryByText(copy.editingMessage)).toBeNull(),
+    );
     expect((textarea as HTMLTextAreaElement).value).toBe("");
   });
 

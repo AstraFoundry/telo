@@ -92,29 +92,21 @@ export function Message({
           initial={
             initial ??
             (animateIn && !reduce
-              ? {
-                  opacity: 0,
-                  transform: "translateY(8px) scale(0.95)",
-                }
+              ? // Separate y/scale rather than a `transform` string: this runs
+                // once per arriving message in a list that can hold hundreds,
+                // and only the split form stays on the compositor.
+                { opacity: 0, y: 8, scale: 0.96 }
               : false)
           }
           animate={
             animate ??
             (animateIn && !reduce
-              ? {
-                  opacity: 1,
-                  transform: "translateY(0px) scale(1)",
-                }
+              ? { opacity: 1, y: 0, scale: 1 }
               : { opacity: 1 })
           }
           exit={
             exit ??
-            (reduce
-              ? { opacity: 0 }
-              : {
-                  opacity: 0,
-                  transform: "translateY(-3px) scale(0.99)",
-                })
+            (reduce ? { opacity: 0 } : { opacity: 0, y: -3, scale: 0.99 })
           }
           transition={
             transition ?? (reduce ? { duration: 0.12 } : MESSAGE_POP_UP)

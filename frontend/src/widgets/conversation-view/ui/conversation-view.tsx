@@ -597,7 +597,9 @@ function ForwardedAttribution({ forward }: { forward: MessageForwardDto }) {
         event.stopPropagation();
         follow();
       }}
-      className="rounded font-medium text-foreground/80 underline-offset-2 hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+      // Inline text: the press spring and a pseudo-element extend the 20px
+      // line box up to the 40px pointer floor without moving the text.
+      className="relative rounded font-medium text-foreground/80 underline-offset-2 transition-[transform,color] duration-[120ms] ease-out before:absolute before:-inset-y-2 before:-inset-x-1.5 before:content-[''] hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none active:scale-[0.96]"
     >
       {name}
     </button>,

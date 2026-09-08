@@ -1,3 +1,4 @@
+import { AnimatePresence, motion, useReducedMotionConfig } from "motion/react";
 import { BellSlash, Paperclip, X } from "@phosphor-icons/react";
 import {
   useEffect,
@@ -28,7 +29,6 @@ import {
 import { copy } from "shared/config/copy";
 import {
   Button,
-  Tooltip,
   ContextMenu,
   ContextMenuCheckboxItem,
   ContextMenuContent,
@@ -37,10 +37,12 @@ import {
   ContextMenuSeparator,
   ContextMenuShortcut,
   ContextMenuTrigger,
+  EASE_OUT,
   MentionAutocomplete,
   mentionOptionId,
   MessageAttachmentTray,
   PromptInput,
+  Tooltip,
 } from "shared/ui";
 
 import {
@@ -107,6 +109,7 @@ export function MessageComposer({
   placeholder = copy.messagePlaceholder,
   onSend,
 }: MessageComposerProps) {
+  const reduce = useReducedMotionConfig();
   const [value, setValue] = useState("");
   const [entities, setEntities] = useState<MessageEntityDto[]>([]);
   const [selection, setSelection] = useState({ start: 0, end: 0 });
@@ -704,31 +707,58 @@ export function MessageComposer({
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
-      {composerTarget ? (
-        <div className="flex items-center gap-2 rounded-xl border border-border bg-card px-3 py-2">
-          <span
-            aria-hidden="true"
-            className="h-8 w-0.5 shrink-0 rounded-full bg-primary"
-          />
-          <div className="flex min-w-0 flex-1 flex-col">
-            <span className="text-xs font-medium text-primary">
-              {targetTitle}
-            </span>
-            <span className="truncate text-xs text-muted-foreground">
-              {composerTarget.preview}
-            </span>
-          </div>
-          <Button
-            size="icon"
-            variant="ghost"
-            aria-label={copy.cancel}
-            className="-mr-2 size-10 shrink-0"
-            onClick={cancelComposerTarget}
+      <AnimatePresence initial={false}>
+        {composerTarget ? (
+          // The quote row pushes the input down, so it animates height as well
+          // as opacity: a bare fade leaves the textarea jumping by the row's
+          // height the moment a reply starts.
+          <motion.div
+            key="composer-target"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{
+              duration: reduce ? 0.12 : 0.18,
+              ease: EASE_OUT,
+              opacity: { duration: reduce ? 0.12 : 0.14 },
+            }}
+            className="overflow-hidden"
           >
-            <X aria-hidden="true" className="size-3.5" />
-          </Button>
-        </div>
-      ) : null}
+            <div className="flex items-center gap-2 rounded-xl border border-border bg-card px-3 py-2">
+              <span
+                aria-hidden="true"
+                className="h-8 w-0.5 shrink-0 rounded-full bg-primary"
+              />
+              <div className="flex min-w-0 flex-1 flex-col">
+                {/* Reply and edit share this row, so the title swap is keyed to
+                    the mode: otherwise the label changes silently under a
+                    reader already looking at it. */}
+                <motion.span
+                  key={targetTitle}
+                  initial={reduce ? { opacity: 0 } : { opacity: 0, y: 4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: reduce ? 0.1 : 0.16, ease: EASE_OUT }}
+                  className="text-xs font-medium text-primary"
+                >
+                  {targetTitle}
+                </motion.span>
+                <span className="truncate text-xs text-muted-foreground">
+                  {composerTarget.preview}
+                </span>
+              </div>
+              <Button
+                size="icon"
+                variant="ghost"
+                aria-label={copy.cancel}
+                className="-mr-2 size-10 shrink-0"
+                onClick={cancelComposerTarget}
+              >
+                <X aria-hidden="true" className="size-3.5" />
+              </Button>
+            </div>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
       {mentionOpen ? (
         <MentionAutocomplete
           id={mentionListboxId}
@@ -951,12 +981,33 @@ export function MessageComposer({
           </ContextMenuItem>
         </ContextMenuContent>
       </ContextMenu>
-      {failure ? (
-        <p role="alert" className="px-2 text-xs text-destructive text-pretty">
-          <span className="font-medium">{failure.title}</span>
-          {failure.detail ? <span> {failure.detail}</span> : null}
-        </p>
-      ) : null}
+      <AnimatePresence initial={false}>
+        {failure ? (
+          // Same shape as the quote row: the alert pushes the composer, so it
+          // animates height too, otherwise the field jumps the instant a send
+          // fails and the error reads as a glitch.
+          <motion.div
+            key="composer-failure"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{
+              duration: reduce ? 0.12 : 0.18,
+              ease: EASE_OUT,
+              opacity: { duration: reduce ? 0.12 : 0.14 },
+            }}
+            className="overflow-hidden"
+          >
+            <p
+              role="alert"
+              className="px-2 text-xs text-destructive text-pretty"
+            >
+              <span className="font-medium">{failure.title}</span>
+              {failure.detail ? <span> {failure.detail}</span> : null}
+            </p>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
     </div>
   );
 }

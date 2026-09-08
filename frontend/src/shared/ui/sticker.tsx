@@ -431,7 +431,9 @@ function PlayOverlay({
       type="button"
       aria-label={label}
       onClick={onPlay}
-      className="absolute inset-0 rounded-lg focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+      // The overlay covers the whole sticker, so the static channel is a tint
+      // rather than a border; press is the shared 0.96.
+      className="absolute inset-0 rounded-lg transition-[transform,background-color] duration-[120ms] ease-out hover:bg-foreground/8 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none active:scale-[0.96]"
     />
   );
 }

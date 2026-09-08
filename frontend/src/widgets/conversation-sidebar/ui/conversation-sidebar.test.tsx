@@ -1,5 +1,6 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { MotionConfig } from "motion/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type {
@@ -122,11 +123,19 @@ async function renderSidebar({
   const { ConversationSidebar } = await import("./conversation-sidebar");
   const onOpenSettings = vi.fn();
   const onSelectChat = vi.fn();
+  // The real tree mounts the sidebar under the app's MotionConfig, which is
+  // where `useReducedMotionConfig` gets its value from; rendering bare would
+  // make every reduced-motion branch read as "unset".
+  const reduceMotion = window.matchMedia(
+    "(prefers-reduced-motion: reduce)",
+  ).matches;
   render(
-    <ConversationSidebar
-      onOpenSettings={onOpenSettings}
-      onSelectChat={onSelectChat}
-    />,
+    <MotionConfig reducedMotion={reduceMotion ? "always" : "never"}>
+      <ConversationSidebar
+        onOpenSettings={onOpenSettings}
+        onSelectChat={onSelectChat}
+      />
+    </MotionConfig>,
   );
   return { telo, useChatStore, onOpenSettings, onSelectChat };
 }

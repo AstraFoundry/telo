@@ -32,8 +32,10 @@ export interface MessageKeyboardProps {
 /** Shared box of every button in a keyboard, pressable or not. */
 const BUTTON_SURFACE =
   "relative flex min-h-10 w-full items-center justify-center overflow-hidden rounded-md px-2.5 text-center text-xs font-semibold";
+// Press is the shared 0.96 at press speed; the hover tint stays as the static
+// channel so the state is legible without motion.
 const BUTTON_ACTION =
-  "bg-foreground/8 text-foreground transition-colors hover:bg-foreground/15 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none";
+  "bg-foreground/8 text-foreground transition-[background-color,transform] duration-[120ms] ease-out hover:bg-foreground/15 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none active:scale-[0.96]";
 
 /**
  * A bot's inline keyboard, attached under the bubble that carries it.

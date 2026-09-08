@@ -151,7 +151,9 @@ export function StorageSection() {
           icon={<Trash />}
           disabled={usage === 0}
           onClick={() => void clear()}
-          className="h-auto w-full justify-start rounded-none px-4 py-3 text-sm font-medium"
+          // py-3 with 14px type lands at 38px; the row is a full-width target,
+          // so it keeps the 40px floor rather than asking for a precise aim.
+          className="min-h-10 w-full justify-start rounded-none px-4 py-3 text-sm font-medium"
         >
           {copy.clearCache}
         </StatefulButton>
