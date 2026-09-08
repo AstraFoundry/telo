@@ -29,6 +29,7 @@
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
   --shadow-column: var(--shadow-column);
+  --shadow-media: var(--shadow-media);
 
   /* Type scale below Tailwind's text-sm (14/20). The body is 14px, one step
      above tdesktop's 13px base and two below the 16px of Telegram Web, so
@@ -72,6 +73,10 @@
   --shadow-column:
     0 1px 2px oklch(0 0 0 / 0.05), 0 8px 24px oklch(0 0 0 / 0.07);
 
+  /* A photo or video that fills its bubble gets a soft drop shadow for edge
+     definition — never an outline. Both values match Telegram's own clients:
+     Web K's 0 1px 2px rgba(16,35,47,.15), lifted on dark like the column. */
+  --shadow-media: 0 1px 2px oklch(0 0 0 / 0.15);
   /* Message bubble metrics, ported from Telegram's own desktop client so the
      transcript keeps its density instead of the airy defaults of a generic
      chat surface. Sources (tdesktop Telegram/SourceFiles/ui/chat/chat.style):
@@ -140,6 +145,7 @@
   --ring: oklch(0.7 0.13 248);
   /* Shadows weaken on dark surfaces; higher opacity keeps the column legible. */
   --shadow-column: 0 1px 2px oklch(0 0 0 / 0.3), 0 8px 24px oklch(0 0 0 / 0.45);
+  --shadow-media: 0 1px 2px oklch(0 0 0 / 0.4);
 }
 
 @layer base {
@@ -207,6 +213,13 @@
      contract works when a surface moves between wide and narrow layouts. */
   .window-titlebar-safe {
     padding-inline-start: max(0.75rem, var(--window-overlay-start));
+    padding-inline-end: max(0.75rem, var(--window-overlay-end));
+  }
+
+  /* Trailing-only edge for headers that own their leading inset (the
+     conversation header's `pl-4`) but still sit under the Windows/Linux
+     window controls and the window's trailing frame. */
+  .window-titlebar-safe-trailing {
     padding-inline-end: max(0.75rem, var(--window-overlay-end));
   }
 

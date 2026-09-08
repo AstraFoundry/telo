@@ -77,7 +77,7 @@ export function SettingsPage({
     <main className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
       <header className="window-titlebar-safe flex h-14 shrink-0 items-center gap-2 [app-region:drag]">
         {includeWindowControls ? <WindowControls /> : null}
-        <Tooltip content={copy.backToConversation}>
+        <Tooltip content={copy.backToConversation} side="bottom">
           <Button
             size="icon"
             variant="ghost"

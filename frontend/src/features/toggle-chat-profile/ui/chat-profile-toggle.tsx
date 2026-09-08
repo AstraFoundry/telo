@@ -12,7 +12,7 @@ export function ChatProfileToggle() {
   const closePanel = useChatProfileStore((state) => state.closePanel);
 
   return (
-    <Tooltip content={copy.chatProfile}>
+    <Tooltip content={copy.chatProfile} side="bottom">
       <Button
         size="icon"
         variant={open ? "secondary" : "ghost"}
