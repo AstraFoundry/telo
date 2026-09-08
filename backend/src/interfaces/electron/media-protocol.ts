@@ -41,7 +41,16 @@ export function handleMediaProtocol(cacheDirectory: () => string): void {
     if (path.dirname(filePath) !== path.resolve(root)) {
       return new Response(null, { status: 403 });
     }
-    const response = await net.fetch(pathToFileURL(filePath).toString());
+    let response: globalThis.Response;
+    try {
+      response = await net.fetch(pathToFileURL(filePath).toString());
+    } catch {
+      // A cache miss is legitimate state, not an exception: Settings can
+      // clear the cache and the cap evicts, while the dialog snapshot still
+      // names the old file. Answer 404 like every other guard in this
+      // handler instead of throwing ERR_FILE_NOT_FOUND into the console.
+      return new Response(null, { status: 404 });
+    }
     // Only this app can reach the scheme — it is not a network protocol and
     // no remote page can name it — so the allowance costs nothing and lets
     // the renderer read its own cache.

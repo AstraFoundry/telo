@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { copy } from "../config/copy";
@@ -29,6 +29,27 @@ describe("Avatar", () => {
     expect(screen.queryByRole("status")).toBeNull();
     expect(container.querySelector("img")).toBeNull();
     expect(container.textContent).toBe("");
+  });
+
+  it("falls back to the empty userpic when the photo source is dead", () => {
+    // A stale telo-media URL after a cache clear must not pin the skeleton.
+    const { container } = render(
+      <Avatar
+        src="telo-media://cache/evicted.jpg"
+        placeholder={{
+          glyph: "T",
+          lightColors: ["#7BC862", "#6EC96C"],
+          darkColors: ["#7BC862", "#6EC96C"],
+        }}
+        className="size-10"
+      />,
+    );
+
+    fireEvent.error(container.querySelector("img")!);
+
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(container.querySelector("img")).toBeNull();
+    expect(container.textContent).toBe("T");
   });
 
   it("paints the Saved Messages bookmark instead of a photo or skeleton", () => {

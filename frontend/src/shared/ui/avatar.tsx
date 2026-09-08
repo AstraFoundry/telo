@@ -69,6 +69,9 @@ export function Avatar({
   className,
 }: AvatarProps) {
   const [loaded, setLoaded] = useState(false);
+  // A dead source (the cache file was evicted or cleared) must not pin the
+  // slot in its loading skeleton — fall back to the empty-userpic fill.
+  const [failed, setFailed] = useState(false);
   const imgRef = useRef<HTMLImageElement>(null);
   const dark = useSyncExternalStore(
     subscribeHtmlClass,
@@ -80,6 +83,7 @@ export function Avatar({
   if (src !== previousSrc) {
     setPreviousSrc(src);
     setLoaded(false);
+    setFailed(false);
   }
 
   // A cached image can finish before React attaches onLoad; `complete` covers
@@ -106,9 +110,13 @@ export function Avatar({
     );
   }
 
-  const showPhoto = Boolean(src);
+  const showPhoto = Boolean(src) && !failed;
   const showPlaceholder = !showPhoto && Boolean(placeholder);
-  const showSkeleton = showPhoto ? !loaded : pending && !showPlaceholder;
+  const showSkeleton = failed
+    ? false
+    : showPhoto
+      ? !loaded
+      : pending && !showPlaceholder;
   const fill = placeholder
     ? placeholderFill(dark ? placeholder.darkColors : placeholder.lightColors)
     : undefined;
@@ -144,12 +152,12 @@ export function Avatar({
           {placeholder.glyph}
         </span>
       ) : null}
-      {src ? (
+      {showPhoto ? (
         <img
-          ref={imgRef}
-          src={src}
+          src={src ?? undefined}
           alt=""
           loading="lazy"
+          onError={() => setFailed(true)}
           decoding="async"
           onLoad={() => setLoaded(true)}
           className={cn(
