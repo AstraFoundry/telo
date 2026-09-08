@@ -52,6 +52,9 @@ Live runs are secret-gated (`make test-live`). Demo Playwright remains the PR me
 ## Account menu actions
 
 - [ ] Open My Profile and Contacts
+- [ ] Add a contact by phone; add/remove a contact from a direct chat's profile
+- [ ] Edit profile name, bio, username, and photo from Settings
+- [ ] Transcript renders call messages as call cards (no redial)
 - [ ] Create a basic group and channel
 - [ ] Start a secret chat from a contact
 - [ ] Page call-message history

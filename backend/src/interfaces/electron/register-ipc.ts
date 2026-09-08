@@ -12,6 +12,7 @@ import {
 } from "electron";
 
 import type {
+  AddContactByPhoneInput,
   DeleteMessageInput,
   AgentContextScopeInput,
   AgentScheduledTaskDto,
@@ -35,10 +36,12 @@ import type {
   SendMessageInput,
   SendMediaInput,
   SetMessageReactionInput,
+  SetPeerContactInput,
   ShellNotifyOptions,
   StickerSetReferenceDto,
   TelegramLoginInput,
   UpdateKeywordFolderInput,
+  UpdateProfileNameInput,
   UpdateUserPreferencesInput,
 } from "../../../../contracts/src/ipc";
 import {
@@ -54,6 +57,57 @@ import { channels } from "./channels";
 export function registerIpc(container: ApplicationContainer): void {
   ipcMain.handle(channels.currentUserGet, () =>
     container.workspace.getCurrentUser(),
+  );
+  ipcMain.handle(
+    channels.profileNameUpdate,
+    (_event, input: UpdateProfileNameInput) =>
+      container.workspace.updateProfileName(input),
+  );
+  ipcMain.handle(channels.bioUpdate, (_event, bio: string) =>
+    container.workspace.updateBio(bio),
+  );
+  ipcMain.handle(
+    channels.usernameAvailabilityCheck,
+    (_event, username: string) =>
+      container.workspace.checkUsernameAvailability(username),
+  );
+  ipcMain.handle(channels.usernameSet, (_event, username: string) =>
+    container.workspace.setUsername(username),
+  );
+  ipcMain.handle(
+    channels.profilePhotoSet,
+    async (_event, file: LocalMediaFileInput) => {
+      // Same staging as a story file: a picked photo arrives as an absolute
+      // path, a pasted one as bytes staged to a temp directory.
+      const staged = await stageUploadFiles([file]);
+      try {
+        const [validated] = await validateUploadFiles(staged.files);
+        if (!validated) throw new Error("Profile photo is required");
+        if (!validated.mimeType.startsWith("image/")) {
+          throw new Error("Profile photo must be an image");
+        }
+        return await container.workspace.setProfilePhoto(validated);
+      } finally {
+        await Promise.all(
+          staged.temporaryDirectories.map((directory) =>
+            rm(directory, { recursive: true, force: true }),
+          ),
+        );
+      }
+    },
+  );
+  ipcMain.handle(
+    channels.contactPhoneAdd,
+    (_event, input: AddContactByPhoneInput) =>
+      container.workspace.addContactByPhone(input),
+  );
+  ipcMain.handle(
+    channels.peerContactSet,
+    (_event, input: SetPeerContactInput) =>
+      container.workspace.setPeerContact(input),
+  );
+  ipcMain.handle(channels.peerContactRemove, (_event, userId: string) =>
+    container.workspace.removePeerContact(userId),
   );
   ipcMain.handle(channels.chatPageList, (_event, input?: ChatPageInput) =>
     container.workspace.listChatPage(input),

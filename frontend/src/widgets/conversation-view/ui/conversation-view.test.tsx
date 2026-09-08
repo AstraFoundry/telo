@@ -100,6 +100,7 @@ function message(partial: Partial<MessageDto> & Pick<MessageDto, "id">) {
     senderAvatarUrl: null,
     body: "Message body",
     entities: [],
+    call: null,
     media: null,
     groupedId: null,
     sentAt: "2026-01-01T10:00:00.000Z",
@@ -320,6 +321,8 @@ describe("ConversationView", () => {
         username: "ada",
         initials: "AL",
         avatarDataUrl: "data:image/gif;base64,YWRh",
+        bio: "",
+        phone: "",
       },
     });
 
@@ -1326,6 +1329,183 @@ describe("ConversationView", () => {
       divider.compareDocumentPosition(screen.getByText("Loaded unread")) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
+  });
+});
+
+describe("ConversationView call messages", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    stubMatchMedia(false);
+    stubIntersectionObserver();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  function callCardSlot(messageId: string, slot: string): HTMLElement {
+    const row = document.getElementById(`conversation-message-${messageId}`);
+    if (!row) throw new Error(`no transcript row for ${messageId}`);
+    const node = row.querySelector<HTMLElement>(`[data-slot="${slot}"]`);
+    if (!node) throw new Error(`no ${slot} for ${messageId}`);
+    return node;
+  }
+
+  it("labels each call status the way tdesktop folds direction and discard reason", async () => {
+    await renderView({
+      messages: [
+        message({
+          id: "m1",
+          body: "",
+          outgoing: true,
+          call: { video: false, status: "outgoing", durationSeconds: 65 },
+        }),
+        message({
+          id: "m2",
+          body: "",
+          call: { video: false, status: "incoming", durationSeconds: 12 },
+        }),
+        message({
+          id: "m3",
+          body: "",
+          call: { video: false, status: "missed", durationSeconds: 0 },
+        }),
+        message({
+          id: "m4",
+          body: "",
+          call: { video: false, status: "declined", durationSeconds: 0 },
+        }),
+        message({
+          id: "m5",
+          body: "",
+          outgoing: true,
+          call: { video: false, status: "cancelled", durationSeconds: 0 },
+        }),
+        message({
+          id: "m6",
+          body: "",
+          call: { video: false, status: "group", durationSeconds: 0 },
+        }),
+        message({
+          id: "m7",
+          body: "",
+          call: {
+            video: false,
+            status: "group",
+            active: true,
+            durationSeconds: 0,
+          },
+        }),
+      ],
+    });
+
+    await screen.findByText(copy.outgoingCall);
+    expect(screen.getByText(copy.incomingCall)).toBeTruthy();
+    expect(screen.getByText(copy.missedCall)).toBeTruthy();
+    expect(screen.getByText(copy.declinedCall)).toBeTruthy();
+    expect(screen.getByText(copy.cancelledCall)).toBeTruthy();
+    expect(screen.getByText(copy.groupCall)).toBeTruthy();
+    // A still-running group call reads "Ongoing", not "Group call".
+    expect(screen.getByText(copy.ongoingCall)).toBeTruthy();
+  });
+
+  it("paints an unconnected call's title in the destructive color", async () => {
+    await renderView({
+      messages: [
+        message({
+          id: "m1",
+          body: "",
+          call: { video: false, status: "missed", durationSeconds: 0 },
+        }),
+        message({
+          id: "m2",
+          body: "",
+          call: { video: false, status: "incoming", durationSeconds: 12 },
+        }),
+      ],
+    });
+
+    await screen.findByText(copy.missedCall);
+    expect(callCardSlot("m1", "call-title").className).toContain(
+      "text-destructive",
+    );
+    expect(callCardSlot("m2", "call-title").className).not.toContain(
+      "text-destructive",
+    );
+  });
+
+  it("shows the m:ss duration on the meta line only when the call connected", async () => {
+    await renderView({
+      messages: [
+        message({
+          id: "m1",
+          body: "",
+          outgoing: true,
+          sentAt: "2026-01-01T10:00:00",
+          call: { video: false, status: "outgoing", durationSeconds: 65 },
+        }),
+        message({
+          id: "m2",
+          body: "",
+          sentAt: "2026-01-01T10:05:00",
+          call: { video: false, status: "missed", durationSeconds: 0 },
+        }),
+      ],
+    });
+
+    await screen.findByText(copy.outgoingCall);
+    expect(callCardSlot("m1", "call-meta").textContent).toContain(", 1:05");
+    // Zero duration means "never connected": the meta line is the bare time.
+    expect(callCardSlot("m2", "call-meta").textContent).not.toContain(", ");
+  });
+
+  it("keeps the outgoing delivery ticks on the card, like an ordinary message", async () => {
+    await renderView({
+      messages: [
+        message({
+          id: "m1",
+          body: "",
+          outgoing: true,
+          status: "read",
+          call: { video: false, status: "outgoing", durationSeconds: 65 },
+        }),
+        message({
+          id: "m2",
+          body: "",
+          call: { video: false, status: "incoming", durationSeconds: 12 },
+        }),
+      ],
+    });
+
+    await screen.findByText(copy.outgoingCall);
+    expect(
+      callCardSlot("m1", "call-meta").querySelector("[data-delivery]"),
+    ).toBeTruthy();
+    expect(
+      callCardSlot("m2", "call-meta").querySelector("[data-delivery]"),
+    ).toBeNull();
+  });
+
+  it("draws the camera icon for a video call and the phone for voice", async () => {
+    await renderView({
+      messages: [
+        message({
+          id: "m1",
+          body: "",
+          outgoing: true,
+          call: { video: true, status: "cancelled", durationSeconds: 0 },
+        }),
+        message({
+          id: "m2",
+          body: "",
+          call: { video: false, status: "incoming", durationSeconds: 12 },
+        }),
+      ],
+    });
+
+    await screen.findByText(copy.cancelledCall);
+    expect(callCardSlot("m1", "call-icon").dataset.video).toBe("true");
+    expect(callCardSlot("m2", "call-icon").dataset.video).toBeUndefined();
   });
 });
 

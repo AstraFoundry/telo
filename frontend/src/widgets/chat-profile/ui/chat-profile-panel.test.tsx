@@ -199,6 +199,16 @@ describe("ChatProfilePanel", () => {
   });
 
   it("opens the full chat profile when the tapped peer owns a dialog", async () => {
+    telo.workspace.getPeerProfile.mockResolvedValue({
+      id: "peer-mina",
+      title: "Mina",
+      username: "mina",
+      kind: "direct",
+      avatarDataUrl: null,
+      bio: "Design systems and spacing rules.",
+      phone: "+1 555 0142",
+      isContact: true,
+    });
     useChatStore.setState({
       chats: [
         chat({ id: "chat-1", title: "Telo Design" }),
@@ -217,6 +227,41 @@ describe("ChatProfilePanel", () => {
     expect(telo.workspace.listSharedMedia).toHaveBeenCalledWith("peer-mina", {
       limit: 30,
     });
+    // A direct dialog also fetches the user card: the info rows and contact
+    // state live on UserFullInfo, which ChatDto does not carry.
+    expect(telo.workspace.getPeerProfile).toHaveBeenCalledWith("peer-mina");
+    expect(await screen.findByText("@mina")).toBeTruthy();
+    expect(screen.getByText("Design systems and spacing rules.")).toBeTruthy();
+  });
+
+  it("offers Add to contacts on a non-contact direct dialog", async () => {
+    telo.workspace.getPeerProfile.mockResolvedValue({
+      id: "peer-mina",
+      title: "Mina",
+      username: "mina",
+      kind: "direct",
+      avatarDataUrl: null,
+      bio: null,
+      phone: null,
+      isContact: false,
+      needPhonePrivacyException: true,
+    });
+    useChatStore.setState({
+      chats: [chat({ id: "peer-mina", title: "Mina", kind: "direct" })],
+    });
+    useChatProfileStore.setState({ open: true, peerId: "peer-mina" });
+
+    render(<ChatProfilePanel />);
+
+    expect(
+      await screen.findByRole("button", { name: copy.addToContacts }),
+    ).toBeTruthy();
+  });
+
+  it("fetches no user card for a group dialog", async () => {
+    render(<ChatProfilePanel />);
+
+    await screen.findByRole("region", { name: copy.sharedMedia });
     expect(telo.workspace.getPeerProfile).not.toHaveBeenCalled();
   });
 

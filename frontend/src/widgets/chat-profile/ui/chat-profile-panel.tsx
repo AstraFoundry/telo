@@ -1,4 +1,10 @@
-import { ArrowLeft, CaretRight, X } from "@phosphor-icons/react";
+import {
+  ArrowLeft,
+  CaretRight,
+  PencilSimple,
+  UserPlus,
+  X,
+} from "@phosphor-icons/react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import type {
@@ -14,6 +20,11 @@ import {
   useChatProfileStore,
   useChatStore,
 } from "entities/chat";
+import {
+  EditPeerContactDialog,
+  RemovePeerContactConfirm,
+} from "features/add-contact";
+import { useTelegramStore } from "entities/telegram";
 import { useTimeFormat } from "entities/preferences";
 import { copy } from "shared/config/copy";
 import { userFacingErrorDetail } from "shared/lib/user-facing-error";
@@ -258,9 +269,31 @@ function ProfileSkeleton() {
   );
 }
 
-function PeerCard({ profile }: { profile: PeerProfileDto }) {
-  const hasDetails = Boolean(profile.username || profile.phone || profile.bio);
+function PeerInfoRows({ profile }: { profile: PeerProfileDto }) {
+  if (!profile.username && !profile.phone && !profile.bio) return null;
+  return (
+    <div className="flex flex-col border-t pt-2">
+      {profile.username ? (
+        <PeerInfoRow value={`@${profile.username}`} label={copy.peerUsername} />
+      ) : null}
+      {profile.phone ? (
+        <PeerInfoRow value={profile.phone} label={copy.peerPhone} tabular />
+      ) : null}
+      {profile.bio ? (
+        <PeerInfoRow value={profile.bio} label={copy.peerBio} wrap />
+      ) : null}
+    </div>
+  );
+}
 
+function PeerCard({
+  profile,
+  onEdit,
+}: {
+  profile: PeerProfileDto;
+  /** My Profile only: jumps to the editable profile in Settings. */
+  onEdit?: () => void;
+}) {
   return (
     <div className="flex flex-col px-2 py-4">
       <ProfileIdentity
@@ -270,22 +303,18 @@ function PeerCard({ profile }: { profile: PeerProfileDto }) {
         title={profile.title}
         status={peerStatus(profile)}
       />
-      {hasDetails ? (
-        <div className="flex flex-col border-t pt-2">
-          {profile.username ? (
-            <PeerInfoRow
-              value={`@${profile.username}`}
-              label={copy.peerUsername}
-            />
-          ) : null}
-          {profile.phone ? (
-            <PeerInfoRow value={profile.phone} label={copy.peerPhone} tabular />
-          ) : null}
-          {profile.bio ? (
-            <PeerInfoRow value={profile.bio} label={copy.peerBio} wrap />
-          ) : null}
-        </div>
+      {onEdit ? (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={onEdit}
+          className="mx-auto mb-3"
+        >
+          <PencilSimple aria-hidden="true" className="size-3.5" />
+          {copy.editProfile}
+        </Button>
       ) : null}
+      <PeerInfoRows profile={profile} />
     </div>
   );
 }
@@ -329,7 +358,49 @@ function PinnedRow({
   );
 }
 
-export function ChatProfilePanel() {
+/**
+ * Contact management on a direct chat's profile, tdesktop's EditContactBox
+ * entry points: "Add to contacts" opens the name/share-phone dialog for a
+ * non-contact, and an existing contact gets the two-step remove. Both reload
+ * the card afterwards so the row flips without a panel reopen.
+ */
+function PeerContactAction({
+  profile,
+  onChanged,
+}: {
+  readonly profile: PeerProfileDto;
+  readonly onChanged: () => void;
+}) {
+  const [dialogOpen, setDialogOpen] = useState(false);
+  if (profile.isContact) {
+    return <RemovePeerContactConfirm userId={profile.id} onSaved={onChanged} />;
+  }
+  return (
+    <>
+      <Button
+        variant="ghost"
+        onClick={() => setDialogOpen(true)}
+        className="h-10 w-full justify-start gap-2 rounded-lg px-2 text-sm font-medium"
+      >
+        <UserPlus aria-hidden="true" className="size-4" />
+        {copy.addToContacts}
+      </Button>
+      <EditPeerContactDialog
+        profile={profile}
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        onSaved={onChanged}
+      />
+    </>
+  );
+}
+
+export function ChatProfilePanel({
+  onEditProfile,
+}: {
+  /** My Profile's edit entry: opens the editable profile in Settings. */
+  onEditProfile?: () => void;
+}) {
   const open = useChatProfileStore((state) => state.open);
   const closePanel = useChatProfileStore((state) => state.closePanel);
   const peerId = useChatProfileStore((state) => state.peerId);
@@ -349,7 +420,14 @@ export function ChatProfilePanel() {
   // profile, so only peers with no history fall through to the identity card.
   const targetId = peerId ?? activeChatId;
   const chat = chats.find((entry) => entry.id === targetId) ?? null;
-  const profileChatId = chat?.id ?? null;
+  const currentUser = useTelegramStore((state) => state.currentUser);
+  // My Profile is the account's identity card, never the Saved Messages
+  // dialog profile the self id would otherwise resolve to — tdesktop's main
+  // menu entry works the same way.
+  const isSelf =
+    peerId !== null && currentUser !== null && peerId === currentUser.id;
+  const showChatProfile = chat !== null && !isSelf;
+  const profileChatId = showChatProfile ? chat.id : null;
 
   // In-widget back stack: main → section views, each entry remembering the
   // scroll offset it was left at. The stack resets when the panel closes or
@@ -450,9 +528,20 @@ export function ChatProfilePanel() {
   if (peerCard.key !== navKey) {
     setPeerCard({ key: navKey, profile: null, error: null });
   }
-  // Only a peer without a dialog needs the lookup; everyone else already has
-  // a ChatDto with the same identity fields.
-  const cardPeerId = open && !chat ? peerId : null;
+  // The user card feeds three surfaces: peers with no dialog, the account's
+  // own My Profile, and direct-chat dialogs — their info rows and contact
+  // state live on UserFullInfo, which ChatDto does not carry. TDLib's
+  // private-chat id is the user id, so the lookup key is always the target.
+  const cardPeerId = open
+    ? showChatProfile
+      ? chat.kind === "direct"
+        ? chat.id
+        : null
+      : targetId
+    : null;
+  // Bumped after a contact add/remove so the card re-reads the peer's
+  // contact state without waiting for a panel reopen.
+  const [peerReload, setPeerReload] = useState(0);
   useEffect(() => {
     if (!cardPeerId) return;
     let cancelled = false;
@@ -472,7 +561,7 @@ export function ChatProfilePanel() {
     return () => {
       cancelled = true;
     };
-  }, [cardPeerId, navKey]);
+  }, [cardPeerId, navKey, peerReload]);
 
   // The grid reads newest first; the page arrives in transcript order.
   const visualMedia = useMemo<ReadonlyArray<MediaTile>>(
@@ -604,9 +693,11 @@ export function ChatProfilePanel() {
       ? copy.sharedMedia
       : current.view === "pinned"
         ? copy.pinnedMessages
-        : !chat && peerId
-          ? copy.userProfile
-          : copy.chatProfile;
+        : isSelf
+          ? copy.myProfile
+          : !showChatProfile
+            ? copy.userProfile
+            : copy.chatProfile;
 
   return (
     <div className="flex h-full min-h-0 w-full flex-col">
@@ -644,15 +735,18 @@ export function ChatProfilePanel() {
             {loadError}
           </p>
         ) : null}
-        {!chat ? (
-          !peerId ? null : peerCard.error ? (
+        {!showChatProfile ? (
+          peerCard.error ? (
             <p role="alert" className="px-4 py-3 text-sm text-destructive">
               {peerCard.error}
             </p>
           ) : peerCard.profile === null ? (
             <ProfileSkeleton />
           ) : (
-            <PeerCard profile={peerCard.profile} />
+            <PeerCard
+              profile={peerCard.profile}
+              onEdit={isSelf ? onEditProfile : undefined}
+            />
           )
         ) : sharedMedia === null || pinned === null ? (
           loadError ? null : (
@@ -677,6 +771,18 @@ export function ChatProfilePanel() {
               title={displayChatTitle(chat)}
               status={subtitle(chat)}
             />
+            {/* Direct chats get the user card's rows too: bio, phone and
+                username live on UserFullInfo, not on ChatDto — tdesktop's
+                user info column shows them for every 1:1 dialog. */}
+            {chat.kind === "direct" && peerCard.profile ? (
+              <>
+                <PeerContactAction
+                  profile={peerCard.profile}
+                  onChanged={() => setPeerReload((count) => count + 1)}
+                />
+                <PeerInfoRows profile={peerCard.profile} />
+              </>
+            ) : null}
             {visualNewestFirst.length || fileMedia.length ? (
               <section aria-label={copy.sharedMedia}>
                 <SectionHeader

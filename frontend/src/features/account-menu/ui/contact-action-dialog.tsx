@@ -1,4 +1,9 @@
-import { CheckCircle, Circle, MagnifyingGlass } from "@phosphor-icons/react";
+import {
+  CheckCircle,
+  Circle,
+  MagnifyingGlass,
+  UserPlus,
+} from "@phosphor-icons/react";
 import { useEffect, useMemo, useState } from "react";
 
 import type { TelegramContactDto } from "../../../../../contracts/src/ipc";
@@ -20,6 +25,12 @@ export type ContactAction = "contacts" | "secret" | "group";
 interface ContactActionDialogProps {
   readonly action: ContactAction | null;
   onOpenChange(open: boolean): void;
+  /**
+   * "New contact" hands off to the add-by-phone dialog, which a widget owns:
+   * features cannot compose features (FSD), so the list closes and the
+   * sidebar opens the add flow above it.
+   */
+  onNewContact?(): void;
 }
 
 const TITLES: Record<ContactAction, string> = {
@@ -31,6 +42,7 @@ const TITLES: Record<ContactAction, string> = {
 export function ContactActionDialog({
   action,
   onOpenChange,
+  onNewContact,
 }: ContactActionDialogProps) {
   const selectChat = useChatStore((state) => state.select);
   const [contacts, setContacts] = useState<ReadonlyArray<TelegramContactDto>>(
@@ -141,6 +153,23 @@ export function ContactActionDialog({
       >
         <div className="flex max-h-[min(76vh,640px)] flex-col p-5">
           <h2 className="pr-10 text-base font-semibold">{TITLES[action]}</h2>
+          {action === "contacts" ? (
+            <Button
+              type="button"
+              variant="ghost"
+              pressScale={1}
+              onClick={() => {
+                onOpenChange(false);
+                onNewContact?.();
+              }}
+              className="mt-3 h-auto w-full justify-start rounded-xl px-2 py-2"
+            >
+              <span className="grid size-10 place-items-center rounded-full bg-primary/10 text-primary">
+                <UserPlus aria-hidden="true" className="size-5" />
+              </span>
+              <span className="text-sm font-semibold">{copy.newContact}</span>
+            </Button>
+          ) : null}
           {action === "group" ? (
             <Input
               label={copy.groupName}

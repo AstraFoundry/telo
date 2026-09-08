@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { rm } from "node:fs/promises";
 
 import type {
+  AddContactByPhoneInput,
   AnimatedEmojiEffectDto,
   BotCallbackAnswerDto,
   ChatDto,
@@ -27,6 +28,7 @@ import type {
   PostedStoryDto,
   PostStoryInput,
   SetMessageReactionInput,
+  SetPeerContactInput,
   StickerItemDto,
   StickerCatalogDto,
   StickerSetDto,
@@ -38,6 +40,8 @@ import type {
   TelegramCallPageDto,
   TelegramContactDto,
   TelegramWorkspaceEvent,
+  UpdateProfileNameInput,
+  UsernameAvailability,
 } from "../../../../contracts/src/ipc";
 import type {
   TelegramAccountRecord,
@@ -317,6 +321,40 @@ export class TelegramAccountCoordinator implements TelegramRepository {
 
   listChatPage(input: ChatPageInput = {}): Promise<ChatPageDto> {
     return this.delegate().listChatPage(input);
+  }
+
+  updateProfileName(input: UpdateProfileNameInput): Promise<CurrentUserDto> {
+    return this.delegate().updateProfileName(input);
+  }
+
+  updateBio(bio: string): Promise<void> {
+    return this.delegate().updateBio(bio);
+  }
+
+  checkUsernameAvailability(username: string): Promise<UsernameAvailability> {
+    return this.delegate().checkUsernameAvailability(username);
+  }
+
+  setUsername(username: string): Promise<CurrentUserDto> {
+    return this.delegate().setUsername(username);
+  }
+
+  setProfilePhoto(file: TelegramUploadFile): Promise<CurrentUserDto> {
+    return this.delegate().setProfilePhoto(file);
+  }
+
+  addContactByPhone(
+    input: AddContactByPhoneInput,
+  ): Promise<TelegramContactDto | null> {
+    return this.delegate().addContactByPhone(input);
+  }
+
+  setPeerContact(input: SetPeerContactInput): Promise<void> {
+    return this.delegate().setPeerContact(input);
+  }
+
+  removePeerContact(userId: string): Promise<void> {
+    return this.delegate().removePeerContact(userId);
   }
 
   createSecretChat(userId: string): Promise<ChatDto> {

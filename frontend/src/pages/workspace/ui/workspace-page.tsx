@@ -188,7 +188,9 @@ export function WorkspacePage({
           {
             id: "profile",
             ariaLabel: copy.chatProfile,
-            content: <ChatProfilePanel />,
+            content: (
+              <ChatProfilePanel onEditProfile={() => onOpenSettings()} />
+            ),
           },
         ]}
         onOpen={openAgentPanel}

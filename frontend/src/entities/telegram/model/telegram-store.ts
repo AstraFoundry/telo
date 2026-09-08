@@ -6,6 +6,7 @@ import type {
   TelegramAuthState,
   TelegramLoginConfigurationDto,
   TelegramLoginInput,
+  UpdateProfileNameInput,
 } from "../../../../../contracts/src/ipc";
 import { copy } from "shared/config/copy";
 import { isTechnicalErrorMessage } from "shared/lib/user-facing-error";
@@ -33,6 +34,16 @@ interface TelegramState {
   beginLogin(input: TelegramLoginInput): Promise<void>;
   submitChallenge(value: string): Promise<void>;
   logout(): Promise<void>;
+  /**
+   * Self-profile edits, tdesktop's My Profile box. Each resolves with the
+   * refreshed identity written into `currentUser`, and rejects so the dialog
+   * that owns the draft can surface the failure inline.
+   */
+  updateProfileName(input: UpdateProfileNameInput): Promise<void>;
+  /** `updateBio` resolves void, so the store applies the saved bio itself. */
+  updateBio(bio: string): Promise<void>;
+  setUsername(username: string): Promise<void>;
+  setProfilePhoto(file: File): Promise<void>;
 }
 
 export const useTelegramStore = create<TelegramState>((set, get) => ({
@@ -46,7 +57,14 @@ export const useTelegramStore = create<TelegramState>((set, get) => ({
     const unsubscribeAuth = window.telo.telegram.onAuthState((auth) =>
       set({ auth: sanitizeAuth(auth) }),
     );
-    const unsubscribeAvatars = window.telo.workspace.onEvent((event) => {
+    const unsubscribeWorkspace = window.telo.workspace.onEvent((event) => {
+      // The account's own profile changed — locally or from another client
+      // (TDLib updateUser). tdesktop applies it to peer data; a reload of
+      // the identity is the equivalent here.
+      if (event.type === "current-user") {
+        void get().loadCurrentUser();
+        return;
+      }
       if (event.type !== "chat-avatar") return;
       const currentUser = get().currentUser;
       if (!currentUser || currentUser.id !== event.chatId) return;
@@ -66,7 +84,7 @@ export const useTelegramStore = create<TelegramState>((set, get) => ({
     );
     return () => {
       unsubscribeAuth();
-      unsubscribeAvatars();
+      unsubscribeWorkspace();
     };
   },
   async loadCurrentUser() {
@@ -102,6 +120,27 @@ export const useTelegramStore = create<TelegramState>((set, get) => ({
     } catch (error) {
       set({ auth: { status: "error", message: safeMessage(error) } });
     }
+  },
+  async updateProfileName(input) {
+    const currentUser = await window.telo.workspace.updateProfileName(input);
+    set({ currentUser });
+  },
+  async updateBio(bio) {
+    await window.telo.workspace.updateBio(bio);
+    const currentUser = get().currentUser;
+    // The RPC resolves void; apply the saved draft (empty clears the bio,
+    // which `getUserFullInfo` reports back as null).
+    if (currentUser) {
+      set({ currentUser: { ...currentUser, bio: bio || null } });
+    }
+  },
+  async setUsername(username) {
+    const currentUser = await window.telo.workspace.setUsername(username);
+    set({ currentUser });
+  },
+  async setProfilePhoto(file) {
+    const currentUser = await window.telo.workspace.setProfilePhoto(file);
+    set({ currentUser });
   },
   startAddingAccount() {
     set({ addingAccount: true, agentSetupPending: false });

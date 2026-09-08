@@ -1,4 +1,5 @@
 import type {
+  AddContactByPhoneInput,
   AnimatedEmojiEffectDto,
   BotCallbackAnswerDto,
   ChatDto,
@@ -24,6 +25,7 @@ import type {
   PostedStoryDto,
   PostStoryInput,
   SetMessageReactionInput,
+  SetPeerContactInput,
   StickerItemDto,
   StickerCatalogDto,
   StickerSetDto,
@@ -31,12 +33,47 @@ import type {
   TelegramWorkspaceEvent,
   TelegramCallPageDto,
   TelegramContactDto,
+  UpdateProfileNameInput,
+  UsernameAvailability,
 } from "../../../../contracts/src/ipc";
 
 export interface TelegramRepository {
   subscribe(listener: (event: TelegramWorkspaceEvent) => void): () => void;
   getCurrentUser(): Promise<CurrentUserDto>;
   listChatPage(input: ChatPageInput): Promise<ChatPageDto>;
+  /**
+   * Renames the account (Telegram `setName`) and returns the refreshed
+   * identity. First name must be non-empty.
+   */
+  updateProfileName(input: UpdateProfileNameInput): Promise<CurrentUserDto>;
+  /**
+   * Sets the account bio (Telegram `setBio`); an empty string clears it.
+   * Telegram bios hold no line feeds, so adapters flatten them.
+   */
+  updateBio(bio: string): Promise<void>;
+  /**
+   * Checks a personal username (Telegram `checkChatUsername` on the Saved
+   * Messages chat) without claiming it.
+   */
+  checkUsernameAvailability(username: string): Promise<UsernameAvailability>;
+  /**
+   * Claims or replaces the account username (Telegram `setUsername`); an
+   * empty string removes it.
+   */
+  setUsername(username: string): Promise<CurrentUserDto>;
+  /** Replaces the account profile photo (Telegram `setProfilePhoto`). */
+  setProfilePhoto(file: TelegramUploadFile): Promise<CurrentUserDto>;
+  /**
+   * Phone-first contact creation (Telegram `importContacts`). Resolves to
+   * null when the number is not registered on Telegram.
+   */
+  addContactByPhone(
+    input: AddContactByPhoneInput,
+  ): Promise<TelegramContactDto | null>;
+  /** Adds or edits a known peer as a contact (Telegram `addContact`). */
+  setPeerContact(input: SetPeerContactInput): Promise<void>;
+  /** Removes a peer from the contact list (Telegram `removeContacts`). */
+  removePeerContact(userId: string): Promise<void>;
   /** Starts a device-local E2EE secret chat with the given user. */
   createSecretChat(userId: string): Promise<ChatDto>;
   listContacts(): Promise<ReadonlyArray<TelegramContactDto>>;

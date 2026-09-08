@@ -1,4 +1,5 @@
 import type {
+  AddContactByPhoneInput,
   ChatDto,
   ChatFolderDto,
   ChatMemberDto,
@@ -19,6 +20,7 @@ import type {
   PostStoryInput,
   SendMessageInput,
   SendMediaInput,
+  SetPeerContactInput,
   StickerItemDto,
   StickerCatalogDto,
   StickerSetDto,
@@ -27,6 +29,8 @@ import type {
   TelegramCallPageDto,
   TelegramContactDto,
   UpdateKeywordFolderInput,
+  UpdateProfileNameInput,
+  UsernameAvailability,
 } from "../../../../contracts/src/ipc";
 import type {
   TelegramRepository,
@@ -39,6 +43,8 @@ const DEFAULT_CHAT_PAGE_SIZE = 50;
 const DEFAULT_MESSAGE_PAGE_SIZE = 50;
 const MAX_PAGE_SIZE = 100;
 const MAX_ALBUM_ITEMS = 10;
+/** Telegram caps the bio at 70 single-line characters. */
+const MAX_BIO_LENGTH = 70;
 
 export class TelegramWorkspaceService {
   constructor(
@@ -95,6 +101,77 @@ export class TelegramWorkspaceService {
 
   getCurrentUser(): Promise<CurrentUserDto> {
     return this.repository.getCurrentUser();
+  }
+
+  updateProfileName(input: UpdateProfileNameInput): Promise<CurrentUserDto> {
+    const firstName = input.firstName.trim();
+    if (!firstName) throw new Error("First name is required");
+    return this.repository.updateProfileName({
+      firstName,
+      lastName: input.lastName.trim(),
+    });
+  }
+
+  updateBio(bio: string): Promise<void> {
+    const trimmed = bio.trim();
+    if (trimmed.length > MAX_BIO_LENGTH) {
+      throw new Error(`Bio must be at most ${MAX_BIO_LENGTH} characters`);
+    }
+    return this.repository.updateBio(trimmed);
+  }
+
+  checkUsernameAvailability(username: string): Promise<UsernameAvailability> {
+    const trimmed = username.trim();
+    if (!trimmed) throw new Error("Username is required");
+    return this.repository.checkUsernameAvailability(trimmed);
+  }
+
+  setUsername(username: string): Promise<CurrentUserDto> {
+    // An empty username removes it; validation belongs to Telegram.
+    return this.repository.setUsername(username.trim());
+  }
+
+  setProfilePhoto(file: TelegramUploadFile): Promise<CurrentUserDto> {
+    if (!file.mimeType.startsWith("image/")) {
+      throw new Error("Profile photo must be an image");
+    }
+    return this.repository.setProfilePhoto(file);
+  }
+
+  addContactByPhone(
+    input: AddContactByPhoneInput,
+  ): Promise<TelegramContactDto | null> {
+    const firstName = input.firstName.trim();
+    const lastName = input.lastName.trim();
+    // tdesktop's AddContactBox: one name part is enough, the phone decides.
+    if (!firstName && !lastName) {
+      throw new Error("Contact name is required");
+    }
+    if (!input.phone.replace(/\D/g, "")) {
+      throw new Error("Phone number is required");
+    }
+    return this.repository.addContactByPhone({
+      firstName,
+      lastName,
+      phone: input.phone,
+    });
+  }
+
+  setPeerContact(input: SetPeerContactInput): Promise<void> {
+    if (!input.userId.trim()) throw new Error("User id is required");
+    // Telegram's addContact requires a non-empty contact first name.
+    if (!input.firstName.trim()) throw new Error("First name is required");
+    return this.repository.setPeerContact({
+      userId: input.userId.trim(),
+      firstName: input.firstName.trim(),
+      lastName: input.lastName.trim(),
+      sharePhoneNumber: input.sharePhoneNumber,
+    });
+  }
+
+  removePeerContact(userId: string): Promise<void> {
+    if (!userId.trim()) throw new Error("User id is required");
+    return this.repository.removePeerContact(userId.trim());
   }
 
   async listChatPage(input: ChatPageInput = {}): Promise<ChatPageDto> {

@@ -33,6 +33,8 @@ const currentUser: CurrentUserDto = {
   id: "u1",
   displayName: "Ada Lovelace",
   username: "ada",
+  bio: null,
+  phone: null,
   initials: "AL",
   avatarDataUrl: null,
 };
@@ -148,6 +150,30 @@ describe("AccountMenu", () => {
 
     expect(telo.workspace.openPrivateChat).toHaveBeenCalledWith("mina");
     expect(useChatStore.getState().activeChatId).toBe("mina");
+  });
+
+  it("hands New contact off to the widget-owned add flow", async () => {
+    useTelegramStore.setState({ currentUser });
+    const telo = installTeloApiMock();
+    telo.workspace.listContacts.mockResolvedValue([]);
+    const onNewContact = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <AccountMenu onOpenSettings={vi.fn()} onNewContact={onNewContact} />,
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: copy.openAccountMenu }),
+    );
+    await user.click(screen.getByRole("button", { name: copy.contacts }));
+    await user.click(
+      await screen.findByRole("button", { name: copy.newContact }),
+    );
+
+    // Features cannot nest features (FSD): the list closes and the sidebar
+    // opens the add-by-phone dialog above it.
+    expect(onNewContact).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("dialog", { name: copy.contacts })).toBeNull();
   });
 
   it("creates a group from selected contacts", async () => {

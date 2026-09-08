@@ -42,7 +42,9 @@ test("creates a group and channel from the avatar menu", async ({ window }) => {
   await window.getByRole("button", { name: "New Group" }).click();
   const groupDialog = window.getByRole("dialog", { name: "New Group" });
   await groupDialog.getByLabel("Group name").fill("Launch Crew");
-  await groupDialog.getByRole("button", { name: "Mina @mina" }).click();
+  // The picker lists contacts; Mina is the demo's one non-contact (the
+  // add-to-contacts path), so the group is built from Aron.
+  await groupDialog.getByRole("button", { name: "Aron @aron" }).click();
   await groupDialog.getByRole("button", { name: "Create group" }).click();
   await expect(
     window.getByRole("heading", { name: "Launch Crew" }),

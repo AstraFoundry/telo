@@ -25,6 +25,7 @@ import {
 } from "entities/chat";
 import { useRecentSearches, useTimeFormat } from "entities/preferences";
 import { AccountMenu } from "features/account-menu";
+import { AddContactByPhoneDialog } from "features/add-contact";
 import { ChatSearch } from "features/chat-search";
 import {
   pushRecentSearch,
@@ -578,6 +579,9 @@ export function ConversationSidebar({
   // stays clickable instead of vanishing under the pointer.
   const [searchFocused, setSearchFocused] = useState(false);
   const [clearHistoryOpen, setClearHistoryOpen] = useState(false);
+  // The account menu's contacts dialog closes itself and hands off here:
+  // features cannot nest features (FSD), so the widget owns the add flow.
+  const [addContactOpen, setAddContactOpen] = useState(false);
   // The folder strip is a short horizontal scroller: it never shows a
   // scrollbar (the same rule the agent suggestion pills follow), and a fade
   // mask — not a track — is the only hint that more tabs exist.
@@ -872,8 +876,15 @@ export function ConversationSidebar({
         )}
       </nav>
       <footer className="border-t">
-        <AccountMenu onOpenSettings={onOpenSettings} />
+        <AccountMenu
+          onOpenSettings={onOpenSettings}
+          onNewContact={() => setAddContactOpen(true)}
+        />
       </footer>
+      <AddContactByPhoneDialog
+        open={addContactOpen}
+        onOpenChange={setAddContactOpen}
+      />
       <CenterMorphModal
         open={clearHistoryOpen}
         onOpenChange={setClearHistoryOpen}

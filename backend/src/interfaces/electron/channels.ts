@@ -1,5 +1,13 @@
 export const channels = {
   currentUserGet: "workspace:get-current-user",
+  profileNameUpdate: "workspace:update-profile-name",
+  bioUpdate: "workspace:update-bio",
+  usernameAvailabilityCheck: "workspace:check-username-availability",
+  usernameSet: "workspace:set-username",
+  profilePhotoSet: "workspace:set-profile-photo",
+  contactPhoneAdd: "workspace:add-contact-by-phone",
+  peerContactSet: "workspace:set-peer-contact",
+  peerContactRemove: "workspace:remove-peer-contact",
   chatPageList: "workspace:list-chat-page",
   secretChatCreate: "workspace:create-secret-chat",
   contactsList: "workspace:list-contacts",

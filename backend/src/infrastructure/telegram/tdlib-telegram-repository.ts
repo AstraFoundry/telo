@@ -3,6 +3,7 @@ import path from "node:path";
 import type * as Td from "tdlib-types";
 
 import type {
+  AddContactByPhoneInput,
   AvatarPlaceholderDto,
   AnimatedEmojiEffectDto,
   BotCallbackAnswerDto,
@@ -28,6 +29,7 @@ import type {
   PostedStoryDto,
   PostStoryInput,
   SetMessageReactionInput,
+  SetPeerContactInput,
   StickerCatalogDto,
   StickerItemDto,
   StickerSetDto,
@@ -39,6 +41,8 @@ import type {
   TelegramCallPageDto,
   TelegramContactDto,
   TelegramWorkspaceEvent,
+  UpdateProfileNameInput,
+  UsernameAvailability,
 } from "../../../../contracts/src/ipc";
 import type {
   TelegramAccountDatabase,
@@ -154,6 +158,11 @@ export class TdlibTelegramRepository implements TelegramRepository {
       await this.client.invoke<Td.user>({ _: "getMe" }),
     );
     this.selfUserId = me.id;
+    // The bio lives on the full info, not the user object; a failed fetch
+    // must not take the whole identity card down with it.
+    const full = await this.client
+      .invoke<Td.userFullInfo>({ _: "getUserFullInfo", user_id: me.id })
+      .catch(() => null);
     await this.scheduleUserAvatar(me, true);
     const name = [me.first_name, me.last_name].filter(Boolean).join(" ");
     const id = String(me.id);
@@ -161,6 +170,8 @@ export class TdlibTelegramRepository implements TelegramRepository {
       id,
       displayName: name,
       username: me.usernames?.active_usernames[0] ?? null,
+      bio: full?.bio?.text || null,
+      phone: me.phone_number || null,
       initials: initials(name || "You"),
       avatarDataUrl: this.avatarUrls.get(id) ?? null,
       avatarPending: this.avatarIsPending(id),
@@ -170,6 +181,68 @@ export class TdlibTelegramRepository implements TelegramRepository {
         (colorId) => accentPaletteOf(colorId, this.customAccentColors),
       ),
     };
+  }
+
+  async updateProfileName(
+    input: UpdateProfileNameInput,
+  ): Promise<CurrentUserDto> {
+    await this.client.invoke({
+      _: "setName",
+      first_name: input.firstName,
+      last_name: input.lastName,
+    });
+    return this.getCurrentUser();
+  }
+
+  async updateBio(bio: string): Promise<void> {
+    // tdesktop's saveSelfBio flattens newlines: a Telegram bio is a single
+    // line, so the multi-line editor's breaks become spaces (setBio rejects
+    // line feeds).
+    await this.client.invoke({ _: "setBio", bio: bio.replaceAll("\n", " ") });
+    this.emit({ type: "current-user" });
+  }
+
+  async checkUsernameAvailability(
+    username: string,
+  ): Promise<UsernameAvailability> {
+    const me = await this.client.invoke<Td.user>({ _: "getMe" });
+    this.selfUserId = me.id;
+    this.rememberUser(me);
+    // Saved Messages doubles as the self chat: its id is the account's own
+    // user id, which is what checkChatUsername expects for a personal name.
+    const result = await this.client.invoke<Td.CheckChatUsernameResult>({
+      _: "checkChatUsername",
+      chat_id: me.id,
+      username,
+    });
+    if (result._ === "checkChatUsernameResultOk") return "available";
+    if (result._ === "checkChatUsernameResultUsernameInvalid") return "invalid";
+    if (result._ === "checkChatUsernameResultUsernameOccupied") return "taken";
+    // Purchasable / public-quota results do not decide a personal username;
+    // the setUsername call stays the source of truth.
+    return "unknown";
+  }
+
+  async setUsername(username: string): Promise<CurrentUserDto> {
+    // An empty username removes it. TDLib rejects with USERNAME_INVALID /
+    // USERNAME_OCCUPIED, which the editor surfaces as-is.
+    await this.client.invoke({ _: "setUsername", username });
+    return this.getCurrentUser();
+  }
+
+  async setProfilePhoto(file: TelegramUploadFile): Promise<CurrentUserDto> {
+    // Same crossing as postStory: the staged local file uploads as
+    // inputFileLocal, wrapped in the static-photo payload setProfilePhoto
+    // expects.
+    await this.client.invoke({
+      _: "setProfilePhoto",
+      photo: {
+        _: "inputChatPhotoStatic",
+        photo: { _: "inputFileLocal", path: file.source },
+      },
+      is_public: false,
+    });
+    return this.getCurrentUser();
   }
 
   async listChatPage(input: ChatPageInput): Promise<ChatPageDto> {
@@ -205,22 +278,74 @@ export class TdlibTelegramRepository implements TelegramRepository {
       const user = this.users.get(userId);
       if (!user || user.type._ === "userTypeDeleted") return [];
       void this.scheduleUserAvatar(user);
-      const peerId = String(user.id);
-      const displayName = [user.first_name, user.last_name]
-        .filter(Boolean)
-        .join(" ");
-      return [
-        {
-          id: peerId,
-          displayName: displayName || peerId,
-          username: user.usernames?.active_usernames[0] ?? null,
-          phone: user.phone_number || null,
-          avatarDataUrl: this.avatarUrls.get(peerId) ?? null,
-          avatarPending: this.avatarIsPending(peerId),
-          avatarPlaceholder: this.avatarPlaceholderForPeer(peerId),
-        },
-      ];
+      return [this.toContactDto(user)];
     });
+  }
+
+  async addContactByPhone(
+    input: AddContactByPhoneInput,
+  ): Promise<TelegramContactDto | null> {
+    const imported = await this.client.invoke<Td.importedContacts>({
+      _: "importContacts",
+      contacts: [
+        {
+          _: "importedContact",
+          phone_number: normalizePhoneNumber(input.phone),
+          first_name: input.firstName,
+          last_name: input.lastName,
+          note: { _: "formattedText", text: "", entities: [] },
+        },
+      ],
+    });
+    // importContacts answers 0 for a number nobody registered — tdesktop's
+    // AddContactBox treats that as the "not joined" retry state, so the
+    // renderer gets a null rather than an error.
+    const userId = imported.user_ids[0] ?? 0;
+    if (userId === 0) return null;
+    const user = await this.fetchUser(userId);
+    if (!user) return null;
+    void this.scheduleUserAvatar(user);
+    return this.toContactDto(user);
+  }
+
+  async setPeerContact(input: SetPeerContactInput): Promise<void> {
+    // tdesktop's EditContactBox: addContact with the names the editor sent;
+    // the phone stays empty because Telegram already knows the user.
+    await this.client.invoke({
+      _: "addContact",
+      user_id: Number(input.userId),
+      contact: {
+        _: "importedContact",
+        phone_number: "",
+        first_name: input.firstName,
+        last_name: input.lastName,
+        note: { _: "formattedText", text: "", entities: [] },
+      },
+      share_phone_number: input.sharePhoneNumber,
+    });
+  }
+
+  async removePeerContact(userId: string): Promise<void> {
+    await this.client.invoke({
+      _: "removeContacts",
+      user_ids: [Number(userId)],
+    });
+  }
+
+  private toContactDto(user: Td.user): TelegramContactDto {
+    const peerId = String(user.id);
+    const displayName = [user.first_name, user.last_name]
+      .filter(Boolean)
+      .join(" ");
+    return {
+      id: peerId,
+      displayName: displayName || peerId,
+      username: user.usernames?.active_usernames[0] ?? null,
+      phone: user.phone_number || null,
+      avatarDataUrl: this.avatarUrls.get(peerId) ?? null,
+      avatarPending: this.avatarIsPending(peerId),
+      avatarPlaceholder: this.avatarPlaceholderForPeer(peerId),
+    };
   }
 
   async openPrivateChat(userId: string): Promise<ChatDto> {
@@ -546,6 +671,11 @@ export class TdlibTelegramRepository implements TelegramRepository {
         ),
         bio: full?.bio?.text ?? null,
         phone: user.phone_number || null,
+        isContact: user.is_contact,
+        // Drives the "share my phone number" checkbox in tdesktop's
+        // EditContactBox (userFullInfo.need_phone_number_privacy_exception).
+        needPhonePrivacyException:
+          full?.need_phone_number_privacy_exception ?? false,
       };
     }
     const chat = this.chats.get(peerId);
@@ -1882,8 +2012,20 @@ export class TdlibTelegramRepository implements TelegramRepository {
     if (update._ === "updateUser") {
       this.rememberUser(update.user);
       this.scheduleUserAvatar(update.user);
+      // Profile edits made on another client arrive as a self updateUser;
+      // the renderer reloads the identity card on this event.
+      if (update.user.id === this.selfUserId) {
+        this.emit({ type: "current-user" });
+      }
       const chat = this.chats.get(String(update.user.id));
       if (chat) this.emit({ type: "chat-upsert", chat: this.toChat(chat) });
+      return;
+    }
+    if (update._ === "updateUserFullInfo") {
+      // Bio and photo changes ride the full-info update, not updateUser.
+      if (update.user_id === this.selfUserId) {
+        this.emit({ type: "current-user" });
+      }
       return;
     }
     if (update._ === "updateBasicGroup") {
@@ -2339,6 +2481,12 @@ function isStickerFileNotReady(error: unknown): boolean {
   return /FILE|DOWNLOAD|not found|not downloaded/i.test(text);
 }
 
+/** Telegram's import format: digits with an optional leading +. */
+function normalizePhoneNumber(value: string): string {
+  const digits = value.replace(/\D/g, "");
+  return value.trim().startsWith("+") ? `+${digits}` : digits;
+}
+
 function toTdEntity(entity: MessageEntityDto): Td.textEntity$Input {
   const base = {
     _: "textEntity" as const,
@@ -2538,6 +2686,32 @@ export class TdlibClientCoordinator implements TelegramAccountClient {
   }
   listChatPage(input: ChatPageInput): Promise<ChatPageDto> {
     return this.repository.listChatPage(input);
+  }
+  updateProfileName(input: UpdateProfileNameInput): Promise<CurrentUserDto> {
+    return this.repository.updateProfileName(input);
+  }
+  updateBio(bio: string): Promise<void> {
+    return this.repository.updateBio(bio);
+  }
+  checkUsernameAvailability(username: string): Promise<UsernameAvailability> {
+    return this.repository.checkUsernameAvailability(username);
+  }
+  setUsername(username: string): Promise<CurrentUserDto> {
+    return this.repository.setUsername(username);
+  }
+  setProfilePhoto(file: TelegramUploadFile): Promise<CurrentUserDto> {
+    return this.repository.setProfilePhoto(file);
+  }
+  addContactByPhone(
+    input: AddContactByPhoneInput,
+  ): Promise<TelegramContactDto | null> {
+    return this.repository.addContactByPhone(input);
+  }
+  setPeerContact(input: SetPeerContactInput): Promise<void> {
+    return this.repository.setPeerContact(input);
+  }
+  removePeerContact(userId: string): Promise<void> {
+    return this.repository.removePeerContact(userId);
   }
   createSecretChat(userId: string): Promise<ChatDto> {
     return this.repository.createSecretChat(userId);
