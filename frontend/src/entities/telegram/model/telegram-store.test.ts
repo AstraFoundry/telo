@@ -177,6 +177,8 @@ describe("telegram-store", () => {
       id: "u1",
       displayName: "Ada Lovelace",
       username: "ada",
+      bio: null,
+      phone: null,
       initials: "AL",
       avatarDataUrl: null,
     };
@@ -199,6 +201,8 @@ describe("telegram-store", () => {
         id: "u1",
         displayName: "Ada Lovelace",
         username: "ada",
+        bio: null,
+        phone: null,
         initials: "AL",
         avatarDataUrl: null,
         avatarPending: true,
@@ -247,6 +251,8 @@ describe("telegram-store", () => {
         id: "u1",
         displayName: "Ada Lovelace",
         username: "ada",
+        bio: null,
+        phone: null,
         initials: "AL",
         avatarDataUrl: null,
       },
@@ -266,6 +272,8 @@ describe("telegram-store", () => {
       id: "u1",
       displayName: "Ada Lovelace",
       username: "ada",
+      bio: null,
+      phone: null,
       initials: "AL",
       avatarDataUrl: null,
     };
@@ -400,5 +408,153 @@ describe("telegram-store", () => {
 
     expect(useTelegramStore.getState().agentSetupPending).toBe(false);
     expect(useTelegramStore.getState().auth).toEqual({ status: "ready" });
+  });
+
+  it("updateProfileName() stores the identity returned by the preload API", async () => {
+    const telo = installTeloApiMock();
+    const updated = {
+      id: "u1",
+      displayName: "Ada Byron",
+      username: "ada",
+      bio: null,
+      phone: "+12025550123",
+      initials: "AB",
+      avatarDataUrl: null,
+    };
+    telo.workspace.updateProfileName.mockResolvedValue(updated);
+
+    await useTelegramStore
+      .getState()
+      .updateProfileName({ firstName: "Ada", lastName: "Byron" });
+
+    expect(telo.workspace.updateProfileName).toHaveBeenCalledWith({
+      firstName: "Ada",
+      lastName: "Byron",
+    });
+    expect(useTelegramStore.getState().currentUser).toEqual(updated);
+  });
+
+  it("updateProfileName() rejects so the editing dialog can surface it", async () => {
+    const telo = installTeloApiMock();
+    telo.workspace.updateProfileName.mockRejectedValue(
+      new Error("FIRSTNAME_INVALID"),
+    );
+
+    await expect(
+      useTelegramStore
+        .getState()
+        .updateProfileName({ firstName: "  ", lastName: "" }),
+    ).rejects.toThrow("FIRSTNAME_INVALID");
+    expect(useTelegramStore.getState().currentUser).toBeNull();
+  });
+
+  it("setUsername() stores the identity returned by the preload API", async () => {
+    const telo = installTeloApiMock();
+    const updated = {
+      id: "u1",
+      displayName: "Ada Lovelace",
+      username: "ada_new",
+      bio: null,
+      phone: null,
+      initials: "AL",
+      avatarDataUrl: null,
+    };
+    telo.workspace.setUsername.mockResolvedValue(updated);
+
+    await useTelegramStore.getState().setUsername("ada_new");
+
+    expect(telo.workspace.setUsername).toHaveBeenCalledWith("ada_new");
+    expect(useTelegramStore.getState().currentUser).toEqual(updated);
+  });
+
+  it("updateBio() applies the saved draft to the current user", async () => {
+    const telo = installTeloApiMock();
+    useTelegramStore.setState({
+      currentUser: {
+        id: "u1",
+        displayName: "Ada Lovelace",
+        username: "ada",
+        bio: null,
+        phone: null,
+        initials: "AL",
+        avatarDataUrl: null,
+      },
+    });
+
+    await useTelegramStore.getState().updateBio("Countess of Lovelace");
+
+    expect(telo.workspace.updateBio).toHaveBeenCalledWith(
+      "Countess of Lovelace",
+    );
+    expect(useTelegramStore.getState().currentUser?.bio).toBe(
+      "Countess of Lovelace",
+    );
+  });
+
+  it("updateBio() maps an empty draft to a cleared (null) bio", async () => {
+    const telo = installTeloApiMock();
+    useTelegramStore.setState({
+      currentUser: {
+        id: "u1",
+        displayName: "Ada Lovelace",
+        username: "ada",
+        bio: "Old bio",
+        phone: null,
+        initials: "AL",
+        avatarDataUrl: null,
+      },
+    });
+
+    await useTelegramStore.getState().updateBio("");
+
+    expect(telo.workspace.updateBio).toHaveBeenCalledWith("");
+    expect(useTelegramStore.getState().currentUser?.bio).toBeNull();
+  });
+
+  it("setProfilePhoto() stores the identity returned by the preload API", async () => {
+    const telo = installTeloApiMock();
+    const photo = new File(["pixels"], "photo.png", { type: "image/png" });
+    const updated = {
+      id: "u1",
+      displayName: "Ada Lovelace",
+      username: "ada",
+      bio: null,
+      phone: null,
+      initials: "AL",
+      avatarDataUrl: "telo-media://cache/avatar_u1.jpg",
+    };
+    telo.workspace.setProfilePhoto.mockResolvedValue(updated);
+
+    await useTelegramStore.getState().setProfilePhoto(photo);
+
+    expect(telo.workspace.setProfilePhoto).toHaveBeenCalledWith(photo);
+    expect(useTelegramStore.getState().currentUser).toEqual(updated);
+  });
+
+  it("start() reloads the identity on a current-user workspace event", async () => {
+    const telo = installTeloApiMock();
+    telo.telegram.onAuthState.mockReturnValue(() => {});
+    telo.telegram.getAuthState.mockResolvedValue({ status: "ready" });
+    telo.telegram.getLoginConfiguration.mockResolvedValue({
+      applicationCredentialsConfigured: true,
+    });
+    const updated = {
+      id: "u1",
+      displayName: "Ada Byron",
+      username: "ada",
+      bio: null,
+      phone: null,
+      initials: "AB",
+      avatarDataUrl: null,
+    };
+    telo.workspace.getCurrentUser.mockResolvedValue(updated);
+
+    const stop = useTelegramStore.getState().start();
+    telo.emitWorkspaceEvent({ type: "current-user" });
+
+    await vi.waitFor(() => {
+      expect(useTelegramStore.getState().currentUser).toEqual(updated);
+    });
+    stop();
   });
 });

@@ -244,6 +244,140 @@ describe("TdlibTelegramRepository", () => {
     expect(events).toContainEqual({ type: "chat-upsert", chat });
   });
 
+  it("resolves addContactByPhone to null when the number never joined", async () => {
+    const { repository, bridge } = setup();
+    // importContacts answers user id 0 for an unregistered number; tdesktop
+    // shows the "not joined" state rather than an error.
+    bridge.handlers.set("importContacts", () => ({
+      _: "importedContacts",
+      user_ids: [0],
+      importer_count: [0],
+    }));
+
+    await expect(
+      repository.addContactByPhone({
+        firstName: "Mina",
+        lastName: "",
+        phone: "+1 (555) 0142",
+      }),
+    ).resolves.toBeNull();
+    expect(bridge.invokes).toContainEqual({
+      _: "importContacts",
+      contacts: [
+        {
+          _: "importedContact",
+          // The adapter normalizes to digits plus an optional leading +.
+          phone_number: "+15550142",
+          first_name: "Mina",
+          last_name: "",
+          note: { _: "formattedText", text: "", entities: [] },
+        },
+      ],
+    });
+  });
+
+  it("imports a registered phone number as a contact", async () => {
+    const { repository, bridge } = setup();
+    bridge.handlers.set("importContacts", () => ({
+      _: "importedContacts",
+      user_ids: [11],
+      importer_count: [0],
+    }));
+
+    await expect(
+      repository.addContactByPhone({
+        firstName: "Ada",
+        lastName: "Byron",
+        phone: "+1 555 0142",
+      }),
+    ).resolves.toMatchObject({ id: "11", displayName: "Ada Byron" });
+  });
+
+  it("renames the account and returns the refreshed identity", async () => {
+    const { repository, bridge } = setup();
+    let firstName = "Ada";
+    let lastName = "Byron";
+    // getCurrentUser refetches through getUser when the photo is unknown, so
+    // both identity reads must follow the rename.
+    bridge.handlers.set("getMe", () =>
+      tdUser(1, { first_name: firstName, last_name: lastName }),
+    );
+    bridge.handlers.set("getUser", (request) =>
+      tdUser(Number(request.user_id), {
+        first_name: firstName,
+        last_name: lastName,
+      }),
+    );
+    bridge.handlers.set("setName", (request) => {
+      firstName = String(request.first_name);
+      lastName = String(request.last_name);
+      return { _: "ok" };
+    });
+
+    const updated = await repository.updateProfileName({
+      firstName: "Grace",
+      lastName: "Hopper",
+    });
+    expect(updated.displayName).toBe("Grace Hopper");
+    expect(bridge.invokes).toContainEqual({
+      _: "setName",
+      first_name: "Grace",
+      last_name: "Hopper",
+    });
+  });
+
+  it("maps username checks on the Saved Messages chat", async () => {
+    const { repository, bridge } = setup();
+    for (const [tdResult, expected] of [
+      ["checkChatUsernameResultOk", "available"],
+      ["checkChatUsernameResultUsernameInvalid", "invalid"],
+      ["checkChatUsernameResultUsernameOccupied", "taken"],
+      ["checkChatUsernameResultUsernamePurchasable", "unknown"],
+    ] as const) {
+      bridge.handlers.set("checkChatUsername", () => ({ _: tdResult }));
+      await expect(repository.checkUsernameAvailability("telo")).resolves.toBe(
+        expected,
+      );
+    }
+    // The Saved Messages chat id is the account's own user id.
+    expect(bridge.invokes).toContainEqual({
+      _: "checkChatUsername",
+      chat_id: 1,
+      username: "telo",
+    });
+  });
+
+  it("emits current-user when the self profile changes arrive as updates", async () => {
+    const { repository, bridge, events } = setup();
+    await repository.hydrate();
+    events.length = 0;
+
+    bridge.emit({ _: "updateUser", user: tdUser(1) } as Td.Update);
+    bridge.emit({
+      _: "updateUserFullInfo",
+      user_id: 1,
+      user_full_info: { _: "userFullInfo" },
+    } as unknown as Td.Update);
+    // Another user's updates never reload the identity card.
+    bridge.emit({ _: "updateUser", user: tdUser(11) } as Td.Update);
+    bridge.emit({
+      _: "updateUserFullInfo",
+      user_id: 11,
+      user_full_info: { _: "userFullInfo" },
+    } as unknown as Td.Update);
+    await vi.waitFor(() => {
+      // Other users' updates may still upsert their chats; only the two self
+      // updates (user and full info) fire current-user.
+      const currentUserEvents = events.filter(
+        (event) => event.type === "current-user",
+      );
+      expect(currentUserEvents).toEqual([
+        { type: "current-user" },
+        { type: "current-user" },
+      ]);
+    });
+  });
+
   it("creates basic groups and channels through TDLib", async () => {
     const { repository, bridge } = setup();
     bridge.handlers.set("createNewBasicGroupChat", () => ({

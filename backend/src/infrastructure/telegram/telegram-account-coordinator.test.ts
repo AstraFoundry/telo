@@ -208,6 +208,8 @@ async function createHarness(options?: {
           id: `user-${accountId}`,
           displayName: `User ${accountId}`,
           username: accountId,
+          bio: null,
+          phone: null,
           initials: "U",
           avatarDataUrl: null,
         },

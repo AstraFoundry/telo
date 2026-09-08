@@ -107,6 +107,14 @@ export function installTeloApiMock(): TeloApiMock {
     workspace: {
       getCurrentUser: vi.fn(),
       listChatPage: vi.fn(async () => ({ items: [], nextCursor: null })),
+      updateProfileName: vi.fn(),
+      updateBio: vi.fn(async () => undefined),
+      checkUsernameAvailability: vi.fn(async () => "available" as const),
+      setUsername: vi.fn(),
+      setProfilePhoto: vi.fn(),
+      addContactByPhone: vi.fn(async () => null),
+      setPeerContact: vi.fn(async () => undefined),
+      removePeerContact: vi.fn(async () => undefined),
       createSecretChat: vi.fn(async (userId: string) => ({
         id: `secret-${userId}`,
         title: "Secret",

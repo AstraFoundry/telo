@@ -90,9 +90,117 @@ describe("DemoTelegramRepository", () => {
     });
   });
 
+  it("round-trips the demo profile edits and emits current-user", async () => {
+    const repository = new DemoTelegramRepository();
+    const events: unknown[] = [];
+    repository.subscribe((event) => events.push(event));
+
+    const renamed = await repository.updateProfileName({
+      firstName: "Demo",
+      lastName: "Maintainer",
+    });
+    expect(renamed.displayName).toBe("Demo Maintainer");
+    await repository.updateBio("Line one\nLine two");
+    await expect(repository.getCurrentUser()).resolves.toMatchObject({
+      // A Telegram bio is a single line; newlines flatten to spaces.
+      bio: "Line one Line two",
+    });
+    expect(events).toEqual([
+      { type: "current-user" },
+      { type: "current-user" },
+    ]);
+  });
+
+  it("resolves addContactByPhone only for a demo peer's phone", async () => {
+    const repository = new DemoTelegramRepository();
+
+    // Mina's fixture phone, in the free-form spacing the editor allows.
+    await expect(
+      repository.addContactByPhone({
+        firstName: "Mina",
+        lastName: "",
+        phone: "+1 (555) 0142",
+      }),
+    ).resolves.toMatchObject({ id: "demo-mina", displayName: "Mina" });
+    // The import flipped her contact state: the chat profile now agrees.
+    await expect(repository.getPeerProfile("mina")).resolves.toMatchObject({
+      isContact: true,
+    });
+    // A number nobody registered answers null, the "not joined" state.
+    await expect(
+      repository.addContactByPhone({
+        firstName: "Nobody",
+        lastName: "",
+        phone: "+9 999 9999",
+      }),
+    ).resolves.toBeNull();
+  });
+
+  it("adds and removes a peer contact through the demo twins", async () => {
+    const repository = new DemoTelegramRepository();
+
+    // Mina starts as the demo's one non-contact with the phone-privacy
+    // exception set.
+    await expect(repository.getPeerProfile("mina")).resolves.toMatchObject({
+      isContact: false,
+      needPhonePrivacyException: true,
+    });
+    await repository.setPeerContact({
+      userId: "mina",
+      firstName: "Mina",
+      lastName: "",
+      sharePhoneNumber: true,
+    });
+    await expect(repository.getPeerProfile("mina")).resolves.toMatchObject({
+      isContact: true,
+    });
+    await repository.removePeerContact("mina");
+    await expect(repository.getPeerProfile("mina")).resolves.toMatchObject({
+      isContact: false,
+    });
+    await expect(repository.removePeerContact("missing")).rejects.toThrow(
+      "Unknown peer missing",
+    );
+  });
+
+  it("maps username availability against the demo peers", async () => {
+    const repository = new DemoTelegramRepository();
+
+    await expect(repository.checkUsernameAvailability("no")).resolves.toBe(
+      "invalid",
+    );
+    // "mina"/"aron"/"lev" are too short to be claimable; "priya" is the
+    // one taken username that passes the length gate.
+    await expect(repository.checkUsernameAvailability("priya")).resolves.toBe(
+      "taken",
+    );
+    await expect(
+      repository.checkUsernameAvailability("telo_dev"),
+    ).resolves.toBe("available");
+    const updated = await repository.setUsername("telo_dev");
+    expect(updated.username).toBe("telo_dev");
+    await expect(repository.setUsername("priya")).rejects.toThrow(
+      "USERNAME_OCCUPIED",
+    );
+    // An empty string removes the username, as TDLib's setUsername does.
+    await expect((await repository.setUsername("")).username).toBeNull();
+  });
+
+  it("carries the call log fixtures in the mina transcript", async () => {
+    const repository = new DemoTelegramRepository();
+    const calls = (await listMessages(repository, "mina"))
+      .map((message) => message.call)
+      .filter(Boolean);
+    expect(calls).toEqual([
+      { video: false, status: "outgoing", durationSeconds: 65 },
+      { video: false, status: "missed", durationSeconds: 0 },
+      { video: true, status: "cancelled", durationSeconds: 0 },
+    ]);
+  });
+
   it("returns deterministic demo chats", async () => {
     const chats = await listChats(new DemoTelegramRepository());
-    expect(chats).toHaveLength(7);
+    expect(chats).toHaveLength(8);
     expect(chats[0]?.pinned).toBe(true);
     expect(chats.some((chat) => chat.kind === "secret")).toBe(true);
   });
@@ -121,6 +229,7 @@ describe("DemoTelegramRepository", () => {
       2,
       2,
       ARCHIVE_FOLDER_ID,
+      null,
       null,
       null,
       null,
@@ -194,6 +303,10 @@ describe("DemoTelegramRepository", () => {
       limit: 1,
       cursor: sixth.nextCursor,
     });
+    const eighth = await repository.listChatPage({
+      limit: 1,
+      cursor: seventh.nextCursor,
+    });
 
     expect(first.items.map((chat) => chat.id)).toEqual(["saved"]);
     expect(second.items.map((chat) => chat.id)).toEqual(["design"]);
@@ -201,8 +314,9 @@ describe("DemoTelegramRepository", () => {
     expect(fourth.items.map((chat) => chat.id)).toEqual(["offsite"]);
     expect(fifth.items.map((chat) => chat.id)).toEqual(["telobot"]);
     expect(sixth.items.map((chat) => chat.id)).toEqual(["mina"]);
-    expect(seventh.items.map((chat) => chat.id)).toEqual(["secret-mina"]);
-    expect(seventh.nextCursor).toBeNull();
+    expect(seventh.items.map((chat) => chat.id)).toEqual(["aron"]);
+    expect(eighth.items.map((chat) => chat.id)).toEqual(["secret-mina"]);
+    expect(eighth.nextCursor).toBeNull();
   });
 
   it("returns a snapshot that does not leak internal chat state", async () => {
@@ -834,6 +948,10 @@ describe("DemoTelegramRepository", () => {
       avatarPlaceholder: mapAvatarPlaceholder("Mina", 5),
       bio: "Design systems, spacing rules, and long changelogs.",
       phone: "+1 555 0142",
+      // Mina is the demo's one non-contact, with the phone-privacy
+      // exception set, so the add-contact flow has an E2E path.
+      isContact: false,
+      needPhonePrivacyException: true,
     });
     // Only one demo peer shares a number, so the card's phone row has both a
     // present and an absent case to render.
@@ -1078,7 +1196,7 @@ describe("DemoTelegramRepository", () => {
 
     await repository.logout();
 
-    await expect(listChats(repository)).resolves.toHaveLength(7);
+    await expect(listChats(repository)).resolves.toHaveLength(8);
     await expect(repository.getCurrentUser()).resolves.toMatchObject({
       id: "demo-user",
     });

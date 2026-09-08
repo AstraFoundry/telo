@@ -36,9 +36,14 @@ type AccountAction = ContactAction | "channel" | "calls" | "story";
 
 interface AccountMenuProps {
   onOpenSettings(): void;
+  /** Opens the add-by-phone flow; owned by the sidebar (FSD layer above). */
+  onNewContact?(): void;
 }
 
-export function AccountMenu({ onOpenSettings }: AccountMenuProps) {
+export function AccountMenu({
+  onOpenSettings,
+  onNewContact,
+}: AccountMenuProps) {
   const [open, setOpen] = useState(false);
   const [action, setAction] = useState<AccountAction | null>(null);
   const currentUser = useTelegramStore((state) => state.currentUser);
@@ -255,6 +260,7 @@ export function AccountMenu({ onOpenSettings }: AccountMenuProps) {
         onOpenChange={(next) => {
           if (!next) setAction(null);
         }}
+        onNewContact={onNewContact}
       />
       <CreateChannelDialog
         key={action === "channel" ? "channel-open" : "channel-closed"}

@@ -23,6 +23,62 @@ export interface TelegramContactDto {
   readonly avatarPlaceholder?: AvatarPlaceholderDto | null;
 }
 
+/**
+ * Phone-first contact creation (Telegram `importContacts`). Mirrors
+ * tdesktop's AddContactBox: one name part is enough, the phone decides.
+ */
+export interface AddContactByPhoneInput {
+  readonly firstName: string;
+  readonly lastName: string;
+  /** Free-form; the adapter strips everything but digits and a leading +. */
+  readonly phone: string;
+}
+
+/**
+ * User-first contact add/edit for a known peer (Telegram `addContact`),
+ * tdesktop's EditContactBox. `sharePhoneNumber` maps to
+ * `addContact.share_phone_number` — the phone-privacy exception offered when
+ * `PeerProfileDto.needPhonePrivacyException` is set.
+ */
+export interface SetPeerContactInput {
+  readonly userId: string;
+  readonly firstName: string;
+  readonly lastName: string;
+  readonly sharePhoneNumber: boolean;
+}
+/** Self profile name edit (Telegram `setName`). First name is required. */
+export interface UpdateProfileNameInput {
+  readonly firstName: string;
+  readonly lastName: string;
+}
+
+/**
+ * Availability of a personal username, mapped from TDLib
+ * `checkChatUsername` on the Saved Messages chat. "unknown" covers the
+ * non-deciding results (purchasable, public-chat quota) — the save itself
+ * stays the source of truth.
+ */
+export type UsernameAvailability =
+  "available" | "invalid" | "taken" | "unknown";
+
+/**
+ * A call log entry inside the transcript (Telegram `messageCall` /
+ * `messageGroupCall`). `status` folds direction and discard reason together
+ * the way tdesktop's `Data::MediaCall::Text` does: outgoing+missed reads
+ * "Cancelled", incoming+missed reads "Missed", incoming+declined reads
+ * "Declined". `durationSeconds` is 0 unless the call connected.
+ */
+export type MessageCallStatus =
+  "outgoing" | "incoming" | "missed" | "declined" | "cancelled" | "group";
+
+export interface MessageCallDto {
+  readonly video: boolean;
+  readonly status: MessageCallStatus;
+  readonly durationSeconds: number;
+  /** `messageGroupCall.is_active`: the group call is still running. */
+  readonly active?: boolean;
+}
+
 export interface CreateTelegramGroupInput {
   readonly title: string;
   readonly userIds: ReadonlyArray<string>;
@@ -618,6 +674,11 @@ export interface MessageDto {
    * an optimistic placeholder and on any message nobody has reacted to.
    */
   readonly reactions?: ReadonlyArray<MessageReactionDto>;
+  /**
+   * Call log entry when the message is a `messageCall`/`messageGroupCall`;
+   * the bubble renders as a call card instead of text. Null otherwise.
+   */
+  readonly call?: MessageCallDto | null;
 }
 
 export interface MessagePageInput {
@@ -756,6 +817,13 @@ export type TelegramWorkspaceEvent =
       readonly online: boolean;
     }
   | {
+      /**
+       * The account's own profile changed (name, bio, username, photo) —
+       * from a local edit or another client. Reload `getCurrentUser`.
+       */
+      readonly type: "current-user";
+    }
+  | {
       /** Full folder snapshot; folder lists are tiny, so deltas are not modeled. */
       readonly type: "folders";
       readonly folders: ReadonlyArray<ChatFolderDto>;
@@ -863,6 +931,10 @@ export interface CurrentUserDto {
   readonly id: string;
   readonly displayName: string;
   readonly username: string | null;
+  /** Telegram "about" text from `getUserFullInfo`; null when empty. */
+  readonly bio: string | null;
+  /** The account's own phone number, always known once authorized. */
+  readonly phone: string | null;
   readonly initials: string;
   readonly avatarDataUrl: string | null;
   /** True until the account photo settles, like `ChatDto.avatarPending`. */
@@ -891,10 +963,9 @@ export interface ChatMemberDto {
 }
 
 /**
- * Identity card for any Telegram peer, including a group member or channel
- * poster who has no dialog of their own. A peer that does have a dialog is
- * shown through the richer chat profile instead, so this carries only what
- * Telegram can tell about a peer with no shared history.
+ * Identity card for any Telegram user: peers with no dialog, the account's
+ * own My Profile, and direct-chat dialogs all read it. It carries the
+ * UserFullInfo fields a ChatDto does not — bio, phone, contact state.
  */
 export interface PeerProfileDto {
   readonly id: string;
@@ -904,6 +975,13 @@ export interface PeerProfileDto {
   readonly avatarDataUrl: string | null;
   /** True until the photo settles, exactly like `ChatDto.avatarPending`. */
   readonly avatarPending?: boolean;
+  /** Whether the peer is in the account's contact list (`user.is_contact`). */
+  readonly isContact?: boolean;
+  /**
+   * `userFullInfo.need_phone_number_privacy_exception`: adding this peer as a
+   * contact should offer the "share my phone number" exception.
+   */
+  readonly needPhonePrivacyException?: boolean;
   readonly avatarPlaceholder?: AvatarPlaceholderDto | null;
   /** Telegram "about" text; null when empty or hidden from the account. */
   readonly bio: string | null;
@@ -1572,6 +1650,48 @@ export interface TeloDesktopApi {
   readonly workspace: {
     getCurrentUser(): Promise<CurrentUserDto>;
     listChatPage(input?: ChatPageInput): Promise<ChatPageDto>;
+    /**
+     * Renames the account (Telegram `setName`) and returns the refreshed
+     * identity. First name must be non-empty.
+     */
+    updateProfileName(input: UpdateProfileNameInput): Promise<CurrentUserDto>;
+    /**
+     * Sets the account bio (Telegram `setBio`); an empty string clears it.
+     * The editor owns the draft, so this resolves void on success.
+     */
+    updateBio(bio: string): Promise<void>;
+    /**
+     * Checks a personal username against Telegram (`checkChatUsername` on
+     * the Saved Messages chat) without claiming it.
+     */
+    checkUsernameAvailability(username: string): Promise<UsernameAvailability>;
+    /**
+     * Claims or replaces the account username (Telegram `setUsername`);
+     * an empty string removes it. Returns the refreshed identity.
+     */
+    setUsername(username: string): Promise<CurrentUserDto>;
+    /**
+     * Replaces the account profile photo (Telegram `setProfilePhoto` from an
+     * uploaded `inputFileLocal`) and returns the refreshed identity.
+     */
+    setProfilePhoto(file: File): Promise<CurrentUserDto>;
+    /**
+     * Phone-first contact creation (Telegram `importContacts`), tdesktop's
+     * AddContactBox. Resolves to the imported contact, or null when the
+     * number is not registered on Telegram (the "not joined" retry state).
+     */
+    addContactByPhone(
+      input: AddContactByPhoneInput,
+    ): Promise<TelegramContactDto | null>;
+    /**
+     * Adds or edits a known peer as a contact (Telegram `addContact`),
+     * tdesktop's EditContactBox. `sharePhoneNumber` maps to
+     * `share_phone_number` — the privacy exception offered when the peer's
+     * profile sets `needPhonePrivacyException`.
+     */
+    setPeerContact(input: SetPeerContactInput): Promise<void>;
+    /** Removes a peer from the contact list (Telegram `removeContacts`). */
+    removePeerContact(userId: string): Promise<void>;
     /**
      * Starts a device-local end-to-end encrypted secret chat with `userId`.
      */

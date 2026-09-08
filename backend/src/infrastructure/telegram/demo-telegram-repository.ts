@@ -2,6 +2,7 @@ import path from "node:path";
 import { copyFile, mkdir, stat, writeFile } from "node:fs/promises";
 
 import type {
+  AddContactByPhoneInput,
   AnimatedEmojiEffectDto,
   BotCallbackAnswerDto,
   ChatDto,
@@ -29,6 +30,7 @@ import type {
   PostedStoryDto,
   PostStoryInput,
   SetMessageReactionInput,
+  SetPeerContactInput,
   StickerFormat,
   StickerCatalogDto,
   StickerItemDto,
@@ -37,6 +39,8 @@ import type {
   TelegramCallPageDto,
   TelegramContactDto,
   TelegramWorkspaceEvent,
+  UpdateProfileNameInput,
+  UsernameAvailability,
 } from "../../../../contracts/src/ipc";
 import { ARCHIVE_FOLDER_ID } from "../../../../contracts/src/ipc";
 import type {
@@ -48,7 +52,7 @@ import {
   demoStickerTgs,
   demoVideoWebm,
 } from "./demo-media-assets";
-import { mapAvatarPlaceholder } from "./tdlib-mappers";
+import { initials, mapAvatarPlaceholder } from "./tdlib-mappers";
 import {
   MEDIA_CACHE_MAX_BYTES,
   enforceMediaCacheLimit,
@@ -187,6 +191,25 @@ const INITIAL_CHAT_SEEDS: ReadonlyArray<Omit<ChatDto, "avatarPlaceholder">> = [
     folderId: null,
   },
   {
+    // Aron is a contact with a dialog, so the contacts list and the group
+    // picker have a real entry while Mina stays the non-contact path.
+    id: "aron",
+    title: "Aron",
+    preview: "Send over the spacing tokens when ready.",
+    updatedAt: "2026-08-23T17:50:00.000Z",
+    unreadCount: 0,
+    lastReadMessageId: "aron-1",
+    muted: false,
+    pinned: false,
+    kind: "direct",
+    initials: "A",
+    avatarDataUrl: null,
+    draftPreview: null,
+    typing: false,
+    presence: "online",
+    folderId: null,
+  },
+  {
     id: "secret-mina",
     title: "Mina",
     preview: "This chat is end-to-end encrypted.",
@@ -224,12 +247,21 @@ const DEMO_AUTO_REPLIES: Record<string, string> = {
 // lookup is the only way to see them: names and usernames match the senders
 // across the fixtures, bios stand in for Telegram's "about" text, and a
 // single peer shares a phone number so both branches of the identity card
-// have deterministic demo coverage.
+// have deterministic demo coverage. Exactly one direct-chat peer (Mina) is
+// NOT a contact and needs the phone-privacy exception, so the add-contact
+// flow has an E2E path.
 interface DemoPeer {
   readonly displayName: string;
   readonly username: string | null;
   readonly bio: string | null;
   readonly phone: string | null;
+  /** Telegram `user.is_contact`: whether the account lists this peer. */
+  readonly contact: boolean;
+  /**
+   * Telegram `userFullInfo.need_phone_number_privacy_exception`: adding
+   * this peer should offer the "share my phone number" exception.
+   */
+  readonly needPhonePrivacyException?: boolean;
 }
 
 const DEMO_PEERS: Record<string, DemoPeer> = {
@@ -238,24 +270,31 @@ const DEMO_PEERS: Record<string, DemoPeer> = {
     username: "mina",
     bio: "Design systems, spacing rules, and long changelogs.",
     phone: "+1 555 0142",
+    // The one non-contact with a dialog: her chat profile offers "Add to
+    // contacts" with the share-phone checkbox, for the E2E path.
+    contact: false,
+    needPhonePrivacyException: true,
   },
   "demo-aron": {
     displayName: "Aron",
     username: "aron",
     bio: "Collects reference shots for the media viewer.",
     phone: null,
+    contact: true,
   },
   "demo-lev": {
     displayName: "Lev",
     username: "lev",
     bio: "Breaks the retry flow on purpose, then files it.",
     phone: null,
+    contact: true,
   },
   "demo-priya": {
     displayName: "Priya",
     username: "priya",
     bio: "Offsite logistics: venues, travel, and hard deadlines.",
     phone: null,
+    contact: true,
   },
 };
 
@@ -827,6 +866,55 @@ const INITIAL_MESSAGES: Record<string, ReadonlyArray<MessageDto>> = {
     },
   ],
   mina: [
+    // Call log coverage for the transcript's call card: one connected
+    // outgoing voice call, one missed incoming call, one cancelled outgoing
+    // video call — the three status/duration combinations tdesktop's
+    // Data::MediaCall::Text distinguishes.
+    {
+      id: "mina-call-1",
+      chatId: "mina",
+      senderName: "You",
+      senderId: DEMO_ACCOUNT_PEER_ID,
+      senderAvatarUrl: null,
+      body: "",
+      entities: [],
+      media: null,
+      groupedId: null,
+      sentAt: "2026-08-23T17:10:00.000Z",
+      outgoing: true,
+      status: "read",
+      call: { video: false, status: "outgoing", durationSeconds: 65 },
+    },
+    {
+      id: "mina-call-2",
+      chatId: "mina",
+      senderName: "Mina",
+      senderId: "demo-mina",
+      senderAvatarUrl: null,
+      body: "",
+      entities: [],
+      media: null,
+      groupedId: null,
+      sentAt: "2026-08-23T17:25:00.000Z",
+      outgoing: false,
+      status: "read",
+      call: { video: false, status: "missed", durationSeconds: 0 },
+    },
+    {
+      id: "mina-call-3",
+      chatId: "mina",
+      senderName: "You",
+      senderId: DEMO_ACCOUNT_PEER_ID,
+      senderAvatarUrl: null,
+      body: "",
+      entities: [],
+      media: null,
+      groupedId: null,
+      sentAt: "2026-08-23T17:45:00.000Z",
+      outgoing: true,
+      status: "read",
+      call: { video: true, status: "cancelled", durationSeconds: 0 },
+    },
     {
       id: "mina-1",
       chatId: "mina",
@@ -858,8 +946,23 @@ const INITIAL_MESSAGES: Record<string, ReadonlyArray<MessageDto>> = {
       status: "read",
     },
   ],
+  aron: [
+    {
+      id: "aron-1",
+      chatId: "aron",
+      senderName: "Aron",
+      senderId: "demo-aron",
+      senderAvatarUrl: null,
+      body: "Send over the spacing tokens when ready.",
+      entities: [],
+      media: null,
+      groupedId: null,
+      sentAt: "2026-08-23T17:50:00.000Z",
+      outgoing: false,
+      status: "read",
+    },
+  ],
 };
-
 // What the demo bot answers a press with, keyed by message id and then by
 // button id. Only callback buttons appear: a url or copy button is serviced
 // by the renderer without a round trip, and an unsupported one has no action
@@ -1029,6 +1132,20 @@ export class DemoTelegramRepository implements TelegramRepository {
   private stickerSetInstalled = DEMO_STICKER_SET.installed;
   private recentStickerIds: string[] = ["sticker/2", "sticker/1"];
   private favoriteStickerIds: string[] = ["sticker/1"];
+  // The account's own profile, mutated by the demo twins of setName / setBio
+  // / setUsername / setProfilePhoto so the MyProfile editor round-trips.
+  private profileFirstName = "Demo";
+  private profileLastName = "User";
+  private profileBio: string | null =
+    "Trying every Telo build before it ships.";
+  private profileUsername: string | null = null;
+  private profileAvatarDataUrl: string | null = null;
+  /** Contact list membership, seeded from the DEMO_PEERS fixture flags. */
+  private readonly contactPeerIds = new Set<string>(
+    Object.entries(DEMO_PEERS)
+      .filter(([, peer]) => peer.contact)
+      .map(([id]) => id),
+  );
 
   constructor(options: DemoTelegramRepositoryOptions = {}) {
     this.typingDelayMs = options.typingDelayMs ?? 500;
@@ -1045,14 +1162,69 @@ export class DemoTelegramRepository implements TelegramRepository {
   }
 
   async getCurrentUser(): Promise<CurrentUserDto> {
+    const displayName = [this.profileFirstName, this.profileLastName]
+      .filter(Boolean)
+      .join(" ");
     return {
       id: "demo-user",
-      displayName: "Demo User",
-      username: null,
-      initials: "DU",
-      avatarDataUrl: null,
-      avatarPlaceholder: mapAvatarPlaceholder("Demo User", 5),
+      displayName,
+      username: this.profileUsername,
+      bio: this.profileBio,
+      phone: "+1 555 0100",
+      initials: initials(displayName || "You"),
+      avatarDataUrl: this.profileAvatarDataUrl,
+      avatarPlaceholder: mapAvatarPlaceholder(displayName || "You", 5),
     };
+  }
+
+  async updateProfileName(
+    input: UpdateProfileNameInput,
+  ): Promise<CurrentUserDto> {
+    this.profileFirstName = input.firstName;
+    this.profileLastName = input.lastName;
+    this.emit({ type: "current-user" });
+    return this.getCurrentUser();
+  }
+
+  async updateBio(bio: string): Promise<void> {
+    // Matches the TDLib twin's flattening: a Telegram bio is one line.
+    this.profileBio = bio.replaceAll("\n", " ") || null;
+    this.emit({ type: "current-user" });
+  }
+
+  async checkUsernameAvailability(
+    username: string,
+  ): Promise<UsernameAvailability> {
+    if (!isValidTelegramUsername(username)) return "invalid";
+    if (username === this.profileUsername) return "available";
+    const clash = Object.values(DEMO_PEERS).some(
+      (peer) => peer.username === username,
+    );
+    return clash ? "taken" : "available";
+  }
+
+  async setUsername(username: string): Promise<CurrentUserDto> {
+    if (!username) {
+      // An empty string removes the username, as TDLib's setUsername does.
+      this.profileUsername = null;
+    } else {
+      // Mirror the TDLib error messages the editor matches on.
+      const availability = await this.checkUsernameAvailability(username);
+      if (availability === "invalid") throw new Error("USERNAME_INVALID");
+      if (availability === "taken") throw new Error("USERNAME_OCCUPIED");
+      this.profileUsername = username;
+    }
+    this.emit({ type: "current-user" });
+    return this.getCurrentUser();
+  }
+
+  async setProfilePhoto(file: TelegramUploadFile): Promise<CurrentUserDto> {
+    // The demo never uploads; the bundled blurred JPEG stands in for the
+    // settled photo so the change is visible without a Telegram round trip.
+    void file;
+    this.profileAvatarDataUrl = DEMO_BLURRED_THUMBNAIL;
+    this.emit({ type: "current-user" });
+    return this.getCurrentUser();
   }
 
   async listChatPage(input: ChatPageInput): Promise<ChatPageDto> {
@@ -1106,7 +1278,7 @@ export class DemoTelegramRepository implements TelegramRepository {
 
   async listContacts(): Promise<ReadonlyArray<TelegramContactDto>> {
     return [...this.chats.values()]
-      .filter((chat) => chat.kind === "direct")
+      .filter((chat) => chat.kind === "direct" && this.isDemoContact(chat.id))
       .map((chat) => {
         const peer = DEMO_PEERS[`demo-${chat.id}`] ?? DEMO_PEERS[chat.id];
         return {
@@ -1118,6 +1290,65 @@ export class DemoTelegramRepository implements TelegramRepository {
           avatarPlaceholder: chat.avatarPlaceholder,
         };
       });
+  }
+
+  async addContactByPhone(
+    input: AddContactByPhoneInput,
+  ): Promise<TelegramContactDto | null> {
+    const phone = normalizeDemoPhone(input.phone);
+    const entry = Object.entries(DEMO_PEERS).find(
+      ([, peer]) => peer.phone && normalizeDemoPhone(peer.phone) === phone,
+    );
+    // Like importContacts answering user id 0: a number nobody registered
+    // resolves to null, the editor's "not joined" state.
+    if (!entry) return null;
+    const [peerId, peer] = entry;
+    this.contactPeerIds.add(peerId);
+    // Telegram stores the name the AddContactBox sent, so the demo contact
+    // answers with it rather than the fixture name.
+    const displayName =
+      [input.firstName, input.lastName].filter(Boolean).join(" ") ||
+      peer.displayName;
+    return {
+      id: peerId,
+      displayName,
+      username: peer.username,
+      phone: peer.phone,
+      avatarDataUrl: null,
+      avatarPlaceholder: mapAvatarPlaceholder(displayName, 5),
+    };
+  }
+
+  async setPeerContact(input: SetPeerContactInput): Promise<void> {
+    // share_phone_number only matters against Telegram's privacy rules; the
+    // demo records the contact add alone.
+    this.contactPeerIds.add(this.requireDemoPeerId(input.userId));
+  }
+
+  async removePeerContact(userId: string): Promise<void> {
+    this.contactPeerIds.delete(this.requireDemoPeerId(userId));
+  }
+
+  // Chat ids and peer ids both address a contact: the chat profile passes
+  // the dialog id ("mina"), the group-member card the sender id
+  // ("demo-mina").
+  private demoPeerId(id: string): string | null {
+    if (DEMO_PEERS[id]) return id;
+    const fromChat = `demo-${id}`;
+    return DEMO_PEERS[fromChat] ? fromChat : null;
+  }
+
+  private requireDemoPeerId(id: string): string {
+    const peerId = this.demoPeerId(id);
+    if (!peerId) throw new Error(`Unknown peer ${id}`);
+    return peerId;
+  }
+
+  private isDemoContact(chatId: string): boolean {
+    // Direct-chat peers without a fixture entry (the bot, the offsite
+    // thread) are ordinary contacts; fixture peers follow contactPeerIds.
+    const peerId = this.demoPeerId(chatId);
+    return peerId ? this.contactPeerIds.has(peerId) : true;
   }
 
   async openPrivateChat(userId: string): Promise<ChatDto> {
@@ -1331,21 +1562,32 @@ export class DemoTelegramRepository implements TelegramRepository {
         kind: "direct",
         avatarDataUrl: user.avatarDataUrl,
         avatarPlaceholder: user.avatarPlaceholder,
-        bio: null,
-        phone: null,
+        bio: user.bio,
+        phone: user.phone,
       };
     }
     const chat = this.chats.get(peerId);
     if (chat) {
+      // A direct chat's identity card carries the peer table row when one
+      // exists, so the contact state and bio survive the dialog shortcut.
+      const peer =
+        chat.kind === "direct" ? DEMO_PEERS[`demo-${chat.id}`] : undefined;
       return {
         id: chat.id,
         title: chat.title,
-        username: null,
+        username: peer?.username ?? null,
         kind: chat.kind,
         avatarDataUrl: chat.avatarDataUrl,
         avatarPlaceholder: chat.avatarPlaceholder,
-        bio: null,
-        phone: null,
+        bio: peer?.bio ?? null,
+        phone: peer?.phone ?? null,
+        ...(chat.kind === "direct"
+          ? {
+              isContact: this.isDemoContact(chat.id),
+              needPhonePrivacyException:
+                peer?.needPhonePrivacyException ?? false,
+            }
+          : {}),
       };
     }
     const peer = DEMO_PEERS[peerId];
@@ -1359,6 +1601,8 @@ export class DemoTelegramRepository implements TelegramRepository {
       avatarPlaceholder: mapAvatarPlaceholder(peer.displayName, 5),
       bio: peer.bio,
       phone: peer.phone,
+      isContact: this.contactPeerIds.has(peerId),
+      needPhonePrivacyException: peer.needPhonePrivacyException ?? false,
     };
   }
 
@@ -2202,6 +2446,18 @@ function reactionsAfterSet(
       ? { ...bucket, count: bucket.count + 1, chosen: true }
       : bucket,
   );
+}
+
+// Telegram username rules: 5–32 chars, letters/digits/underscore, starting
+// with a letter. The demo check enforces the same gate TDLib would.
+function isValidTelegramUsername(username: string): boolean {
+  return /^[a-zA-Z][a-zA-Z0-9_]{4,31}$/.test(username);
+}
+
+// Fixture phones carry spaces for readability; comparison strips everything
+// but the digits, like the TDLib twin's import normalization.
+function normalizeDemoPhone(value: string): string {
+  return value.replace(/\D/g, "");
 }
 
 // Cache names derive from the media id plus the original extension, so the

@@ -22,6 +22,8 @@ const demoUser: CurrentUserDto = {
   id: "demo-user",
   displayName: "Demo User",
   username: "demouser",
+  bio: null,
+  phone: "+1 202 555 0123",
   initials: "DU",
   avatarDataUrl: null,
 };
@@ -348,8 +350,10 @@ describe("SettingsPage", () => {
     const user = userEvent.setup();
     await renderPage({ currentUser: demoUser });
 
-    expect(screen.getByText(demoUser.displayName)).toBeTruthy();
-    expect(screen.getByText(`@${demoUser.username}`)).toBeTruthy();
+    // The cover and the editing rows both carry the identity, the way
+    // tdesktop's My Profile repeats the name and handle as its rows.
+    expect(screen.getAllByText(demoUser.displayName).length).toBe(2);
+    expect(screen.getAllByText(`@${demoUser.username}`).length).toBe(2);
     expect(screen.queryByLabelText(copy.phoneNumber)).toBeNull();
 
     await user.click(
@@ -365,6 +369,269 @@ describe("SettingsPage", () => {
     });
 
     expect(screen.getByText(copy.connectionConnecting)).toBeTruthy();
+  });
+
+  it("shows the phone number and the inline bio field on the account pane", async () => {
+    await renderPage({ currentUser: demoUser });
+
+    expect(screen.getByText(String(demoUser.phone))).toBeTruthy();
+    expect(screen.getByLabelText(copy.peerBio)).toBeTruthy();
+  });
+
+  it("edits the account name through the Name row dialog", async () => {
+    const user = userEvent.setup();
+    const { telo } = await renderPage({ currentUser: demoUser });
+    const updated: CurrentUserDto = {
+      ...demoUser,
+      displayName: "Ada User",
+      initials: "AU",
+    };
+    telo.workspace.updateProfileName.mockResolvedValue(updated);
+
+    await user.click(screen.getByRole("button", { name: copy.profileName }));
+    const dialog = await screen.findByRole("dialog", {
+      name: copy.profileName,
+    });
+
+    // Prefilled from the display name, tdesktop's EditNameBox behaviour.
+    const firstName = within(dialog).getByLabelText(copy.contactFirstName);
+    expect(firstName).toHaveProperty("value", "Demo");
+    expect(within(dialog).getByLabelText(copy.contactLastName)).toHaveProperty(
+      "value",
+      "User",
+    );
+
+    await user.clear(firstName);
+    await user.type(firstName, "Ada");
+    await user.click(within(dialog).getByRole("button", { name: copy.save }));
+
+    await waitFor(() => {
+      expect(telo.workspace.updateProfileName).toHaveBeenCalledWith({
+        firstName: "Ada",
+        lastName: "User",
+      });
+    });
+    // The store takes the returned identity, so the cover follows the save.
+    await waitFor(() => {
+      expect(screen.getAllByText("Ada User").length).toBe(2);
+    });
+  });
+
+  it("requires a first name before the name dialog can save", async () => {
+    const user = userEvent.setup();
+    const { telo } = await renderPage({ currentUser: demoUser });
+
+    await user.click(screen.getByRole("button", { name: copy.profileName }));
+    const dialog = await screen.findByRole("dialog", {
+      name: copy.profileName,
+    });
+
+    await user.clear(within(dialog).getByLabelText(copy.contactFirstName));
+
+    // Telegram's setName rejects an empty first name; the field says so and
+    // the save never leaves the dialog.
+    expect(
+      await within(dialog).findByText(copy.firstNameRequired),
+    ).toBeTruthy();
+    expect(
+      within(dialog).getByRole("button", { name: copy.save }),
+    ).toHaveProperty("disabled", true);
+    await user.keyboard("{Enter}");
+    expect(telo.workspace.updateProfileName).not.toHaveBeenCalled();
+  });
+
+  it("checks username availability live and saves an available name", async () => {
+    const user = userEvent.setup();
+    const { telo } = await renderPage({ currentUser: demoUser });
+    telo.workspace.checkUsernameAvailability.mockResolvedValue("available");
+    telo.workspace.setUsername.mockResolvedValue({
+      ...demoUser,
+      username: "ada_lovelace",
+    });
+
+    await user.click(screen.getByRole("button", { name: copy.peerUsername }));
+    const dialog = await screen.findByRole("dialog", {
+      name: copy.peerUsername,
+    });
+    const field = within(dialog).getByLabelText(copy.peerUsername);
+    expect(field).toHaveProperty("value", "demouser");
+
+    await user.clear(field);
+    await user.type(field, "ada_lovelace");
+
+    expect(
+      await within(dialog).findByText(copy.usernameAvailable, undefined, {
+        timeout: 3000,
+      }),
+    ).toBeTruthy();
+    expect(telo.workspace.checkUsernameAvailability).toHaveBeenCalledWith(
+      "ada_lovelace",
+    );
+
+    await user.click(within(dialog).getByRole("button", { name: copy.save }));
+    await waitFor(() => {
+      expect(telo.workspace.setUsername).toHaveBeenCalledWith("ada_lovelace");
+    });
+  });
+
+  it("blocks saving a username that Telegram reports as taken", async () => {
+    const user = userEvent.setup();
+    const { telo } = await renderPage({ currentUser: demoUser });
+    telo.workspace.checkUsernameAvailability.mockResolvedValue("taken");
+
+    await user.click(screen.getByRole("button", { name: copy.peerUsername }));
+    const dialog = await screen.findByRole("dialog", {
+      name: copy.peerUsername,
+    });
+    const field = within(dialog).getByLabelText(copy.peerUsername);
+    await user.clear(field);
+    await user.type(field, "taken_name");
+
+    expect(
+      await within(dialog).findByText(copy.usernameTaken, undefined, {
+        timeout: 3000,
+      }),
+    ).toBeTruthy();
+    expect(
+      within(dialog).getByRole("button", { name: copy.save }),
+    ).toHaveProperty("disabled", true);
+    expect(telo.workspace.setUsername).not.toHaveBeenCalled();
+  });
+
+  it("explains the username rules instead of checking an invalid candidate", async () => {
+    const user = userEvent.setup();
+    const { telo } = await renderPage({ currentUser: demoUser });
+
+    await user.click(screen.getByRole("button", { name: copy.peerUsername }));
+    const dialog = await screen.findByRole("dialog", {
+      name: copy.peerUsername,
+    });
+    const field = within(dialog).getByLabelText(copy.peerUsername);
+    await user.clear(field);
+    await user.type(field, "ab");
+
+    expect(await within(dialog).findByText(copy.usernameInvalid)).toBeTruthy();
+    // Past the debounce: an invalid candidate must never reach the RPC.
+    // The tsconfig lib predates Promise.withResolvers; hand-roll the wait.
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, 600);
+    });
+    expect(telo.workspace.checkUsernameAvailability).not.toHaveBeenCalled();
+    expect(
+      within(dialog).getByRole("button", { name: copy.save }),
+    ).toHaveProperty("disabled", true);
+  });
+
+  it("shows the checking state while the availability RPC is pending", async () => {
+    const user = userEvent.setup();
+    const { telo } = await renderPage({ currentUser: demoUser });
+    telo.workspace.checkUsernameAvailability.mockReturnValue(
+      // Never settles: the dialog must stay in its checking state.
+      new Promise<never>(() => {}),
+    );
+
+    await user.click(screen.getByRole("button", { name: copy.peerUsername }));
+    const dialog = await screen.findByRole("dialog", {
+      name: copy.peerUsername,
+    });
+    const field = within(dialog).getByLabelText(copy.peerUsername);
+    await user.clear(field);
+    await user.type(field, "pending_name");
+
+    expect(
+      await within(dialog).findByText(copy.usernameChecking, undefined, {
+        timeout: 3000,
+      }),
+    ).toBeTruthy();
+    expect(
+      within(dialog).getByRole("button", { name: copy.save }),
+    ).toHaveProperty("disabled", true);
+  });
+
+  it("removes the username when the field is saved empty", async () => {
+    const user = userEvent.setup();
+    const { telo } = await renderPage({ currentUser: demoUser });
+    telo.workspace.setUsername.mockResolvedValue({
+      ...demoUser,
+      username: null,
+    });
+
+    await user.click(screen.getByRole("button", { name: copy.peerUsername }));
+    const dialog = await screen.findByRole("dialog", {
+      name: copy.peerUsername,
+    });
+    await user.clear(within(dialog).getByLabelText(copy.peerUsername));
+
+    await user.click(within(dialog).getByRole("button", { name: copy.save }));
+    await waitFor(() => {
+      expect(telo.workspace.setUsername).toHaveBeenCalledWith("");
+    });
+  });
+
+  it("autosaves the bio once typing stops, not per keystroke", async () => {
+    const { telo } = await renderPage({ currentUser: demoUser });
+
+    fireEvent.change(screen.getByLabelText(copy.peerBio), {
+      target: { value: "Countess of Lovelace" },
+    });
+
+    expect(telo.workspace.updateBio).not.toHaveBeenCalled();
+    await waitFor(
+      () => {
+        expect(telo.workspace.updateBio).toHaveBeenCalledWith(
+          "Countess of Lovelace",
+        );
+      },
+      { timeout: 3000 },
+    );
+  });
+
+  it("collapses newlines in the bio before saving", async () => {
+    const { telo } = await renderPage({ currentUser: demoUser });
+
+    fireEvent.change(screen.getByLabelText(copy.peerBio), {
+      target: { value: "line one\nline two" },
+    });
+
+    await waitFor(
+      () => {
+        expect(telo.workspace.updateBio).toHaveBeenCalledWith(
+          "line one line two",
+        );
+      },
+      { timeout: 3000 },
+    );
+  });
+
+  it("counts down the bio budget and turns destructive at zero", async () => {
+    await renderPage({ currentUser: demoUser });
+
+    expect(screen.getByText("70")).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText(copy.peerBio), {
+      target: { value: "x".repeat(70) },
+    });
+
+    const counter = screen.getByText("0");
+    expect(counter.className).toContain("tabular-nums");
+    expect(counter.className).toContain("text-destructive");
+  });
+
+  it("uploads a new profile photo picked from the cover", async () => {
+    const { telo, container } = await renderPage({ currentUser: demoUser });
+    telo.workspace.setProfilePhoto.mockResolvedValue({
+      ...demoUser,
+      avatarDataUrl: "telo-media://cache/avatar_new.jpg",
+    });
+    const photo = new File(["pixels"], "photo.png", { type: "image/png" });
+
+    const picker = container.querySelector('input[type="file"]');
+    expect(picker).toBeTruthy();
+    fireEvent.change(picker as Element, { target: { files: [photo] } });
+
+    await waitFor(() => {
+      expect(telo.workspace.setProfilePhoto).toHaveBeenCalledWith(photo);
+    });
   });
 
   it("persists the accent color picked from the radio group", async () => {

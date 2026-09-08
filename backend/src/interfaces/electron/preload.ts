@@ -17,6 +17,29 @@ const api: TeloDesktopApi = {
   workspace: {
     getCurrentUser: () => ipcRenderer.invoke(channels.currentUserGet),
     listChatPage: (input) => ipcRenderer.invoke(channels.chatPageList, input),
+    updateProfileName: (input) =>
+      ipcRenderer.invoke(channels.profileNameUpdate, input),
+    updateBio: (bio) => ipcRenderer.invoke(channels.bioUpdate, bio),
+    checkUsernameAvailability: (username) =>
+      ipcRenderer.invoke(channels.usernameAvailabilityCheck, username),
+    setUsername: (username) =>
+      ipcRenderer.invoke(channels.usernameSet, username),
+    setProfilePhoto: async (file) => {
+      const source = webUtils.getPathForFile(file);
+      return ipcRenderer.invoke(channels.profilePhotoSet, {
+        source,
+        bytes: source ? undefined : new Uint8Array(await file.arrayBuffer()),
+        name: file.name,
+        mimeType: file.type,
+        size: file.size,
+      });
+    },
+    addContactByPhone: (input) =>
+      ipcRenderer.invoke(channels.contactPhoneAdd, input),
+    setPeerContact: (input) =>
+      ipcRenderer.invoke(channels.peerContactSet, input),
+    removePeerContact: (userId) =>
+      ipcRenderer.invoke(channels.peerContactRemove, userId),
     createSecretChat: (userId) =>
       ipcRenderer.invoke(channels.secretChatCreate, userId),
     listContacts: () => ipcRenderer.invoke(channels.contactsList),

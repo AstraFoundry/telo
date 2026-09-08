@@ -115,6 +115,7 @@ import {
 import type { MediaViewerItem, MediaViewerOrigin } from "shared/ui";
 
 import { deliveryGlyphKind, type DeliveryGlyphKind } from "./delivery-status";
+import { CallMessage } from "./call-message";
 import { DeleteMessageDialog } from "./delete-message-dialog";
 import { ForwardPickerDialog } from "./forward-picker-dialog";
 import { ForwardSelectedDialog } from "./forward-selected-dialog";
@@ -1022,6 +1023,24 @@ function ConversationMessage({
                     </PressableBlock>
                   ) : null}
                   {mediaNode}
+                  {/* A messageCall/messageGroupCall has no text body; it
+                      draws tdesktop's HistoryView::Media::Call card instead
+                      of the empty bubble the text path would leave. The
+                      card's meta line carries the time, so the footer meta
+                      below is skipped for calls. */}
+                  {message.call ? (
+                    <CallMessage
+                      call={message.call}
+                      outgoing={message.outgoing}
+                      sentAt={message.sentAt}
+                      timeFormat={timeFormat}
+                      trailing={
+                        message.outgoing ? (
+                          <DeliveryGlyph status={message.status} />
+                        ) : undefined
+                      }
+                    />
+                  ) : null}
                   {message.body ? (
                     <MessageRichText
                       body={message.body}
@@ -1209,7 +1228,9 @@ function ConversationMessage({
             {actionError.detail ? `: ${actionError.detail}` : ""}
           </p>
         ) : null}
-        {metaInText ? null : (
+        {/* A call card draws its own time inside the bubble (tdesktop
+            HistoryView::Media::Call), so the footer row would repeat it. */}
+        {metaInText || message.call ? null : (
           <MessageFooter className="text-foreground/70">
             <MessageMeta message={message} timeFormat={timeFormat} />
           </MessageFooter>

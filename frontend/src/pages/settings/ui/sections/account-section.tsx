@@ -4,11 +4,17 @@ import { useState } from "react";
 import { useChatStore } from "entities/chat";
 import { useTelegramStore } from "entities/telegram";
 import { TelegramConnectionForm } from "features/connect-telegram";
+import {
+  EditBioField,
+  EditNameDialog,
+  EditUsernameDialog,
+  ProfilePhotoButton,
+} from "features/edit-profile";
 import { copy } from "shared/config/copy";
 import {
-  Avatar,
   Button,
   SettingsGroup,
+  SettingsLinkRow,
   SettingsRow,
   StatefulButton,
   type ButtonState,
@@ -35,6 +41,7 @@ export function AccountSection({ onLoggedOut }: AccountSectionProps) {
   const [confirmingLogOut, setConfirmingLogOut] = useState(false);
   const [logOutState, setLogOutState] = useState<ButtonState>("idle");
 
+  const [editing, setEditing] = useState<"name" | "username" | null>(null);
   // Two-step confirm: the first click arms the button, the second executes.
   const handleLogOut = async () => {
     if (!confirmingLogOut) {
@@ -75,12 +82,7 @@ export function AccountSection({ onLoggedOut }: AccountSectionProps) {
           things every Telegram client leads its settings with. */}
       <SettingsGroup settingId="telegram-account">
         <div className="flex items-center gap-4 p-4">
-          <Avatar
-            src={currentUser.avatarDataUrl}
-            pending={currentUser.avatarPending}
-            placeholder={currentUser.avatarPlaceholder}
-            className="size-14"
-          />
+          <ProfilePhotoButton />
           <div className="min-w-0">
             <strong className="block truncate text-base font-semibold">
               {currentUser.displayName}
@@ -92,6 +94,24 @@ export function AccountSection({ onLoggedOut }: AccountSectionProps) {
             ) : null}
           </div>
         </div>
+        {/* tdesktop's My Profile order below the photo: bio, then the name,
+            phone and username rows that open their editors. */}
+        <EditBioField />
+        <SettingsLinkRow
+          label={copy.profileName}
+          value={currentUser.displayName}
+          onClick={() => setEditing("name")}
+        />
+        <SettingsRow
+          label={copy.peerPhone}
+          value={currentUser.phone ?? undefined}
+          settingId="account-phone"
+        />
+        <SettingsLinkRow
+          label={copy.peerUsername}
+          value={currentUser.username ? `@${currentUser.username}` : undefined}
+          onClick={() => setEditing("username")}
+        />
         <SettingsRow
           label={copy.accountConnection}
           value={CONNECTION_COPY[connectionState]}
@@ -132,6 +152,18 @@ export function AccountSection({ onLoggedOut }: AccountSectionProps) {
           {confirmingLogOut ? copy.logOutConfirm : copy.logOut}
         </StatefulButton>
       </SettingsGroup>
+      <EditNameDialog
+        open={editing === "name"}
+        onOpenChange={(open) => {
+          if (!open) setEditing(null);
+        }}
+      />
+      <EditUsernameDialog
+        open={editing === "username"}
+        onOpenChange={(open) => {
+          if (!open) setEditing(null);
+        }}
+      />
     </div>
   );
 }

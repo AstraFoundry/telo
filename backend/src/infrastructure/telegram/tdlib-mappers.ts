@@ -8,6 +8,8 @@ import {
   type ChatKind,
   type MessageButtonDto,
   type MessageButtonKind,
+  type MessageCallDto,
+  type MessageCallStatus,
   type MessageDto,
   type MessageEntityDto,
   type MessageFileMediaDto,
@@ -314,6 +316,7 @@ export function mapMessage(
     isolatedEmojiCount:
       text && text.entities.length === 0 ? isolatedEmojiCount(text.text) : 0,
     media: mapMedia(message),
+    call: mapMessageCall(message.content, message.is_outgoing),
     groupedId: message.media_album_id === "0" ? null : message.media_album_id,
     sentAt: new Date(message.date * 1000).toISOString(),
     outgoing,
@@ -330,6 +333,48 @@ export function mapMessage(
     keyboard: mapKeyboard(message.reply_markup),
     reactions: mapReactions(message.interaction_info),
   };
+}
+
+/**
+ * Call log entries (`messageCall` / `messageGroupCall`). Status folds
+ * direction and discard reason together the way tdesktop's
+ * `Data::MediaCall::Text` (data_media_types.cpp) does: an outgoing call
+ * that was never picked up reads "Cancelled", an incoming one "Missed",
+ * and an explicitly declined incoming call "Declined". The duration only
+ * means something for connected calls, so it is forced to 0 for every
+ * missed/declined/cancelled outcome.
+ */
+export function mapMessageCall(
+  content: Td.MessageContent,
+  isOutgoing: boolean,
+): MessageCallDto | null {
+  if (content._ === "messageCall") {
+    const missed = content.discard_reason?._ === "callDiscardReasonMissed";
+    const declined = content.discard_reason?._ === "callDiscardReasonDeclined";
+    const status: MessageCallStatus = missed
+      ? isOutgoing
+        ? "cancelled"
+        : "missed"
+      : declined && !isOutgoing
+        ? "declined"
+        : isOutgoing
+          ? "outgoing"
+          : "incoming";
+    return {
+      video: content.is_video,
+      status,
+      durationSeconds: missed || declined ? 0 : content.duration,
+    };
+  }
+  if (content._ === "messageGroupCall") {
+    return {
+      video: false,
+      status: "group",
+      active: content.is_active,
+      durationSeconds: content.duration,
+    };
+  }
+  return null;
 }
 
 export function mapEntities(

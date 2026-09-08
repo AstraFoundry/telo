@@ -124,18 +124,45 @@
     },
     {
       "id": "account-actions",
-      "workflow": "Contacts, private chats, basic groups, and channels from the account avatar menu",
+      "workflow": "Contacts, private chats, basic groups, and channels from the account avatar menu; add a contact by phone; add or remove a contact from a direct chat's profile",
       "methods": [
         "getContacts",
         "createPrivateChat",
         "createNewBasicGroupChat",
-        "createNewSupergroupChat"
+        "createNewSupergroupChat",
+        "importContacts",
+        "addContact",
+        "removeContacts"
       ],
       "evidence": [
         "backend/src/infrastructure/telegram/tdlib-telegram-repository.ts",
         "frontend/src/features/account-menu/ui/account-menu.tsx",
         "frontend/src/features/account-menu/ui/contact-action-dialog.tsx",
-        "frontend/src/features/account-menu/ui/create-channel-dialog.tsx"
+        "frontend/src/features/account-menu/ui/create-channel-dialog.tsx",
+        "frontend/src/features/add-contact/ui/add-contact-by-phone-dialog.tsx",
+        "frontend/src/features/add-contact/ui/edit-peer-contact-dialog.tsx"
+      ],
+      "state": "covered"
+    },
+    {
+      "id": "profile-editing",
+      "workflow": "Edit the account's name, bio, username (with availability check), and profile photo from Settings; My Profile shows the account identity card",
+      "methods": [
+        "setName",
+        "setBio",
+        "setUsername",
+        "checkChatUsername",
+        "setProfilePhoto",
+        "getUserFullInfo"
+      ],
+      "evidence": [
+        "backend/src/infrastructure/telegram/tdlib-telegram-repository.ts",
+        "frontend/src/features/edit-profile/ui/edit-name-dialog.tsx",
+        "frontend/src/features/edit-profile/ui/edit-username-dialog.tsx",
+        "frontend/src/features/edit-profile/ui/edit-bio-field.tsx",
+        "frontend/src/features/edit-profile/ui/profile-photo-button.tsx",
+        "frontend/src/pages/settings/ui/sections/account-section.tsx",
+        "frontend/src/widgets/chat-profile/ui/chat-profile-panel.tsx"
       ],
       "state": "covered"
     },
@@ -151,7 +178,7 @@
     },
     {
       "id": "call-history",
-      "workflow": "Paged incoming, outgoing, missed, voice, and video call-message history",
+      "workflow": "Paged incoming, outgoing, missed, voice, and video call-message history; transcript renders messageCall/messageGroupCall as call cards (tdesktop HistoryView::Media::Call parity). VoIP media stays out of scope: no initiation, no redial",
       "methods": ["searchCallMessages"],
       "evidence": [
         "backend/src/infrastructure/telegram/tdlib-telegram-repository.ts",

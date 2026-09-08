@@ -20,6 +20,7 @@ import {
   mapConnectionState,
   mapFolders,
   mapMessage,
+  mapMessageCall,
   mapReactionTypeEmojis,
   mediaIdForFile,
   minithumbnailDataUrl,
@@ -702,5 +703,89 @@ describe("tdlib mappers", () => {
         { _: "reactionTypeEmoji", emoji: "👍" },
       ]),
     ).toEqual(["👍"]);
+  });
+
+  it("maps call log entries the way tdesktop's MediaCall::Text folds them", () => {
+    const call = (
+      isOutgoing: boolean,
+      discardReason: string,
+      duration: number,
+      isVideo = false,
+    ) =>
+      mapMessageCall(
+        {
+          _: "messageCall",
+          unique_id: "1",
+          is_video: isVideo,
+          discard_reason: { _: discardReason },
+          duration,
+        } as unknown as Td.MessageContent,
+        isOutgoing,
+      );
+
+    // Connected calls keep their duration and direction.
+    expect(call(true, "callDiscardReasonEmpty", 65)).toEqual({
+      video: false,
+      status: "outgoing",
+      durationSeconds: 65,
+    });
+    expect(call(false, "callDiscardReasonEmpty", 12, true)).toEqual({
+      video: true,
+      status: "incoming",
+      durationSeconds: 12,
+    });
+    // Missed/declined calls force the duration to 0: the call never
+    // connected, whatever TDLib stored.
+    expect(call(false, "callDiscardReasonMissed", 30)).toEqual({
+      video: false,
+      status: "missed",
+      durationSeconds: 0,
+    });
+    expect(call(true, "callDiscardReasonMissed", 30)).toEqual({
+      video: false,
+      status: "cancelled",
+      durationSeconds: 0,
+    });
+    expect(call(false, "callDiscardReasonDeclined", 30)).toEqual({
+      video: false,
+      status: "declined",
+      durationSeconds: 0,
+    });
+    // An outgoing decline still reads as an outgoing call, duration 0.
+    expect(call(true, "callDiscardReasonDeclined", 30)).toEqual({
+      video: false,
+      status: "outgoing",
+      durationSeconds: 0,
+    });
+
+    expect(
+      mapMessageCall(
+        {
+          _: "messageGroupCall",
+          unique_id: "7",
+          is_active: true,
+          was_missed: false,
+          is_video: false,
+          duration: 90,
+          other_participant_ids: [],
+        } as unknown as Td.MessageContent,
+        false,
+      ),
+    ).toEqual({
+      video: false,
+      status: "group",
+      active: true,
+      durationSeconds: 90,
+    });
+
+    expect(
+      mapMessageCall(
+        {
+          _: "messageText",
+          text: { _: "formattedText", text: "hi", entities: [] },
+        } as unknown as Td.MessageContent,
+        true,
+      ),
+    ).toBeNull();
   });
 });
