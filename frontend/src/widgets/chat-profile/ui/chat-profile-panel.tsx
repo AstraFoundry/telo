@@ -626,7 +626,7 @@ export function ChatProfilePanel() {
         <h2 className="min-w-0 flex-1 truncate text-base font-semibold">
           {title}
         </h2>
-        <Tooltip content={copy.closeChatProfile}>
+        <Tooltip content={copy.closeChatProfile} side="bottom">
           <Button
             size="icon"
             variant="ghost"

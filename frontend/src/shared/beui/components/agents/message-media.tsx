@@ -74,6 +74,12 @@ export interface MessageMediaProps {
    */
   readonly tile?: boolean;
   /**
+   * The photo/video IS the bubble (Telegram's no-caption rule): the bubble
+   * frame owns the silhouette and the shadow, so the card drops its own
+   * radius. Captioned media keeps the card inside the padded bubble.
+   */
+  readonly fill?: boolean;
+  /**
    * Animated and video stickers replay on their own. Off — the reader turned
    * sticker looping off — gives them a single pass and then a held frame.
    */
@@ -140,6 +146,7 @@ function FileMedia({
   download,
   labels,
   tile = false,
+  fill = false,
   downloadIsExplicit = false,
   onDownload,
   onCancel,
@@ -156,6 +163,7 @@ function FileMedia({
         labels={labels}
         tile={tile}
         downloadIsExplicit={downloadIsExplicit}
+        fill={fill}
         video={video}
         onDownload={onDownload}
         onCancel={onCancel}
@@ -281,6 +289,7 @@ function VisualMedia({
   download,
   labels,
   tile,
+  fill,
   downloadIsExplicit,
   video,
   onDownload,
@@ -308,9 +317,15 @@ function VisualMedia({
   const showDownload =
     failed || cancelled || (download === null && !preloadExpected);
 
+  // Telegram convention: chat media never carries a visible outline — corner
+  // rounding plus the bubble's soft shadow does the edge work (tdesktop
+  // MediaRoundingMask + fillImageShadow, Web A .has-shadow). The `fill`
+  // frame owns the rounding when the photo is the whole bubble.
   const frame = tile
     ? "relative aspect-square overflow-hidden bg-black/5 dark:bg-white/5"
-    : "relative overflow-hidden rounded-lg bg-black/5 outline outline-1 -outline-offset-1 outline-black/10 dark:outline-white/10";
+    : fill
+      ? "relative overflow-hidden bg-black/5 dark:bg-white/5"
+      : "relative overflow-hidden rounded-lg bg-black/5 dark:bg-white/5";
   // A tile is already a square, so only the full card reserves a box.
   const box = tile ? null : visualMediaBox(media.width, media.height);
   const boxStyle = box

@@ -10,7 +10,7 @@ export function AgentToggle() {
   const label = open ? copy.closeAgent : copy.openAgent;
 
   return (
-    <Tooltip content={label}>
+    <Tooltip content={label} side="bottom">
       <Button
         size="icon"
         variant={open ? "secondary" : "ghost"}

@@ -745,6 +745,18 @@ function ConversationMessage({
   const mediaKey = message.media ? mediaDownloadKey(message.media) : null;
   const fileMedia =
     message.media && message.media.kind !== "webpage" ? message.media : null;
+  // A photo or video with no caption and no chrome IS the bubble in every
+  // Telegram client (tdesktop fills the bubble shape with the image and
+  // shadows it; Web A drops the solid background for captionless media). The
+  // frame below clips the card to the bubble radius and carries the edge
+  // with --shadow-media — never an outline.
+  const mediaFillsBubble =
+    fileMedia !== null &&
+    (fileMedia.kind === "photo" || fileMedia.kind === "video") &&
+    !message.body &&
+    !message.replyTo &&
+    !message.forwardedFrom &&
+    !message.keyboard;
   const mediaDownload = useChatStore((state) =>
     mediaKey ? (state.mediaDownloads[mediaKey] ?? null) : null,
   );
@@ -828,6 +840,7 @@ function ConversationMessage({
     <div ref={mediaKey ? preloadRef : undefined}>
       <MessageMedia
         media={message.media}
+        fill={mediaFillsBubble}
         download={mediaDownload}
         labels={MEDIA_LABELS}
         loopStickers={loopStickers}
@@ -978,7 +991,11 @@ function ConversationMessage({
                     metrics, which live as tokens in app/styles/index.css. */}
                 <MessageBubbleContent
                   ref={bubbleContentRef}
-                  className={`max-w-[var(--message-bubble-max-width)] rounded-[var(--message-bubble-radius)] px-[var(--message-bubble-padding-x)] py-[var(--message-bubble-padding-y)] text-[length:var(--message-font-size,14px)] leading-[var(--message-line-height)] text-pretty ${groupedCorners}`}
+                  className={
+                    mediaFillsBubble
+                      ? `w-fit max-w-[var(--message-bubble-max-width)] overflow-hidden rounded-[var(--message-bubble-radius)] p-0 shadow-media ${groupedCorners}`
+                      : `max-w-[var(--message-bubble-max-width)] rounded-[var(--message-bubble-radius)] px-[var(--message-bubble-padding-x)] py-[var(--message-bubble-padding-y)] text-[length:var(--message-font-size,14px)] leading-[var(--message-line-height)] text-pretty ${groupedCorners}`
+                  }
                 >
                   {message.forwardedFrom ? (
                     <ForwardedAttribution forward={message.forwardedFrom} />
@@ -1401,6 +1418,11 @@ function AlbumMessage({
       mediaDownloads[media.id] === undefined &&
       autoDownloadsMedia(media, autoDownload),
   );
+  // Same rule as a single photo: an album with no caption or chrome fills
+  // the bubble — the frame owns the radius and the shadow, the grid inside
+  // keeps only its 2px gutters.
+  const albumFillsBubble =
+    !first.body && !first.forwardedFrom && !first.keyboard;
   // Album thumbnails preload together once the grid scrolls into view.
   const preloadRef = useEdgeSentinel({
     enabled: pendingPreload,
@@ -1440,13 +1462,23 @@ function AlbumMessage({
           </MessageHeader>
         ) : null}
         <MessageBubble variant={first.outgoing ? "tint" : "soft"}>
-          <MessageBubbleContent className="max-w-[var(--message-bubble-max-width)] rounded-[var(--message-bubble-radius)] px-[var(--message-bubble-padding-x)] py-[var(--message-bubble-padding-y)] text-[length:var(--message-font-size,14px)] leading-[var(--message-line-height)] text-pretty">
+          <MessageBubbleContent
+            className={
+              albumFillsBubble
+                ? "w-fit max-w-[var(--message-bubble-max-width)] overflow-hidden rounded-[var(--message-bubble-radius)] p-0 shadow-media"
+                : "max-w-[var(--message-bubble-max-width)] rounded-[var(--message-bubble-radius)] px-[var(--message-bubble-padding-x)] py-[var(--message-bubble-padding-y)] text-[length:var(--message-font-size,14px)] leading-[var(--message-line-height)] text-pretty"
+            }
+          >
             {first.forwardedFrom ? (
               <ForwardedAttribution forward={first.forwardedFrom} />
             ) : null}
             <div
               ref={preloadRef}
-              className="grid max-w-md grid-cols-2 gap-0.5 overflow-hidden rounded-lg outline outline-1 -outline-offset-1 outline-black/10 dark:outline-white/10"
+              className={
+                albumFillsBubble
+                  ? "grid max-w-md grid-cols-2 gap-0.5"
+                  : "grid max-w-md grid-cols-2 gap-0.5 overflow-hidden rounded-lg"
+              }
             >
               {tiles.map(({ message, media }) => (
                 <MessageMedia
@@ -2058,7 +2090,7 @@ export function ConversationView() {
           ) : null}
         </div>
         <div className="flex gap-1 [app-region:no-drag]">
-          <Tooltip content={copy.searchInChatShortcut}>
+          <Tooltip content={copy.searchInChatShortcut} side="bottom">
             <Button
               size="icon"
               variant={chatSearchOpen ? "secondary" : "ghost"}
@@ -2076,6 +2108,7 @@ export function ConversationView() {
           {activeChat ? (
             <Tooltip
               content={activeChat.pinned ? copy.unpinChat : copy.pinChat}
+              side="bottom"
             >
               <Button
                 size="icon"

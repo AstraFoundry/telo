@@ -228,7 +228,7 @@ export function GlobalAgentPanel({ onOpenSettings }: GlobalAgentPanelProps) {
             )}
           </MorphPopoverContent>
         </MorphPopover>
-        <Tooltip content={copy.agentNewThread}>
+        <Tooltip content={copy.agentNewThread} side="bottom">
           <Button
             size="icon"
             variant="ghost"
@@ -240,7 +240,7 @@ export function GlobalAgentPanel({ onOpenSettings }: GlobalAgentPanelProps) {
             <Plus />
           </Button>
         </Tooltip>
-        <Tooltip content={copy.closeAgent}>
+        <Tooltip content={copy.closeAgent} side="bottom">
           <Button
             size="icon"
             variant="ghost"
