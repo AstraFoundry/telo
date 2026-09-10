@@ -124,6 +124,13 @@ export class TdlibTelegramRepository implements TelegramRepository {
   /** User ids that have been fetched with `getUser`, not a min `updateUser`. */
   private readonly fetchedUserIds = new Set<number>();
   /**
+   * Group ids TDLib answered "not found" for — stale chat entries whose
+   * group/channel was deleted or revoked after TDLib cached it. Same
+   * degradation as inaccessible users: remember, never retry, stay quiet.
+   */
+  private readonly unknownSupergroupIds = new Set<number>();
+  private readonly unknownBasicGroupIds = new Set<number>();
+  /**
    * User ids TDLib answered "Have no access to the user" for. tdesktop and
    * Telegram Web A treat that 400 as a settled "no photo" answer rather than
    * an error: the id is remembered so no lookup is ever repeated, and the
@@ -1969,11 +1976,11 @@ export class TdlibTelegramRepository implements TelegramRepository {
     }
     return items;
   }
-
   private async hydrateBasicGroup(
     groupId: number,
     emit: boolean,
   ): Promise<void> {
+    if (this.unknownBasicGroupIds.has(groupId)) return;
     try {
       const group = await this.client.invoke<Td.basicGroup>({
         _: "getBasicGroup",
@@ -1983,6 +1990,10 @@ export class TdlibTelegramRepository implements TelegramRepository {
       this.basicGroups.set(group.id, group);
       if (emit) this.emitGroupChat(groupId, "chatTypeBasicGroup");
     } catch (error) {
+      if (isNotFoundError(error)) {
+        this.unknownBasicGroupIds.add(groupId);
+        return;
+      }
       console.error("TDLib getBasicGroup failed", { groupId, error });
     }
   }
@@ -1991,6 +2002,7 @@ export class TdlibTelegramRepository implements TelegramRepository {
     supergroupId: number,
     emit: boolean,
   ): Promise<void> {
+    if (this.unknownSupergroupIds.has(supergroupId)) return;
     try {
       const group = await this.client.invoke<Td.supergroup>({
         _: "getSupergroup",
@@ -2000,6 +2012,10 @@ export class TdlibTelegramRepository implements TelegramRepository {
       this.supergroups.set(group.id, group);
       if (emit) this.emitGroupChat(supergroupId, "chatTypeSupergroup");
     } catch (error) {
+      if (isNotFoundError(error)) {
+        this.unknownSupergroupIds.add(supergroupId);
+        return;
+      }
       console.error("TDLib getSupergroup failed", { supergroupId, error });
     }
   }
@@ -3313,6 +3329,27 @@ function isInsufficientRightsError(error: unknown): boolean {
     candidate.code === 400 &&
     typeof candidate.message === "string" &&
     candidate.message.toLowerCase().includes("not enough rights")
+  );
+}
+
+/**
+ * TDLib answers `400 "... not found"` for objects it no longer knows —
+ * typically groups and channels deleted or revoked after the chat entry was
+ * cached. Reference clients treat the chat as degraded (read-only, cached
+ * title) and never re-ask; it is not an error worth logging.
+ */
+function isNotFoundError(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) return false;
+  const candidate = error as {
+    _?: unknown;
+    code?: unknown;
+    message?: unknown;
+  };
+  return (
+    candidate._ === "error" &&
+    candidate.code === 400 &&
+    typeof candidate.message === "string" &&
+    candidate.message.toLowerCase().includes("not found")
   );
 }
 

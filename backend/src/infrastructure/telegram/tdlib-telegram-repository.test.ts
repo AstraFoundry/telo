@@ -1487,6 +1487,78 @@ describe("TdlibTelegramRepository", () => {
     ]);
   });
 
+  it("treats an unknown supergroup as degraded: quiet, cached, never retried", async () => {
+    const { bridge, events } = setup();
+    bridge.handlers.set("getSupergroup", () =>
+      Promise.reject({
+        _: "error",
+        code: 400,
+        message: "Supergroup not found",
+      }),
+    );
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      // The chat entry itself still renders — TDLib owns its membership and
+      // drops it from the list on sync if the group is really gone.
+      bridge.emit({
+        _: "updateNewChat",
+        chat: tdChat(22, {
+          type: {
+            _: "chatTypeSupergroup",
+            supergroup_id: 5,
+            is_channel: false,
+          },
+        }),
+      } as Td.Update);
+      await vi.waitFor(() => {
+        expect(
+          bridge.invokes.some(
+            (item) => (item as { _: string })._ === "getSupergroup",
+          ),
+        ).toBe(true);
+      });
+      // Degraded, not dropped: the chat still reaches the renderer with its
+      // cached title and read-only access (writeAccess falls to none without
+      // a supergroup status).
+      await vi.waitFor(() => {
+        expect(
+          events.some(
+            (event) => event.type === "chat-upsert" && event.chat.id === "22",
+          ),
+        ).toBe(true);
+      });
+      expect(
+        errorSpy.mock.calls.filter(
+          (call) =>
+            typeof call[0] === "string" && call[0].includes("getSupergroup"),
+        ),
+      ).toHaveLength(0);
+
+      const lookups = () =>
+        bridge.invokes.filter(
+          (item) => (item as { _: string })._ === "getSupergroup",
+        ).length;
+      const before = lookups();
+      bridge.emit({
+        _: "updateNewChat",
+        chat: tdChat(22, {
+          type: {
+            _: "chatTypeSupergroup",
+            supergroup_id: 5,
+            is_channel: false,
+          },
+        }),
+      } as Td.Update);
+      // handleUpdate is async; two microtask turns let it settle. A known
+      // unknown group must not produce another getSupergroup call.
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(lookups()).toBe(before);
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
   it("maps sticker catalog, favorites, search, and send", async () => {
     const { repository, bridge } = setup();
     const sticker = tdSticker(8);
