@@ -69,8 +69,10 @@ describe("ReactionBar", () => {
 
     const chips = screen.getAllByRole("button");
     expect(chips).toHaveLength(2);
-    expect(chips[0].textContent).toBe("👍3");
-    expect(chips[1].textContent).toBe("❤️1");
+    expect(chips[0].textContent).toContain("👍");
+    expect(chips[1].textContent).toContain("❤️");
+    expect(chips[0].querySelector(".sr-only")?.textContent).toBe("3");
+    expect(chips[1].querySelector(".sr-only")?.textContent).toBe("1");
     expect(chips[0].getAttribute("aria-pressed")).toBe("false");
     expect(chips[1].getAttribute("aria-pressed")).toBe("true");
     expect(chips[1].dataset.chosen).toBe("true");
@@ -97,6 +99,28 @@ describe("ReactionBar", () => {
       messageId: "m1",
       emoji: "👍",
     });
+  });
+  it("bursts the glyph only when a tap adds the reaction", async () => {
+    await renderBar(
+      message({ reactions: [{ emoji: "👍", count: 1, chosen: false }] }),
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button"));
+    });
+    // The burst renders the glyph a second time, above the chip.
+    expect(screen.getAllByText("👍")).toHaveLength(2);
+  });
+
+  it("paints no burst when a tap removes the reaction", async () => {
+    await renderBar(
+      message({ reactions: [{ emoji: "👍", count: 1, chosen: true }] }),
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button"));
+    });
+    expect(screen.getAllByText("👍")).toHaveLength(1);
   });
 
   it("clears the account's own reaction when its chip is pressed again", async () => {
