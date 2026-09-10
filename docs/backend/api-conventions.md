@@ -1,6 +1,6 @@
 # IPC conventions
 
-Telo's backend API is Electron IPC, not HTTP. Shared request and response DTOs live in `contracts/src/ipc.ts`; channel names are private to the interfaces adapter.
+Telo's backend API is Electron IPC, not HTTP. Shared request and response DTOs are imported from `contracts/src/ipc.ts`; the vocabulary itself is declared in the backend domain and re-exported by the contracts module, so the domain never imports the transport contract. Channel names are private to the interfaces adapter.
 
 ## Rules
 

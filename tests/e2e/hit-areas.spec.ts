@@ -300,8 +300,16 @@ test("keeps the overlays at a 40px pointer target", async ({ window }) => {
   // The media viewer puts its controls over the image rather than beside it,
   // so nothing pads them if they are undersized.
   await conversation.hover();
+  // The transcript window renders only the visible range: after the jump to
+  // the top, wheel down until the photo bubble enters the rendered window.
   await window.mouse.wheel(0, -100_000);
-  await conversation.getByRole("button", { name: "telo-hero.png" }).click();
+  const heroPhoto = conversation.getByRole("button", {
+    name: "telo-hero.png",
+  });
+  for (let i = 0; i < 20 && !(await heroPhoto.isVisible()); i++) {
+    await window.mouse.wheel(0, 1_200);
+  }
+  await heroPhoto.click();
   const viewer = window.getByRole("dialog", { name: "Media viewer" });
   await expect(viewer).toBeVisible();
   expect(await sweep(window)).toEqual({ undersized: [], collisions: [] });

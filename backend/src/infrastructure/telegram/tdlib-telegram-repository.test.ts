@@ -429,6 +429,140 @@ describe("TdlibTelegramRepository", () => {
     );
   });
 
+  it("creates a server folder with every filter flag off", async () => {
+    const { repository, bridge } = setup();
+    // Fixed reply: the invoke payload itself is asserted below.
+    bridge.handlers.set("createChatFolder", () => ({
+      _: "chatFolderInfo",
+      id: 2,
+      name: {
+        _: "chatFolderName",
+        text: { _: "formattedText", text: "Work", entities: [] },
+      },
+      icon: { _: "chatFolderIcon", name: "Work" },
+    }));
+
+    const created = await repository.createChatFolder({
+      title: "Work",
+      chatIds: ["11"],
+    });
+
+    expect(created).toEqual({ id: 2, title: "Work", unreadCount: 0 });
+    expect(bridge.invokes).toContainEqual({
+      _: "createChatFolder",
+      folder: {
+        _: "chatFolder",
+        name: {
+          _: "chatFolderName",
+          text: { _: "formattedText", text: "Work", entities: [] },
+        },
+        pinned_chat_ids: [],
+        included_chat_ids: [11],
+        excluded_chat_ids: [],
+        exclude_muted: false,
+        exclude_read: false,
+        exclude_archived: false,
+        include_contacts: false,
+        include_non_contacts: false,
+        include_bots: false,
+        include_groups: false,
+        include_channels: false,
+      },
+    });
+  });
+
+  it("reads one folder's edit state and preserves untouched flags on edit", async () => {
+    const { repository, bridge } = setup();
+    bridge.emit({
+      _: "updateChatFolders",
+      chat_folders: [
+        {
+          _: "chatFolderInfo",
+          id: 2,
+          name: {
+            _: "chatFolderName",
+            text: { _: "formattedText", text: "Work", entities: [] },
+          },
+          icon: { _: "chatFolderIcon", name: "Work" },
+        },
+      ],
+    } as unknown as Td.Update);
+    // The existing filter keeps excluded chats, the exclude-muted switch and
+    // an in-folder pin; the edit only renames and re-includes.
+    bridge.handlers.set("getChatFolder", () => ({
+      _: "chatFolder",
+      name: {
+        _: "chatFolderName",
+        text: { _: "formattedText", text: "Work", entities: [] },
+      },
+      color_id: -1,
+      is_shareable: false,
+      pinned_chat_ids: [22],
+      included_chat_ids: [11, 22],
+      excluded_chat_ids: [33],
+      exclude_muted: true,
+      exclude_read: false,
+      exclude_archived: false,
+      include_contacts: false,
+      include_non_contacts: false,
+      include_bots: false,
+      include_groups: false,
+      include_channels: false,
+    }));
+    bridge.handlers.set("editChatFolder", (request) => ({
+      _: "chatFolderInfo",
+      id: Number(request.chat_folder_id),
+      name: {
+        _: "chatFolderName",
+        text: { _: "formattedText", text: "Studio", entities: [] },
+      },
+      icon: { _: "chatFolderIcon", name: "Work" },
+    }));
+
+    await expect(repository.getChatFolder(2)).resolves.toEqual({
+      id: 2,
+      title: "Work",
+      includedChatIds: ["22", "11"],
+    });
+    // Unknown ids answer from the cached folder list without asking TDLib.
+    await expect(repository.getChatFolder(99)).resolves.toBeNull();
+
+    const edited = await repository.editChatFolder({
+      id: 2,
+      title: "Studio",
+      chatIds: ["11"],
+    });
+
+    expect(edited).toEqual({ id: 2, title: "Studio", unreadCount: 0 });
+    expect(bridge.invokes).toContainEqual({
+      _: "editChatFolder",
+      chat_folder_id: 2,
+      folder: expect.objectContaining({
+        name: {
+          _: "chatFolderName",
+          text: { _: "formattedText", text: "Studio", entities: [] },
+        },
+        // Chat 22 left the folder, so its in-folder pin goes with it; the
+        // exclusions and flags survive untouched.
+        pinned_chat_ids: [],
+        included_chat_ids: [11],
+        excluded_chat_ids: [33],
+        exclude_muted: true,
+      }),
+    });
+  });
+
+  it("deletes a server folder through TDLib", async () => {
+    const { repository, bridge } = setup();
+
+    await repository.deleteChatFolder(2);
+
+    expect(bridge.invokes).toContainEqual({
+      _: "deleteChatFolder",
+      chat_folder_id: 2,
+    });
+  });
+
   it("maps TDLib call history", async () => {
     const { repository, bridge } = setup();
     bridge.handlers.set("searchCallMessages", () => ({
@@ -618,6 +752,110 @@ describe("TdlibTelegramRepository", () => {
         ),
       ).toBe(true);
     });
+  });
+
+  it("sends a scheduled message with a scheduling state", async () => {
+    const { repository, bridge, events } = setup();
+    await repository.hydrate();
+    const sendAt = Math.floor(Date.now() / 1000) + 3600;
+    bridge.handlers.set("sendMessage", () => ({
+      ...tdMessage(100),
+      scheduling_state: {
+        _: "messageSchedulingStateSendAtDate",
+        send_date: sendAt,
+      },
+    }));
+
+    const sent = await repository.sendMessage(
+      "11",
+      "later",
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      sendAt,
+    );
+
+    expect(bridge.invokes).toContainEqual(
+      expect.objectContaining({
+        _: "sendMessage",
+        scheduling_state: {
+          _: "messageSchedulingStateSendAtDate",
+          send_date: sendAt,
+        },
+      }),
+    );
+    expect(sent.scheduledAt).toBe(new Date(sendAt * 1000).toISOString());
+    expect(events.some((event) => event.type === "scheduled-messages")).toBe(
+      true,
+    );
+  });
+
+  it("lists scheduled messages soonest first with their delivery time", async () => {
+    const { repository, bridge } = setup();
+    await repository.hydrate();
+    bridge.handlers.set("getChatScheduledMessages", () => ({
+      _: "messages",
+      total_count: 2,
+      messages: [
+        {
+          ...tdMessage(101),
+          scheduling_state: {
+            _: "messageSchedulingStateSendAtDate",
+            send_date: 1800003600,
+          },
+        },
+        {
+          ...tdMessage(100),
+          scheduling_state: {
+            _: "messageSchedulingStateSendAtDate",
+            send_date: 1800000000,
+          },
+        },
+      ],
+    }));
+
+    const scheduled = await repository.listScheduledMessages("11");
+
+    expect(bridge.invokes).toContainEqual({
+      _: "getChatScheduledMessages",
+      chat_id: 11,
+    });
+    expect(scheduled.map((message) => message.id)).toEqual(["100", "101"]);
+    expect(scheduled[0]?.scheduledAt).toBe(
+      new Date(1800000000 * 1000).toISOString(),
+    );
+  });
+
+  it("routes a scheduled message update to the scheduled list, not the transcript", async () => {
+    const { repository, bridge, events } = setup();
+    await repository.hydrate();
+    events.length = 0;
+
+    bridge.emit({
+      _: "updateNewMessage",
+      message: {
+        ...tdMessage(100),
+        scheduling_state: {
+          _: "messageSchedulingStateSendAtDate",
+          send_date: 1800000000,
+        },
+      },
+    } as Td.Update);
+
+    await vi.waitFor(() => {
+      expect(events).toEqual([{ type: "scheduled-messages", chatId: "11" }]);
+    });
+  });
+
+  it("signals the scheduled list after a delete, covering scheduled ids", async () => {
+    const { repository, events } = setup();
+    await repository.hydrate();
+    events.length = 0;
+
+    await repository.deleteMessage({ chatId: "11", messageId: "100" });
+
+    expect(events).toEqual([{ type: "scheduled-messages", chatId: "11" }]);
   });
 
   it("keeps a min chat avatar pending until the photo arrives", async () => {
@@ -1266,6 +1504,79 @@ describe("TdlibTelegramRepository", () => {
     ).resolves.toEqual({ kind: "message", text: "ok", alert: false });
   });
 
+  it("pins silently by default and unpins through TDLib", async () => {
+    const { repository, bridge } = setup();
+    await repository.hydrate();
+
+    await repository.pinMessage({
+      chatId: "11",
+      messageId: "20",
+      pinned: true,
+    });
+    await repository.pinMessage({
+      chatId: "11",
+      messageId: "21",
+      pinned: true,
+      silent: false,
+    });
+    await repository.pinMessage({
+      chatId: "11",
+      messageId: "20",
+      pinned: false,
+    });
+
+    expect(bridge.invokes).toContainEqual({
+      _: "pinChatMessage",
+      chat_id: 11,
+      message_id: 20,
+      disable_notification: true,
+      only_for_self: false,
+    });
+    expect(bridge.invokes).toContainEqual({
+      _: "pinChatMessage",
+      chat_id: 11,
+      message_id: 21,
+      disable_notification: false,
+      only_for_self: false,
+    });
+    expect(bridge.invokes).toContainEqual({
+      _: "unpinChatMessage",
+      chat_id: 11,
+      message_id: 20,
+    });
+  });
+
+  it("maps is_pinned onto the DTO and refreshes on updateMessageIsPinned", async () => {
+    const { repository, bridge, events } = setup();
+    await repository.hydrate();
+    bridge.handlers.set("getMessage", () => ({
+      ...tdMessage(3),
+      is_pinned: true,
+    }));
+
+    bridge.emit({
+      _: "updateMessageIsPinned",
+      chat_id: 11,
+      message_id: 3,
+      is_pinned: true,
+    } as Td.Update);
+
+    await vi.waitFor(() => {
+      expect(events).toContainEqual({
+        type: "pinned-messages",
+        chatId: "11",
+      });
+      const upsert = events.find(
+        (event) => event.type === "message-upsert" && event.message.id === "3",
+      );
+      expect(
+        upsert && upsert.type === "message-upsert"
+          ? upsert.message.pinned
+          : undefined,
+      ).toBe(true);
+    });
+  });
+
   it("publishes file, list-order, and connection updates", async () => {
     const { repository, bridge, events, cache } = setup();
     await repository.hydrate();
@@ -1510,6 +1821,50 @@ describe("TdlibTelegramRepository", () => {
     await repository.cancelMediaUpload("up1");
     await repository.cancelMediaDownload("tdfile:8");
     await repository.logout();
+  });
+
+  it("sends a voice-kind upload as inputMessageVoiceNote", async () => {
+    const { repository, bridge } = setup();
+    await repository.hydrate();
+    bridge.handlers.set("sendMessage", () => tdMessage(31));
+
+    const uploaded = await repository.sendMedia(
+      "11",
+      [
+        {
+          source: "/tmp/voice-message.ogg",
+          name: "voice-message.ogg",
+          mimeType: "audio/ogg",
+          size: 512,
+          kind: "voice",
+          durationSeconds: 2.4,
+        },
+      ],
+      "",
+      undefined,
+      "cid-voice",
+      "up-voice",
+    );
+
+    expect(uploaded[0]?.clientId).toBe("cid-voice");
+    expect(bridge.invokes).toContainEqual(
+      expect.objectContaining({
+        _: "sendMessage",
+        input_message_content: {
+          _: "inputMessageVoiceNote",
+          voice_note: {
+            _: "inputVoiceNote",
+            voice_note: {
+              _: "inputFileLocal",
+              path: "/tmp/voice-message.ogg",
+            },
+            duration: 2,
+            waveform: "",
+          },
+          caption: undefined,
+        },
+      }),
+    );
   });
 
   it("copies a completed chat photo into the avatar cache", async () => {
@@ -1830,25 +2185,8 @@ describe("TdlibTelegramRepository", () => {
     expect(page.items[0]?.canSendMessages).toBe(false);
     expect(page.items[0]?.canSendStickers).toBe(false);
     expect(page.items[0]?.canSendMedia).toBe(false);
-    await expect(repository.sendMessage("-100", "hello")).rejects.toThrow(
-      "The current account can't write to this chat",
-    );
-    await expect(repository.saveDraft("-100", "later")).rejects.toThrow(
-      "The current account can't write to this chat",
-    );
-    const beforeTyping = bridge.invokes.length;
-    await repository.setTyping("-100", true);
-    expect(bridge.invokes.slice(beforeTyping)).toEqual([]);
-    expect(
-      bridge.invokes.some(
-        (item) => (item as { _: string })._ === "sendMessage",
-      ),
-    ).toBe(false);
-    expect(
-      bridge.invokes.some(
-        (item) => (item as { _: string })._ === "setChatDraftMessage",
-      ),
-    ).toBe(false);
+    expect((await repository.getChat("-100"))?.canSendMessages).toBe(false);
+    expect(await repository.getChat("-999")).toBeNull();
 
     events.length = 0;
     bridge.emit({
@@ -1957,30 +2295,182 @@ describe("TdlibTelegramRepository", () => {
     await expect(repository.sendMessage("-5", "hello")).resolves.toMatchObject({
       id: "40",
     });
-    await expect(repository.sendSticker("-5", "tdfile:8")).rejects.toThrow(
-      "The current account can't send stickers to this chat",
-    );
-    await expect(
-      repository.sendMedia(
-        "-5",
-        [
-          {
-            source: "/tmp/a.jpg",
-            name: "a.jpg",
-            mimeType: "image/jpeg",
-            size: 10,
+  });
+
+  it("votes in a poll through setPollAnswer with 0-based option ids", async () => {
+    const { repository, bridge } = setup();
+    await repository.hydrate();
+
+    await repository.setMessagePollAnswer("11", "7", [1, 2]);
+
+    expect(bridge.invokes).toContainEqual({
+      _: "setPollAnswer",
+      chat_id: 11,
+      message_id: 7,
+      option_ids: [1, 2],
+    });
+  });
+
+  it("creates a poll as sendMessage with inputMessagePoll", async () => {
+    const { repository, bridge } = setup();
+    await repository.hydrate();
+    bridge.handlers.set("sendMessage", () => ({
+      ...tdMessage(50),
+      content: {
+        _: "messagePoll",
+        poll: {
+          _: "poll",
+          id: "p1",
+          question: { _: "formattedText", text: "Ship it?", entities: [] },
+          options: [
+            {
+              _: "pollOption",
+              id: "a",
+              text: { _: "formattedText", text: "Yes", entities: [] },
+              voter_count: 0,
+              vote_percentage: 0,
+              is_chosen: false,
+              is_being_chosen: false,
+              recent_voter_ids: [],
+              addition_date: 0,
+            },
+            {
+              _: "pollOption",
+              id: "b",
+              text: { _: "formattedText", text: "No", entities: [] },
+              voter_count: 0,
+              vote_percentage: 0,
+              is_chosen: false,
+              is_being_chosen: false,
+              recent_voter_ids: [],
+              addition_date: 0,
+            },
+          ],
+          total_voter_count: 0,
+          recent_voter_ids: [],
+          can_get_voters: false,
+          can_see_results: true,
+          is_anonymous: true,
+          allows_multiple_answers: false,
+          allows_revoting: false,
+          members_only: false,
+          country_codes: [],
+          option_order: [],
+          type: {
+            _: "pollTypeQuiz",
+            correct_option_ids: [],
+            explanation: { _: "formattedText", text: "", entities: [] },
           },
-        ],
-        "",
-        undefined,
-        "cid",
-        "up1",
-      ),
-    ).rejects.toThrow("The current account can't send media to this chat");
-    expect(
-      bridge.invokes.filter(
-        (item) => (item as { _: string })._ === "sendMessage",
-      ),
-    ).toHaveLength(1);
+          open_period: 0,
+          close_date: 0,
+          is_closed: false,
+        },
+      },
+    }));
+
+    const sent = await repository.sendPoll("11", {
+      question: "Ship it?",
+      options: ["Yes", "No"],
+      isAnonymous: true,
+      kind: "quiz",
+      allowMultipleAnswers: false,
+      correctOptionId: 0,
+    });
+
+    const invoke = bridge.invokes.find(
+      (item) => (item as { _: string })._ === "sendMessage",
+    ) as { input_message_content: Record<string, unknown> };
+    expect(invoke.input_message_content).toEqual({
+      _: "inputMessagePoll",
+      question: { _: "formattedText", text: "Ship it?", entities: [] },
+      options: [
+        {
+          _: "inputPollOption",
+          text: { _: "formattedText", text: "Yes", entities: [] },
+        },
+        {
+          _: "inputPollOption",
+          text: { _: "formattedText", text: "No", entities: [] },
+        },
+      ],
+      is_anonymous: true,
+      allows_multiple_answers: false,
+      // A quiz must name its correct option; the returned poll still hides
+      // it from the DTO until the account answers.
+      type: { _: "inputPollTypeQuiz", correct_option_ids: [0] },
+    });
+    expect(sent.poll).toMatchObject({
+      question: "Ship it?",
+      kind: "quiz",
+      correctOptionIds: null,
+    });
+  });
+
+  it("routes a poll vote update through the edited-message upsert", async () => {
+    const { repository, bridge, events } = setup();
+    await repository.hydrate();
+    bridge.handlers.set("getMessage", () => ({
+      ...tdMessage(7),
+      content: {
+        _: "messagePoll",
+        poll: {
+          _: "poll",
+          id: "p1",
+          question: { _: "formattedText", text: "Ship it?", entities: [] },
+          options: [
+            {
+              _: "pollOption",
+              id: "a",
+              text: { _: "formattedText", text: "Yes", entities: [] },
+              voter_count: 1,
+              vote_percentage: 100,
+              is_chosen: true,
+              is_being_chosen: false,
+              recent_voter_ids: [],
+              addition_date: 0,
+            },
+          ],
+          total_voter_count: 1,
+          recent_voter_ids: [],
+          can_get_voters: false,
+          can_see_results: true,
+          is_anonymous: false,
+          allows_multiple_answers: false,
+          allows_revoting: false,
+          members_only: false,
+          country_codes: [],
+          option_order: [],
+          type: { _: "pollTypeRegular" },
+          open_period: 0,
+          close_date: 0,
+          is_closed: false,
+        },
+      },
+    }));
+    events.length = 0;
+
+    // TDLib pushes updateMessageContent when a poll's tally moves.
+    bridge.emit({
+      _: "updateMessageContent",
+      chat_id: 11,
+      message_id: 7,
+      old_content: { _: "messagePoll" },
+      new_content: { _: "messagePoll" },
+    } as unknown as Td.Update);
+
+    await vi.waitFor(() => {
+      const edited = events.find(
+        (event) => event.type === "message-upsert" && event.cause === "edited",
+      );
+      expect(edited).toMatchObject({
+        message: {
+          id: "7",
+          poll: {
+            question: "Ship it?",
+            options: [{ text: "Yes", voterCount: 1, chosen: true }],
+          },
+        },
+      });
+    });
   });
 });

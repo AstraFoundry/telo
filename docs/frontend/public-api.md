@@ -37,9 +37,10 @@ Use path aliases (e.g., `features/...`, `shared/...`) so the public API rule is 
 
 ## Shared public API
 
-`shared` is also a slice in the lowest layer. It exposes primitives through its own `index.ts` or through sub-module indexes such as `shared/ui`, `shared/lib`, `shared/api`.
+`shared` is also a slice in the lowest layer. Component primitives are exposed through the `shared/ui` barrel. `shared/lib` and `shared/config` have no barrels by convention: each file there is a single-purpose public module (e.g., `shared/lib/format-time`, `shared/config/copy`) and is imported directly by path. Do not deep-import a file inside another `shared` sub-module's internal directory structure; only top-level files of `shared/lib` and `shared/config` are public.
 
 ```ts
 import { Button } from "shared/ui";
-import { formatDate } from "shared/lib";
+import { formatTime } from "shared/lib/format-time";
+import { copy } from "shared/config/copy";
 ```

@@ -13,6 +13,7 @@ import type {
   AgentGateway,
 } from "../../domain/agent/agent-ports";
 import type { TelegramRepository } from "../../domain/telegram/telegram-ports";
+import { assertCanSendContent } from "../../domain/telegram/can-send-content";
 import { AgentContextService, buildScopedPrompt } from "./agent-context";
 
 /**
@@ -115,14 +116,16 @@ export class AgentAutomationRunner {
     if (!text) return { status: "empty", text };
 
     if (input.delivery === "auto-send") {
+      const target = await this.telegram.getChat(input.chatId);
+      if (target) assertCanSendContent(target, "text");
       await this.telegram.sendMessage(input.chatId, text, input.replyToId);
       return { status: "sent", text };
     }
-
     const chat = await this.findChat(input.chatId);
     // An occupied composer is a human's half-written message; automation
     // must never overwrite it, so the run parks as a conflict instead.
     if (chat.draftPreview) return { status: "draft-conflict", text };
+    assertCanSendContent(chat, "text");
     await this.telegram.saveDraft(input.chatId, text);
     return { status: "draft", text };
   }

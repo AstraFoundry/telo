@@ -7,6 +7,7 @@ import {
   Button,
   CenterMorphModal,
   CenterMorphModalContent,
+  ErrorRow,
   Input,
   StatefulButton,
 } from "shared/ui";
@@ -105,11 +106,7 @@ function EditNameForm({ onClose }: { onClose(): void }) {
         onChange={setLastName}
         className="mt-3"
       />
-      {error ? (
-        <p role="alert" className="mt-3 text-sm text-destructive">
-          {error}
-        </p>
-      ) : null}
+      <ErrorRow message={error} className="mt-3" />
       <div className="mt-4 flex justify-end gap-2">
         <Button
           type="button"

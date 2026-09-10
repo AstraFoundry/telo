@@ -575,6 +575,7 @@ describe("registerIpc message actions", () => {
         editMessage: vi.fn().mockResolvedValue(undefined),
         deleteMessage: vi.fn().mockResolvedValue(undefined),
         forwardMessage: vi.fn().mockResolvedValue(undefined),
+        pinMessage: vi.fn().mockResolvedValue(undefined),
         answerBotCallback: vi.fn().mockResolvedValue({ kind: "none" }),
       },
     } as unknown as ApplicationContainer;
@@ -592,6 +593,20 @@ describe("registerIpc message actions", () => {
       "chat-1",
       "hello",
       { replyToId: "message-1" },
+    );
+  });
+
+  it("forwards the scheduled list request to the workspace", async () => {
+    const container = messageActionsContainer();
+    container.workspace.listScheduledMessages = vi.fn().mockResolvedValue([]);
+    registerIpc(container);
+
+    const handler = ipc.handlers.get(channels.scheduledMessageList);
+    if (!handler) throw new Error("scheduled list handler was not registered");
+
+    await handler({}, "chat-1");
+    expect(container.workspace.listScheduledMessages).toHaveBeenCalledWith(
+      "chat-1",
     );
   });
 
@@ -627,6 +642,19 @@ describe("registerIpc message actions", () => {
     );
   });
 
+  it("forwards the pin payload to the use case", async () => {
+    const container = messageActionsContainer();
+    registerIpc(container);
+
+    const pin = ipc.handlers.get(channels.messagePin);
+    if (!pin) throw new Error("pin message handler was not registered");
+
+    const pinInput = { chatId: "chat-1", messageId: "m-1", pinned: true };
+    await pin({}, pinInput);
+
+    expect(container.messageActions.pinMessage).toHaveBeenCalledWith(pinInput);
+  });
+
   it("forwards a keyboard press and returns the bot's answer", async () => {
     const container = messageActionsContainer();
     registerIpc(container);
@@ -642,6 +670,43 @@ describe("registerIpc message actions", () => {
       "m-1",
       "1:2",
     );
+  });
+
+  it("forwards a poll vote to the message actions use case", async () => {
+    const container = messageActionsContainer();
+    container.messageActions.setMessagePollAnswer = vi
+      .fn()
+      .mockResolvedValue(undefined);
+    registerIpc(container);
+
+    const vote = ipc.handlers.get(channels.pollAnswerSet);
+    if (!vote) throw new Error("poll answer handler was not registered");
+
+    await vote({}, "chat-1", "m-1", [0, 2]);
+    expect(container.messageActions.setMessagePollAnswer).toHaveBeenCalledWith(
+      "chat-1",
+      "m-1",
+      [0, 2],
+    );
+  });
+
+  it("forwards poll creation to the workspace", async () => {
+    const container = messageActionsContainer();
+    container.workspace.sendPoll = vi.fn().mockResolvedValue({ id: "m-9" });
+    registerIpc(container);
+
+    const send = ipc.handlers.get(channels.pollSend);
+    if (!send) throw new Error("send poll handler was not registered");
+
+    const input = {
+      question: "Ship it?",
+      options: ["Yes", "No"],
+      isAnonymous: true,
+      kind: "regular",
+      allowMultipleAnswers: false,
+    };
+    await send({}, "chat-1", input);
+    expect(container.workspace.sendPoll).toHaveBeenCalledWith("chat-1", input);
   });
 });
 

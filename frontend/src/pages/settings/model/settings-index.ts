@@ -190,6 +190,12 @@ export const SETTINGS_INDEX: ReadonlyArray<SettingsIndexEntry> = [
     terms: ["badge", "unread"],
   },
   {
+    id: "chat-folders",
+    section: "folders",
+    label: copy.serverFolders,
+    terms: ["sync", "tabs", "filter"],
+  },
+  {
     id: "keyword-folders",
     section: "folders",
     label: copy.keywordFolders,

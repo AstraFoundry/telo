@@ -21,7 +21,7 @@
     },
     {
       "id": "chat-list",
-      "workflow": "Chat list order, pin, mute, archive, folders, unread, Saved Messages, restart from SQLite",
+      "workflow": "Chat list order, pin, mute, archive, folders (read + create/edit/delete), unread, Saved Messages, restart from SQLite",
       "methods": [
         "loadChats",
         "getChats",
@@ -31,32 +31,56 @@
         "toggleChatIsMarkedAsUnread",
         "addChatToList",
         "updateChatFolders",
+        "getChatFolder",
+        "createChatFolder",
+        "editChatFolder",
+        "deleteChatFolder",
         "createPrivateChat"
       ],
       "evidence": [
         "backend/src/infrastructure/telegram/tdlib-telegram-repository.ts",
-        "backend/src/infrastructure/telegram/tdlib-mappers.ts"
+        "backend/src/infrastructure/telegram/tdlib-mappers.ts",
+        "backend/src/infrastructure/telegram/demo-telegram-repository.ts",
+        "frontend/src/features/manage-chat-folders/ui/chat-folders-settings.tsx"
       ],
       "state": "covered"
     },
     {
       "id": "history",
-      "workflow": "Page older, live new/edit/delete, reply, forward, silent send",
+      "workflow": "Page older, live new/edit/delete, reply, forward, silent send, pin/unpin, scheduled send/list/delete",
       "methods": [
         "getChatHistory",
         "sendMessage",
         "editMessageText",
         "deleteMessages",
-        "forwardMessages"
+        "forwardMessages",
+        "pinChatMessage",
+        "unpinChatMessage",
+        "getChatScheduledMessages"
       ],
       "evidence": [
-        "backend/src/infrastructure/telegram/tdlib-telegram-repository.ts"
+        "backend/src/infrastructure/telegram/tdlib-telegram-repository.ts",
+        "backend/src/infrastructure/telegram/demo-telegram-repository.ts",
+        "frontend/src/features/send-message/ui/schedule-message-dialog.tsx",
+        "frontend/src/features/send-message/ui/scheduled-messages-bar.tsx"
+      ],
+      "state": "covered"
+    },
+    {
+      "id": "polls",
+      "workflow": "Render messagePoll cards with tallies, vote with retract, quiz answer reveal after voting, closed-poll final results, create polls (regular/quiz, anonymous, multiple answers) from the composer send-options menu",
+      "methods": ["sendMessage", "setPollAnswer", "updateMessageContent"],
+      "evidence": [
+        "backend/src/infrastructure/telegram/tdlib-telegram-repository.ts",
+        "backend/src/infrastructure/telegram/demo-telegram-repository.ts",
+        "frontend/src/widgets/conversation-view/ui/poll-message.tsx",
+        "frontend/src/features/create-poll/ui/create-poll-dialog.tsx"
       ],
       "state": "covered"
     },
     {
       "id": "composer",
-      "workflow": "Entities, media album, stickers, drafts, typing, content-type write-access gating",
+      "workflow": "Entities, media album, voice-note record and send (inputMessageVoiceNote), stickers, drafts, typing, content-type write-access gating",
       "methods": [
         "sendMessage",
         "sendMessageAlbum",
@@ -67,7 +91,9 @@
         "getSupergroup"
       ],
       "evidence": [
-        "backend/src/infrastructure/telegram/tdlib-telegram-repository.ts"
+        "backend/src/infrastructure/telegram/tdlib-telegram-repository.ts",
+        "frontend/src/features/send-message/model/voice-recorder.ts",
+        "frontend/src/features/send-message/ui/voice-recording-bar.tsx"
       ],
       "state": "covered"
     },

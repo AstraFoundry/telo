@@ -16,7 +16,15 @@ The domain layer contains the business rules of the system. It has no dependenci
 - The domain layer must not import from `application`, `infrastructure`, or `interfaces`.
 - Domain code must be pure JavaScript/TypeScript or the equivalent in your language. No HTTP, no SQL, no framework annotations.
 - Validation of business invariants happens here.
+- Domain-owned vocabulary (chat/message/sticker/story/call/contact/profile DTO shapes, agent provider ids and bounds, preference unions, upload limits) is declared in the domain modules and mirrored by `contracts/src/ipc.ts` through re-exports, so the domain never imports the transport contract.
 - Use rich domain models when the rules are complex. Use anemic models with domain services only when the rules are trivial.
+
+## Telegram vocabulary and rules
+
+`domain/telegram/` owns the Telegram vocabulary (`chat.ts`, `message.ts`, `sticker.ts`, `story.ts`, `call.ts`, `contact.ts`, `profile.ts`, `workspace-event.ts`) plus two rule modules:
+
+- **`can-send-content.ts`** — evaluates a chat's `canSendMessages`/`canSendStickers`/`canSendMedia` flags against a content kind (`text` / `stickers` / `media` / `any`). Omitted flags mean writable, and omitted sticker/media flags follow the text flag, matching the `ChatDto` contract. Application send paths consult `assertCanSendContent` before invoking the repository port; adapters only map raw permission data into the flags.
+- **`upload-policy.ts`** — Telegram's vendor upload limits (album ≤ 10 files, 2 GB per upload, 10 MB story photos). The IPC boundary and the application layer validate against the same constants.
 
 ## Example
 

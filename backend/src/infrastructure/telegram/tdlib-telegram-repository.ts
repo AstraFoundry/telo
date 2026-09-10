@@ -8,7 +8,9 @@ import type {
   AnimatedEmojiEffectDto,
   BotCallbackAnswerDto,
   ChatDto,
+  ChatFolderDetailsDto,
   ChatFolderDto,
+  ChatFolderInput,
   ChatMemberDto,
   ChatPageDto,
   ChatPageInput,
@@ -26,8 +28,10 @@ import type {
   MessageSearchPageDto,
   MessageSearchPageInput,
   PeerProfileDto,
+  PinMessageInput,
   PostedStoryDto,
   PostStoryInput,
+  SendPollInput,
   SetMessageReactionInput,
   SetPeerContactInput,
   StickerCatalogDto,
@@ -41,6 +45,7 @@ import type {
   TelegramCallPageDto,
   TelegramContactDto,
   TelegramWorkspaceEvent,
+  UpdateChatFolderInput,
   UpdateProfileNameInput,
   UsernameAvailability,
 } from "../../../../contracts/src/ipc";
@@ -91,6 +96,14 @@ import type { TelegramAccountClient } from "./telegram-account-coordinator";
 
 /** Telegram Desktop drops a typing indicator after about six seconds. */
 const TYPING_EXPIRY_MS = 6_000;
+
+/** Folder titles are plain text; TDLib still wants a formattedText wrapper. */
+function chatFolderNameOf(title: string): Td.chatFolderName$Input {
+  return {
+    _: "chatFolderName",
+    text: { _: "formattedText", text: title, entities: [] },
+  };
+}
 
 export class TdlibTelegramRepository implements TelegramRepository {
   private readonly listeners = new Set<
@@ -257,6 +270,11 @@ export class TdlibTelegramRepository implements TelegramRepository {
       items,
       nextCursor: start + items.length < chats.length && last ? last.id : null,
     };
+  }
+
+  async getChat(chatId: string): Promise<ChatDto | null> {
+    const chat = this.chats.get(chatId);
+    return chat ? this.toChat(chat) : null;
   }
 
   async createSecretChat(userId: string): Promise<ChatDto> {
@@ -499,6 +517,88 @@ export class TdlibTelegramRepository implements TelegramRepository {
     return this.folderDtos();
   }
 
+  async getChatFolder(folderId: number): Promise<ChatFolderDetailsDto | null> {
+    // `updateChatFolders` carries only chatFolderInfo, so an unknown or
+    // Archive id is answered from the cached list before asking TDLib.
+    if (!this.folders.some((folder) => folder.id === folderId)) return null;
+    const folder = await this.client.invoke<Td.chatFolder>({
+      _: "getChatFolder",
+      chat_folder_id: folderId,
+    });
+    return {
+      id: folderId,
+      title: folder.name.text.text,
+      // tdesktop's editor shows one "included chats" list; TDLib splits it
+      // into pinned and always-included, and a pinned chat sits in both.
+      includedChatIds: [
+        ...new Set([...folder.pinned_chat_ids, ...folder.included_chat_ids]),
+      ].map((id) => chatIdOf(id)),
+    };
+  }
+
+  async createChatFolder(input: ChatFolderInput): Promise<ChatFolderDto> {
+    const info = await this.client.invoke<Td.chatFolderInfo>({
+      _: "createChatFolder",
+      folder: {
+        _: "chatFolder",
+        name: chatFolderNameOf(input.title),
+        // Chats the editor picked are always included; every filter flag
+        // starts off, matching tdesktop's new-folder defaults.
+        pinned_chat_ids: [],
+        included_chat_ids: input.chatIds.map((id) => Number(id)),
+        excluded_chat_ids: [],
+        exclude_muted: false,
+        exclude_read: false,
+        exclude_archived: false,
+        include_contacts: false,
+        include_non_contacts: false,
+        include_bots: false,
+        include_groups: false,
+        include_channels: false,
+      },
+    });
+    // The server's updateChatFolders repaints the tabs; the dto only
+    // confirms the assigned id and name to the caller.
+    return { id: info.id, title: info.name.text.text, unreadCount: 0 };
+  }
+
+  async editChatFolder(input: UpdateChatFolderInput): Promise<ChatFolderDto> {
+    // The edit dialog touches the name and the included chats only; the
+    // filter's other flags are read back and preserved, like tdesktop's
+    // folder editor keeping the exclude/include switches on a rename.
+    const current = await this.client.invoke<Td.chatFolder>({
+      _: "getChatFolder",
+      chat_folder_id: input.id,
+    });
+    const chatIds = input.chatIds.map((id) => Number(id));
+    const info = await this.client.invoke<Td.chatFolderInfo>({
+      _: "editChatFolder",
+      chat_folder_id: input.id,
+      folder: {
+        ...current,
+        name: chatFolderNameOf(input.title),
+        // A chat dropped from the folder cannot stay pinned inside it.
+        pinned_chat_ids: current.pinned_chat_ids.filter((id) =>
+          chatIds.includes(id),
+        ),
+        included_chat_ids: chatIds,
+      },
+    });
+    const existing = this.folderDtos().find((folder) => folder.id === info.id);
+    return {
+      id: info.id,
+      title: info.name.text.text,
+      unreadCount: existing?.unreadCount ?? 0,
+    };
+  }
+
+  async deleteChatFolder(folderId: number): Promise<void> {
+    await this.client.invoke({
+      _: "deleteChatFolder",
+      chat_folder_id: folderId,
+    });
+  }
+
   async listMessagePage(
     chatId: string,
     input: MessagePageInput,
@@ -618,6 +718,22 @@ export class TdlibTelegramRepository implements TelegramRepository {
     });
     return Promise.all(
       found.messages.map((message) => this.toMessage(message)),
+    );
+  }
+
+  async listScheduledMessages(
+    chatId: string,
+  ): Promise<ReadonlyArray<MessageDto>> {
+    const found = await this.client.invoke<Td.messages>({
+      _: "getChatScheduledMessages",
+      chat_id: Number(chatId),
+    });
+    // TDLib returns scheduled messages in reverse chronological order; the
+    // scheduled view lists them soonest first, the way tdesktop does.
+    return Promise.all(
+      [...found.messages]
+        .reverse()
+        .flatMap((message) => (message ? [this.toMessage(message)] : [])),
     );
   }
 
@@ -779,7 +895,6 @@ export class TdlibTelegramRepository implements TelegramRepository {
     stickerId: string,
     clientId?: string,
   ): Promise<MessageDto> {
-    this.assertCanWrite(chatId, "stickers");
     const fileId = fileIdFromMediaId(stickerId);
     if (fileId === null) throw new Error("Sticker id is required");
     const cached = this.stickersByFileId.get(fileId);
@@ -933,8 +1048,8 @@ export class TdlibTelegramRepository implements TelegramRepository {
     clientId?: string,
     silent?: boolean,
     entities?: ReadonlyArray<MessageEntityDto>,
+    sendAt?: number,
   ): Promise<MessageDto> {
-    this.assertCanWrite(chatId);
     const sendingId = this.nextSendingId();
     this.rememberClientId(sendingId, clientId);
     const message = await this.client.invoke<Td.message>({
@@ -946,6 +1061,16 @@ export class TdlibTelegramRepository implements TelegramRepository {
             message_id: Number(replyToId),
           }
         : undefined,
+      // A scheduled send parks the message server-side until send_date
+      // (tdesktop's "Schedule message"); TDLib delivers it without further
+      // client involvement.
+      scheduling_state:
+        sendAt !== undefined
+          ? {
+              _: "messageSchedulingStateSendAtDate",
+              send_date: sendAt,
+            }
+          : undefined,
       options: {
         _: "messageSendOptions",
         disable_notification: Boolean(silent),
@@ -962,7 +1087,63 @@ export class TdlibTelegramRepository implements TelegramRepository {
     });
     this.bindPendingClientId(message);
     const dto = await this.toMessage(message);
+    // The scheduled list changes without a transcript upsert, so signal the
+    // composer's scheduled-messages entry the way the pin strip is signaled.
+    if (sendAt !== undefined) {
+      this.emit({ type: "scheduled-messages", chatId });
+    }
     return clientId ? { ...dto, clientId } : dto;
+  }
+
+  async sendPoll(chatId: string, input: SendPollInput): Promise<MessageDto> {
+    const sendingId = this.nextSendingId();
+    const message = await this.client.invoke<Td.message>({
+      _: "sendMessage",
+      chat_id: Number(chatId),
+      options: {
+        _: "messageSendOptions",
+        disable_notification: false,
+        sending_id: sendingId,
+      },
+      // tdesktop's attach menu → Poll maps to inputMessagePoll; a quiz has
+      // to name its correct option or TDLib rejects the create.
+      input_message_content: {
+        _: "inputMessagePoll",
+        question: { _: "formattedText", text: input.question, entities: [] },
+        options: input.options.map((text) => ({
+          _: "inputPollOption" as const,
+          text: { _: "formattedText" as const, text, entities: [] },
+        })),
+        is_anonymous: input.isAnonymous,
+        allows_multiple_answers:
+          input.kind === "regular" ? input.allowMultipleAnswers : false,
+        type:
+          input.kind === "quiz"
+            ? {
+                _: "inputPollTypeQuiz" as const,
+                correct_option_ids: [input.correctOptionId ?? 0],
+              }
+            : { _: "inputPollTypeRegular" as const, allow_option_input: false },
+      },
+    });
+    this.bindPendingClientId(message);
+    return this.toMessage(message);
+  }
+
+  async setMessagePollAnswer(
+    chatId: string,
+    messageId: string,
+    optionIds: ReadonlyArray<number>,
+  ): Promise<void> {
+    // Older TDLib schemas name this method setMessagePollAnswer; the shape —
+    // chat, message, 0-based option ids — is unchanged. An empty list
+    // retracts the account's answer.
+    await this.client.invoke({
+      _: "setPollAnswer",
+      chat_id: Number(chatId),
+      message_id: Number(messageId),
+      option_ids: [...optionIds],
+    });
   }
 
   async downloadMedia(mediaId: string): Promise<void> {
@@ -1023,7 +1204,6 @@ export class TdlibTelegramRepository implements TelegramRepository {
     clientId: string | undefined,
     uploadId: string,
   ): Promise<ReadonlyArray<MessageDto>> {
-    this.assertCanWrite(chatId, "media");
     this.emit({
       type: "media-upload",
       uploadId,
@@ -1102,7 +1282,6 @@ export class TdlibTelegramRepository implements TelegramRepository {
   }
 
   async editMessage(input: EditMessageInput): Promise<void> {
-    this.assertCanWrite(input.chatId);
     await this.client.invoke({
       _: "editMessageText",
       chat_id: Number(input.chatId),
@@ -1125,10 +1304,13 @@ export class TdlibTelegramRepository implements TelegramRepository {
       message_ids: [Number(input.messageId)],
       revoke: input.scope !== "me",
     });
+    // TDLib deleteMessages covers scheduled ids too (tdesktop's scheduled
+    // view deletes through it); the adapter cannot tell which list the id
+    // came from, so the scheduled entry always reloads after a delete.
+    this.emit({ type: "scheduled-messages", chatId: input.chatId });
   }
 
   async forwardMessage(input: ForwardMessageInput): Promise<void> {
-    this.assertCanWrite(input.toChatId, "any");
     await this.client.invoke({
       _: "forwardMessages",
       chat_id: Number(input.toChatId),
@@ -1137,6 +1319,28 @@ export class TdlibTelegramRepository implements TelegramRepository {
       send_copy: Boolean(input.hideSender),
       remove_caption: false,
     });
+  }
+
+  async pinMessage(input: PinMessageInput): Promise<void> {
+    // TDLib splits the call by direction; pinChatMessage carries the
+    // notification flag, unpinChatMessage never notifies. The is_pinned
+    // flip arrives back as updateMessageIsPinned, which refreshes the pin
+    // strip and the transcript message.
+    await this.client.invoke(
+      input.pinned
+        ? {
+            _: "pinChatMessage" as const,
+            chat_id: Number(input.chatId),
+            message_id: Number(input.messageId),
+            disable_notification: input.silent ?? true,
+            only_for_self: false,
+          }
+        : {
+            _: "unpinChatMessage" as const,
+            chat_id: Number(input.chatId),
+            message_id: Number(input.messageId),
+          },
+    );
   }
 
   async setChatPinned(chatId: string, pinned: boolean): Promise<void> {
@@ -1189,8 +1393,6 @@ export class TdlibTelegramRepository implements TelegramRepository {
   }
 
   async setTyping(chatId: string, typing: boolean): Promise<void> {
-    const chat = this.chats.get(chatId);
-    if (chat && !this.writeAccess(chat).text) return;
     await this.client.invoke({
       _: "sendChatAction",
       chat_id: Number(chatId),
@@ -1199,7 +1401,6 @@ export class TdlibTelegramRepository implements TelegramRepository {
   }
 
   async saveDraft(chatId: string, text: string): Promise<void> {
-    this.assertCanWrite(chatId);
     await this.client.invoke({
       _: "setChatDraftMessage",
       chat_id: Number(chatId),
@@ -1933,6 +2134,16 @@ export class TdlibTelegramRepository implements TelegramRepository {
       return;
     }
     if (update._ === "updateNewMessage") {
+      // A scheduled message is not transcript content yet; it refreshes the
+      // scheduled list instead (tdesktop keeps it out of the history until
+      // delivery, when it arrives again without a scheduling state).
+      if (update.message.scheduling_state) {
+        this.emit({
+          type: "scheduled-messages",
+          chatId: chatIdOf(update.message.chat_id),
+        });
+        return;
+      }
       const clientId = this.bindPendingClientId(update.message);
       const dto = await this.toMessage(update.message);
       this.emit({
@@ -1951,6 +2162,28 @@ export class TdlibTelegramRepository implements TelegramRepository {
       return;
     }
     if (update._ === "updateMessageContent") {
+      const message = await this.client
+        .invoke<Td.message>({
+          _: "getMessage",
+          chat_id: update.chat_id,
+          message_id: update.message_id,
+        })
+        .catch(() => null);
+      if (!message) return;
+      this.emit({
+        type: "message-upsert",
+        cause: "edited",
+        message: await this.toMessage(message),
+      });
+      return;
+    }
+    if (update._ === "updateMessageIsPinned") {
+      // The pin strip reloads from the pinned-messages event; the transcript
+      // message gets its refreshed `pinned` flag through the upsert.
+      this.emit({
+        type: "pinned-messages",
+        chatId: chatIdOf(update.chat_id),
+      });
       const message = await this.client
         .invoke<Td.message>({
           _: "getMessage",
@@ -2298,27 +2531,6 @@ export class TdlibTelegramRepository implements TelegramRepository {
     };
   }
 
-  private assertCanWrite(
-    chatId: string,
-    kind: "text" | "stickers" | "media" | "any" = "text",
-  ): void {
-    const chat = this.chats.get(chatId);
-    if (!chat) return;
-    const access = this.writeAccess(chat);
-    const allowed =
-      kind === "any"
-        ? access.text || access.stickers || access.media
-        : access[kind];
-    if (allowed) return;
-    throw new Error(
-      kind === "stickers"
-        ? "The current account can't send stickers to this chat"
-        : kind === "media"
-          ? "The current account can't send media to this chat"
-          : "The current account can't write to this chat",
-    );
-  }
-
   private async toMessage(message: Td.message): Promise<MessageDto> {
     this.indexKeyboard(message);
     await this.hydrateSender(message.sender_id);
@@ -2434,6 +2646,23 @@ function inputContentForFile(
   caption: Td.formattedText$Input | undefined,
 ): Td.InputMessageContent$Input {
   const localFile = { _: "inputFileLocal" as const, path: file.source };
+  // tdesktop's Media::Clip::PrepareVoiceMessage sends the recording as
+  // inputMessageVoiceNote with the duration decoded from the opus stream and
+  // a sampled waveform. The composer recorder measures wall-clock seconds and
+  // cannot decode the bytes, so the waveform goes out empty and TDLib renders
+  // default bars, matching a voice note sent without one.
+  if (file.kind === "voice") {
+    return {
+      _: "inputMessageVoiceNote",
+      voice_note: {
+        _: "inputVoiceNote",
+        voice_note: localFile,
+        duration: Math.max(1, Math.round(file.durationSeconds ?? 0)),
+        waveform: "",
+      },
+      caption,
+    };
+  }
   if (file.mimeType.startsWith("image/")) {
     return {
       _: "inputMessagePhoto",
@@ -2687,6 +2916,9 @@ export class TdlibClientCoordinator implements TelegramAccountClient {
   listChatPage(input: ChatPageInput): Promise<ChatPageDto> {
     return this.repository.listChatPage(input);
   }
+  getChat(chatId: string): Promise<ChatDto | null> {
+    return this.repository.getChat(chatId);
+  }
   updateProfileName(input: UpdateProfileNameInput): Promise<CurrentUserDto> {
     return this.repository.updateProfileName(input);
   }
@@ -2728,6 +2960,18 @@ export class TdlibClientCoordinator implements TelegramAccountClient {
   createChannel(input: CreateTelegramChannelInput): Promise<ChatDto> {
     return this.repository.createChannel(input);
   }
+  getChatFolder(folderId: number): Promise<ChatFolderDetailsDto | null> {
+    return this.repository.getChatFolder(folderId);
+  }
+  createChatFolder(input: ChatFolderInput): Promise<ChatFolderDto> {
+    return this.repository.createChatFolder(input);
+  }
+  editChatFolder(input: UpdateChatFolderInput): Promise<ChatFolderDto> {
+    return this.repository.editChatFolder(input);
+  }
+  deleteChatFolder(folderId: number): Promise<void> {
+    return this.repository.deleteChatFolder(folderId);
+  }
   listCalls(cursor: string | null = null): Promise<TelegramCallPageDto> {
     return this.repository.listCalls(cursor);
   }
@@ -2757,6 +3001,9 @@ export class TdlibClientCoordinator implements TelegramAccountClient {
   }
   listPinnedMessages(chatId: string): Promise<ReadonlyArray<MessageDto>> {
     return this.repository.listPinnedMessages(chatId);
+  }
+  listScheduledMessages(chatId: string): Promise<ReadonlyArray<MessageDto>> {
+    return this.repository.listScheduledMessages(chatId);
   }
   listChatMembers(chatId: string): Promise<ReadonlyArray<ChatMemberDto>> {
     return this.repository.listChatMembers(chatId);
@@ -2820,6 +3067,7 @@ export class TdlibClientCoordinator implements TelegramAccountClient {
     clientId?: string,
     silent?: boolean,
     entities?: ReadonlyArray<MessageEntityDto>,
+    sendAt?: number,
   ): Promise<MessageDto> {
     return this.repository.sendMessage(
       chatId,
@@ -2828,6 +3076,7 @@ export class TdlibClientCoordinator implements TelegramAccountClient {
       clientId,
       silent,
       entities,
+      sendAt,
     );
   }
   downloadMedia(mediaId: string): Promise<void> {
@@ -2856,6 +3105,16 @@ export class TdlibClientCoordinator implements TelegramAccountClient {
       uploadId,
     );
   }
+  sendPoll(chatId: string, input: SendPollInput): Promise<MessageDto> {
+    return this.repository.sendPoll(chatId, input);
+  }
+  setMessagePollAnswer(
+    chatId: string,
+    messageId: string,
+    optionIds: ReadonlyArray<number>,
+  ): Promise<void> {
+    return this.repository.setMessagePollAnswer(chatId, messageId, optionIds);
+  }
   cancelMediaUpload(uploadId: string): Promise<void> {
     return this.repository.cancelMediaUpload(uploadId);
   }
@@ -2867,6 +3126,9 @@ export class TdlibClientCoordinator implements TelegramAccountClient {
   }
   forwardMessage(input: ForwardMessageInput): Promise<void> {
     return this.repository.forwardMessage(input);
+  }
+  pinMessage(input: PinMessageInput): Promise<void> {
+    return this.repository.pinMessage(input);
   }
   setChatPinned(chatId: string, pinned: boolean): Promise<void> {
     return this.repository.setChatPinned(chatId, pinned);

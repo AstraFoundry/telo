@@ -11,6 +11,7 @@ import {
   CenterMorphModal,
   CenterMorphModalContent,
   Checkbox,
+  ErrorRow,
   Input,
   Select,
   SelectContent,
@@ -286,11 +287,7 @@ export function PostStoryDialog({ open, onOpenChange }: PostStoryDialogProps) {
             onCheckedChange={setProtectContent}
             label={copy.storyProtectContent}
           />
-          {error ? (
-            <p role="alert" className="text-sm text-destructive">
-              {error}
-            </p>
-          ) : null}
+          <ErrorRow message={error} />
           <div className="flex justify-end gap-2">
             <Button
               type="button"

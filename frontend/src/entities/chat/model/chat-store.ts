@@ -4,6 +4,7 @@ import { create } from "zustand";
 import type {
   AnimatedEmojiEffectDto,
   ChatDto,
+  ChatFolderDetailsDto,
   ChatFolderDto,
   ChatPageCursorDto,
   DeleteMessageScope,
@@ -18,6 +19,7 @@ import type {
   MessageReactionDto,
   MessageReplyToDto,
   StickerItemDto,
+  SendPollInput,
   StickerSetDto,
   StickerSetSummaryDto,
   TelegramWorkspaceEvent,
@@ -201,6 +203,18 @@ function notifiesChatKind(
   return preferences.notifyDirectChats;
 }
 
+/**
+ * The chat-list/notification line for a message: its body, or the poll
+ * label a `messagePoll` carries in place of one (tdesktop's dialog row).
+ * Both the upsert handler and the notifier read it, so a vote's edited
+ * upsert never blanks the preview with the poll's empty body.
+ */
+function messagePreviewText(message: MessageDto): string {
+  if (message.body) return message.body;
+  if (message.poll) return `${copy.pollPreviewLabel}: ${message.poll.question}`;
+  return "";
+}
+
 // The window-focus check mirrors entities/agent's notifyRunComplete: a
 // desktop notification only makes sense while the app is not the focused
 // surface the user is already looking at.
@@ -223,7 +237,7 @@ function notifyIncomingMessage(
   void window.telo.shell.notify(
     preferences.notificationSenderName ? chat.title : copy.appName,
     preferences.notificationPreview
-      ? message.body
+      ? messagePreviewText(message)
       : copy.notifyIncomingMessageBody,
     chat.id,
     { silent: !preferences.notificationSound },
@@ -303,21 +317,26 @@ function mediaKindFor(file: File): MessageMediaKind {
 
 // Builds the media preview for an optimistic outgoing bubble straight from
 // the picked File; the id is placeholder-only and is replaced by the real
-// media id when the ack reconciles the bubble.
+// media id when the ack reconciles the bubble. A voice-note send stamps the
+// "voice" kind and the recorder's duration so the bubble reads as a voice
+// note, not a generic file card, while it flies.
 function optimisticMedia(
   clientId: string,
   index: number,
   file: File,
+  voiceNote?: { readonly durationSeconds: number },
 ): MessageMediaDto {
   return {
     id: `${clientId}:${index}`,
-    kind: mediaKindFor(file),
+    kind: voiceNote ? "voice" : mediaKindFor(file),
     fileName: file.name || null,
     mimeType: file.type || null,
     size: file.size,
     width: null,
     height: null,
-    duration: null,
+    duration: voiceNote
+      ? Math.max(1, Math.round(voiceNote.durationSeconds))
+      : null,
     spoiler: false,
   };
 }
@@ -331,6 +350,11 @@ export interface ComposerTarget {
 export interface SendOptions {
   /** Telegram "send without sound": no notification sound for the recipient. */
   readonly silent?: boolean;
+  /**
+   * Unix seconds of the scheduled delivery. A scheduled send parks in the
+   * chat's scheduled list — no optimistic transcript bubble is drawn.
+   */
+  readonly sendAt?: number;
   /**
    * Formatting spans authored in the composer (UTF-16 ranges over `body`);
    * forwarded to the adapter so the delivered message carries real entities.
@@ -537,6 +561,11 @@ interface ChatState {
   send(body: string, options?: SendOptions): Promise<void>;
   /** Sends one sticker from the composer picker into the active chat. */
   sendSticker(sticker: StickerItemDto): Promise<void>;
+  /**
+   * Creates a poll in the active chat (tdesktop attach menu → Poll). No
+   * optimistic bubble: the adapter's upsert lands the poll card.
+   */
+  sendPoll(input: SendPollInput): Promise<void>;
   resendMessage(messageId: string): Promise<void>;
   downloadMedia(mediaId: string): Promise<void>;
   cancelMediaDownload(mediaId: string): Promise<void>;
@@ -544,6 +573,12 @@ interface ChatState {
     files: ReadonlyArray<File>,
     caption: string,
     uploadId: string,
+    /**
+     * Set by the composer's voice recorder: the single staged file is sent
+     * as a voice note (TDLib `inputMessageVoiceNote`) with this wall-clock
+     * duration instead of going out as a document.
+     */
+    voiceNote?: { readonly durationSeconds: number },
   ): Promise<void>;
   cancelMediaUpload(uploadId: string): Promise<void>;
   startReply(message: MessageDto): void;
@@ -572,6 +607,12 @@ interface ChatState {
     toChatId: string,
     options?: { hideSender?: boolean },
   ): Promise<void>;
+  /**
+   * Pins or unpins one transcript message. Confirmed-then-paint like
+   * togglePin: the flag flips after Telegram accepts, and the pin strip
+   * reloads from the adapter's `pinned-messages` event on its own.
+   */
+  toggleMessagePinned(chatId: string, messageId: string): Promise<void>;
   togglePin(chatId: string): Promise<void>;
   toggleMute(chatId: string): Promise<void>;
   toggleRead(chatId: string): Promise<void>;
@@ -596,6 +637,18 @@ interface ChatState {
   createKeywordFolder(title: string, query: string): Promise<void>;
   updateKeywordFolder(id: number, title: string, query: string): Promise<void>;
   deleteKeywordFolder(id: number): Promise<void>;
+  /** One server folder's edit state for the folder dialog; null when unknown. */
+  getChatFolder(folderId: number): Promise<ChatFolderDetailsDto | null>;
+  createChatFolder(
+    title: string,
+    chatIds: ReadonlyArray<string>,
+  ): Promise<void>;
+  updateChatFolder(
+    id: number,
+    title: string,
+    chatIds: ReadonlyArray<string>,
+  ): Promise<void>;
+  deleteChatFolder(id: number): Promise<void>;
   setSearchQuery(query: string): void;
   /** Selects the chat when needed, then asks the view to scroll to the message. */
   requestJumpToMessage(chatId: string, messageId: string): Promise<void>;
@@ -1024,6 +1077,26 @@ export const useChatStore = create<ChatState>((set, get) => ({
       // and the composer restores that text when edit mode ends.
       return;
     }
+    if (options?.sendAt !== undefined) {
+      // A scheduled send draws no optimistic bubble: the message lives in
+      // the scheduled list, which refreshes from the adapter's
+      // `scheduled-messages` event. Unlike a live send, a failure here
+      // propagates so the composer can surface it — there is no transcript
+      // bubble to flip into `failed`.
+      await window.telo.workspace.sendMessage(chatId, body, {
+        ...(options.entities && options.entities.length > 0
+          ? { entities: options.entities }
+          : {}),
+        sendAt: options.sendAt,
+        ...(target?.mode === "reply" ? { replyToId: target.messageId } : {}),
+      });
+      set((state) => ({
+        composerTarget: null,
+        drafts: { ...state.drafts, [chatId]: "" },
+      }));
+      clearDraftState(chatId);
+      return;
+    }
     const clientId = crypto.randomUUID();
     const optimistic: MessageDto = {
       id: clientId,
@@ -1317,6 +1390,20 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }));
     }
   },
+
+  async sendPoll(input) {
+    const chatId = get().activeChatId;
+    if (!chatId || !chatAllowsSending(get().chats, chatId)) return;
+    const message = await window.telo.workspace.sendPoll(chatId, input);
+    // The adapter also emits the new-message upsert; upserting the returned
+    // DTO here is idempotent and covers transports that only answer the call.
+    set((state) => ({
+      messages:
+        state.activeChatId === chatId
+          ? upsertMessage(state.messages, message)
+          : state.messages,
+    }));
+  },
   async resendMessage(messageId) {
     const chatId = get().activeChatId;
     if (!chatId) return;
@@ -1402,7 +1489,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   cancelMediaDownload(mediaId) {
     return window.telo.workspace.cancelMediaDownload(mediaId);
   },
-  async sendMedia(files, caption, uploadId) {
+  async sendMedia(files, caption, uploadId, voiceNote) {
     const chatId = get().activeChatId;
     if (!chatId || !chatAllowsMedia(get().chats, chatId)) return;
     const target = get().composerTarget;
@@ -1421,7 +1508,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       // Telegram attaches the caption to the album's first message only.
       body: index === 0 ? caption : "",
       entities: [],
-      media: optimisticMedia(clientId, index, file),
+      media: optimisticMedia(clientId, index, file, voiceNote),
       groupedId,
       sentAt,
       outgoing: true,
@@ -1448,6 +1535,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         caption,
         replyToId: target?.mode === "reply" ? target.messageId : undefined,
         clientId,
+        voiceNote,
       });
       set((state) => ({
         messages: mergeMessages(
@@ -1592,6 +1680,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
       };
     });
   },
+  async toggleMessagePinned(chatId, messageId) {
+    const target = get().messages.find((entry) => entry.id === messageId);
+    if (!target) return;
+    const pinned = !target.pinned;
+    await window.telo.workspace.pinMessage({ chatId, messageId, pinned });
+    set((state) => ({
+      messages: state.messages.map((entry) =>
+        entry.id === messageId
+          ? { ...entry, pinned: pinned || undefined }
+          : entry,
+      ),
+    }));
+  },
   async toggleMute(chatId) {
     const chat = get().chats.find((entry) => entry.id === chatId);
     if (!chat) return;
@@ -1701,17 +1802,35 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
   async createKeywordFolder(title, query) {
     await window.telo.workspace.createKeywordFolder({ title, query });
-    await reloadKeywordFolders();
+    await reloadFoldersAndChats();
   },
   async updateKeywordFolder(id, title, query) {
     await window.telo.workspace.updateKeywordFolder({ id, title, query });
-    await reloadKeywordFolders();
+    await reloadFoldersAndChats();
   },
   async deleteKeywordFolder(id) {
     await window.telo.workspace.deleteKeywordFolder(id);
     const { activeFolderId } = get();
     if (activeFolderId === id) set({ activeFolderId: null });
-    await reloadKeywordFolders();
+    await reloadFoldersAndChats();
+  },
+  getChatFolder(folderId) {
+    return window.telo.workspace.getChatFolder(folderId);
+  },
+  async createChatFolder(title, chatIds) {
+    await window.telo.workspace.createChatFolder({ title, chatIds });
+    await reloadFoldersAndChats();
+  },
+  async updateChatFolder(id, title, chatIds) {
+    await window.telo.workspace.editChatFolder({ id, title, chatIds });
+    await reloadFoldersAndChats();
+  },
+  async deleteChatFolder(id) {
+    await window.telo.workspace.deleteChatFolder(id);
+    // Same rule as keyword folders: a deleted tab's view closes back to All.
+    const { activeFolderId } = get();
+    if (activeFolderId === id) set({ activeFolderId: null });
+    await reloadFoldersAndChats();
   },
   setSearchQuery(query) {
     set({ searchQuery: query });
@@ -1991,7 +2110,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           if (c.id !== event.message.chatId) return c;
           const next = {
             ...c,
-            preview: event.message.body,
+            preview: messagePreviewText(event.message),
             updatedAt: event.message.sentAt,
             unreadCount:
               incomingNew && !isActive ? c.unreadCount + 1 : c.unreadCount,
@@ -2398,7 +2517,9 @@ function mergeChats(
   return incoming.reduce(upsertChat, current);
 }
 
-async function reloadKeywordFolders(): Promise<void> {
+// Folders and chat membership come back together after any folder mutation:
+// the folders event alone would leave the rows' folderId stale.
+async function reloadFoldersAndChats(): Promise<void> {
   const [folders, chatPage] = await Promise.all([
     window.telo.workspace.listFolders(),
     window.telo.workspace.listChatPage(),

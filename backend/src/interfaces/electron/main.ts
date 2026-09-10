@@ -3,7 +3,7 @@ import path from "node:path";
 import { app, BrowserWindow, Menu, shell } from "electron";
 import type { MenuItemConstructorOptions } from "electron";
 
-import { createContainer } from "./container";
+import { createContainer, runTdlibSmoke } from "./container";
 import { channels } from "./channels";
 import { isSafeExternalUrl } from "./external-url";
 import { registerIpc } from "./register-ipc";
@@ -14,7 +14,6 @@ import {
   registerMediaScheme,
   unhandleMediaProtocol,
 } from "./media-protocol";
-import { runTdlibSmoke } from "../../infrastructure/telegram/tdlib-probe";
 
 registerMediaScheme();
 

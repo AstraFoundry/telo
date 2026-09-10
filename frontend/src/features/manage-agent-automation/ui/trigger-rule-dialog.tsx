@@ -11,6 +11,7 @@ import {
   CenterMorphModalClose,
   CenterMorphModalContent,
   Checkbox,
+  ErrorRow,
   Input,
 } from "shared/ui";
 
@@ -213,11 +214,7 @@ function RuleForm({ rule, onClose, onSave }: RuleFormProps) {
           className="rounded-xl border border-border bg-transparent px-3.5 py-2.5 text-base leading-6 text-foreground outline-none transition-colors duration-200 placeholder:text-muted-foreground/60 focus:border-foreground/40 focus:ring-2 focus:ring-ring/40"
         />
       </label>
-      {error ? (
-        <p role="alert" className="text-sm text-destructive">
-          {error}
-        </p>
-      ) : null}
+      <ErrorRow message={error} />
       <div className="flex justify-end gap-2">
         <CenterMorphModalClose>
           <Button type="button" variant="ghost">

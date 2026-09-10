@@ -40,8 +40,13 @@ test("drives the animated surfaces with reduced motion enabled", async ({
   // Media viewer: the origin morph collapses to a fade, so the dialog has to
   // appear without the shared-element transition that normally places it.
   await conversation.hover();
+  // The transcript window renders only the visible range: jump to the top,
+  // then wheel down until the photo enters the rendered window.
   await window.mouse.wheel(0, -100_000);
   const photo = conversation.getByRole("button", { name: "telo-hero.png" });
+  for (let i = 0; i < 20 && !(await photo.isVisible()); i++) {
+    await window.mouse.wheel(0, 1_200);
+  }
   await expect(photo).toBeVisible();
   await photo.click();
   const viewer = window.getByRole("dialog", { name: "Media viewer" });

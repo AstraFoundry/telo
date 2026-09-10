@@ -7,18 +7,7 @@ import type {
   TimeFormatPreference,
 } from "../../../../../contracts/src/ipc";
 import { copy } from "shared/config/copy";
-
-// Same shape as the transcript's own `time` helper in conversation-view.tsx
-// (and the copies in chat-profile-panel.tsx / conversation-sidebar.tsx —
-// this widget folder has no shared time module). "system" defers to the
-// locale's hour12 default, while 12h/24h pin it explicitly.
-function time(value: string, format: TimeFormatPreference): string {
-  return new Intl.DateTimeFormat(undefined, {
-    hour: "2-digit",
-    minute: "2-digit",
-    ...(format === "system" ? {} : { hour12: format === "12h" }),
-  }).format(new Date(value));
-}
+import { formatTime } from "shared/lib/format-time";
 
 // tdesktop's `Data::MediaCall::Text`: direction and discard reason fold into
 // one label — outgoing+missed reads "Cancelled", incoming+missed "Missed",
@@ -109,7 +98,7 @@ export function CallMessage({
           className="inline-flex items-center gap-1 text-[length:var(--message-meta-font-size)] leading-none tabular-nums text-foreground/60"
         >
           <time>
-            {time(sentAt, timeFormat)}
+            {formatTime(sentAt, timeFormat)}
             {call.durationSeconds > 0
               ? `, ${callDuration(call.durationSeconds)}`
               : ""}

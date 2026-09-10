@@ -6,7 +6,9 @@ import type {
   AnimatedEmojiEffectDto,
   BotCallbackAnswerDto,
   ChatDto,
+  ChatFolderDetailsDto,
   ChatFolderDto,
+  ChatFolderInput,
   ChatMemberDto,
   ChatPageCursorDto,
   ChatPageDto,
@@ -25,8 +27,10 @@ import type {
   MessageSearchPageDto,
   MessageSearchPageInput,
   PeerProfileDto,
+  PinMessageInput,
   PostedStoryDto,
   PostStoryInput,
+  SendPollInput,
   SetMessageReactionInput,
   SetPeerContactInput,
   StickerItemDto,
@@ -40,6 +44,7 @@ import type {
   TelegramCallPageDto,
   TelegramContactDto,
   TelegramWorkspaceEvent,
+  UpdateChatFolderInput,
   UpdateProfileNameInput,
   UsernameAvailability,
 } from "../../../../contracts/src/ipc";
@@ -323,6 +328,10 @@ export class TelegramAccountCoordinator implements TelegramRepository {
     return this.delegate().listChatPage(input);
   }
 
+  getChat(chatId: string): Promise<ChatDto | null> {
+    return this.delegate().getChat(chatId);
+  }
+
   updateProfileName(input: UpdateProfileNameInput): Promise<CurrentUserDto> {
     return this.delegate().updateProfileName(input);
   }
@@ -396,6 +405,22 @@ export class TelegramAccountCoordinator implements TelegramRepository {
     return this.delegate().listFolders();
   }
 
+  getChatFolder(folderId: number): Promise<ChatFolderDetailsDto | null> {
+    return this.delegate().getChatFolder(folderId);
+  }
+
+  createChatFolder(input: ChatFolderInput): Promise<ChatFolderDto> {
+    return this.delegate().createChatFolder(input);
+  }
+
+  editChatFolder(input: UpdateChatFolderInput): Promise<ChatFolderDto> {
+    return this.delegate().editChatFolder(input);
+  }
+
+  deleteChatFolder(folderId: number): Promise<void> {
+    return this.delegate().deleteChatFolder(folderId);
+  }
+
   listMessagePage(
     chatId: string,
     input: MessagePageInput,
@@ -412,6 +437,10 @@ export class TelegramAccountCoordinator implements TelegramRepository {
 
   listPinnedMessages(chatId: string): Promise<ReadonlyArray<MessageDto>> {
     return this.delegate().listPinnedMessages(chatId);
+  }
+
+  listScheduledMessages(chatId: string): Promise<ReadonlyArray<MessageDto>> {
+    return this.delegate().listScheduledMessages(chatId);
   }
 
   listChatMembers(chatId: string): Promise<ReadonlyArray<ChatMemberDto>> {
@@ -491,6 +520,7 @@ export class TelegramAccountCoordinator implements TelegramRepository {
     clientId?: string,
     silent?: boolean,
     entities?: ReadonlyArray<MessageEntityDto>,
+    sendAt?: number,
   ): Promise<MessageDto> {
     return this.delegate().sendMessage(
       chatId,
@@ -499,6 +529,7 @@ export class TelegramAccountCoordinator implements TelegramRepository {
       clientId,
       silent,
       entities,
+      sendAt,
     );
   }
 
@@ -546,6 +577,22 @@ export class TelegramAccountCoordinator implements TelegramRepository {
 
   forwardMessage(input: ForwardMessageInput): Promise<void> {
     return this.delegate().forwardMessage(input);
+  }
+
+  pinMessage(input: PinMessageInput): Promise<void> {
+    return this.delegate().pinMessage(input);
+  }
+
+  setMessagePollAnswer(
+    chatId: string,
+    messageId: string,
+    optionIds: ReadonlyArray<number>,
+  ): Promise<void> {
+    return this.delegate().setMessagePollAnswer(chatId, messageId, optionIds);
+  }
+
+  sendPoll(chatId: string, input: SendPollInput): Promise<MessageDto> {
+    return this.delegate().sendPoll(chatId, input);
   }
 
   setChatPinned(chatId: string, pinned: boolean): Promise<void> {

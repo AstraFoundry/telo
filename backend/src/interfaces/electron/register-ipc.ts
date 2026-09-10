@@ -16,6 +16,7 @@ import type {
   DeleteMessageInput,
   AgentContextScopeInput,
   AgentScheduledTaskDto,
+  ChatFolderInput,
   ChatPageInput,
   ConnectAgentAccountInput,
   CreateTelegramChannelInput,
@@ -27,6 +28,7 @@ import type {
   MessageSearchPageInput,
   KeywordFolderInput,
   LocalMediaFileInput,
+  PinMessageInput,
   PostStoryInput,
   RunAgentInput,
   RunChatAgentInput,
@@ -34,12 +36,14 @@ import type {
   SaveScheduledTaskInput,
   SaveTriggerRuleInput,
   SendMessageInput,
+  SendPollInput,
   SendMediaInput,
   SetMessageReactionInput,
   SetPeerContactInput,
   ShellNotifyOptions,
   StickerSetReferenceDto,
   TelegramLoginInput,
+  UpdateChatFolderInput,
   UpdateKeywordFolderInput,
   UpdateProfileNameInput,
   UpdateUserPreferencesInput,
@@ -50,6 +54,11 @@ import {
   MESSAGE_ACTION_EVENT_NAME,
 } from "../../../../contracts/src/ipc";
 import type { AgentOutput } from "../../domain/agent/agent-ports";
+import {
+  MAX_ALBUM_FILES,
+  MAX_UPLOAD_FILE_BYTES,
+  STORY_PHOTO_MAX_BYTES,
+} from "../../domain/telegram/upload-policy";
 import type { AgentScheduledTask } from "../../domain/agent/agent-scheduled-task";
 import type { ApplicationContainer } from "./container";
 import { channels } from "./channels";
@@ -76,25 +85,14 @@ export function registerIpc(container: ApplicationContainer): void {
   );
   ipcMain.handle(
     channels.profilePhotoSet,
-    async (_event, file: LocalMediaFileInput) => {
-      // Same staging as a story file: a picked photo arrives as an absolute
-      // path, a pasted one as bytes staged to a temp directory.
-      const staged = await stageUploadFiles([file]);
-      try {
-        const [validated] = await validateUploadFiles(staged.files);
+    async (_event, file: LocalMediaFileInput) =>
+      withStagedUploads([file], async ([validated]) => {
         if (!validated) throw new Error("Profile photo is required");
         if (!validated.mimeType.startsWith("image/")) {
           throw new Error("Profile photo must be an image");
         }
-        return await container.workspace.setProfilePhoto(validated);
-      } finally {
-        await Promise.all(
-          staged.temporaryDirectories.map((directory) =>
-            rm(directory, { recursive: true, force: true }),
-          ),
-        );
-      }
-    },
+        return container.workspace.setProfilePhoto(validated);
+      }),
   );
   ipcMain.handle(
     channels.contactPhoneAdd,
@@ -136,10 +134,8 @@ export function registerIpc(container: ApplicationContainer): void {
   );
   ipcMain.handle(
     channels.storyPost,
-    async (_event, file: LocalMediaFileInput, input: PostStoryInput) => {
-      const staged = await stageUploadFiles([file]);
-      try {
-        const [validated] = await validateUploadFiles(staged.files);
+    async (_event, file: LocalMediaFileInput, input: PostStoryInput) =>
+      withStagedUploads([file], async ([validated]) => {
         if (!validated) throw new Error("Story media is required");
         if (
           !validated.mimeType.startsWith("image/") &&
@@ -149,24 +145,31 @@ export function registerIpc(container: ApplicationContainer): void {
         }
         if (
           validated.mimeType.startsWith("image/") &&
-          validated.size > 10 * 1024 * 1024
+          validated.size > STORY_PHOTO_MAX_BYTES
         ) {
           throw new Error("Story photos must be at most 10 MB");
         }
-        return await container.workspace.postStory(validated, input);
-      } finally {
-        await Promise.all(
-          staged.temporaryDirectories.map((directory) =>
-            rm(directory, { recursive: true, force: true }),
-          ),
-        );
-      }
-    },
+        return container.workspace.postStory(validated, input);
+      }),
   );
   ipcMain.handle(channels.savedMessagesOpen, () =>
     container.workspace.openSavedMessages(),
   );
   ipcMain.handle(channels.folderList, () => container.workspace.listFolders());
+  ipcMain.handle(channels.folderGet, (_event, folderId: number) =>
+    container.workspace.getChatFolder(folderId),
+  );
+  ipcMain.handle(channels.folderCreate, (_event, input: ChatFolderInput) =>
+    container.workspace.createChatFolder(input),
+  );
+  ipcMain.handle(
+    channels.folderUpdate,
+    (_event, input: UpdateChatFolderInput) =>
+      container.workspace.editChatFolder(input),
+  );
+  ipcMain.handle(channels.folderDelete, (_event, folderId: number) =>
+    container.workspace.deleteChatFolder(folderId),
+  );
   ipcMain.handle(
     channels.keywordFolderCreate,
     (_event, input: KeywordFolderInput) =>
@@ -192,6 +195,9 @@ export function registerIpc(container: ApplicationContainer): void {
   );
   ipcMain.handle(channels.pinnedMessageList, (_event, chatId: string) =>
     container.workspace.listPinnedMessages(chatId),
+  );
+  ipcMain.handle(channels.scheduledMessageList, (_event, chatId: string) =>
+    container.workspace.listScheduledMessages(chatId),
   );
   ipcMain.handle(channels.chatMemberList, (_event, chatId: string) =>
     container.workspace.listChatMembers(chatId),
@@ -290,24 +296,10 @@ export function registerIpc(container: ApplicationContainer): void {
       chatId: string,
       files: ReadonlyArray<LocalMediaFileInput>,
       input: SendMediaInput,
-    ) => {
-      const staged = await stageUploadFiles(files);
-      try {
-        return await container.workspace.sendMedia(
-          chatId,
-          await validateUploadFiles(staged.files),
-          input,
-        );
-      } finally {
-        // Staged copies exist only to give the upload a path; the repository
-        // has consumed them by the time sendMedia settles.
-        await Promise.all(
-          staged.temporaryDirectories.map((directory) =>
-            rm(directory, { recursive: true, force: true }),
-          ),
-        );
-      }
-    },
+    ) =>
+      withStagedUploads(files, (validated) =>
+        container.workspace.sendMedia(chatId, validated, input),
+      ),
   );
   ipcMain.handle(channels.mediaUploadCancel, (_event, uploadId: string) =>
     container.workspace.cancelMediaUpload(uploadId),
@@ -322,6 +314,28 @@ export function registerIpc(container: ApplicationContainer): void {
     channels.messageForward,
     (_event, input: ForwardMessageInput) =>
       container.messageActions.forwardMessage(input),
+  );
+  ipcMain.handle(channels.messagePin, (_event, input: PinMessageInput) =>
+    container.messageActions.pinMessage(input),
+  );
+  ipcMain.handle(
+    channels.pollSend,
+    (_event, chatId: string, input: SendPollInput) =>
+      container.workspace.sendPoll(chatId, input),
+  );
+  ipcMain.handle(
+    channels.pollAnswerSet,
+    (
+      _event,
+      chatId: string,
+      messageId: string,
+      optionIds: ReadonlyArray<number>,
+    ) =>
+      container.messageActions.setMessagePollAnswer(
+        chatId,
+        messageId,
+        optionIds,
+      ),
   );
   ipcMain.handle(
     channels.botCallbackAnswer,
@@ -601,10 +615,6 @@ function scheduledTaskDto(task: AgentScheduledTask): AgentScheduledTaskDto {
     nextRunAt: task.nextRunAt()?.toISOString() ?? null,
   };
 }
-const MAX_ALBUM_FILES = 10;
-// Telegram rejects user uploads past 2 GB per file.
-const MAX_UPLOAD_FILE_BYTES = 2 * 1024 ** 3;
-
 /**
  * Pasted clipboard files have no disk path; their bytes arrive over IPC and
  * are staged to a temp file so the rest of the pipeline (validation,
@@ -659,6 +669,28 @@ async function validateUploadFiles(
       return file;
     }),
   );
+}
+
+/**
+ * Stages pasted bytes to temp files, validates the staged set, and always
+ * sweeps the temp directories afterwards. Staged copies exist only to give
+ * the upload a path; the repository has consumed them by the time `fn`
+ * settles.
+ */
+async function withStagedUploads<T>(
+  files: ReadonlyArray<LocalMediaFileInput>,
+  fn: (files: ReadonlyArray<LocalMediaFileInput>) => Promise<T>,
+): Promise<T> {
+  const staged = await stageUploadFiles(files);
+  try {
+    return await fn(await validateUploadFiles(staged.files));
+  } finally {
+    await Promise.all(
+      staged.temporaryDirectories.map((directory) =>
+        rm(directory, { recursive: true, force: true }),
+      ),
+    );
+  }
 }
 
 async function streamAgentEvents(

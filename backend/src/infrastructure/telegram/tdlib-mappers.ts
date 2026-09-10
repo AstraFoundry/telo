@@ -17,6 +17,7 @@ import {
   type MessageKeyboardDto,
   type MessageMediaDto,
   type MessageReactionDto,
+  type MessagePollDto,
   type MessageReplyToDto,
   type MessageStickerDto,
   type StickerFormat,
@@ -317,11 +318,17 @@ export function mapMessage(
       text && text.entities.length === 0 ? isolatedEmojiCount(text.text) : 0,
     media: mapMedia(message),
     call: mapMessageCall(message.content, message.is_outgoing),
+    poll: mapMessagePoll(message.content),
     groupedId: message.media_album_id === "0" ? null : message.media_album_id,
     sentAt: new Date(message.date * 1000).toISOString(),
+    scheduledAt:
+      message.scheduling_state?._ === "messageSchedulingStateSendAtDate"
+        ? new Date(message.scheduling_state.send_date * 1000).toISOString()
+        : null,
     outgoing,
     status: mapMessageStatus(message, context.lastReadOutboxMessageId),
     replyTo: mapReply(message, context),
+    pinned: message.is_pinned || undefined,
     editedAt: message.edit_date
       ? new Date(message.edit_date * 1000).toISOString()
       : null,
@@ -332,6 +339,42 @@ export function mapMessage(
     forwardedFrom: mapForward(message, context),
     keyboard: mapKeyboard(message.reply_markup),
     reactions: mapReactions(message.interaction_info),
+  };
+}
+
+/**
+ * Poll cards (`messagePoll`). TDLib reports `correct_option_ids` only once
+ * the account has answered or the poll is closed (empty list while
+ * unanswered), which is exactly tdesktop's quiz reveal rule, so the DTO
+ * collapses "empty" to null. Per-option counts are only meaningful once
+ * results are visible; TDLib zeroes them otherwise and the renderer reads
+ * `chosen` to decide.
+ */
+export function mapMessagePoll(
+  content: Td.MessageContent,
+): MessagePollDto | null {
+  if (content._ !== "messagePoll") return null;
+  const poll = content.poll;
+  const quiz = poll.type._ === "pollTypeQuiz" ? poll.type : null;
+  return {
+    id: poll.id,
+    question: poll.question.text,
+    options: poll.options.map((option) => ({
+      id: option.id,
+      text: option.text.text,
+      voterCount: option.voter_count,
+      votePercentage: option.vote_percentage,
+      chosen: option.is_chosen,
+    })),
+    totalVoterCount: poll.total_voter_count,
+    isAnonymous: poll.is_anonymous,
+    isClosed: poll.is_closed,
+    kind: quiz ? "quiz" : "regular",
+    allowMultipleAnswers: quiz ? false : poll.allows_multiple_answers,
+    correctOptionIds:
+      quiz && quiz.correct_option_ids.length > 0
+        ? [...quiz.correct_option_ids]
+        : null,
   };
 }
 
@@ -900,6 +943,11 @@ function previewOf(message: Td.message): string {
   }
   if (content._ === "messageDocument") {
     return content.document.file_name || "File";
+  }
+  if (content._ === "messagePoll") {
+    // tdesktop's dialog row leads with the poll emoji; the label carries
+    // the question itself.
+    return `Poll: ${content.poll.question.text}`;
   }
   return "";
 }

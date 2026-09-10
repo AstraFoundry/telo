@@ -82,6 +82,13 @@ export interface PromptInputProps extends Omit<
   sendMenuContent?: ReactNode;
   /** Accessible label for the send button's context menu panel. */
   sendMenuLabel?: string;
+  /**
+   * Replaces the built-in send button entirely — e.g. the composer's
+   * microphone button, which takes the send slot while the field is empty
+   * (tdesktop's mic/send swap). The send-options menu is bound to the send
+   * button, so it is suppressed while an override occupies the slot.
+   */
+  sendAction?: ReactNode;
   allowEmptySubmit?: boolean;
   className?: string;
 }
@@ -106,6 +113,7 @@ export function PromptInput({
   inputRef,
   sendMenuContent,
   sendMenuLabel = "Send options",
+  sendAction,
   allowEmptySubmit = false,
   className,
   disabled,
@@ -367,7 +375,7 @@ export function PromptInput({
           </Select>
         ) : null}
 
-        {sendMenuContent ? (
+        {sendMenuContent && !sendAction ? (
           <ContextMenu>
             <ContextMenuTrigger disabled={loading ? !onStop : !canSubmit}>
               {sendButton}
@@ -377,7 +385,7 @@ export function PromptInput({
             </ContextMenuContent>
           </ContextMenu>
         ) : (
-          sendButton
+          (sendAction ?? sendButton)
         )}
       </div>
     </form>

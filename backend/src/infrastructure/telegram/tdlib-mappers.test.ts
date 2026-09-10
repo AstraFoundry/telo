@@ -21,6 +21,7 @@ import {
   mapFolders,
   mapMessage,
   mapMessageCall,
+  mapMessagePoll,
   mapReactionTypeEmojis,
   mediaIdForFile,
   minithumbnailDataUrl,
@@ -787,5 +788,166 @@ describe("tdlib mappers", () => {
         true,
       ),
     ).toBeNull();
+  });
+
+  it("maps a poll message, hiding the quiz answer until it is known", () => {
+    const pollContent = (
+      type: Record<string, unknown>,
+      extra: Record<string, unknown> = {},
+    ) =>
+      ({
+        _: "messagePoll",
+        poll: {
+          _: "poll",
+          id: "p1",
+          question: { _: "formattedText", text: "Pick one", entities: [] },
+          options: [
+            {
+              _: "pollOption",
+              id: "a",
+              text: { _: "formattedText", text: "First", entities: [] },
+              voter_count: 2,
+              vote_percentage: 67,
+              is_chosen: true,
+              is_being_chosen: false,
+              recent_voter_ids: [],
+              addition_date: 0,
+            },
+            {
+              _: "pollOption",
+              id: "b",
+              text: { _: "formattedText", text: "Second", entities: [] },
+              voter_count: 1,
+              vote_percentage: 33,
+              is_chosen: false,
+              is_being_chosen: false,
+              recent_voter_ids: [],
+              addition_date: 0,
+            },
+          ],
+          total_voter_count: 3,
+          recent_voter_ids: [],
+          can_get_voters: false,
+          can_see_results: true,
+          is_anonymous: true,
+          allows_multiple_answers: true,
+          allows_revoting: false,
+          members_only: false,
+          country_codes: [],
+          option_order: [],
+          type,
+          open_period: 0,
+          close_date: 0,
+          is_closed: false,
+          ...extra,
+        },
+      }) as unknown as Td.MessageContent;
+
+    // A regular poll keeps its flags and per-option tallies.
+    expect(mapMessagePoll(pollContent({ _: "pollTypeRegular" }))).toEqual({
+      id: "p1",
+      question: "Pick one",
+      options: [
+        {
+          id: "a",
+          text: "First",
+          voterCount: 2,
+          votePercentage: 67,
+          chosen: true,
+        },
+        {
+          id: "b",
+          text: "Second",
+          voterCount: 1,
+          votePercentage: 33,
+          chosen: false,
+        },
+      ],
+      totalVoterCount: 3,
+      isAnonymous: true,
+      isClosed: false,
+      kind: "regular",
+      allowMultipleAnswers: true,
+      correctOptionIds: null,
+    });
+
+    // An unanswered quiz ships empty correct_option_ids — the DTO hides
+    // them (tdesktop's reveal rule), and multiple answers are always off.
+    expect(
+      mapMessagePoll(
+        pollContent({
+          _: "pollTypeQuiz",
+          correct_option_ids: [],
+          explanation: { _: "formattedText", text: "", entities: [] },
+        }),
+      ),
+    ).toMatchObject({
+      kind: "quiz",
+      allowMultipleAnswers: false,
+      correctOptionIds: null,
+    });
+
+    // Once answered, TDLib fills correct_option_ids and the DTO reveals them.
+    expect(
+      mapMessagePoll(
+        pollContent({
+          _: "pollTypeQuiz",
+          correct_option_ids: [1],
+          explanation: { _: "formattedText", text: "", entities: [] },
+        }),
+      ),
+    ).toMatchObject({ kind: "quiz", correctOptionIds: [1] });
+
+    // Non-poll content maps to null.
+    expect(
+      mapMessagePoll({
+        _: "messageText",
+        text: { _: "formattedText", text: "hi", entities: [] },
+      } as unknown as Td.MessageContent),
+    ).toBeNull();
+  });
+
+  it("previews a poll in the chat list by its question", () => {
+    const mapped = mapChat(
+      chat({
+        last_message: {
+          _: "message",
+          id: 5,
+          chat_id: 11,
+          date: 1700000000,
+          is_outgoing: false,
+          sender_id: { _: "messageSenderUser", user_id: 1 },
+          content: {
+            _: "messagePoll",
+            poll: {
+              _: "poll",
+              id: "p1",
+              question: {
+                _: "formattedText",
+                text: "Lunch where?",
+                entities: [],
+              },
+              options: [],
+              total_voter_count: 0,
+              recent_voter_ids: [],
+              can_get_voters: false,
+              can_see_results: false,
+              is_anonymous: true,
+              allows_multiple_answers: false,
+              allows_revoting: false,
+              members_only: false,
+              country_codes: [],
+              option_order: [],
+              type: { _: "pollTypeRegular" },
+              open_period: 0,
+              close_date: 0,
+              is_closed: false,
+            },
+          },
+        },
+      }),
+      emptyContext,
+    );
+    expect(mapped.preview).toBe("Poll: Lunch where?");
   });
 });

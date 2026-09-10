@@ -132,9 +132,13 @@ export function AgentAutomationSettings() {
         <ul className="mt-5 flex flex-col gap-3">
           <AnimatePresence initial={false}>
             {rules.length === 0 ? (
-              <li className="text-sm text-muted-foreground">
+              <motion.li
+                key="empty"
+                {...rowMotion}
+                className="text-sm text-muted-foreground"
+              >
                 {copy.noTriggerRules}
-              </li>
+              </motion.li>
             ) : (
               rules.map((rule) => (
                 <motion.li
@@ -205,9 +209,13 @@ export function AgentAutomationSettings() {
         <ul className="mt-5 flex flex-col gap-3">
           <AnimatePresence initial={false}>
             {tasks.length === 0 ? (
-              <li className="text-sm text-muted-foreground">
+              <motion.li
+                key="empty"
+                {...rowMotion}
+                className="text-sm text-muted-foreground"
+              >
                 {copy.noScheduledTasks}
-              </li>
+              </motion.li>
             ) : (
               tasks.map((task) => (
                 <motion.li

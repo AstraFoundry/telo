@@ -10,7 +10,7 @@ import {
   agentProviderSupportsOAuth,
   isAgentProvider,
   type AgentProvider,
-} from "../../../../contracts/src/ipc";
+} from "./agent-providers";
 
 export type { AgentProvider };
 

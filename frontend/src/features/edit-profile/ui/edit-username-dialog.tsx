@@ -10,6 +10,7 @@ import {
   CenterMorphModal,
   CenterMorphModalContent,
   EASE_OUT,
+  ErrorRow,
   Input,
   StatefulButton,
 } from "shared/ui";
@@ -182,11 +183,7 @@ function EditUsernameForm({ onClose }: { onClose(): void }) {
           ) : null}
         </AnimatePresence>
       </p>
-      {error ? (
-        <p role="alert" className="mt-1 text-sm text-destructive">
-          {error}
-        </p>
-      ) : null}
+      <ErrorRow message={error} className="mt-1" />
       <div className="mt-3 flex justify-end gap-2">
         <Button
           type="button"

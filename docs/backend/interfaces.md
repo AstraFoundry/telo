@@ -6,10 +6,10 @@ The interfaces layer adapts the application layer to the outside world. In Telo 
 
 `interfaces/electron/` contains the whole adapter:
 
-- **`main.ts`** — Electron main-process entry point. Builds the container, registers IPC handlers, hides Chromium's application menu, creates the window (Linux frameless; Windows/macOS hidden title bar with overlay controls), and pushes Telegram auth-state events to the renderer.
+- **`main.ts`** — Electron main-process entry point. Builds the container, registers IPC handlers, hides Chromium's application menu, creates the window (Linux frameless; Windows/macOS hidden title bar with overlay controls), and pushes Telegram auth-state events to the renderer. The `TELO_TDLIB_SMOKE=1` probe runs through the container module like every other infrastructure dependency, so the entry point imports only interface-layer siblings.
 - **`container.ts`** — composition root. Wires infrastructure implementations into application services.
 - **`channels.ts`** — IPC channel names. Private to this layer; the renderer never references raw channel strings.
-- **`register-ipc.ts`** — one `ipcMain.handle` registration per capability, plus the AG-UI event stream for agent runs.
+- **`register-ipc.ts`** — one `ipcMain.handle` registration per capability, plus the AG-UI event stream for agent runs. Upload handlers stage pasted bytes, validate against the shared `domain/telegram/upload-policy` limits (album ≤ 10 files, 2 GB per file, 10 MB story photos), and sweep temp files through one `withStagedUploads` helper.
 - **`preload.ts`** — the `contextBridge` surface exposed as `window.telo`, typed by `TeloDesktopApi` from `contracts/src/ipc.ts`.
 
 ## What belongs in `interfaces/`

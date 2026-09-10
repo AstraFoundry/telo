@@ -6,7 +6,9 @@ import type {
   AnimatedEmojiEffectDto,
   BotCallbackAnswerDto,
   ChatDto,
+  ChatFolderDetailsDto,
   ChatFolderDto,
+  ChatFolderInput,
   ChatMemberDto,
   ChatPageDto,
   ChatPageInput,
@@ -27,8 +29,10 @@ import type {
   MessageSearchPageDto,
   MessageSearchPageInput,
   PeerProfileDto,
+  PinMessageInput,
   PostedStoryDto,
   PostStoryInput,
+  SendPollInput,
   SetMessageReactionInput,
   SetPeerContactInput,
   StickerFormat,
@@ -39,6 +43,7 @@ import type {
   TelegramCallPageDto,
   TelegramContactDto,
   TelegramWorkspaceEvent,
+  UpdateChatFolderInput,
   UpdateProfileNameInput,
   UsernameAvailability,
 } from "../../../../contracts/src/ipc";
@@ -401,6 +406,141 @@ const INITIAL_MESSAGES: Record<string, ReadonlyArray<MessageDto>> = {
       sentAt: "2026-08-27T14:18:00.000Z",
       outgoing: true,
       status: "read",
+    },
+    // Poll fixtures sit inside the read range (before `design-3`), so the
+    // unread divider and the three-message gap stay put. Together they cover
+    // an open multiple-answers poll, an unanswered quiz (its correct option
+    // stays hidden until a vote, per TDLib's reveal rule), and a closed
+    // poll — the vote, reveal, and rejection paths all have demo data.
+    {
+      id: "design-poll-1",
+      chatId: "design",
+      // Not a name the transcript assertions count on (Mina appears in
+      // reply-quote e2e expectations).
+      senderName: "Priya",
+      senderId: "demo-priya",
+      senderAvatarUrl: null,
+      body: "",
+      entities: [],
+      media: null,
+      groupedId: null,
+      sentAt: "2026-08-27T14:20:00.000Z",
+      outgoing: false,
+      status: "read",
+      poll: {
+        id: "demo-poll-1",
+        question: "Which surfaces should the poll card reach first?",
+        options: [
+          {
+            id: "a",
+            text: "Transcript",
+            voterCount: 2,
+            votePercentage: 67,
+            chosen: false,
+          },
+          {
+            id: "b",
+            text: "Chat list preview",
+            voterCount: 1,
+            votePercentage: 33,
+            chosen: false,
+          },
+          {
+            id: "c",
+            text: "Agent context",
+            voterCount: 0,
+            votePercentage: 0,
+            chosen: false,
+          },
+        ],
+        totalVoterCount: 3,
+        isAnonymous: true,
+        isClosed: false,
+        kind: "regular",
+        allowMultipleAnswers: true,
+        correctOptionIds: null,
+      },
+    },
+    {
+      id: "design-poll-2",
+      chatId: "design",
+      senderName: "Aron",
+      senderId: "demo-aron",
+      senderAvatarUrl: null,
+      body: "",
+      entities: [],
+      media: null,
+      groupedId: null,
+      sentAt: "2026-08-27T14:22:00.000Z",
+      outgoing: false,
+      status: "read",
+      poll: {
+        id: "demo-poll-2",
+        question: "Which client reveals a quiz answer only after voting?",
+        options: [
+          {
+            id: "a",
+            text: "Telegram Web",
+            voterCount: 0,
+            votePercentage: 0,
+            chosen: false,
+          },
+          {
+            id: "b",
+            text: "Telegram Desktop",
+            voterCount: 0,
+            votePercentage: 0,
+            chosen: false,
+          },
+        ],
+        totalVoterCount: 0,
+        isAnonymous: false,
+        isClosed: false,
+        kind: "quiz",
+        allowMultipleAnswers: false,
+        // TDLib ships correct_option_ids empty until the account answers.
+        correctOptionIds: null,
+      },
+    },
+    {
+      id: "design-poll-3",
+      chatId: "design",
+      senderName: "Lev",
+      senderId: "demo-lev",
+      senderAvatarUrl: null,
+      body: "",
+      entities: [],
+      media: null,
+      groupedId: null,
+      sentAt: "2026-08-27T14:24:00.000Z",
+      outgoing: false,
+      status: "read",
+      poll: {
+        id: "demo-poll-3",
+        question: "Ship the poll card this cycle?",
+        options: [
+          {
+            id: "a",
+            text: "Yes",
+            voterCount: 4,
+            votePercentage: 80,
+            chosen: true,
+          },
+          {
+            id: "b",
+            text: "No",
+            voterCount: 1,
+            votePercentage: 20,
+            chosen: false,
+          },
+        ],
+        totalVoterCount: 5,
+        isAnonymous: false,
+        isClosed: true,
+        kind: "regular",
+        allowMultipleAnswers: false,
+        correctOptionIds: null,
+      },
     },
     {
       id: "design-3",
@@ -986,6 +1126,14 @@ const DEMO_BOT_CALLBACK_ANSWERS: Record<
   },
 };
 
+// The quiz fixture's correct option indexes, keyed by message id. The DTO
+// keeps them hidden until the account votes, exactly like TDLib's empty
+// correct_option_ids on an unanswered quiz; the reveal below reads from
+// here. `sendPoll` registers its own quiz the same way.
+const DEMO_QUIZ_CORRECT_ANSWERS: Record<string, ReadonlyArray<number>> = {
+  "design-poll-2": [1],
+};
+
 // The account's single installed sticker set, backing the composer picker.
 // It is the set the `product` transcript's stickers already belong to, and it
 // holds one sticker per Telegram encoding so the picker exercises the still,
@@ -1095,11 +1243,22 @@ export class DemoTelegramRepository implements TelegramRepository {
   private readonly chats = new Map(
     INITIAL_CHATS.map((chat) => [chat.id, { ...chat }]),
   );
+  // Custom server folders, id → title; membership is the chats' folderId.
+  // TDLib assigns dialog filter ids from 2 upward (1 is the Archive).
+  private readonly folders = new Map<number, string>([
+    [DEMO_WORK_FOLDER_ID, DEMO_WORK_FOLDER_TITLE],
+  ]);
+  private nextFolderId = DEMO_WORK_FOLDER_ID + 1;
   private readonly messages = new Map(
     Object.entries(INITIAL_MESSAGES).map(([chatId, messages]) => [
       chatId,
       [...messages],
     ]),
+  );
+  // Correct option indexes of quizzes created at runtime, keyed by message
+  // id, alongside the fixture entries in DEMO_QUIZ_CORRECT_ANSWERS.
+  private readonly quizCorrectAnswers = new Map<string, ReadonlyArray<number>>(
+    Object.entries(DEMO_QUIZ_CORRECT_ANSWERS),
   );
   private readonly pinnedMessageIds = new Map(
     Object.entries(INITIAL_PINNED_MESSAGE_IDS).map(([chatId, ids]) => [
@@ -1113,6 +1272,13 @@ export class DemoTelegramRepository implements TelegramRepository {
   private readonly transientFailures = new Set<string>();
   private readonly typingDelayMs: number;
   private readonly autoReplyDelayMs: number;
+  /**
+   * Scheduled messages per chat, parked outside the transcript the way
+   * Telegram keeps them out of the history until delivery. Delivery is
+   * server-side for the TDLib workspace; the demo delivers due messages when
+   * the chat is read, so no timer ever fires on its own.
+   */
+  private readonly scheduledMessages = new Map<string, MessageDto[]>();
   private readonly uploadStepMs: number;
   private readonly mediaCacheDirectory: string | null;
   private readonly mediaCacheLimitBytes: () => Promise<number>;
@@ -1242,6 +1408,10 @@ export class DemoTelegramRepository implements TelegramRepository {
       items,
       nextCursor: start + items.length < chats.length && last ? last.id : null,
     };
+  }
+
+  async getChat(chatId: string): Promise<ChatDto | null> {
+    return this.chats.get(chatId) ?? null;
   }
 
   async createSecretChat(userId: string): Promise<ChatDto> {
@@ -1456,6 +1626,69 @@ export class DemoTelegramRepository implements TelegramRepository {
     return this.foldersSnapshot();
   }
 
+  async getChatFolder(folderId: number): Promise<ChatFolderDetailsDto | null> {
+    const title = this.folders.get(folderId);
+    if (title === undefined) return null;
+    return {
+      id: folderId,
+      title,
+      includedChatIds: [...this.chats.values()]
+        .filter((chat) => chat.folderId === folderId)
+        .map((chat) => chat.id),
+    };
+  }
+
+  async createChatFolder(input: ChatFolderInput): Promise<ChatFolderDto> {
+    const id = this.nextFolderId;
+    this.nextFolderId += 1;
+    this.folders.set(id, input.title);
+    this.setFolderMembership(id, input.chatIds);
+    return this.requireFolderDto(id);
+  }
+
+  async editChatFolder(input: UpdateChatFolderInput): Promise<ChatFolderDto> {
+    if (!this.folders.has(input.id)) {
+      throw new Error(`Unknown chat folder ${input.id}`);
+    }
+    this.folders.set(input.id, input.title);
+    this.setFolderMembership(input.id, input.chatIds);
+    return this.requireFolderDto(input.id);
+  }
+
+  async deleteChatFolder(folderId: number): Promise<void> {
+    if (!this.folders.delete(folderId)) {
+      throw new Error(`Unknown chat folder ${folderId}`);
+    }
+    // tdesktop's delete confirm says it plainly: the chats stay, only the
+    // tab goes — members fall back to the main list.
+    this.setFolderMembership(folderId, []);
+  }
+
+  // A membership change is per-chat folderId writes (each emits chat-upsert,
+  // the way TDLib's updateChatPosition would) plus one folders snapshot.
+  private setFolderMembership(
+    folderId: number,
+    chatIds: ReadonlyArray<string>,
+  ): void {
+    const wanted = new Set(chatIds);
+    for (const chatId of wanted) this.requireChat(chatId);
+    for (const chat of [...this.chats.values()]) {
+      const member = chat.folderId === folderId;
+      if (wanted.has(chat.id) === member) continue;
+      this.updateChat(chat.id, (current) => ({
+        ...current,
+        folderId: wanted.has(chat.id) ? folderId : null,
+      }));
+    }
+    this.emit({ type: "folders", folders: this.foldersSnapshot() });
+  }
+
+  private requireFolderDto(folderId: number): ChatFolderDto {
+    const dto = this.foldersSnapshot().find((folder) => folder.id === folderId);
+    if (!dto) throw new Error(`Unknown chat folder ${folderId}`);
+    return dto;
+  }
+
   // Folder unread badges sum the unread counts of the member chats, like the
   // production adapter computes them from the chat list.
   private foldersSnapshot(): ReadonlyArray<ChatFolderDto> {
@@ -1464,13 +1697,11 @@ export class DemoTelegramRepository implements TelegramRepository {
       chats
         .filter((chat) => chat.folderId === folderId)
         .reduce((total, chat) => total + chat.unreadCount, 0);
-    const folders: ChatFolderDto[] = [
-      {
-        id: DEMO_WORK_FOLDER_ID,
-        title: DEMO_WORK_FOLDER_TITLE,
-        unreadCount: unreadIn(DEMO_WORK_FOLDER_ID),
-      },
-    ];
+    const folders: ChatFolderDto[] = [...this.folders].map(([id, title]) => ({
+      id,
+      title,
+      unreadCount: unreadIn(id),
+    }));
     if (chats.some((chat) => chat.folderId === ARCHIVE_FOLDER_ID)) {
       folders.push({
         id: ARCHIVE_FOLDER_ID,
@@ -1486,6 +1717,7 @@ export class DemoTelegramRepository implements TelegramRepository {
     input: MessagePageInput,
   ): Promise<MessagePageDto> {
     this.requireChat(chatId);
+    this.deliverDueScheduledMessages(chatId);
     const messages = this.visibleMessages(chatId);
     const end = input.beforeMessageId
       ? messages.findIndex((message) => message.id === input.beforeMessageId)
@@ -1540,6 +1772,50 @@ export class DemoTelegramRepository implements TelegramRepository {
       const message = visible.find((entry) => entry.id === id);
       return message ? [message] : [];
     });
+  }
+
+  async listScheduledMessages(
+    chatId: string,
+  ): Promise<ReadonlyArray<MessageDto>> {
+    this.requireChat(chatId);
+    this.deliverDueScheduledMessages(chatId);
+    // Soonest delivery first, matching tdesktop's scheduled view order.
+    return [...(this.scheduledMessages.get(chatId) ?? [])].sort(
+      (a, b) =>
+        new Date(a.scheduledAt ?? a.sentAt).getTime() -
+        new Date(b.scheduledAt ?? b.sentAt).getTime(),
+    );
+  }
+
+  /**
+   * Telegram delivers scheduled messages server-side; the demo has no
+   * server, so due messages move into the transcript when the chat is read.
+   * No timer fires on its own: a scheduled message whose time passes while
+   * nobody looks simply waits for the next read.
+   */
+  private deliverDueScheduledMessages(chatId: string): void {
+    const scheduled = this.scheduledMessages.get(chatId);
+    if (!scheduled?.length) return;
+    const now = Date.now();
+    const due = scheduled.filter(
+      (message) => new Date(message.scheduledAt ?? 0).getTime() <= now,
+    );
+    if (due.length === 0) return;
+    this.scheduledMessages.set(
+      chatId,
+      scheduled.filter((message) => !due.includes(message)),
+    );
+    const current = this.messages.get(chatId) ?? [];
+    const delivered = due.map((message) => ({
+      ...message,
+      scheduledAt: null,
+      sentAt: new Date().toISOString(),
+    }));
+    this.messages.set(chatId, [...current, ...delivered]);
+    for (const message of delivered) {
+      this.emit({ type: "message-upsert", cause: "new", message });
+    }
+    this.emit({ type: "scheduled-messages", chatId });
   }
 
   async listChatMembers(chatId: string): Promise<ReadonlyArray<ChatMemberDto>> {
@@ -1660,6 +1936,7 @@ export class DemoTelegramRepository implements TelegramRepository {
     clientId?: string,
     silent?: boolean,
     entities?: ReadonlyArray<MessageEntityDto>,
+    sendAt?: number,
   ): Promise<MessageDto> {
     this.requireChat(chatId);
     if (
@@ -1684,7 +1961,17 @@ export class DemoTelegramRepository implements TelegramRepository {
       status: "sent",
       replyTo: replyToId ? this.replySnapshot(chatId, replyToId) : null,
       clientId: clientId ?? null,
+      scheduledAt:
+        sendAt !== undefined ? new Date(sendAt * 1000).toISOString() : null,
     };
+    if (sendAt !== undefined) {
+      // A scheduled message parks outside the transcript: no preview bump,
+      // no auto-reply, no upsert — the scheduled entry reloads instead.
+      const scheduled = this.scheduledMessages.get(chatId) ?? [];
+      this.scheduledMessages.set(chatId, [...scheduled, message]);
+      this.emit({ type: "scheduled-messages", chatId });
+      return message;
+    }
     const current = this.messages.get(chatId) ?? [];
     this.messages.set(chatId, [...current, message]);
     this.updateChat(chatId, (chat) => ({
@@ -1860,17 +2147,25 @@ export class DemoTelegramRepository implements TelegramRepository {
         entities: [],
         media: {
           id: `${chatId}/${crypto.randomUUID()}`,
-          kind: file.mimeType.startsWith("image/")
-            ? "photo"
-            : file.mimeType.startsWith("video/")
-              ? "video"
-              : "file",
+          // A stamped voice upload is a voice note, not a file: the demo
+          // mirrors the TDLib adapter's inputMessageVoiceNote mapping.
+          kind:
+            file.kind === "voice"
+              ? "voice"
+              : file.mimeType.startsWith("image/")
+                ? "photo"
+                : file.mimeType.startsWith("video/")
+                  ? "video"
+                  : "file",
           fileName: file.name,
           mimeType: file.mimeType || null,
           size: file.size,
           width: null,
           height: null,
-          duration: null,
+          duration:
+            file.kind === "voice"
+              ? Math.max(1, Math.round(file.durationSeconds ?? 0))
+              : null,
           spoiler: false,
         },
         groupedId,
@@ -1906,7 +2201,12 @@ export class DemoTelegramRepository implements TelegramRepository {
       }
       this.updateChat(chatId, (chat) => ({
         ...chat,
-        preview: caption || files[0].name,
+        // tdesktop's voice-note preview text, matching the mapper's
+        // "Voice message" for received notes; an unnamed recording must not
+        // leak its staging file name into the dialog row.
+        preview:
+          caption ||
+          (files[0].kind === "voice" ? "Voice message" : files[0].name),
         updatedAt: sentAt,
         draftPreview: null,
       }));
@@ -2089,6 +2389,128 @@ export class DemoTelegramRepository implements TelegramRepository {
     return message;
   }
 
+  // A created poll is an outgoing message with no body and zeroed tallies,
+  // the way TDLib echoes a fresh inputMessagePoll back as messagePoll.
+  async sendPoll(chatId: string, input: SendPollInput): Promise<MessageDto> {
+    this.requireChat(chatId);
+    const messageId = crypto.randomUUID();
+    if (input.kind === "quiz" && input.correctOptionId !== undefined) {
+      this.quizCorrectAnswers.set(messageId, [input.correctOptionId]);
+    }
+    const message: MessageDto = {
+      id: messageId,
+      chatId,
+      senderName: "You",
+      senderId: DEMO_ACCOUNT_PEER_ID,
+      senderAvatarUrl: null,
+      body: "",
+      entities: [],
+      media: null,
+      groupedId: null,
+      sentAt: new Date().toISOString(),
+      outgoing: true,
+      status: "sent",
+      poll: {
+        id: crypto.randomUUID(),
+        question: input.question,
+        options: input.options.map((text, index) => ({
+          id: String.fromCharCode(97 + index),
+          text,
+          voterCount: 0,
+          votePercentage: 0,
+          chosen: false,
+        })),
+        totalVoterCount: 0,
+        isAnonymous: input.isAnonymous,
+        isClosed: false,
+        kind: input.kind,
+        allowMultipleAnswers:
+          input.kind === "regular" ? input.allowMultipleAnswers : false,
+        // TDLib hides the correct option until the creator votes or closes.
+        correctOptionIds: null,
+      },
+    };
+    const current = this.messages.get(chatId) ?? [];
+    this.messages.set(chatId, [...current, message]);
+    // Telegram previews a poll by its question, the way tdesktop's dialog
+    // row leads with the poll emoji.
+    this.updateChat(chatId, (chat) => ({
+      ...chat,
+      preview: `Poll: ${input.question}`,
+      updatedAt: message.sentAt,
+      draftPreview: null,
+    }));
+    this.emit({ type: "message-upsert", cause: "new", message });
+    return message;
+  }
+
+  async setMessagePollAnswer(
+    chatId: string,
+    messageId: string,
+    optionIds: ReadonlyArray<number>,
+  ): Promise<void> {
+    const { message, messages } = this.findMessage(chatId, messageId);
+    const poll = message.poll;
+    if (!poll) throw new Error(`Message ${messageId} carries no poll`);
+    // Telegram refuses votes on a closed poll outright.
+    if (poll.isClosed) throw new Error("The poll is closed");
+    if (
+      optionIds.some(
+        (optionId) => optionId < 0 || optionId >= poll.options.length,
+      )
+    ) {
+      throw new Error("Unknown poll option");
+    }
+    if (optionIds.length > 1 && !poll.allowMultipleAnswers) {
+      throw new Error("The poll allows a single answer");
+    }
+    const chosen = new Set(optionIds);
+    const hadVoted = poll.options.some((option) => option.chosen);
+    const options = poll.options.map((option, index) => {
+      const wasChosen = option.chosen;
+      const isChosen = chosen.has(index);
+      return {
+        ...option,
+        chosen: isChosen,
+        voterCount:
+          option.voterCount + (isChosen ? 1 : 0) - (wasChosen ? 1 : 0),
+      };
+    });
+    const votes = chosen.size > 0;
+    const totalVoterCount =
+      poll.totalVoterCount +
+      (votes && !hadVoted ? 1 : 0) -
+      (!votes && hadVoted ? 1 : 0);
+    const answered: MessageDto = {
+      ...message,
+      poll: {
+        ...poll,
+        options: options.map((option) => ({
+          ...option,
+          votePercentage:
+            totalVoterCount > 0
+              ? Math.round((option.voterCount / totalVoterCount) * 100)
+              : 0,
+        })),
+        totalVoterCount,
+        // The quiz reveal: TDLib fills correct_option_ids in the same
+        // updateMessageContent that reports the vote. A wrong answer still
+        // records — `chosen` stays on the picked option.
+        correctOptionIds:
+          poll.kind === "quiz" && votes
+            ? (this.quizCorrectAnswers.get(messageId) ?? null)
+            : poll.correctOptionIds,
+      },
+    };
+    this.messages.set(
+      chatId,
+      messages.map((entry) => (entry.id === messageId ? answered : entry)),
+    );
+    // The tally rides the same edited-message upsert the TDLib adapter
+    // derives from updateMessageContent.
+    this.emit({ type: "message-upsert", cause: "edited", message: answered });
+  }
+
   async setTyping(chatId: string, typing: boolean): Promise<void> {
     // The local user's own typing signal has no counterpart to notify in the
     // demo workspace; the production adapter sends it as sendChatAction.
@@ -2169,7 +2591,25 @@ export class DemoTelegramRepository implements TelegramRepository {
     this.emit({ type: "message-upsert", cause: "edited", message: edited });
   }
 
+  /**
+   * Scheduled messages sit outside the transcript, so a delete that names
+   * one of them removes it from the scheduled store — TDLib's
+   * `deleteMessages` covers scheduled ids the same way.
+   */
+  private deleteScheduledMessage(chatId: string, messageId: string): boolean {
+    const scheduled = this.scheduledMessages.get(chatId) ?? [];
+    if (!scheduled.some((entry) => entry.id === messageId)) return false;
+    this.scheduledMessages.set(
+      chatId,
+      scheduled.filter((entry) => entry.id !== messageId),
+    );
+    this.emit({ type: "scheduled-messages", chatId });
+    return true;
+  }
+
   async deleteMessage(input: DeleteMessageInput): Promise<void> {
+    this.requireChat(input.chatId);
+    if (this.deleteScheduledMessage(input.chatId, input.messageId)) return;
     const { messages } = this.findMessage(input.chatId, input.messageId);
     if (input.scope === "me") {
       // Delete-for-me keeps the message for other participants; this client
@@ -2236,6 +2676,21 @@ export class DemoTelegramRepository implements TelegramRepository {
       updatedAt: forwarded.sentAt,
     }));
     this.emit({ type: "message-upsert", cause: "new", message: forwarded });
+  }
+
+  async pinMessage(input: PinMessageInput): Promise<void> {
+    this.findMessage(input.chatId, input.messageId);
+    const current = this.pinnedMessageIds.get(input.chatId) ?? [];
+    // Most recently pinned first, matching listPinnedMessages' order; a
+    // re-pin of an already pinned message moves it to the front, like
+    // Telegram bumping the pin.
+    const next = input.pinned
+      ? [input.messageId, ...current.filter((id) => id !== input.messageId)]
+      : current.filter((id) => id !== input.messageId);
+    this.pinnedMessageIds.set(input.chatId, next);
+    // The pin strip reloads from this event; the transcript's pinned flag
+    // is overlaid from the same map on every read, so both stay in step.
+    this.emit({ type: "pinned-messages", chatId: input.chatId });
   }
 
   async answerBotCallback(
@@ -2386,11 +2841,16 @@ export class DemoTelegramRepository implements TelegramRepository {
   }
 
   // The chat's messages as this client sees them: delete-for-me entries are
-  // hidden here but stay in the store for the other participants.
+  // hidden here but stay in the store for the other participants. The pinned
+  // flag is derived from pinnedMessageIds so pins (initial or later) show on
+  // the transcript without duplicating the state into each message literal.
   private visibleMessages(chatId: string): ReadonlyArray<MessageDto> {
-    return (this.messages.get(chatId) ?? []).filter(
-      (entry) => !this.hiddenMessageIds.has(`${chatId}:${entry.id}`),
-    );
+    const pinned = new Set(this.pinnedMessageIds.get(chatId) ?? []);
+    return (this.messages.get(chatId) ?? [])
+      .filter((entry) => !this.hiddenMessageIds.has(`${chatId}:${entry.id}`))
+      .map((entry) =>
+        pinned.has(entry.id) ? { ...entry, pinned: true } : entry,
+      );
   }
 
   private requireChat(chatId: string): void {

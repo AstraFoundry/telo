@@ -4,17 +4,21 @@ import type {
   DeleteMessageInput,
   EditMessageInput,
   ForwardMessageInput,
+  PinMessageInput,
   SetMessageReactionInput,
 } from "../../../../contracts/src/ipc";
 import type { TelegramRepository } from "../../domain/telegram/telegram-ports";
+import { assertCanSendContent } from "../../domain/telegram/can-send-content";
 
 export class MessageActionsService {
   constructor(private readonly repository: TelegramRepository) {}
 
-  editMessage(input: EditMessageInput): Promise<void> {
+  async editMessage(input: EditMessageInput): Promise<void> {
     if (!input.chatId.trim()) throw new Error("Chat id is required");
     if (!input.messageId.trim()) throw new Error("Message id is required");
     if (!input.body.trim()) throw new Error("Message body is required");
+    const chat = await this.repository.getChat(input.chatId);
+    if (chat) assertCanSendContent(chat, "text");
     return this.repository.editMessage({ ...input, body: input.body.trim() });
   }
 
@@ -31,11 +35,19 @@ export class MessageActionsService {
     return this.repository.deleteMessage(input);
   }
 
-  forwardMessage(input: ForwardMessageInput): Promise<void> {
+  async forwardMessage(input: ForwardMessageInput): Promise<void> {
     if (!input.fromChatId.trim()) throw new Error("Chat id is required");
     if (!input.messageId.trim()) throw new Error("Message id is required");
     if (!input.toChatId.trim()) throw new Error("Chat id is required");
+    const chat = await this.repository.getChat(input.toChatId);
+    if (chat) assertCanSendContent(chat, "any");
     return this.repository.forwardMessage(input);
+  }
+
+  pinMessage(input: PinMessageInput): Promise<void> {
+    if (!input.chatId.trim()) throw new Error("Chat id is required");
+    if (!input.messageId.trim()) throw new Error("Message id is required");
+    return this.repository.pinMessage(input);
   }
 
   /**
@@ -67,6 +79,26 @@ export class MessageActionsService {
       emoji: input.emoji.trim(),
       remove: Boolean(input.remove),
     });
+  }
+
+  /**
+   * Votes in a poll (TDLib `setPollAnswer`). Option indexes beyond the
+   * option list are rejected server-side; here only the ids themselves and
+   * the integer shape of the indexes are checked.
+   */
+  setMessagePollAnswer(
+    chatId: string,
+    messageId: string,
+    optionIds: ReadonlyArray<number>,
+  ): Promise<void> {
+    if (!chatId.trim()) throw new Error("Chat id is required");
+    if (!messageId.trim()) throw new Error("Message id is required");
+    for (const optionId of optionIds) {
+      if (!Number.isInteger(optionId) || optionId < 0) {
+        throw new Error("Poll option indexes must be non-negative integers");
+      }
+    }
+    return this.repository.setMessagePollAnswer(chatId, messageId, optionIds);
   }
 
   listAvailableReactions(

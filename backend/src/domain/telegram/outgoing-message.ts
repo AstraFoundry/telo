@@ -1,4 +1,4 @@
-import type { MessageEntityDto } from "../../../../contracts/src/ipc";
+import type { MessageEntityDto } from "./message";
 
 /**
  * Trims an outgoing body the way the application layer always has, and shifts

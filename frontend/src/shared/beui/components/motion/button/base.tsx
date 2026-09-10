@@ -9,7 +9,8 @@ import { forwardRef, type ReactNode } from "react";
 import { SPRING_PRESS } from "@beui-lib/ease";
 import { cn } from "@/shared/lib/cn";
 
-export type ButtonVariant = "primary" | "secondary" | "ghost" | "outline";
+export type ButtonVariant =
+  "primary" | "secondary" | "ghost" | "outline" | "destructive";
 export type ButtonSize = "sm" | "md" | "lg" | "icon";
 
 export interface ButtonProps extends Omit<
@@ -38,6 +39,7 @@ const VARIANT_CLASS: Record<ButtonVariant, string> = {
   ghost: "text-muted-foreground hover:text-foreground hover:bg-primary/5",
   outline:
     "border border-border bg-transparent text-foreground hover:bg-primary/5",
+  destructive: "bg-destructive text-primary-foreground hover:bg-destructive/90",
 };
 
 const SIZE_CLASS: Record<ButtonSize, string> = {

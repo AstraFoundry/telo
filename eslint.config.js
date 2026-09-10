@@ -147,12 +147,14 @@ export default tseslint.config(
     // beui registry; every other module goes through the barrel. They are
     // exempt for one reason: the barrel re-exports them, so importing it back
     // would be a cycle. That covers the barrel, the motion seam that carries
-    // the constants those primitives need, and the window controls, which are
-    // three sized `Button`s and cannot express that as a `PressableBlock`.
+    // three sized `Button`s and cannot express that as a `PressableBlock`;
+    // jump-to-latest is the same shape (a sized icon `Button` plus a
+    // `Tooltip` inside the barrel's own module).
     files: [
       "frontend/src/shared/ui/index.ts",
       "frontend/src/shared/ui/motion.ts",
       "frontend/src/shared/ui/window-controls.tsx",
+      "frontend/src/shared/ui/jump-to-latest.tsx",
     ],
     rules: {
       "no-restricted-imports": "off",

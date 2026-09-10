@@ -1,6 +1,8 @@
+import type { Locator, Page } from "@playwright/test";
+
 import { demoTest as test, expect, waitForDemoWorkspace } from "./fixtures";
 
-async function openDesignChat(window: import("@playwright/test").Page) {
+async function openDesignChat(window: Page) {
   await waitForDemoWorkspace(window);
   await window
     .getByRole("navigation", { name: "Chats" })
@@ -12,12 +14,15 @@ async function openDesignChat(window: import("@playwright/test").Page) {
   return window.getByRole("region", { name: "Conversation" });
 }
 
-async function revealFirstMedia(
-  window: import("@playwright/test").Page,
-  conversation: import("@playwright/test").Locator,
-) {
+async function revealFirstMedia(window: Page, conversation: Locator) {
   await conversation.hover();
+  // The transcript window renders only the visible range: jump to the top,
+  // then wheel down until the first media bubble enters the rendered window.
   await window.mouse.wheel(0, -100_000);
+  const photo = conversation.getByRole("button", { name: "telo-hero.png" });
+  for (let i = 0; i < 20 && !(await photo.isVisible()); i++) {
+    await window.mouse.wheel(0, 1_200);
+  }
 }
 
 test("opens the viewer from a photo bubble and closes with Escape", async ({

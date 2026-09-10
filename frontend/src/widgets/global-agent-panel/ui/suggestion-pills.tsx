@@ -1,10 +1,9 @@
-import { ArrowDown } from "@phosphor-icons/react";
 import { AnimatePresence, motion, useReducedMotionConfig } from "motion/react";
 import { useRef } from "react";
 
 import { copy } from "shared/config/copy";
 import { scrollFadeMask, useScrollFade } from "shared/lib/use-scroll-fade";
-import { Button, EASE_OUT, Tooltip } from "shared/ui";
+import { Button, EASE_OUT, JumpToLatest } from "shared/ui";
 
 export interface Suggestion {
   readonly id: string;
@@ -78,30 +77,12 @@ export function SuggestionPills({
           </motion.div>
         ) : null}
       </AnimatePresence>
-      <AnimatePresence initial={false}>
-        {showJump ? (
-          <motion.div
-            key="jump"
-            initial={reduce ? { opacity: 0 } : { opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={reduce ? { opacity: 0 } : { opacity: 0, scale: 0.9 }}
-            transition={transition}
-            className="pointer-events-auto absolute right-0"
-          >
-            <Tooltip content={copy.jumpToLatestMessages}>
-              <Button
-                size="icon"
-                variant="secondary"
-                aria-label={copy.jumpToLatestMessages}
-                className="relative size-7 rounded-full shadow-md shadow-foreground/10 after:absolute after:-inset-1.5 after:content-['']"
-                onClick={onJump}
-              >
-                <ArrowDown className="size-3.5" weight="bold" />
-              </Button>
-            </Tooltip>
-          </motion.div>
-        ) : null}
-      </AnimatePresence>
+      <JumpToLatest
+        show={showJump}
+        onJump={onJump}
+        size="sm"
+        className="pointer-events-auto absolute right-0"
+      />
     </div>
   );
 }
