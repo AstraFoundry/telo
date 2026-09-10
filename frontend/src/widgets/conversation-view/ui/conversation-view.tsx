@@ -1096,14 +1096,20 @@ function ConversationMessage({
           </ContextMenuTrigger>
           <ContextMenuContent ariaLabel={copy.messageActions}>
             <ReactionMenuStrip message={message} />
-            {/* A failed send never reached Telegram, so Reply/Edit/Forward —
-                which reference a server-side message — stay hidden; Resend and
-                Delete are the meaningful actions. */}
-            {message.status === "failed" ? (
-              <ContextMenuItem onSelect={() => void resendMessage(message.id)}>
-                <ArrowClockwise aria-hidden="true" className="size-4" />
-                {copy.resendMessage}
-              </ContextMenuItem>
+            {/* A failed send never reached Telegram and a still-sending one
+                has only a temporary local id, so Reply/Edit/Forward — which
+                reference a server-side message — stay hidden until delivery;
+                Resend and Delete are the meaningful actions. tdesktop gates
+                the same actions on delivery. */}
+            {message.status === "failed" || message.status === "sending" ? (
+              message.status === "failed" ? (
+                <ContextMenuItem
+                  onSelect={() => void resendMessage(message.id)}
+                >
+                  <ArrowClockwise aria-hidden="true" className="size-4" />
+                  {copy.resendMessage}
+                </ContextMenuItem>
+              ) : null
             ) : (
               <ContextMenuItem onSelect={() => startReply(message)}>
                 <ArrowBendUpLeft aria-hidden="true" className="size-4" />
@@ -1114,13 +1120,14 @@ function ConversationMessage({
                 with an error), so tdesktop's menu has no Edit for them. */}
             {message.outgoing &&
             message.status !== "failed" &&
+            message.status !== "sending" &&
             !message.poll ? (
               <ContextMenuItem onSelect={() => startEdit(message)}>
                 <PencilSimple aria-hidden="true" className="size-4" />
                 {copy.editMessage}
               </ContextMenuItem>
             ) : null}
-            {message.status !== "failed" ? (
+            {message.status !== "failed" && message.status !== "sending" ? (
               <ContextMenuItem
                 onSelect={() =>
                   void toggleMessagePinned(message.chatId, message.id)
@@ -1142,7 +1149,7 @@ function ConversationMessage({
               <Copy aria-hidden="true" className="size-4" />
               {selection ? copy.copySelectedText : copy.copyText}
             </ContextMenuItem>
-            {message.status !== "failed" ? (
+            {message.status !== "failed" && message.status !== "sending" ? (
               <ContextMenuItem onSelect={() => onForward(message)}>
                 <ArrowFatLineRight aria-hidden="true" className="size-4" />
                 {copy.forward}

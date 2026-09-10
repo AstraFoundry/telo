@@ -827,6 +827,22 @@ describe("TdlibTelegramRepository", () => {
     );
   });
 
+  it("treats a read-only chat's scheduled list as empty instead of failing", async () => {
+    const { repository, bridge } = setup();
+    await repository.hydrate();
+    // TDLib's answer on a channel where the account cannot post; tdesktop
+    // simply offers no scheduled view there.
+    bridge.handlers.set("getChatScheduledMessages", () =>
+      Promise.reject({
+        _: "error",
+        code: 400,
+        message: "Not enough rights to get scheduled messages",
+      }),
+    );
+
+    await expect(repository.listScheduledMessages("11")).resolves.toEqual([]);
+  });
+
   it("routes a scheduled message update to the scheduled list, not the transcript", async () => {
     const { repository, bridge, events } = setup();
     await repository.hydrate();
@@ -1339,6 +1355,48 @@ describe("TdlibTelegramRepository", () => {
       ),
     ).toBe(true);
     expect(me.avatarDataUrl).toMatch(/telo-media:\/\/cache\/avatar2_1\.jpg/);
+  });
+
+  it("settles a no-access user photo quietly and never retries the lookup", async () => {
+    const { repository, bridge } = setup();
+    // TDLib's exact answer for users the account may not resolve (min
+    // updateUser shells, privacy-restricted profiles, deleted accounts).
+    const noAccess = {
+      _: "error",
+      code: 400,
+      message: "Have no access to the user",
+    };
+    bridge.handlers.set("getMe", () => tdUser(1));
+    bridge.handlers.set("getUser", () => tdUser(1));
+    bridge.handlers.set("getUserFullInfo", () => Promise.reject(noAccess));
+    bridge.handlers.set("getUserProfilePhotos", () => Promise.reject(noAccess));
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const me = await repository.getCurrentUser();
+      // Degraded, not pending forever: the placeholder owns the disc now.
+      expect(me.avatarPending).toBe(false);
+      expect(me.avatarDataUrl).toBeNull();
+      expect(
+        errorSpy.mock.calls.filter(
+          (call) =>
+            typeof call[0] === "string" &&
+            call[0].includes("photo lookup failed"),
+        ),
+      ).toHaveLength(0);
+      // tdesktop/Web A behavior: the 400 is a settled answer, so a second
+      // resolution must not re-issue either lookup.
+      const lookups = () =>
+        bridge.invokes.filter(
+          (item) =>
+            (item as { _: string })._ === "getUserFullInfo" ||
+            (item as { _: string })._ === "getUserProfilePhotos",
+        ).length;
+      const before = lookups();
+      await repository.getCurrentUser();
+      expect(lookups()).toBe(before);
+    } finally {
+      errorSpy.mockRestore();
+    }
   });
 
   it("downloads an unready sticker file and retries send", async () => {

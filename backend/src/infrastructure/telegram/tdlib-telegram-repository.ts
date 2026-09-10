@@ -123,6 +123,13 @@ export class TdlibTelegramRepository implements TelegramRepository {
   private readonly customAccentColors = new Map<number, Td.accentColor>();
   /** User ids that have been fetched with `getUser`, not a min `updateUser`. */
   private readonly fetchedUserIds = new Set<number>();
+  /**
+   * User ids TDLib answered "Have no access to the user" for. tdesktop and
+   * Telegram Web A treat that 400 as a settled "no photo" answer rather than
+   * an error: the id is remembered so no lookup is ever repeated, and the
+   * avatar degrades to the placeholder instead of logging per attempt.
+   */
+  private readonly inaccessibleUserIds = new Set<number>();
   private readonly typingTimers = new Map<
     string,
     ReturnType<typeof setTimeout>
@@ -172,10 +179,13 @@ export class TdlibTelegramRepository implements TelegramRepository {
     );
     this.selfUserId = me.id;
     // The bio lives on the full info, not the user object; a failed fetch
-    // must not take the whole identity card down with it.
-    const full = await this.client
-      .invoke<Td.userFullInfo>({ _: "getUserFullInfo", user_id: me.id })
-      .catch(() => null);
+    // must not take the whole identity card down with it. A user TDLib
+    // already answered "no access" for is not asked again.
+    const full = this.inaccessibleUserIds.has(Number(me.id))
+      ? null
+      : await this.client
+          .invoke<Td.userFullInfo>({ _: "getUserFullInfo", user_id: me.id })
+          .catch(() => null);
     await this.scheduleUserAvatar(me, true);
     const name = [me.first_name, me.last_name].filter(Boolean).join(" ");
     const id = String(me.id);
@@ -724,11 +734,19 @@ export class TdlibTelegramRepository implements TelegramRepository {
   async listScheduledMessages(
     chatId: string,
   ): Promise<ReadonlyArray<MessageDto>> {
-    const found = await this.client.invoke<Td.messages>({
-      _: "getChatScheduledMessages",
-      chat_id: Number(chatId),
-    });
-    // TDLib returns scheduled messages in reverse chronological order; the
+    // tdesktop only offers scheduled messages where the account can post;
+    // on a read-only channel TDLib answers 400 "Not enough rights", which
+    // is a settled "no scheduled view" answer, not an error to surface.
+    const found = await this.client
+      .invoke<Td.messages>({
+        _: "getChatScheduledMessages",
+        chat_id: Number(chatId),
+      })
+      .catch((error: unknown) => {
+        if (isInsufficientRightsError(error)) return null;
+        throw error;
+      });
+    if (!found) return [];
     // scheduled view lists them soonest first, the way tdesktop does.
     return Promise.all(
       [...found.messages]
@@ -769,9 +787,11 @@ export class TdlibTelegramRepository implements TelegramRepository {
     if (user) {
       this.rememberUser(user);
       this.scheduleUserAvatar(user);
-      const full = await this.client
-        .invoke<Td.userFullInfo>({ _: "getUserFullInfo", user_id: user.id })
-        .catch(() => null);
+      const full = this.inaccessibleUserIds.has(Number(user.id))
+        ? null
+        : await this.client
+            .invoke<Td.userFullInfo>({ _: "getUserFullInfo", user_id: user.id })
+            .catch(() => null);
       const id = String(user.id);
       return {
         id,
@@ -1651,6 +1671,11 @@ export class TdlibTelegramRepository implements TelegramRepository {
 
   private scheduleUserAvatar(user: Td.user, wait = false): Promise<void> {
     const peerId = String(user.id);
+    if (this.inaccessibleUserIds.has(Number(user.id))) {
+      // Known no-access user: settle as "no photo" without another lookup.
+      this.settleEmptyAvatar(peerId);
+      return Promise.resolve();
+    }
     const photo = user.profile_photo;
     this.paintMinithumbnail(peerId, photo?.minithumbnail);
     if (photo === null || photo?.id === "0") {
@@ -1705,6 +1730,14 @@ export class TdlibTelegramRepository implements TelegramRepository {
         this.settleEmptyAvatar(peerId);
       }
     } catch (error) {
+      if (isNoUserAccessError(error)) {
+        // Expected for users we only know through a min updateUser or a
+        // privacy-restricted profile: settle "no photo", remember the id so
+        // the lookup is never retried, and stay quiet like tdesktop does.
+        this.inaccessibleUserIds.add(Number(user.id));
+        this.settleEmptyAvatar(peerId);
+        return;
+      }
       console.error("TDLib user photo lookup failed", {
         userId: user.id,
         error,
@@ -1879,7 +1912,12 @@ export class TdlibTelegramRepository implements TelegramRepository {
         return user;
       }
     } catch (error) {
-      console.error("TDLib getUser failed", { userId: id, error });
+      if (isNoUserAccessError(error)) {
+        // Same degradation as the photo lookup: remember and stay quiet.
+        this.inaccessibleUserIds.add(id);
+      } else {
+        console.error("TDLib getUser failed", { userId: id, error });
+      }
     }
     return this.users.get(id) ?? null;
   }
@@ -3239,6 +3277,43 @@ export class TdlibClientCoordinator implements TelegramAccountClient {
     this.state = state;
     this.options.onState(state);
   }
+}
+
+/**
+ * TDLib answers `400 "Have no access to the user"` for users the account may
+ * not resolve — min `updateUser` shells, privacy-restricted profiles, and
+ * deleted accounts. Reference clients treat it as a settled "unknown user /
+ * no photo" answer, not as an error worth logging.
+ */
+function isNoUserAccessError(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) return false;
+  const candidate = error as { _?: unknown; code?: unknown; message?: unknown };
+  return (
+    candidate._ === "error" &&
+    candidate.code === 400 &&
+    typeof candidate.message === "string" &&
+    candidate.message.toLowerCase().includes("have no access")
+  );
+}
+
+/**
+ * TDLib answers `400 "Not enough rights"` when the account may not perform
+ * the requested action in a chat — for a read-only channel, tdesktop treats
+ * that as the feature simply being unavailable there.
+ */
+function isInsufficientRightsError(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) return false;
+  const candidate = error as {
+    _?: unknown;
+    code?: unknown;
+    message?: unknown;
+  };
+  return (
+    candidate._ === "error" &&
+    candidate.code === 400 &&
+    typeof candidate.message === "string" &&
+    candidate.message.toLowerCase().includes("not enough rights")
+  );
 }
 
 function fileIdOf(file: Td.file | undefined): number | null {

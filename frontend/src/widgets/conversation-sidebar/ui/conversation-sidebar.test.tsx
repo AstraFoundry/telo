@@ -521,6 +521,25 @@ describe("ConversationSidebar", () => {
     expect(useChatStore.getState().chats[0]?.muted).toBe(true);
   });
 
+  it("offers no mute for the Saved Messages chat", async () => {
+    await renderSidebar({
+      chats: [chat({ id: "saved", kind: "saved", title: "Saved Messages" })],
+    });
+
+    fireEvent.contextMenu(
+      screen.getByRole("button", { name: /Saved Messages/ }),
+    );
+    const menu = await screen.findByRole("menu");
+    // TDLib: "Notification settings of the Saved Messages chat can't be
+    // changed" — tdesktop offers no mute there.
+    expect(
+      within(menu).queryByRole("menuitem", { name: copy.muteChat }),
+    ).toBeNull();
+    expect(
+      within(menu).queryByRole("menuitem", { name: copy.unmuteChat }),
+    ).toBeNull();
+  });
+
   it("groups pinned chats under a Pinned section above the rest", async () => {
     await renderSidebar({
       chats: [

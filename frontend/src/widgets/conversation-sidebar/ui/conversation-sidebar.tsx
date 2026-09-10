@@ -250,14 +250,18 @@ function ChatListRow({
           )}
           {chat.pinned ? copy.unpinChat : copy.pinChat}
         </ContextMenuItem>
-        <ContextMenuItem onSelect={() => void toggleMute(chat.id)}>
-          {chat.muted ? (
-            <Bell aria-hidden="true" className="size-4" />
-          ) : (
-            <BellSlash aria-hidden="true" className="size-4" />
-          )}
-          {chat.muted ? copy.unmuteChat : copy.muteChat}
-        </ContextMenuItem>
+        {/* TDLib answers 400 "Notification settings of the Saved Messages
+            chat can't be changed"; tdesktop offers no mute there. */}
+        {chat.kind === "saved" ? null : (
+          <ContextMenuItem onSelect={() => void toggleMute(chat.id)}>
+            {chat.muted ? (
+              <Bell aria-hidden="true" className="size-4" />
+            ) : (
+              <BellSlash aria-hidden="true" className="size-4" />
+            )}
+            {chat.muted ? copy.unmuteChat : copy.muteChat}
+          </ContextMenuItem>
+        )}
         <ContextMenuItem onSelect={() => void setArchived(chat.id, !archived)}>
           <Archive aria-hidden="true" className="size-4" />
           {archived ? copy.unarchiveChat : copy.archiveChat}
