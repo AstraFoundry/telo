@@ -1,5 +1,5 @@
 import { motion, useReducedMotionConfig } from "motion/react";
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 
 import { EASE_OUT } from "shared/ui";
 export interface ReactionBurstProps {
@@ -31,6 +31,13 @@ const PARTICLE_COUNT = 6;
  */
 export function ReactionBurst({ emoji, seed, onDone }: ReactionBurstProps) {
   const reduce = useReducedMotionConfig() ?? false;
+  // Retire by lifetime, not onAnimationComplete: the parent's reaction
+  // upsert re-renders mid-flight and the retargeted keyframe animation can
+  // drop its completion callback, stranding the finished glyph.
+  useEffect(() => {
+    const lifetime = window.setTimeout(onDone, reduce ? 220 : 600);
+    return () => window.clearTimeout(lifetime);
+  }, [onDone, reduce]);
   const particles = useMemo<ReadonlyArray<ParticleVector>>(
     () =>
       Array.from({ length: PARTICLE_COUNT }, (_, i) => {
