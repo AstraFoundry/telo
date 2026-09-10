@@ -7,7 +7,8 @@ import { test as base, expect, type Page } from "@playwright/test";
 const liveEnabled = process.env.TELO_LIVE_E2E === "1";
 
 const test = base.extend<{ window: Page }>({
-  window: async ({}, use) => {
+  window: async ({ browserName }, use) => {
+    void browserName;
     if (!liveEnabled) {
       await use(null as unknown as Page);
       return;

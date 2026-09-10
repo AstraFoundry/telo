@@ -8,7 +8,7 @@ import type {
 } from "../../../../../contracts/src/ipc";
 import { copy } from "shared/config/copy";
 import { cn } from "shared/lib/cn";
-import { Button, EASE_OUT } from "shared/ui";
+import { Button, EASE_OUT, NumberTicker } from "shared/ui";
 
 // tdesktop subtitles the card from anonymity and kind
 // (HistoryView::PollData's "Anonymous Poll" / "Quiz" strings).
@@ -169,7 +169,12 @@ export function PollMessage({ message }: { readonly message: MessageDto }) {
                       {option.text}
                     </span>
                     <span className="text-sm tabular-nums text-muted-foreground">
-                      {option.votePercentage}%
+                      <NumberTicker
+                        value={option.votePercentage}
+                        startOnView={false}
+                        duration={0.35}
+                        suffix="%"
+                      />
                     </span>
                   </div>
                   {/* The bar animates from zero as results land — the same
@@ -214,12 +219,20 @@ export function PollMessage({ message }: { readonly message: MessageDto }) {
           {error}
         </p>
       ) : null}
-      <div className="text-xs text-muted-foreground">
-        {poll.isClosed
-          ? `${copy.pollFinalResults} · ${poll.totalVoterCount} ${copy.pollVotes}`
-          : poll.totalVoterCount === 0
-            ? copy.pollNoVotes
-            : `${poll.totalVoterCount} ${copy.pollVotes}`}
+      <div className="text-xs tabular-nums text-muted-foreground">
+        {poll.isClosed ? `${copy.pollFinalResults} · ` : null}
+        {!poll.isClosed && poll.totalVoterCount === 0 ? (
+          copy.pollNoVotes
+        ) : (
+          <>
+            <NumberTicker
+              value={poll.totalVoterCount}
+              startOnView={false}
+              duration={0.35}
+            />{" "}
+            {copy.pollVotes}
+          </>
+        )}
       </div>
     </div>
   );

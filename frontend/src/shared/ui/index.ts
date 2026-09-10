@@ -175,3 +175,5 @@ export type {
 } from "@components/agents/approval-card";
 export { Checkbox } from "@components/motion/checkbox";
 export type { CheckboxProps } from "@components/motion/checkbox";
+export { NumberTicker } from "@components/motion/number-ticker";
+export type { NumberTickerProps } from "@components/motion/number-ticker";

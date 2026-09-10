@@ -124,8 +124,9 @@ describe("PollMessage", () => {
     );
 
     expect(screen.queryByRole("radio")).toBeNull();
-    expect(screen.getByText("75%")).toBeDefined();
-    expect(screen.getByText(`4 ${copy.pollVotes}`)).toBeDefined();
+    expect(screen.getByText("75%", { selector: ".sr-only" })).toBeDefined();
+    expect(screen.getByText("4", { selector: ".sr-only" })).toBeDefined();
+    expect(screen.getByText(copy.pollVotes)).toBeDefined();
   });
 
   it("reveals the quiz's correct option after answering, marking a wrong pick", () => {
@@ -162,7 +163,9 @@ describe("PollMessage", () => {
     expect(screen.getByText(copy.pollAnonymousQuiz)).toBeDefined();
     // The reveal replaces the voting rows with results.
     expect(screen.queryByRole("radio")).toBeNull();
-    expect(screen.getAllByText("50%")).toHaveLength(2);
+    expect(screen.getAllByText("50%", { selector: ".sr-only" })).toHaveLength(
+      2,
+    );
   });
 
   it("reads a closed poll as final results and offers no vote", () => {
@@ -170,9 +173,8 @@ describe("PollMessage", () => {
     render(<PollMessage message={messageWithPoll(poll({ isClosed: true }))} />);
 
     expect(screen.queryByRole("radio")).toBeNull();
-    expect(
-      screen.getByText(`${copy.pollFinalResults} · 0 ${copy.pollVotes}`),
-    ).toBeDefined();
+    expect(screen.getByText(new RegExp(copy.pollFinalResults))).toBeDefined();
+    expect(screen.getByText("0", { selector: ".sr-only" })).toBeDefined();
   });
 
   it("surfaces a failed vote inline", async () => {
