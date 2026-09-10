@@ -910,6 +910,32 @@ describe("ConversationView", () => {
     ).toBeNull();
   });
 
+  it("hides server-side actions while a send is still pending", async () => {
+    await renderView({
+      messages: [
+        message({
+          id: "m1",
+          outgoing: true,
+          status: "sending",
+          body: "Pending body",
+        }),
+      ],
+    });
+
+    fireEvent.contextMenu(screen.getByText("Pending body"));
+    const menu = await screen.findByRole("menu");
+    // The bubble carries only a temporary local id until delivery; TDLib
+    // rejects edit/reply/forward/pin against it, so the menu gates them.
+    for (const name of [
+      copy.reply,
+      copy.editMessage,
+      copy.pinMessage,
+      copy.forward,
+    ]) {
+      expect(within(menu).queryByRole("menuitem", { name })).toBeNull();
+    }
+  });
+
   it("starts an edit from the bubble context menu on outgoing messages", async () => {
     const { useChatStore } = await renderView({
       messages: [message({ id: "m1", outgoing: true, body: "Message body" })],

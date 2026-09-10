@@ -2,7 +2,9 @@
 
 Standard Telo workflows that must be `covered` in [`tdlib-capability-matrix.json`](tdlib-capability-matrix.json) and exercised before cutover. Compared against Telegram Desktop on the same account. Not in this baseline: VoIP media, story browsing, Mini Apps, Stars, wallets.
 
-Live runs are secret-gated (`make test-live`). Demo Playwright remains the PR merge gate for UI.
+Live runs are secret-gated (`make test-live`; the full driver needs `TELO_LIVE_E2E=1` plus a signed-in user-data directory). Demo Playwright remains the PR merge gate for UI.
+
+**Last live verification (single rented account, TDLib 1.8.67):** every item below passed except where annotated. The driver is [`../../tests/live/live-baseline.spec.ts`](../../tests/live/live-baseline.spec.ts). Annotations: group creation was BLOCKED (the account had no contacts, and a basic group requires at least one member); 2FA, multi-account (needs three accounts), secret-chat interop (needs a second official client online), and reconnect (needs a controlled network cut) are not automated by the driver.
 
 ## Auth
 
