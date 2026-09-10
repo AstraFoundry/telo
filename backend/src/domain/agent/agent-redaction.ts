@@ -1,5 +1,4 @@
-import type { AgentRedactionCounts } from "../../../../contracts/src/ipc";
-import type { AgentScopedMessage } from "./agent-context";
+import type { AgentRedactionCounts, AgentScopedMessage } from "./agent-context";
 
 export const REDACTED_EMAIL = "[redacted email]";
 export const REDACTED_PHONE = "[redacted phone]";

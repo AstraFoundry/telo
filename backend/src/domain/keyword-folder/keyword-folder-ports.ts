@@ -1,8 +1,5 @@
-import type {
-  ChatPageDto,
-  ChatPageInput,
-  GlobalSearchResultDto,
-} from "../../../../contracts/src/ipc";
+import type { ChatPageDto, ChatPageInput } from "../telegram/chat";
+import type { GlobalSearchResultDto } from "../telegram/message";
 import type { KeywordFolder } from "./keyword-folder";
 
 export interface KeywordFolderRepository {

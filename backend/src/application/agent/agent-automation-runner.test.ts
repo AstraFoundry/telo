@@ -59,6 +59,7 @@ function telegramStub(
 ): TelegramRepository {
   return {
     listChatPage: async () => ({ items: [chatDto()], nextCursor: null }),
+    getChat: async () => chatDto(),
     listMessagePage: async () => ({
       items: [messageDto()],
       nextCursor: null,
@@ -145,6 +146,21 @@ describe("AgentAutomationRunner", () => {
     expect(result).toEqual({ status: "sent", text: "On it." });
     expect(telegram.sendMessage).toHaveBeenCalledWith("chat", "On it.", "m1");
     expect(telegram.saveDraft).not.toHaveBeenCalled();
+  });
+
+  it("rejects delivery to a chat the account cannot write to", async () => {
+    const telegram = telegramStub({
+      getChat: async () => chatDto({ canSendMessages: false }),
+    });
+    const { runner } = makeRunner(
+      gatewayYielding([{ type: "text", delta: "On it." }]),
+      telegram,
+    );
+
+    await expect(runner.run(runInput())).rejects.toThrow(
+      "The current account can't write to this chat",
+    );
+    expect(telegram.sendMessage).not.toHaveBeenCalled();
   });
 
   it("saves a draft when the composer is empty", async () => {

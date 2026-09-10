@@ -928,6 +928,46 @@ describe("ConversationView", () => {
     );
   });
 
+  it("pins and unpins from the bubble context menu", async () => {
+    const { telo } = await renderView({
+      messages: [
+        message({ id: "m1", body: "Plain body" }),
+        message({ id: "m2", body: "Pinned body", pinned: true }),
+      ],
+    });
+
+    fireEvent.contextMenu(screen.getByText("Plain body"));
+    let menu = await screen.findByRole("menu");
+    expect(
+      within(menu).queryByRole("menuitem", { name: copy.unpinMessage }),
+    ).toBeNull();
+    fireEvent.click(
+      within(menu).getByRole("menuitem", { name: copy.pinMessage }),
+    );
+
+    await waitFor(() => {
+      expect(telo.workspace.pinMessage).toHaveBeenCalledWith({
+        chatId: "chat-1",
+        messageId: "m1",
+        pinned: true,
+      });
+    });
+
+    fireEvent.contextMenu(screen.getByText("Pinned body"));
+    menu = await screen.findByRole("menu");
+    fireEvent.click(
+      within(menu).getByRole("menuitem", { name: copy.unpinMessage }),
+    );
+
+    await waitFor(() => {
+      expect(telo.workspace.pinMessage).toHaveBeenCalledWith({
+        chatId: "chat-1",
+        messageId: "m2",
+        pinned: false,
+      });
+    });
+  });
+
   it("opens the delete confirmation from a destructive menu item", async () => {
     await renderView({
       messages: [message({ id: "m1", body: "Message body" })],
@@ -2164,5 +2204,162 @@ describe("ConversationView Wave 4 message interaction", () => {
 
     expect(screen.getByText(copy.typing)).toBeTruthy();
     expect(document.querySelector('[data-slot="message-typing"]')).toBeNull();
+  });
+});
+
+describe("ConversationView polls", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    stubMatchMedia(false);
+    stubIntersectionObserver();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("renders a poll card in the bubble and votes through the workspace", async () => {
+    const { telo } = await renderView({
+      messages: [
+        message({
+          id: "m1",
+          body: "",
+          poll: {
+            id: "poll-1",
+            question: "Ship it?",
+            options: [
+              {
+                id: "a",
+                text: "Yes",
+                voterCount: 0,
+                votePercentage: 0,
+                chosen: false,
+              },
+              {
+                id: "b",
+                text: "No",
+                voterCount: 0,
+                votePercentage: 0,
+                chosen: false,
+              },
+            ],
+            totalVoterCount: 0,
+            isAnonymous: true,
+            isClosed: false,
+            kind: "regular",
+            allowMultipleAnswers: false,
+            correctOptionIds: null,
+          },
+        }),
+      ],
+    });
+
+    const row = document.getElementById("conversation-message-m1");
+    expect(row?.querySelector('[data-slot="message-poll"]')).toBeTruthy();
+
+    await screen.findByText("Ship it?");
+    fireEvent.click(screen.getByRole("radio", { name: /No/ }));
+
+    expect(telo.workspace.setMessagePollAnswer).toHaveBeenCalledWith(
+      "chat-1",
+      "m1",
+      [1],
+    );
+  });
+
+  it("applies a vote's edited upsert to the open transcript and the chat preview", async () => {
+    const { useChatStore } = await renderView({
+      chats: [
+        chat({
+          id: "chat-1",
+          title: "Telo Design",
+          kind: "group",
+          preview: `${copy.pollPreviewLabel}: Ship it?`,
+        }),
+      ],
+      messages: [
+        message({
+          id: "m1",
+          body: "",
+          poll: {
+            id: "poll-1",
+            question: "Ship it?",
+            options: [
+              {
+                id: "a",
+                text: "Yes",
+                voterCount: 0,
+                votePercentage: 0,
+                chosen: false,
+              },
+              {
+                id: "b",
+                text: "No",
+                voterCount: 0,
+                votePercentage: 0,
+                chosen: false,
+              },
+            ],
+            totalVoterCount: 0,
+            isAnonymous: true,
+            isClosed: false,
+            kind: "regular",
+            allowMultipleAnswers: false,
+            correctOptionIds: null,
+          },
+        }),
+      ],
+    });
+    await screen.findByText("Ship it?");
+
+    // The workspace event subscription lives in app.tsx; the view tests
+    // drive the same store entry point it calls.
+    const answered = message({
+      id: "m1",
+      body: "",
+      poll: {
+        id: "poll-1",
+        question: "Ship it?",
+        options: [
+          {
+            id: "a",
+            text: "Yes",
+            voterCount: 0,
+            votePercentage: 0,
+            chosen: false,
+          },
+          {
+            id: "b",
+            text: "No",
+            voterCount: 1,
+            votePercentage: 100,
+            chosen: true,
+          },
+        ],
+        totalVoterCount: 1,
+        isAnonymous: true,
+        isClosed: false,
+        kind: "regular",
+        allowMultipleAnswers: false,
+        correctOptionIds: null,
+      },
+    });
+    act(() => {
+      useChatStore.getState().receive({
+        type: "message-upsert",
+        cause: "edited",
+        message: answered,
+      });
+    });
+
+    // The card swaps the voting rows for the tally.
+    const row = document.getElementById("conversation-message-m1");
+    expect(row?.querySelector('[role="radio"]')).toBeNull();
+    expect(within(row as HTMLElement).getByText("100%")).toBeTruthy();
+    // The poll's empty body never blanks the chat preview.
+    expect(
+      useChatStore.getState().chats.find((entry) => entry.id === "chat-1")
+        ?.preview,
+    ).toBe(`${copy.pollPreviewLabel}: Ship it?`);
   });
 });

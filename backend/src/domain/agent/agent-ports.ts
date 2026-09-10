@@ -1,7 +1,5 @@
-import type {
-  AgentOAuthProvider,
-  UiContextSnapshot,
-} from "../../../../contracts/src/ipc";
+import type { AgentOAuthProvider } from "./agent-providers";
+import type { UiContextSnapshot } from "./agent-context";
 import type { AgentAuditRecord } from "./agent-audit";
 import type {
   AgentConfiguration,

@@ -1,7 +1,6 @@
 import {
   ArrowBendUpLeft,
   ArrowClockwise,
-  ArrowDown,
   ArrowFatLineRight,
   ArrowSquareOut,
   Check,
@@ -15,6 +14,7 @@ import {
   MagnifyingGlass,
   PencilSimple,
   PushPin,
+  PushPinSlash,
   Translate,
   Trash,
   WarningCircle,
@@ -64,6 +64,7 @@ import {
 } from "entities/preferences";
 import { useTelegramStore } from "entities/telegram";
 import { AddToAgentButton } from "features/add-to-agent";
+import { CreatePollDialog } from "features/create-poll";
 import { InChatSearchBar } from "features/chat-search";
 import {
   ReactionBar,
@@ -74,6 +75,7 @@ import { MessageComposer } from "features/send-message";
 import { AgentToggle } from "features/toggle-agent";
 import { ChatProfileToggle } from "features/toggle-chat-profile";
 import { copy } from "shared/config/copy";
+import { formatTime } from "shared/lib/format-time";
 import { userFacingErrorDetail } from "shared/lib/user-facing-error";
 import { useEdgeSentinel } from "shared/lib/use-edge-sentinel";
 import { useHotkeys } from "shared/lib/use-hotkeys";
@@ -104,6 +106,7 @@ import {
   MessageRichText,
   MessageMedia,
   LoadIndicator,
+  JumpToLatest,
   MorphPopover,
   MorphPopoverContent,
   MorphPopoverTrigger,
@@ -116,6 +119,7 @@ import type { MediaViewerItem, MediaViewerOrigin } from "shared/ui";
 
 import { deliveryGlyphKind, type DeliveryGlyphKind } from "./delivery-status";
 import { CallMessage } from "./call-message";
+import { PollMessage } from "./poll-message";
 import { DeleteMessageDialog } from "./delete-message-dialog";
 import { ForwardPickerDialog } from "./forward-picker-dialog";
 import { ForwardSelectedDialog } from "./forward-selected-dialog";
@@ -172,16 +176,6 @@ const DRAFT_REPLY_TONES: ReadonlyArray<{
   { tone: "friendly", label: copy.draftReplyToneFriendly },
   { tone: "formal", label: copy.draftReplyToneFormal },
 ];
-
-// "system" defers to the locale's hour12 default, while 12h/24h pin it
-// explicitly.
-function time(value: string, format: TimeFormatPreference): string {
-  return new Intl.DateTimeFormat(undefined, {
-    hour: "2-digit",
-    minute: "2-digit",
-    ...(format === "system" ? {} : { hour12: format === "12h" }),
-  }).format(new Date(value));
-}
 
 // Groups the transcript into day buckets, Telegram-style: a marker renders
 // once at the start of each calendar day instead of on every message.
@@ -443,7 +437,7 @@ function MessageMeta({
       }
     >
       {message.editedAt ? <span>{copy.edited}</span> : null}
-      <time>{time(message.sentAt, timeFormat)}</time>
+      <time>{formatTime(message.sentAt, timeFormat)}</time>
       {message.outgoing ? <DeliveryGlyph status={message.status} /> : null}
     </span>
   );
@@ -599,6 +593,8 @@ function ForwardedAttribution({ forward }: { forward: MessageForwardDto }) {
       }}
       // Inline text: the press spring and a pseudo-element extend the 20px
       // line box up to the 40px pointer floor without moving the text.
+      // Deliberately not the shared Button, whose size padding would break
+      // the inline attribution flow.
       className="relative rounded font-medium text-foreground/80 underline-offset-2 transition-[transform,color] duration-[120ms] ease-out before:absolute before:-inset-y-2 before:-inset-x-1.5 before:content-[''] hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none active:scale-[0.96]"
     >
       {name}
@@ -728,6 +724,9 @@ function ConversationMessage({
 }) {
   const startReply = useChatStore((state) => state.startReply);
   const startEdit = useChatStore((state) => state.startEdit);
+  const toggleMessagePinned = useChatStore(
+    (state) => state.toggleMessagePinned,
+  );
   const resendMessage = useChatStore((state) => state.resendMessage);
   const runMessageAction = useChatStore((state) => state.runMessageAction);
   const messageAction = useChatStore((state) => state.messageAction);
@@ -1043,6 +1042,10 @@ function ConversationMessage({
                       }
                     />
                   ) : null}
+                  {/* A messagePoll has no text body; the card draws the
+                      question, options, and tallies (tdesktop
+                      HistoryView::PollData) and keeps the footer meta. */}
+                  {message.poll ? <PollMessage message={message} /> : null}
                   {message.body ? (
                     <MessageRichText
                       body={message.body}
@@ -1107,10 +1110,28 @@ function ConversationMessage({
                 {copy.reply}
               </ContextMenuItem>
             )}
-            {message.outgoing && message.status !== "failed" ? (
+            {/* Polls carry no editable text (TDLib answers editMessageText
+                with an error), so tdesktop's menu has no Edit for them. */}
+            {message.outgoing &&
+            message.status !== "failed" &&
+            !message.poll ? (
               <ContextMenuItem onSelect={() => startEdit(message)}>
                 <PencilSimple aria-hidden="true" className="size-4" />
                 {copy.editMessage}
+              </ContextMenuItem>
+            ) : null}
+            {message.status !== "failed" ? (
+              <ContextMenuItem
+                onSelect={() =>
+                  void toggleMessagePinned(message.chatId, message.id)
+                }
+              >
+                {message.pinned ? (
+                  <PushPinSlash aria-hidden="true" className="size-4" />
+                ) : (
+                  <PushPin aria-hidden="true" className="size-4" />
+                )}
+                {message.pinned ? copy.unpinMessage : copy.pinMessage}
               </ContextMenuItem>
             ) : null}
             <ContextMenuItem
@@ -1693,6 +1714,7 @@ export function ConversationView() {
   );
   const loadOlderMessages = useChatStore((state) => state.loadOlderMessages);
   const send = useChatStore((state) => state.send);
+  const sendPoll = useChatStore((state) => state.sendPoll);
   const setScrollPosition = useChatStore((state) => state.setScrollPosition);
   const togglePin = useChatStore((state) => state.togglePin);
   const chatSearchOpen = useChatStore((state) => state.chatSearch.open);
@@ -1718,6 +1740,7 @@ export function ConversationView() {
     [autoDownloadPhotos, autoDownloadVideos, autoDownloadFiles],
   );
   const [forwardSource, setForwardSource] = useState<MessageDto | null>(null);
+  const [pollOpen, setPollOpen] = useState(false);
   const [deleteSource, setDeleteSource] = useState<MessageDto | null>(null);
   const [selectionDeleteOpen, setSelectionDeleteOpen] = useState(false);
   const [selectionForwardOpen, setSelectionForwardOpen] = useState(false);
@@ -2314,39 +2337,11 @@ export function ConversationView() {
             );
           })}
         </MessageScroller>
-        <AnimatePresence initial={false}>
-          {!followingLiveEdge ? (
-            <motion.div
-              key="jump-to-latest"
-              initial={{
-                opacity: 0,
-                ...(reduceMotion ? {} : { y: 6, scale: 0.96 }),
-              }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{
-                opacity: 0,
-                ...(reduceMotion ? {} : { y: 6, scale: 0.96 }),
-              }}
-              transition={{
-                duration: reduceMotion ? 0.12 : 0.16,
-                ease: EASE_OUT,
-              }}
-              className="absolute right-5 bottom-3 z-10"
-            >
-              <Tooltip content={copy.jumpToLatestMessages}>
-                <Button
-                  size="icon"
-                  variant="secondary"
-                  aria-label={copy.jumpToLatestMessages}
-                  className="size-12 rounded-full shadow-lg shadow-foreground/10"
-                  onClick={jumpToLatestMessages}
-                >
-                  <ArrowDown className="size-5" weight="bold" />
-                </Button>
-              </Tooltip>
-            </motion.div>
-          ) : null}
-        </AnimatePresence>
+        <JumpToLatest
+          show={!followingLiveEdge}
+          onJump={jumpToLatestMessages}
+          className="absolute right-5 bottom-3 z-10"
+        />
       </div>
       <div className="px-5 py-3">
         <div
@@ -2411,9 +2406,15 @@ export function ConversationView() {
                   ? copy.readOnlyChat
                   : copy.messagePlaceholder
               }
+              onCreatePoll={() => setPollOpen(true)}
               onSend={send}
             />
           )}
+          <CreatePollDialog
+            open={pollOpen}
+            onClose={() => setPollOpen(false)}
+            onSubmit={(input) => sendPoll(input)}
+          />
         </div>
       </div>
       <ForwardPickerDialog

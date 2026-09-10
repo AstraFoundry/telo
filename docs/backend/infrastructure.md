@@ -14,6 +14,7 @@ The infrastructure layer implements the abstractions that the domain layer defin
 
 - Infrastructure depends on `domain` and `application`. It never contains business rules.
 - Implement domain ports, do not invent new interfaces unless needed.
+- Telegram adapters map raw member status and chat permissions onto the `ChatDto` send flags only; the decision to allow a send lives in `domain/telegram/can-send-content.ts` and is enforced by application services, so the TDLib and demo adapters cannot diverge.
 - Keep mapping code explicit. Transform between persistence models and domain entities in one place.
 - Do not leak infrastructure details into `application` or `domain`.
 

@@ -29,6 +29,10 @@ test("renders every sticker encoding without an attachment card", async ({
   );
   await expect(stickers).toHaveCount(4);
 
+  // The first sticker sits above the fold on shorter windows; its preload
+  // only fires (and its <img> only exists) once the row is in view.
+  await stickers.first().scrollIntoViewIfNeeded();
+
   // Still and video stickers resolve to their own elements; the Lottie one
   // renders an SVG once the player has gunzipped and parsed the document.
   await expect(stickers.nth(0).locator("img")).toBeVisible();

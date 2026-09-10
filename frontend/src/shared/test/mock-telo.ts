@@ -164,6 +164,18 @@ export function installTeloApiMock(): TeloApiMock {
         typing: false,
       })),
       listFolders: vi.fn(async () => []),
+      getChatFolder: vi.fn(async () => null),
+      createChatFolder: vi.fn(async () => ({
+        id: 3,
+        title: "Work",
+        unreadCount: 0,
+      })),
+      editChatFolder: vi.fn(async () => ({
+        id: 2,
+        title: "Work",
+        unreadCount: 0,
+      })),
+      deleteChatFolder: vi.fn(async () => undefined),
       createKeywordFolder: vi.fn(async () => ({
         id: -1,
         title: "Spacing",
@@ -182,6 +194,7 @@ export function installTeloApiMock(): TeloApiMock {
       listMessagePage: vi.fn(async () => ({ items: [], nextCursor: null })),
       listSharedMedia: vi.fn(async () => ({ items: [], nextCursor: null })),
       listPinnedMessages: vi.fn(async () => []),
+      listScheduledMessages: vi.fn(async () => []),
       listChatMembers: vi.fn(async () => []),
       getPeerProfile: vi.fn(async (peerId: string) => ({
         id: peerId,
@@ -256,6 +269,51 @@ export function installTeloApiMock(): TeloApiMock {
       editMessage: vi.fn(),
       deleteMessage: vi.fn(),
       forwardMessage: vi.fn(),
+      pinMessage: vi.fn(),
+      setMessagePollAnswer: vi.fn(async () => undefined),
+      sendPoll: vi.fn(
+        async (
+          chatId: string,
+          input: {
+            question: string;
+            options: ReadonlyArray<string>;
+            isAnonymous: boolean;
+            kind: "regular" | "quiz";
+            allowMultipleAnswers: boolean;
+            correctOptionId?: number;
+          },
+        ) => ({
+          id: "poll-message",
+          chatId,
+          senderName: "You",
+          senderId: "demo-you",
+          senderAvatarUrl: null,
+          body: "",
+          entities: [],
+          media: null,
+          groupedId: null,
+          sentAt: new Date(0).toISOString(),
+          outgoing: true,
+          status: "sent" as const,
+          poll: {
+            id: "poll-1",
+            question: input.question,
+            options: input.options.map((text, index) => ({
+              id: String(index),
+              text,
+              voterCount: 0,
+              votePercentage: 0,
+              chosen: false,
+            })),
+            totalVoterCount: 0,
+            isAnonymous: input.isAnonymous,
+            isClosed: false,
+            kind: input.kind,
+            allowMultipleAnswers: input.allowMultipleAnswers,
+            correctOptionIds: null,
+          },
+        }),
+      ),
       setMessageReaction: vi.fn(),
       listAvailableReactions: vi.fn(async () => [] as ReadonlyArray<string>),
       clickAnimatedEmoji: vi.fn(async () => null),

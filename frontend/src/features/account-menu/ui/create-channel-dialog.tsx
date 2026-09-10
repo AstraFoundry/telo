@@ -6,6 +6,7 @@ import {
   Button,
   CenterMorphModal,
   CenterMorphModalContent,
+  ErrorRow,
   Input,
   StatefulButton,
 } from "shared/ui";
@@ -72,11 +73,7 @@ export function CreateChannelDialog({
             maxLength={255}
             onChange={setDescription}
           />
-          {error ? (
-            <p role="alert" className="text-sm text-destructive">
-              {error}
-            </p>
-          ) : null}
+          <ErrorRow message={error} />
           <div className="flex justify-end gap-2">
             <Button
               type="button"

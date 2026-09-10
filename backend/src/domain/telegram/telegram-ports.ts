@@ -1,16 +1,24 @@
 import type {
-  AddContactByPhoneInput,
-  AnimatedEmojiEffectDto,
-  BotCallbackAnswerDto,
   ChatDto,
+  ChatFolderDetailsDto,
   ChatFolderDto,
+  ChatFolderInput,
   ChatMemberDto,
   ChatPageCursorDto,
   ChatPageDto,
   ChatPageInput,
-  CurrentUserDto,
   CreateTelegramChannelInput,
   CreateTelegramGroupInput,
+  UpdateChatFolderInput,
+} from "./chat";
+import type { TelegramCallPageDto } from "./call";
+import type {
+  AddContactByPhoneInput,
+  SetPeerContactInput,
+  TelegramContactDto,
+} from "./contact";
+import type {
+  BotCallbackAnswerDto,
   DeleteMessageInput,
   EditMessageInput,
   ForwardMessageInput,
@@ -21,26 +29,35 @@ import type {
   MessagePageInput,
   MessageSearchPageDto,
   MessageSearchPageInput,
-  PeerProfileDto,
-  PostedStoryDto,
-  PostStoryInput,
+  PinMessageInput,
   SetMessageReactionInput,
-  SetPeerContactInput,
-  StickerItemDto,
-  StickerCatalogDto,
-  StickerSetDto,
-  StickerSetReferenceDto,
-  TelegramWorkspaceEvent,
-  TelegramCallPageDto,
-  TelegramContactDto,
+} from "./message";
+import type {
+  CurrentUserDto,
+  PeerProfileDto,
   UpdateProfileNameInput,
   UsernameAvailability,
-} from "../../../../contracts/src/ipc";
+} from "./profile";
+import type { PostedStoryDto, PostStoryInput } from "./story";
+import type {
+  AnimatedEmojiEffectDto,
+  StickerCatalogDto,
+  StickerItemDto,
+  StickerSetDto,
+  StickerSetReferenceDto,
+} from "./sticker";
+import type { SendPollInput } from "./poll";
+import type { TelegramWorkspaceEvent } from "./workspace-event";
 
 export interface TelegramRepository {
   subscribe(listener: (event: TelegramWorkspaceEvent) => void): () => void;
   getCurrentUser(): Promise<CurrentUserDto>;
   listChatPage(input: ChatPageInput): Promise<ChatPageDto>;
+  /**
+   * One chat by id, or null when the adapter has not loaded it. Send paths
+   * read the chat's permission flags through this lookup before posting.
+   */
+  getChat(chatId: string): Promise<ChatDto | null>;
   /**
    * Renames the account (Telegram `setName`) and returns the refreshed
    * identity. First name must be non-empty.
@@ -95,6 +112,29 @@ export interface TelegramRepository {
    * chats) with server-computed unread counts.
    */
   listFolders(): Promise<ReadonlyArray<ChatFolderDto>>;
+  /**
+   * One native folder's edit state (title plus included chats) for the
+   * folder editor (TDLib `getChatFolder`). Resolves to null when the id is
+   * not a known custom folder — the Archive is not editable.
+   */
+  getChatFolder(folderId: number): Promise<ChatFolderDetailsDto | null>;
+  /**
+   * Creates a native dialog filter (TDLib `createChatFolder`). The server
+   * echoes the change as `updateChatFolders`, which the adapters surface as
+   * a `folders` event.
+   */
+  createChatFolder(input: ChatFolderInput): Promise<ChatFolderDto>;
+  /**
+   * Renames a folder and replaces its always-included chats (TDLib
+   * `editChatFolder`), preserving the filter's other flags — tdesktop's
+   * editor keeps them when only the name or chat list changes.
+   */
+  editChatFolder(input: UpdateChatFolderInput): Promise<ChatFolderDto>;
+  /**
+   * Removes a native dialog filter (TDLib `deleteChatFolder`); member chats
+   * fall back to the main list.
+   */
+  deleteChatFolder(folderId: number): Promise<void>;
   listMessagePage(
     chatId: string,
     input: MessagePageInput,
@@ -171,7 +211,18 @@ export interface TelegramRepository {
      * adapters map them onto Telegram message entities at send time.
      */
     entities?: ReadonlyArray<MessageEntityDto>,
+    /**
+     * Unix seconds of the scheduled delivery (TDLib
+     * `messageSchedulingStateSendAtDate`). When set the message lands in the
+     * chat's scheduled list instead of the live transcript.
+     */
+    sendAt?: number,
   ): Promise<MessageDto>;
+  /**
+   * The chat's scheduled messages, soonest delivery first (TDLib
+   * `getChatScheduledMessages`).
+   */
+  listScheduledMessages(chatId: string): Promise<ReadonlyArray<MessageDto>>;
   downloadMedia(mediaId: string): Promise<void>;
   cancelMediaDownload(mediaId: string): Promise<void>;
   /**
@@ -200,6 +251,12 @@ export interface TelegramRepository {
    * message in the target chat and never carries a replyTo snapshot.
    */
   forwardMessage(input: ForwardMessageInput): Promise<void>;
+  /**
+   * Pins or unpins a message in its chat (TDLib `pinChatMessage` /
+   * `unpinChatMessage`). See `PinMessageInput` for the notification
+   * semantics of `silent`.
+   */
+  pinMessage(input: PinMessageInput): Promise<void>;
   setChatPinned(chatId: string, pinned: boolean): Promise<void>;
   setChatMuted(chatId: string, muted: boolean): Promise<void>;
   /**
@@ -234,6 +291,23 @@ export interface TelegramRepository {
    */
   setMessageReaction(input: SetMessageReactionInput): Promise<void>;
   /**
+   * Sets this account's answer on a poll (TDLib `setPollAnswer`; older TDLib
+   * schemas named the same method `setMessagePollAnswer`). `optionIds` are
+   * 0-based option indexes; an empty list retracts the answer. The new
+   * tally arrives as an edited-message upsert.
+   */
+  setMessagePollAnswer(
+    chatId: string,
+    messageId: string,
+    optionIds: ReadonlyArray<number>,
+  ): Promise<void>;
+  /**
+   * Creates a poll in the chat (TDLib `sendMessage` with
+   * `inputMessagePoll`). Kept off the text `sendMessage` path because the
+   * input carries no body and passes different validation.
+   */
+  sendPoll(chatId: string, input: SendPollInput): Promise<MessageDto>;
+  /**
    * Emoji the picker may offer, in Telegram's own order. Prefer the
    * per-message list (`getMessageAvailableReactions`) when `messageId` is
    * given; otherwise the chat's allowed set / the account's active emoji.
@@ -265,6 +339,18 @@ export interface TelegramUploadFile {
   readonly name: string;
   readonly mimeType: string;
   readonly size: number;
+  /**
+   * `"voice"` marks a composer-recorded voice note: the TDLib adapter sends
+   * `inputMessageVoiceNote` instead of deriving the content type from
+   * `mimeType`. Omitted means a regular photo/video/document upload.
+   */
+  readonly kind?: "voice";
+  /**
+   * Recorder-measured duration in seconds, set when `kind` is `"voice"`.
+   * Wall-clock from the composer's MediaRecorder session, not a decode of
+   * the stream the way tdesktop measures it.
+   */
+  readonly durationSeconds?: number;
 }
 
 /**

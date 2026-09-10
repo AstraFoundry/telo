@@ -10,6 +10,7 @@ import {
   CenterMorphModal,
   CenterMorphModalContent,
   EASE_OUT,
+  ErrorRow,
   Input,
   StatefulButton,
 } from "shared/ui";
@@ -162,11 +163,7 @@ function AddContactByPhoneForm({
             autoComplete="off"
             onChange={setPhone}
           />
-          {error ? (
-            <p role="alert" className="text-sm text-destructive">
-              {error}
-            </p>
-          ) : null}
+          <ErrorRow message={error} />
           <div className="flex justify-end gap-2">
             <Button type="button" variant="ghost" onClick={onClose}>
               {copy.cancel}

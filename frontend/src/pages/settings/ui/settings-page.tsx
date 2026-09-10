@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 
 import { AgentConfigurationForm } from "features/configure-agent";
 import { AgentAutomationSettings } from "features/manage-agent-automation";
+import { ChatFoldersSettings } from "features/manage-chat-folders";
 import { KeywordFoldersSettings } from "features/manage-keyword-folders";
 import { copy } from "shared/config/copy";
 import {
@@ -140,7 +141,12 @@ export function SettingsPage({
                 {section === "appearance" ? <AppearanceSection /> : null}
                 {section === "chat" ? <ChatSection /> : null}
                 {section === "notifications" ? <NotificationsSection /> : null}
-                {section === "folders" ? <KeywordFoldersSettings /> : null}
+                {section === "folders" ? (
+                  <>
+                    <ChatFoldersSettings />
+                    <KeywordFoldersSettings />
+                  </>
+                ) : null}
                 {section === "agent" ? (
                   <>
                     <AgentConfigurationForm />

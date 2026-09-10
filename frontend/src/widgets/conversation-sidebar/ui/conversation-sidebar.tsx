@@ -26,15 +26,16 @@ import {
 import { useRecentSearches, useTimeFormat } from "entities/preferences";
 import { AccountMenu } from "features/account-menu";
 import { AddContactByPhoneDialog } from "features/add-contact";
-import { ChatSearch } from "features/chat-search";
 import {
+  ChatSearch,
   pushRecentSearch,
   removeRecentSearch,
-} from "features/chat-search/model/recent-searches";
+} from "features/chat-search";
 import { StartSecretChatMenuItem } from "features/start-secret-chat";
 import { AnimatePresence, motion, useReducedMotionConfig } from "motion/react";
 
 import { copy } from "shared/config/copy";
+import { formatTime } from "shared/lib/format-time";
 import { useEdgeSentinel } from "shared/lib/use-edge-sentinel";
 import { scrollFadeMask, useScrollFade } from "shared/lib/use-scroll-fade";
 
@@ -50,20 +51,11 @@ import {
   EASE_OUT,
   LoadIndicator,
   MessageTyping,
+  SPRING_PRESS,
   Skeleton,
   SkeletonGroup,
   WindowControls,
 } from "shared/ui";
-
-// "system" defers to the locale's hour12 default, while 12h/24h pin it
-// explicitly.
-function shortTime(value: string, format: TimeFormatPreference): string {
-  return new Intl.DateTimeFormat(undefined, {
-    hour: "2-digit",
-    minute: "2-digit",
-    ...(format === "system" ? {} : { hour12: format === "12h" }),
-  }).format(new Date(value));
-}
 
 interface ConversationSidebarProps {
   onOpenSettings(): void;
@@ -77,6 +69,43 @@ interface FolderTabProps {
   readonly selected: boolean;
   readonly unread: number;
   onSelect(): void;
+}
+/**
+ * Unread count pill with Telegram Desktop's badge pop: scale 0.6 → 1 on
+ * appear, a quick shrink-fade on disappear. The count text updating inside a
+ * mounted badge does not retrigger the pop (constant key at the call site).
+ */
+function UnreadBadge({
+  count,
+  className,
+}: {
+  readonly count: number;
+  readonly className?: string;
+}) {
+  const reduce = useReducedMotionConfig() ?? false;
+  return (
+    <motion.span
+      aria-label={`${count} ${copy.unread}`}
+      initial={reduce ? { opacity: 0 } : { opacity: 0, scale: 0.6 }}
+      animate={
+        reduce
+          ? { opacity: 1, transition: { duration: 0.1 } }
+          : { opacity: 1, scale: 1, transition: SPRING_PRESS }
+      }
+      exit={
+        reduce
+          ? { opacity: 0, transition: { duration: 0.1 } }
+          : {
+              opacity: 0,
+              scale: 0.8,
+              transition: { duration: 0.12, ease: EASE_OUT },
+            }
+      }
+      className={className}
+    >
+      {count}
+    </motion.span>
+  );
 }
 
 function FolderTab({ label, selected, unread, onSelect }: FolderTabProps) {
@@ -92,17 +121,16 @@ function FolderTab({ label, selected, unread, onSelect }: FolderTabProps) {
       }`}
     >
       {label}
-      {unread ? (
-        <>
-          {" "}
-          <span
-            aria-label={`${unread} ${copy.unread}`}
+      {unread ? " " : null}
+      <AnimatePresence initial={false}>
+        {unread ? (
+          <UnreadBadge
+            key="unread"
+            count={unread}
             className="grid h-4 min-w-4 place-items-center rounded-full bg-primary px-1 text-caption font-semibold text-primary-foreground tabular-nums"
-          >
-            {unread}
-          </span>
-        </>
-      ) : null}
+          />
+        ) : null}
+      </AnimatePresence>
     </Button>
   );
 }
@@ -167,6 +195,7 @@ function ChatListRow({
             <span className="flex items-center gap-2">
               {chat.kind === "secret" ? (
                 <Lock
+                  weight="bold"
                   aria-label={copy.secretChat}
                   className="size-3.5 shrink-0 text-muted-foreground"
                 />
@@ -175,7 +204,7 @@ function ChatListRow({
                 {displayChatTitle(chat)}
               </span>
               <time className="shrink-0 text-xs font-normal text-muted-foreground tabular-nums">
-                {shortTime(chat.updatedAt, timeFormat)}
+                {formatTime(chat.updatedAt, timeFormat)}
               </time>
             </span>
             <span className="mt-px flex items-center gap-1.5 text-callout font-normal text-muted-foreground">
@@ -191,16 +220,19 @@ function ChatListRow({
                   chat.preview
                 )}
               </span>
-              {chat.muted ? <BellSlash aria-label={copy.muted} /> : null}
-              {chat.unreadCount ? (
-                <span
-                  aria-label={`${chat.unreadCount} ${copy.unread}`}
-                  /* deslop-ignore-next-line 19 */
-                  className="grid h-5 min-w-5 shrink-0 place-items-center rounded-full bg-primary px-1.5 text-caption font-semibold text-primary-foreground tabular-nums"
-                >
-                  {chat.unreadCount}
-                </span>
+              {chat.muted ? (
+                <BellSlash weight="bold" aria-label={copy.muted} />
               ) : null}
+              <AnimatePresence initial={false}>
+                {chat.unreadCount ? (
+                  <UnreadBadge
+                    key="unread"
+                    count={chat.unreadCount}
+                    /* deslop-ignore-next-line 19 */
+                    className="grid h-5 min-w-5 shrink-0 place-items-center rounded-full bg-primary px-1.5 text-caption font-semibold text-primary-foreground tabular-nums"
+                  />
+                ) : null}
+              </AnimatePresence>
             </span>
           </span>
         </Button>
@@ -273,7 +305,7 @@ function MessageSearchResultRow({
             {message.senderName}
           </span>
           <time className="shrink-0 text-xs font-normal text-muted-foreground tabular-nums">
-            {shortTime(message.sentAt, timeFormat)}
+            {formatTime(message.sentAt, timeFormat)}
           </time>
         </span>
         <span className="mt-px block truncate text-callout font-normal text-muted-foreground">
@@ -325,7 +357,9 @@ function SearchHistory({
               {copy.recentSearches}
             </span>
             {/* tdesktop's RecentsController puts the same "Clear" link on the
-                section header (`dialogs_suggestions.cpp`). */}
+                section header (`dialogs_suggestions.cpp`). Deliberately not
+                the shared Button: this is an inline text link, and Button's
+                size/ghost padding would break the header's text flow. */}
             <button
               type="button"
               onClick={onClearAll}
@@ -405,7 +439,7 @@ function RecentSearchRow({
                   {displayChatTitle(chat)}
                 </span>
                 <time className="shrink-0 text-xs font-normal text-muted-foreground tabular-nums">
-                  {shortTime(chat.updatedAt, timeFormat)}
+                  {formatTime(chat.updatedAt, timeFormat)}
                 </time>
               </span>
               <span className="mt-px block truncate text-callout font-normal text-muted-foreground">
@@ -919,12 +953,11 @@ export function ConversationSidebar({
             <p className="text-sm">{copy.clearSearchHistoryConfirm}</p>
             <div className="flex justify-end gap-2">
               <Button
-                variant="primary"
+                variant="destructive"
                 onClick={() => {
                   selectRecentSearches([]);
                   setClearHistoryOpen(false);
                 }}
-                className="bg-destructive text-primary-foreground hover:bg-destructive/90"
               >
                 {copy.clearSearchHistoryAction}
               </Button>

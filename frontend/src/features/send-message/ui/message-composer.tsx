@@ -1,5 +1,12 @@
 import { AnimatePresence, motion, useReducedMotionConfig } from "motion/react";
-import { BellSlash, Paperclip, X } from "@phosphor-icons/react";
+import {
+  BellSlash,
+  CalendarBlank,
+  ChartBar,
+  Microphone,
+  Paperclip,
+  X,
+} from "@phosphor-icons/react";
 import {
   useEffect,
   useId,
@@ -64,8 +71,15 @@ import {
   mentionQueryAtCaret,
 } from "../model/mention-query";
 import { namePastedFile } from "../model/pasted-file-name";
+import {
+  useVoiceRecorder,
+  type VoiceNoteRecording,
+} from "../model/voice-recorder";
 import { MediaPicker } from "./media-picker";
 import { TemplatePicker } from "./template-picker";
+import { VoiceRecordingBar } from "./voice-recording-bar";
+import { ScheduleMessageDialog } from "./schedule-message-dialog";
+import { ScheduledMessagesBar } from "./scheduled-messages-bar";
 
 interface SelectedFile {
   readonly id: string;
@@ -78,6 +92,12 @@ interface MessageComposerProps {
   stickersDisabled?: boolean;
   mediaDisabled?: boolean;
   placeholder?: string;
+  /**
+   * Opens the poll-creation flow. The dialog itself is composed by the
+   * widget layer: features must not import sibling features, so the
+   * composer only exposes the entry point.
+   */
+  onCreatePoll?: () => void;
   onSend(body: string, options?: SendOptions): Promise<void>;
 }
 
@@ -107,6 +127,7 @@ export function MessageComposer({
   stickersDisabled,
   mediaDisabled,
   placeholder = copy.messagePlaceholder,
+  onCreatePoll,
   onSend,
 }: MessageComposerProps) {
   const reduce = useReducedMotionConfig();
@@ -129,6 +150,8 @@ export function MessageComposer({
     ReadonlyArray<SelectedFile>
   >([]);
   const [uploadId, setUploadId] = useState<string | null>(null);
+  const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [scheduleDefault, setScheduleDefault] = useState(0);
   const [dropActive, setDropActive] = useState(false);
   const { value: sendWithEnter } = useSendWithEnter();
   const { value: recentEmojis, select: selectRecentEmojis } = useRecentEmojis();
@@ -177,6 +200,23 @@ export function MessageComposer({
     uploadId !== null ||
     composerTarget?.mode === "edit";
 
+  // The microphone takes the send button's slot while the field is empty
+  // (tdesktop's mic/send swap) and follows the same write-access gate as
+  // attachments: a voice note is media. Edit mode hides it, like the
+  // paperclip.
+  const recorder = useVoiceRecorder({
+    onFinish: (recording) => {
+      void sendVoiceNote(recording);
+    },
+    onError: (detail) => {
+      setFailure({ title: copy.voiceRecordFailed, detail });
+    },
+  });
+  const micAvailable =
+    !value.trim() &&
+    selectedFiles.length === 0 &&
+    !attachmentsBlocked &&
+    !recorder.recording;
   // Edit mode prefills the input with the original body and takes focus with
   // the caret behind it. Leaving edit mode — cancel through the global Escape
   // or a finished edit — restores the chat's own unsent draft, because an
@@ -618,7 +658,9 @@ export function MessageComposer({
       ...(trimmed.entities.length > 0 ? { entities: trimmed.entities } : {}),
     };
     const hasOptions =
-      payload.silent === true || payload.entities !== undefined;
+      payload.silent === true ||
+      payload.entities !== undefined ||
+      payload.sendAt !== undefined;
     const currentUploadId =
       selectedFiles.length > 0 ? crypto.randomUUID() : null;
     try {
@@ -660,12 +702,46 @@ export function MessageComposer({
     }
   };
 
+  // A finished recording rides the same staged-upload path as picked files
+  // (withStagedUploads → workspace sendMedia), stamped as a voice note so the
+  // adapter sends inputMessageVoiceNote instead of a document.
+  const sendVoiceNote = async ({
+    file,
+    durationSeconds,
+  }: VoiceNoteRecording) => {
+    const id = crypto.randomUUID();
+    setUploadId(id);
+    try {
+      await sendMedia([file], "", id, { durationSeconds });
+      cancelledUploads.current.delete(id);
+      setFailure(null);
+    } catch (reason) {
+      if (!cancelledUploads.current.delete(id)) {
+        setFailure({
+          title: copy.voiceSendFailed,
+          detail: reason instanceof Error ? reason.message : String(reason),
+        });
+      }
+    } finally {
+      setUploadId(null);
+    }
+  };
+
   // The silent flag rides SendMessageInput only; the context-menu item is
   // disabled while attachments are staged, so this always sends plain text.
   const sendSilently = () => {
     const trimmed = trimOutgoingMessage(value, entities);
     if (!trimmed.body) return;
     void submit(trimmed.body, { silent: true });
+  };
+
+  // Scheduling rides SendMessageInput like the silent flag; the context-menu
+  // item is disabled while attachments are staged, so this always schedules
+  // plain text (tdesktop's "Schedule message" from the send button's menu).
+  const scheduleMessage = (sendAt: number) => {
+    const trimmed = trimOutgoingMessage(value, entities);
+    if (!trimmed.body) return;
+    void submit(trimmed.body, { sendAt });
   };
 
   const insertEmoji = (glyph: string) => {
@@ -698,6 +774,20 @@ export function MessageComposer({
       : replySenderName
         ? `${copy.replyingTo} ${replySenderName}`
         : copy.replyingTo;
+
+  // tdesktop swaps the send arrow for a microphone while the draft is empty;
+  // the mic occupies the same slot through PromptInput's sendAction override.
+  const micButton = micAvailable ? (
+    <Button
+      size="icon"
+      variant="ghost"
+      aria-label={copy.recordVoiceMessage}
+      className="ml-auto size-10 rounded-full"
+      onClick={() => void recorder.start()}
+    >
+      <Microphone aria-hidden="true" className="size-4" />
+    </Button>
+  ) : undefined;
 
   return (
     <div
@@ -768,219 +858,272 @@ export function MessageComposer({
           onPick={pickMention}
         />
       ) : null}
-      <ContextMenu
-        onOpenChange={(open) => {
-          // The menu acts on whatever was selected when it opened; reading the
-          // textarea later would see the selection the menu's own focus took.
-          const textarea = textareaRef.current;
-          if (!open || !textarea) return;
-          syncSelection(textarea);
-          menuRange.current = {
-            start: textarea.selectionStart,
-            end: textarea.selectionEnd,
-          };
-        }}
-      >
-        <ContextMenuTrigger>
-          <div>
-            <PromptInput
-              minRows={1}
-              maxRows={5}
-              disabled={disabled}
-              placeholder={placeholder}
-              aria-label={placeholder}
-              // The suggestions are a sibling listbox and focus never leaves the
-              // textarea, so the active option has to be named here or a screen
-              // reader never hears the `@` query narrow down. `aria-expanded` is
-              // deliberately absent: `textbox` does not support it, and promoting
-              // this to `combobox` would cost the multiline semantics.
-              aria-autocomplete="list"
-              aria-controls={mentionOpen ? mentionListboxId : undefined}
-              aria-activedescendant={
-                mentionOpen
-                  ? mentionOptionId(mentionListboxId, mentionActiveIndex)
-                  : undefined
-              }
-              value={value}
-              loading={uploadId !== null}
-              allowEmptySubmit={selectedFiles.length > 0}
-              inputRef={textareaRef}
-              onPaste={handlePaste}
-              onSelect={(event) => syncSelection(event.currentTarget)}
-              onClick={(event) => syncSelection(event.currentTarget)}
-              onKeyUp={(event) => syncSelection(event.currentTarget)}
-              sendMenuLabel={copy.sendOptions}
-              sendMenuContent={
-                <ContextMenuItem
-                  disabled={
-                    selectedFiles.length > 0 || composerTarget?.mode === "edit"
-                  }
-                  onSelect={sendSilently}
-                >
-                  <BellSlash aria-hidden="true" className="size-4" />
-                  {copy.sendWithoutSound}
-                </ContextMenuItem>
-              }
-              onStop={() => {
-                if (!uploadId) return;
-                cancelledUploads.current.add(uploadId);
-                void cancelMediaUpload(uploadId);
-              }}
-              attachmentPreview={
-                selectedFiles.length > 0 ? (
-                  <MessageAttachmentTray
-                    items={selectedFiles.map((selected) => ({
-                      id: selected.id,
-                      name: selected.file.name,
-                      size: selected.file.size,
-                      previewUrl: selected.previewUrl,
-                    }))}
-                    progress={
-                      upload?.state === "uploading" ? upload.progress : null
-                    }
-                    removeLabel={(name) => `${copy.removeAttachment}: ${name}`}
-                    onRemove={(id) => {
-                      const selected = selectedFiles.find(
-                        (item) => item.id === id,
-                      );
-                      if (selected?.previewUrl)
-                        URL.revokeObjectURL(selected.previewUrl);
-                      setSelectedFiles((current) =>
-                        current.filter((item) => item.id !== id),
-                      );
-                    }}
-                  />
-                ) : undefined
-              }
-              leadingAction={
-                <>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    multiple
-                    tabIndex={-1}
-                    aria-hidden="true"
-                    className="hidden"
-                    onChange={selectFiles}
-                  />
-                  {mediaDisabled && !disabled ? (
-                    <Tooltip content={copy.mediaDisabled} side="top">
+      {activeChatId && !recorder.recording ? (
+        <ScheduledMessagesBar chatId={activeChatId} />
+      ) : null}
+      {recorder.recording ? (
+        // The recording strip replaces the whole input while the microphone
+        // is open, like tdesktop's audio-hold strip: the draft underneath is
+        // untouched, and Escape or the cancel button discards the take.
+        <VoiceRecordingBar
+          elapsedSeconds={recorder.elapsedSeconds}
+          onSend={recorder.finish}
+          onCancel={recorder.cancel}
+        />
+      ) : (
+        <ContextMenu
+          onOpenChange={(open) => {
+            // The menu acts on whatever was selected when it opened; reading the
+            // textarea later would see the selection the menu's own focus took.
+            const textarea = textareaRef.current;
+            if (!open || !textarea) return;
+            syncSelection(textarea);
+            menuRange.current = {
+              start: textarea.selectionStart,
+              end: textarea.selectionEnd,
+            };
+          }}
+        >
+          <ContextMenuTrigger>
+            <div>
+              <PromptInput
+                minRows={1}
+                maxRows={5}
+                disabled={disabled}
+                placeholder={placeholder}
+                aria-label={placeholder}
+                // The suggestions are a sibling listbox and focus never leaves the
+                // textarea, so the active option has to be named here or a screen
+                // reader never hears the `@` query narrow down. `aria-expanded` is
+                // deliberately absent: `textbox` does not support it, and promoting
+                // this to `combobox` would cost the multiline semantics.
+                aria-autocomplete="list"
+                aria-controls={mentionOpen ? mentionListboxId : undefined}
+                aria-activedescendant={
+                  mentionOpen
+                    ? mentionOptionId(mentionListboxId, mentionActiveIndex)
+                    : undefined
+                }
+                value={value}
+                loading={uploadId !== null}
+                allowEmptySubmit={selectedFiles.length > 0}
+                sendAction={micButton}
+                inputRef={textareaRef}
+                onPaste={handlePaste}
+                onSelect={(event) => syncSelection(event.currentTarget)}
+                onClick={(event) => syncSelection(event.currentTarget)}
+                onKeyUp={(event) => syncSelection(event.currentTarget)}
+                sendMenuLabel={copy.sendOptions}
+                sendMenuContent={
+                  <>
+                    <ContextMenuItem
+                      disabled={
+                        selectedFiles.length > 0 ||
+                        composerTarget?.mode === "edit"
+                      }
+                      onSelect={sendSilently}
+                    >
+                      <BellSlash aria-hidden="true" className="size-4" />
+                      {copy.sendWithoutSound}
+                    </ContextMenuItem>
+                    <ContextMenuItem
+                      disabled={
+                        !value.trim() ||
+                        selectedFiles.length > 0 ||
+                        composerTarget?.mode === "edit"
+                      }
+                      onSelect={() => {
+                        // Event handler, not render: Date.now is allowed here,
+                        // and the dialog stays pure by receiving the default.
+                        setScheduleDefault(
+                          Math.floor(Date.now() / 1000) + 60 * 60,
+                        );
+                        setScheduleOpen(true);
+                      }}
+                    >
+                      <CalendarBlank aria-hidden="true" className="size-4" />
+                      {copy.scheduleMessage}
+                    </ContextMenuItem>
+                    {/* tdesktop puts Poll in the attach menu; the send
+                        options menu is the composer's one menu, so the
+                        entry lives beside scheduling. The dialog is composed
+                        by the widget layer (no feature→feature imports). */}
+                    {onCreatePoll ? (
+                      <ContextMenuItem
+                        disabled={disabled || composerTarget?.mode === "edit"}
+                        onSelect={onCreatePoll}
+                      >
+                        <ChartBar aria-hidden="true" className="size-4" />
+                        {copy.createPoll}
+                      </ContextMenuItem>
+                    ) : null}
+                  </>
+                }
+                onStop={() => {
+                  if (!uploadId) return;
+                  cancelledUploads.current.add(uploadId);
+                  void cancelMediaUpload(uploadId);
+                }}
+                attachmentPreview={
+                  selectedFiles.length > 0 ? (
+                    <MessageAttachmentTray
+                      items={selectedFiles.map((selected) => ({
+                        id: selected.id,
+                        name: selected.file.name,
+                        size: selected.file.size,
+                        previewUrl: selected.previewUrl,
+                      }))}
+                      progress={
+                        upload?.state === "uploading" ? upload.progress : null
+                      }
+                      removeLabel={(name) =>
+                        `${copy.removeAttachment}: ${name}`
+                      }
+                      onRemove={(id) => {
+                        const selected = selectedFiles.find(
+                          (item) => item.id === id,
+                        );
+                        if (selected?.previewUrl)
+                          URL.revokeObjectURL(selected.previewUrl);
+                        setSelectedFiles((current) =>
+                          current.filter((item) => item.id !== id),
+                        );
+                      }}
+                    />
+                  ) : undefined
+                }
+                leadingAction={
+                  <>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      multiple
+                      tabIndex={-1}
+                      aria-hidden="true"
+                      className="hidden"
+                      onChange={selectFiles}
+                    />
+                    {mediaDisabled && !disabled ? (
+                      <Tooltip content={copy.mediaDisabled} side="top">
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="size-10 rounded-full"
+                          aria-label={copy.mediaDisabled}
+                          disabled={attachmentsBlocked}
+                          onClick={() => fileInputRef.current?.click()}
+                        >
+                          <Paperclip aria-hidden="true" className="size-4" />
+                        </Button>
+                      </Tooltip>
+                    ) : (
                       <Button
                         size="icon"
                         variant="ghost"
                         className="size-10 rounded-full"
-                        aria-label={copy.mediaDisabled}
+                        aria-label={copy.attachFiles}
                         disabled={attachmentsBlocked}
                         onClick={() => fileInputRef.current?.click()}
                       >
                         <Paperclip aria-hidden="true" className="size-4" />
                       </Button>
-                    </Tooltip>
-                  ) : (
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="size-10 rounded-full"
-                      aria-label={copy.attachFiles}
-                      disabled={attachmentsBlocked}
-                      onClick={() => fileInputRef.current?.click()}
-                    >
-                      <Paperclip aria-hidden="true" className="size-4" />
-                    </Button>
-                  )}
-                  <MediaPicker
-                    disabled={disabled || uploadId !== null}
-                    stickersDisabled={Boolean(stickersDisabled)}
-                    recentEmojis={recentEmojis}
-                    onPickEmoji={insertEmoji}
-                    onPickSticker={(sticker) => void sendSticker(sticker)}
-                  />
-                  <TemplatePicker
-                    disabled={disabled || uploadId !== null}
-                    templates={templates}
-                    onPick={insertAtCaret}
-                    onChange={selectTemplates}
-                  />
-                </>
+                    )}
+                    <MediaPicker
+                      disabled={disabled || uploadId !== null}
+                      stickersDisabled={Boolean(stickersDisabled)}
+                      recentEmojis={recentEmojis}
+                      onPickEmoji={insertEmoji}
+                      onPickSticker={(sticker) => void sendSticker(sticker)}
+                    />
+                    <TemplatePicker
+                      disabled={disabled || uploadId !== null}
+                      templates={templates}
+                      onPick={insertAtCaret}
+                      onChange={selectTemplates}
+                    />
+                  </>
+                }
+                onValueChange={(next) => {
+                  const edit = diffEdit(value, next);
+                  setEntities(
+                    shiftEntities(
+                      entities,
+                      edit.start,
+                      edit.end,
+                      edit.inserted.length,
+                    ),
+                  );
+                  setValue(next);
+                  if (failure) setFailure(null);
+                  rememberDraft(next);
+                }}
+                onKeyDown={handleKeyDown}
+                onSubmit={(body) => submit(body)}
+                /* deslop-ignore-next-line 21 — rounded composer on a flat surface, no nesting parent */
+                className={
+                  dropActive
+                    ? "rounded-xl border-primary/60 bg-primary/5"
+                    : "rounded-xl"
+                }
+              />
+            </div>
+          </ContextMenuTrigger>
+          <ContextMenuContent ariaLabel={copy.composerActions}>
+            <ContextMenuItem
+              disabled={!hasSelection}
+              onSelect={() =>
+                void copySelection(menuRange.current ?? undefined)
               }
-              onValueChange={(next) => {
-                const edit = diffEdit(value, next);
-                setEntities(
-                  shiftEntities(
-                    entities,
-                    edit.start,
-                    edit.end,
-                    edit.inserted.length,
-                  ),
-                );
-                setValue(next);
-                if (failure) setFailure(null);
-                rememberDraft(next);
-              }}
-              onKeyDown={handleKeyDown}
-              onSubmit={(body) => submit(body)}
-              /* deslop-ignore-next-line 21 — rounded composer on a flat surface, no nesting parent */
-              className={
-                dropActive
-                  ? "rounded-xl border-primary/60 bg-primary/5"
-                  : "rounded-xl"
-              }
-            />
-          </div>
-        </ContextMenuTrigger>
-        <ContextMenuContent ariaLabel={copy.composerActions}>
-          <ContextMenuItem
-            disabled={!hasSelection}
-            onSelect={() => void copySelection(menuRange.current ?? undefined)}
-          >
-            {copy.composerCopy}
-          </ContextMenuItem>
-          <ContextMenuItem
-            disabled={!hasSelection || disabled}
-            onSelect={() => void cutSelection(menuRange.current ?? undefined)}
-          >
-            {copy.composerCut}
-          </ContextMenuItem>
-          <ContextMenuItem
-            disabled={disabled}
-            onSelect={() => void pasteText(menuRange.current ?? undefined)}
-          >
-            {copy.composerPaste}
-          </ContextMenuItem>
-          <ContextMenuItem disabled={!value} onSelect={selectAll}>
-            {copy.composerSelectAll}
-          </ContextMenuItem>
-          <ContextMenuSeparator />
-          {/* Telegram Desktop nests these under a Formatting submenu; the
+            >
+              {copy.composerCopy}
+            </ContextMenuItem>
+            <ContextMenuItem
+              disabled={!hasSelection || disabled}
+              onSelect={() => void cutSelection(menuRange.current ?? undefined)}
+            >
+              {copy.composerCut}
+            </ContextMenuItem>
+            <ContextMenuItem
+              disabled={disabled}
+              onSelect={() => void pasteText(menuRange.current ?? undefined)}
+            >
+              {copy.composerPaste}
+            </ContextMenuItem>
+            <ContextMenuItem disabled={!value} onSelect={selectAll}>
+              {copy.composerSelectAll}
+            </ContextMenuItem>
+            <ContextMenuSeparator />
+            {/* Telegram Desktop nests these under a Formatting submenu; the
               registry has no submenu primitive, so the group is labelled
               instead of nested. The items stay checkable because a format
               already covering the selection toggles back off. */}
-          <ContextMenuLabel>{copy.formatting}</ContextMenuLabel>
-          {COMPOSER_FORMATS.map((type) => (
-            <ContextMenuCheckboxItem
-              key={type}
-              checked={activeFormats.has(type)}
+            <ContextMenuLabel>{copy.formatting}</ContextMenuLabel>
+            {COMPOSER_FORMATS.map((type) => (
+              <ContextMenuCheckboxItem
+                key={type}
+                checked={activeFormats.has(type)}
+                disabled={!hasSelection || disabled}
+                onCheckedChange={() =>
+                  applyFormat(type, menuRange.current ?? undefined)
+                }
+              >
+                {FORMAT_LABELS[type]}
+                <ContextMenuShortcut>
+                  {FORMAT_SHORTCUTS[type]}
+                </ContextMenuShortcut>
+              </ContextMenuCheckboxItem>
+            ))}
+            <ContextMenuItem
               disabled={!hasSelection || disabled}
-              onCheckedChange={() =>
-                applyFormat(type, menuRange.current ?? undefined)
+              onSelect={() =>
+                clearSelectionFormats(menuRange.current ?? undefined)
               }
             >
-              {FORMAT_LABELS[type]}
-              <ContextMenuShortcut>
-                {FORMAT_SHORTCUTS[type]}
-              </ContextMenuShortcut>
-            </ContextMenuCheckboxItem>
-          ))}
-          <ContextMenuItem
-            disabled={!hasSelection || disabled}
-            onSelect={() =>
-              clearSelectionFormats(menuRange.current ?? undefined)
-            }
-          >
-            {copy.formatClear}
-          </ContextMenuItem>
-        </ContextMenuContent>
-      </ContextMenu>
+              {copy.formatClear}
+            </ContextMenuItem>
+          </ContextMenuContent>
+        </ContextMenu>
+      )}
       <AnimatePresence initial={false}>
         {failure ? (
           // Same shape as the quote row: the alert pushes the composer, so it
@@ -1008,6 +1151,12 @@ export function MessageComposer({
           </motion.div>
         ) : null}
       </AnimatePresence>
+      <ScheduleMessageDialog
+        open={scheduleOpen}
+        defaultSendAt={scheduleDefault}
+        onClose={() => setScheduleOpen(false)}
+        onSchedule={scheduleMessage}
+      />
     </div>
   );
 }

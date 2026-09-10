@@ -2,6 +2,10 @@ export { EASE_OUT, SPRING_PRESS } from "./motion";
 
 export { Avatar } from "./avatar";
 export { WindowControls } from "./window-controls";
+export { ErrorRow } from "./error-row";
+export type { ErrorRowProps } from "./error-row";
+export { JumpToLatest } from "./jump-to-latest";
+export type { JumpToLatestProps } from "./jump-to-latest";
 export type { AvatarPlaceholder, AvatarProps } from "./avatar";
 export { LoadIndicator } from "./load-indicator";
 export type { LoadIndicatorProps } from "./load-indicator";
@@ -47,7 +51,7 @@ export type {
 } from "./media-viewer";
 
 export { Button, StatefulButton } from "@components/motion/button";
-export type { ButtonState } from "@components/motion/button";
+export type { ButtonState, ButtonVariant } from "@components/motion/button";
 export { Input } from "@components/motion/input";
 export { OTPInput } from "@components/motion/otp-input";
 export type { OTPStatus } from "@components/motion/otp-input";

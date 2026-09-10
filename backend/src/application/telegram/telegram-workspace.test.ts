@@ -16,6 +16,7 @@ function repository(): TelegramRepository {
   return {
     subscribe: vi.fn(() => () => {}),
     listChatPage: vi.fn(async () => ({ items: [], nextCursor: null })),
+    getChat: vi.fn(async () => null),
     createSecretChat: vi.fn(async (userId: string) => ({
       id: `secret-${userId}`,
       title: "Secret",
@@ -54,9 +55,14 @@ function repository(): TelegramRepository {
       typing: false,
     })),
     listFolders: vi.fn(async () => []),
+    getChatFolder: vi.fn(async () => null),
+    createChatFolder: vi.fn(async () => ({ id: 2, title: "", unreadCount: 0 })),
+    editChatFolder: vi.fn(async () => ({ id: 2, title: "", unreadCount: 0 })),
+    deleteChatFolder: vi.fn(async () => undefined),
     listMessagePage: vi.fn(async () => ({ items: [], nextCursor: null })),
     listSharedMedia: vi.fn(async () => ({ items: [], nextCursor: null })),
     listPinnedMessages: vi.fn(async () => []),
+    listScheduledMessages: vi.fn(async () => []),
     listChatMembers: vi.fn(async () => []),
     getPeerProfile: vi.fn(async (peerId: string) => ({
       id: peerId,
@@ -172,6 +178,9 @@ function repository(): TelegramRepository {
     editMessage: vi.fn(async () => undefined),
     deleteMessage: vi.fn(async () => undefined),
     forwardMessage: vi.fn(async () => undefined),
+    pinMessage: vi.fn(async () => undefined),
+    setMessagePollAnswer: vi.fn(async () => undefined),
+    sendPoll: vi.fn(),
     answerBotCallback: vi.fn(async () => ({ kind: "none" }) as const),
     setMessageReaction: vi.fn(async () => undefined),
     listAvailableReactions: vi.fn(async () => []),
@@ -183,6 +192,25 @@ function repository(): TelegramRepository {
     setTyping: vi.fn(async () => undefined),
     saveDraft: vi.fn(async () => undefined),
     logout: vi.fn(async () => undefined),
+  };
+}
+
+function readOnlyChat(): ChatDto {
+  return {
+    id: "chat",
+    title: "News",
+    preview: "",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+    unreadCount: 0,
+    lastReadMessageId: null,
+    muted: false,
+    pinned: false,
+    kind: "channel",
+    initials: "N",
+    avatarDataUrl: null,
+    draftPreview: null,
+    typing: false,
+    canSendMessages: false,
   };
 }
 
@@ -202,6 +230,81 @@ describe("TelegramWorkspaceService", () => {
     const service = new TelegramWorkspaceService(port);
 
     await expect(service.listFolders()).resolves.toEqual(folders);
+  });
+
+  it("creates a server folder with a trimmed title and chat ids", async () => {
+    const port = repository();
+    const service = new TelegramWorkspaceService(port);
+
+    await service.createChatFolder({
+      title: "  Design  ",
+      chatIds: ["design", " product "],
+    });
+
+    expect(port.createChatFolder).toHaveBeenCalledWith({
+      title: "Design",
+      chatIds: ["design", "product"],
+    });
+  });
+
+  it("rejects a server folder without a name", async () => {
+    const port = repository();
+    const service = new TelegramWorkspaceService(port);
+
+    expect(() =>
+      service.createChatFolder({ title: "   ", chatIds: [] }),
+    ).toThrow("Folder name is required");
+    expect(port.createChatFolder).not.toHaveBeenCalled();
+  });
+
+  it("rejects blank and duplicate chat ids in a server folder", async () => {
+    const port = repository();
+    const service = new TelegramWorkspaceService(port);
+
+    expect(() =>
+      service.createChatFolder({ title: "Design", chatIds: [""] }),
+    ).toThrow("Chat id is required");
+    expect(() =>
+      service.editChatFolder({ id: 2, title: "Design", chatIds: ["a", "a"] }),
+    ).toThrow("Folder chats contain duplicates");
+    expect(port.createChatFolder).not.toHaveBeenCalled();
+    expect(port.editChatFolder).not.toHaveBeenCalled();
+  });
+
+  it("rejects a non-positive folder id on edit and delete", async () => {
+    const port = repository();
+    const service = new TelegramWorkspaceService(port);
+
+    expect(() =>
+      service.editChatFolder({ id: 0, title: "Design", chatIds: [] }),
+    ).toThrow("Folder id is required");
+    expect(() => service.deleteChatFolder(1.5)).toThrow(
+      "Folder id is required",
+    );
+    expect(() => service.getChatFolder(Number.NaN)).toThrow(
+      "Folder id is required",
+    );
+    expect(port.editChatFolder).not.toHaveBeenCalled();
+    expect(port.deleteChatFolder).not.toHaveBeenCalled();
+  });
+
+  it("delegates server folder edit and delete to the port", async () => {
+    const port = repository();
+    const service = new TelegramWorkspaceService(port);
+
+    await service.editChatFolder({
+      id: 2,
+      title: "Studio",
+      chatIds: ["design"],
+    });
+    await service.deleteChatFolder(2);
+
+    expect(port.editChatFolder).toHaveBeenCalledWith({
+      id: 2,
+      title: "Studio",
+      chatIds: ["design"],
+    });
+    expect(port.deleteChatFolder).toHaveBeenCalledWith(2);
   });
 
   it("merges keyword folders into listFolders and annotates chats", async () => {
@@ -306,6 +409,7 @@ describe("TelegramWorkspaceService", () => {
       undefined,
       undefined,
       undefined,
+      undefined,
     );
   });
 
@@ -323,6 +427,7 @@ describe("TelegramWorkspaceService", () => {
       "client-1",
       undefined,
       undefined,
+      undefined,
     );
   });
 
@@ -337,6 +442,47 @@ describe("TelegramWorkspaceService", () => {
       undefined,
       true,
       undefined,
+      undefined,
+    );
+  });
+
+  it("forwards a future schedule time to the port", async () => {
+    const port = repository();
+    const service = new TelegramWorkspaceService(port);
+    const sendAt = Math.floor(Date.now() / 1000) + 3600;
+    await service.sendMessage("chat", "hello", { sendAt });
+    expect(port.sendMessage).toHaveBeenCalledWith(
+      "chat",
+      "hello",
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      sendAt,
+    );
+  });
+
+  it("rejects a schedule time that is not in the future", async () => {
+    const port = repository();
+    const service = new TelegramWorkspaceService(port);
+    await expect(
+      service.sendMessage("chat", "hello", {
+        sendAt: Math.floor(Date.now() / 1000) - 60,
+      }),
+    ).rejects.toThrow("Schedule time must be in the future");
+    await expect(
+      service.sendMessage("chat", "hello", { sendAt: Number.NaN }),
+    ).rejects.toThrow("Schedule time must be in the future");
+    expect(port.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it("lists scheduled messages through the port and validates the chat id", async () => {
+    const port = repository();
+    const service = new TelegramWorkspaceService(port);
+    await service.listScheduledMessages("chat");
+    expect(port.listScheduledMessages).toHaveBeenCalledWith("chat");
+    expect(() => service.listScheduledMessages(" ")).toThrow(
+      "Chat id is required",
     );
   });
 
@@ -353,6 +499,7 @@ describe("TelegramWorkspaceService", () => {
       undefined,
       undefined,
       [{ type: "bold", offset: 0, length: 5 }],
+      undefined,
     );
   });
 
@@ -365,6 +512,51 @@ describe("TelegramWorkspaceService", () => {
 
     expect(port.setTyping).toHaveBeenCalledWith("chat", true);
     expect(port.saveDraft).toHaveBeenCalledWith("chat", "draft text");
+  });
+
+  it("rejects sends to a chat the account cannot write to", async () => {
+    const port = repository();
+    port.getChat = vi.fn(async () => readOnlyChat());
+    const service = new TelegramWorkspaceService(port);
+
+    await expect(service.sendMessage("chat", "hello")).rejects.toThrow(
+      "The current account can't write to this chat",
+    );
+    await expect(service.saveDraft("chat", "draft")).rejects.toThrow(
+      "The current account can't write to this chat",
+    );
+    await expect(
+      service.sendMedia(
+        "chat",
+        [
+          {
+            source: "/tmp/a.jpg",
+            name: "a.jpg",
+            mimeType: "image/jpeg",
+            size: 10,
+          },
+        ],
+        { uploadId: "upload-1" },
+      ),
+    ).rejects.toThrow("The current account can't send media to this chat");
+    await expect(service.sendSticker("chat", "sticker/1")).rejects.toThrow(
+      "The current account can't send stickers to this chat",
+    );
+
+    expect(port.sendMessage).not.toHaveBeenCalled();
+    expect(port.saveDraft).not.toHaveBeenCalled();
+    expect(port.sendMedia).not.toHaveBeenCalled();
+    expect(port.sendSticker).not.toHaveBeenCalled();
+  });
+
+  it("skips the typing signal silently in a read-only chat", async () => {
+    const port = repository();
+    port.getChat = vi.fn(async () => readOnlyChat());
+    const service = new TelegramWorkspaceService(port);
+
+    await service.setTyping("chat", true);
+
+    expect(port.setTyping).not.toHaveBeenCalled();
   });
 
   it("pages shared media and lists pinned messages through the port", async () => {
@@ -650,11 +842,11 @@ describe("TelegramWorkspaceService", () => {
   it.each([
     [" ", "sticker/12345", "Chat id is required"],
     ["chat", " ", "Sticker id is required"],
-  ])("sendSticker() rejects %s / %s", (chatId, stickerId, error) => {
+  ])("sendSticker() rejects %s / %s", async (chatId, stickerId, error) => {
     const port = repository();
     const service = new TelegramWorkspaceService(port);
 
-    expect(() => service.sendSticker(chatId, stickerId)).toThrow(error);
+    await expect(service.sendSticker(chatId, stickerId)).rejects.toThrow(error);
     expect(port.sendSticker).not.toHaveBeenCalled();
   });
 
@@ -724,23 +916,23 @@ describe("TelegramWorkspaceService", () => {
 
   it.each(["setTyping", "saveDraft"] as const)(
     "%s() rejects an empty chat id",
-    (method) => {
+    async (method) => {
       const service = new TelegramWorkspaceService(repository());
-      expect(() =>
+      await expect(
         method === "setTyping"
           ? service.setTyping(" ", true)
           : service.saveDraft(" ", "text"),
-      ).toThrow("Chat id is required");
+      ).rejects.toThrow("Chat id is required");
     },
   );
 
   it.each([
     ["", "message", "Chat id"],
     ["chat", "  ", "Message body"],
-  ])("rejects invalid messages", (chatId, body, error) => {
-    expect(() =>
+  ])("rejects invalid messages", async (chatId, body, error) => {
+    await expect(
       new TelegramWorkspaceService(repository()).sendMessage(chatId, body),
-    ).toThrow(error);
+    ).rejects.toThrow(error);
   });
 
   it("rejects an empty chat id when loading a message page", () => {
@@ -841,6 +1033,75 @@ describe("TelegramWorkspaceService", () => {
     );
   });
 
+  it("stamps a voice-note send on the staged file before the port", async () => {
+    const port = repository();
+    const service = new TelegramWorkspaceService(port);
+
+    await service.sendMedia(
+      "chat",
+      [
+        {
+          source: "/tmp/voice-message.ogg",
+          name: "voice-message.ogg",
+          mimeType: "audio/ogg",
+          size: 512,
+        },
+      ],
+      { uploadId: "upload-voice", voiceNote: { durationSeconds: 2.4 } },
+    );
+
+    expect(port.sendMedia).toHaveBeenCalledWith(
+      "chat",
+      [
+        {
+          source: "/tmp/voice-message.ogg",
+          name: "voice-message.ogg",
+          mimeType: "audio/ogg",
+          size: 512,
+          kind: "voice",
+          durationSeconds: 2.4,
+        },
+      ],
+      "",
+      undefined,
+      undefined,
+      "upload-voice",
+    );
+  });
+
+  it("rejects a voice-note send that is not exactly one audio recording", async () => {
+    const port = repository();
+    const service = new TelegramWorkspaceService(port);
+    const voiceUpload = {
+      source: "/tmp/voice-message.ogg",
+      name: "voice-message.ogg",
+      mimeType: "audio/ogg",
+      size: 512,
+    };
+
+    // Voice notes cannot ride an album (TDLib inputMessageVoiceNote is
+    // single-message only).
+    await expect(
+      service.sendMedia("chat", [voiceUpload, voiceUpload], {
+        uploadId: "u",
+        voiceNote: { durationSeconds: 2 },
+      }),
+    ).rejects.toThrow("A voice note send carries exactly one recording");
+    await expect(
+      service.sendMedia("chat", [{ ...voiceUpload, mimeType: "image/jpeg" }], {
+        uploadId: "u",
+        voiceNote: { durationSeconds: 2 },
+      }),
+    ).rejects.toThrow("A voice note upload must be an audio recording");
+    await expect(
+      service.sendMedia("chat", [voiceUpload], {
+        uploadId: "u",
+        voiceNote: { durationSeconds: Number.NaN },
+      }),
+    ).rejects.toThrow("Voice note duration is invalid");
+    expect(port.sendMedia).not.toHaveBeenCalled();
+  });
+
   it.each([
     [" ", [uploadFile], { uploadId: "u" }, "Chat id is required"],
     ["chat", [uploadFile], { uploadId: " " }, "Upload id is required"],
@@ -877,14 +1138,14 @@ describe("TelegramWorkspaceService", () => {
     ],
   ])(
     "rejects invalid media input %j",
-    (chatId, files, input, error: string) => {
-      expect(() =>
+    async (chatId, files, input, error: string) => {
+      await expect(
         new TelegramWorkspaceService(repository()).sendMedia(
           chatId,
           files,
           input,
         ),
-      ).toThrow(error);
+      ).rejects.toThrow(error);
     },
   );
 
@@ -898,5 +1159,139 @@ describe("TelegramWorkspaceService", () => {
     expect(() => service.cancelMediaUpload(" ")).toThrow(
       "Upload id is required",
     );
+  });
+
+  it("creates a poll with trimmed fields through the port", async () => {
+    const port = repository();
+    port.sendPoll = vi.fn(async (chatId: string) => ({
+      id: "poll-message",
+      chatId,
+      senderName: "You",
+      senderId: "demo-you",
+      senderAvatarUrl: null,
+      body: "",
+      entities: [],
+      media: null,
+      groupedId: null,
+      sentAt: new Date(0).toISOString(),
+      outgoing: true,
+      status: "sent" as const,
+    }));
+    const service = new TelegramWorkspaceService(port);
+
+    await service.sendPoll("chat", {
+      question: "  Ship it?  ",
+      options: [" Yes ", "No"],
+      isAnonymous: true,
+      kind: "regular",
+      allowMultipleAnswers: true,
+    });
+
+    expect(port.sendPoll).toHaveBeenCalledWith("chat", {
+      question: "Ship it?",
+      options: ["Yes", "No"],
+      isAnonymous: true,
+      kind: "regular",
+      allowMultipleAnswers: true,
+    });
+  });
+
+  it.each([
+    [
+      " ",
+      { question: "Q", options: ["A", "B"], kind: "regular" },
+      "Chat id is required",
+    ],
+    [
+      "chat",
+      { question: "  ", options: ["A", "B"], kind: "regular" },
+      "Poll question is required",
+    ],
+    [
+      "chat",
+      { question: "Q", options: ["A"], kind: "regular" },
+      "2-10 options",
+    ],
+    [
+      "chat",
+      {
+        question: "Q",
+        options: Array.from({ length: 11 }, (_, i) => `Option ${i}`),
+        kind: "regular",
+      },
+      "2-10 options",
+    ],
+    [
+      "chat",
+      { question: "Q", options: ["A", " "], kind: "regular" },
+      "Poll options can't be empty",
+    ],
+    [
+      "chat",
+      { question: "Q", options: ["A", "B"], kind: "quiz" },
+      "A quiz needs a correct option",
+    ],
+    [
+      "chat",
+      { question: "Q", options: ["A", "B"], kind: "quiz", correctOptionId: 2 },
+      "A quiz needs a correct option",
+    ],
+  ])("rejects an invalid poll %j", async (chatId, input, error: string) => {
+    const port = repository();
+    const service = new TelegramWorkspaceService(port);
+
+    await expect(
+      service.sendPoll(chatId, {
+        isAnonymous: true,
+        allowMultipleAnswers: false,
+        ...input,
+      } as never),
+    ).rejects.toThrow(error);
+    expect(port.sendPoll).not.toHaveBeenCalled();
+  });
+
+  it("forces a quiz to single-answer and rejects polls in read-only chats", async () => {
+    const port = repository();
+    const service = new TelegramWorkspaceService(port);
+
+    await service.sendPoll("chat", {
+      question: "Q",
+      options: ["A", "B"],
+      isAnonymous: false,
+      kind: "quiz",
+      allowMultipleAnswers: true,
+      correctOptionId: 1,
+    });
+    expect(port.sendPoll).toHaveBeenCalledWith(
+      "chat",
+      expect.objectContaining({ allowMultipleAnswers: false }),
+    );
+    port.getChat = vi.fn(async () => ({
+      id: "chat",
+      title: "News",
+      preview: "",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+      unreadCount: 0,
+      lastReadMessageId: null,
+      muted: false,
+      pinned: false,
+      kind: "channel" as const,
+      initials: "N",
+      avatarDataUrl: null,
+      draftPreview: null,
+      typing: false,
+      canSendMessages: false,
+      canSendStickers: false,
+      canSendMedia: false,
+    }));
+    await expect(
+      service.sendPoll("chat", {
+        question: "Q",
+        options: ["A", "B"],
+        isAnonymous: true,
+        kind: "regular",
+        allowMultipleAnswers: false,
+      }),
+    ).rejects.toThrow("The current account can't write to this chat");
   });
 });

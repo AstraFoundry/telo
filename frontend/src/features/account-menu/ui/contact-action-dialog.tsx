@@ -4,6 +4,7 @@ import {
   MagnifyingGlass,
   UserPlus,
 } from "@phosphor-icons/react";
+import { AnimatePresence, motion, useReducedMotionConfig } from "motion/react";
 import { useEffect, useMemo, useState } from "react";
 
 import type { TelegramContactDto } from "../../../../../contracts/src/ipc";
@@ -14,6 +15,8 @@ import {
   Button,
   CenterMorphModal,
   CenterMorphModalContent,
+  EASE_OUT,
+  ErrorRow,
   Input,
   Skeleton,
   SkeletonGroup,
@@ -54,6 +57,17 @@ export function ContactActionDialog({
   const [loading, setLoading] = useState(Boolean(action));
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const reduce = useReducedMotionConfig() ?? false;
+
+  // Skeleton → list/empty swap inside the open dialog: an occasional,
+  // state-indicating change, so it crossfades instead of hard-cutting
+  // (mirrors add-contact-by-phone-dialog's swap).
+  const swap = {
+    initial: reduce ? { opacity: 0 } : { opacity: 0, y: 4 },
+    animate: { opacity: 1, y: 0 },
+    exit: reduce ? { opacity: 0 } : { opacity: 0, y: -4 },
+    transition: { duration: reduce ? 0.12 : 0.18, ease: EASE_OUT },
+  } as const;
 
   useEffect(() => {
     if (!action) return;
@@ -152,7 +166,9 @@ export function ContactActionDialog({
         className="w-[min(92vw,440px)]"
       >
         <div className="flex max-h-[min(76vh,640px)] flex-col p-5">
-          <h2 className="pr-10 text-base font-semibold">{TITLES[action]}</h2>
+          <h2 className="pr-10 text-base font-semibold text-balance">
+            {TITLES[action]}
+          </h2>
           {action === "contacts" ? (
             <Button
               type="button"
@@ -189,78 +205,91 @@ export function ContactActionDialog({
           />
 
           <div className="mt-3 min-h-0 flex-1 overflow-y-auto">
-            {loading ? (
-              <SkeletonGroup label={copy.loading} className="space-y-2 p-1">
-                {[0, 1, 2, 3].map((index) => (
-                  <div key={index} className="flex items-center gap-3 py-1.5">
-                    <Skeleton circle className="size-10" />
-                    <div className="flex-1 space-y-2">
-                      <Skeleton className="h-3.5 w-2/5" />
-                      <Skeleton className="h-3 w-1/4" />
-                    </div>
-                  </div>
-                ))}
-              </SkeletonGroup>
-            ) : filtered.length === 0 ? (
-              <p className="py-10 text-center text-sm text-muted-foreground">
-                {copy.noContacts}
-              </p>
-            ) : (
-              <div className="space-y-0.5">
-                {filtered.map((contact) => {
-                  const checked = selected.has(contact.id);
-                  return (
-                    <Button
-                      key={contact.id}
-                      type="button"
-                      variant="ghost"
-                      pressScale={1}
-                      disabled={submitting}
-                      aria-pressed={action === "contacts" ? undefined : checked}
-                      onClick={() =>
-                        action === "contacts"
-                          ? void openContact(contact.id)
-                          : toggle(contact.id)
-                      }
-                      className="h-auto w-full justify-start rounded-xl px-2 py-2 text-left"
-                    >
-                      <Avatar
-                        src={contact.avatarDataUrl}
-                        pending={contact.avatarPending}
-                        placeholder={contact.avatarPlaceholder}
-                        className="size-10"
-                      />
-                      <span className="min-w-0 flex-1">
-                        <strong className="block truncate text-sm font-semibold">
-                          {contact.displayName}
-                        </strong>
-                        {contact.username || contact.phone ? (
-                          <span className="block truncate text-xs text-muted-foreground">
-                            {contact.username
-                              ? `@${contact.username}`
-                              : contact.phone}
-                          </span>
+            <AnimatePresence mode="wait" initial={false}>
+              {loading ? (
+                <motion.div key="loading" {...swap}>
+                  <SkeletonGroup label={copy.loading} className="space-y-2 p-1">
+                    {[0, 1, 2, 3].map((index) => (
+                      <div
+                        key={index}
+                        className="flex items-center gap-3 py-1.5"
+                      >
+                        <Skeleton circle className="size-10" />
+                        <div className="flex-1 space-y-2">
+                          <Skeleton className="h-3.5 w-2/5" />
+                          <Skeleton className="h-3 w-1/4" />
+                        </div>
+                      </div>
+                    ))}
+                  </SkeletonGroup>
+                </motion.div>
+              ) : filtered.length === 0 ? (
+                <motion.p
+                  key="empty"
+                  {...swap}
+                  className="py-10 text-center text-sm text-pretty text-muted-foreground"
+                >
+                  {copy.noContacts}
+                </motion.p>
+              ) : (
+                <motion.div key="list" {...swap} className="space-y-0.5">
+                  {filtered.map((contact) => {
+                    const checked = selected.has(contact.id);
+                    return (
+                      <Button
+                        key={contact.id}
+                        type="button"
+                        variant="ghost"
+                        pressScale={1}
+                        disabled={submitting}
+                        aria-pressed={
+                          action === "contacts" ? undefined : checked
+                        }
+                        onClick={() =>
+                          action === "contacts"
+                            ? void openContact(contact.id)
+                            : toggle(contact.id)
+                        }
+                        className="h-auto w-full justify-start rounded-xl px-2 py-2 text-left"
+                      >
+                        <Avatar
+                          src={contact.avatarDataUrl}
+                          pending={contact.avatarPending}
+                          placeholder={contact.avatarPlaceholder}
+                          className="size-10"
+                        />
+                        <span className="min-w-0 flex-1">
+                          <strong className="block truncate text-sm font-semibold">
+                            {contact.displayName}
+                          </strong>
+                          {contact.username || contact.phone ? (
+                            <span className="block truncate text-xs text-muted-foreground">
+                              {contact.username
+                                ? `@${contact.username}`
+                                : contact.phone}
+                            </span>
+                          ) : null}
+                        </span>
+                        {action !== "contacts" ? (
+                          checked ? (
+                            <CheckCircle
+                              weight="fill"
+                              aria-hidden="true"
+                              className="size-5 text-primary"
+                            />
+                          ) : (
+                            <Circle
+                              aria-hidden="true"
+                              className="size-5 text-muted-foreground/60"
+                            />
+                          )
                         ) : null}
-                      </span>
-                      {action !== "contacts" ? (
-                        checked ? (
-                          <CheckCircle
-                            weight="fill"
-                            aria-hidden="true"
-                            className="size-5 text-primary"
-                          />
-                        ) : (
-                          <Circle
-                            aria-hidden="true"
-                            className="size-5 text-muted-foreground/60"
-                          />
-                        )
-                      ) : null}
-                    </Button>
-                  );
-                })}
-              </div>
-            )}
+                      </Button>
+                    );
+                  })}
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
 
           {action === "secret" && selected.size > 0 ? (
@@ -268,11 +297,7 @@ export function ContactActionDialog({
               {copy.startSecretChatConfirm}
             </p>
           ) : null}
-          {error ? (
-            <p role="alert" className="mt-3 text-sm text-destructive">
-              {error}
-            </p>
-          ) : null}
+          <ErrorRow message={error} className="mt-3" />
           {action !== "contacts" ? (
             <div className="mt-4 flex justify-end gap-2">
               <Button type="button" variant="ghost" onClick={close}>

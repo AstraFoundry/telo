@@ -11,6 +11,7 @@ import {
   CenterMorphModal,
   CenterMorphModalClose,
   CenterMorphModalContent,
+  ErrorRow,
   Input,
   RadioGroup,
   RadioGroupItem,
@@ -264,11 +265,7 @@ function TaskForm({ task, onClose, onSave }: TaskFormProps) {
           required
         />
       ) : null}
-      {error ? (
-        <p role="alert" className="text-sm text-destructive">
-          {error}
-        </p>
-      ) : null}
+      <ErrorRow message={error} />
       <div className="flex justify-end gap-2">
         <CenterMorphModalClose>
           <Button type="button" variant="ghost">

@@ -1,10 +1,26 @@
-import type {
-  AccentColorPreference,
-  ChatWallpaperPreference,
-  MessageTemplateDto,
-  ThemePreference,
-  TimeFormatPreference,
-} from "../../../../contracts/src/ipc";
+export type ThemePreference = "light" | "dark" | "system";
+
+export type AccentColorPreference =
+  "blue" | "green" | "purple" | "red" | "orange";
+
+export type TimeFormatPreference = "system" | "12h" | "24h";
+
+/**
+ * Conversation backdrop, the setting both reference clients call the chat
+ * background. Every option is drawn from theme tokens rather than shipped as
+ * an image, so it follows the theme and the accent instead of fighting them.
+ */
+export type ChatWallpaperPreference = "plain" | "dots" | "grid" | "gradient";
+
+/**
+ * A user-defined quick reply: the composer inserts `body` at the caret.
+ * Persisted as a preference so templates follow the account on this device.
+ */
+export interface MessageTemplateDto {
+  readonly id: string;
+  readonly title: string;
+  readonly body: string;
+}
 
 export interface UserPreferencesSnapshot {
   readonly agentPanelOpen: boolean;

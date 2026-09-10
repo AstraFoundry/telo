@@ -15,6 +15,7 @@ Live runs are secret-gated (`make test-live`). Demo Playwright remains the PR me
 ## Chat list
 
 - [ ] Order matches Desktop for main, pin, Archive, and folders
+- [ ] Create, edit, and delete server folders from Settings → Folders; tabs update live
 - [ ] Mute, unread, Saved Messages
 - [ ] Restart paints from SQLite before network catch-up
 
@@ -22,13 +23,17 @@ Live runs are secret-gated (`make test-live`). Demo Playwright remains the PR me
 
 - [ ] Page older messages
 - [ ] Live new / edit / delete
-- [ ] Reply, forward, silent send
+- [ ] Reply, forward, silent send, pin/unpin
+- [ ] Schedule a message from the send-options menu; scheduled bar lists, deletes
 - [ ] Optimistic `clientId` reconcile
+- [ ] Polls render as cards; vote single/multiple, quiz reveals after answering, closed polls read final results
 
 ## Composer
 
 - [ ] UTF-16 entities
 - [ ] Media album
+- [ ] Create a poll from the send-options menu (question, 2-10 options, quiz correct answer)
+- [ ] Voice note record and send (mic button, elapsed timer, cancel discards)
 - [ ] Stickers, drafts, typing
 
 ## Search and media

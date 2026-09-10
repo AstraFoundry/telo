@@ -1,4 +1,5 @@
 import { PencilSimple, Plus, Trash } from "@phosphor-icons/react";
+import { AnimatePresence, motion, useReducedMotionConfig } from "motion/react";
 import { useMemo, useState } from "react";
 
 import type { ChatFolderDto } from "../../../../../contracts/src/ipc";
@@ -9,6 +10,8 @@ import {
   CenterMorphModal,
   CenterMorphModalClose,
   CenterMorphModalContent,
+  EASE_OUT,
+  ErrorRow,
   Input,
 } from "shared/ui";
 
@@ -37,6 +40,16 @@ export function KeywordFoldersSettings() {
   );
   const [draft, setDraft] = useState<FolderDraft | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Row entrance/exit shared by the list, mirroring agent-automation-settings;
+  // the empty state animates with the same treatment so it does not snap in
+  // while sibling rows animate out.
+  const reduceMotion = useReducedMotionConfig();
+  const rowMotion = {
+    initial: reduceMotion ? { opacity: 0 } : { opacity: 0, y: 4 },
+    animate: { opacity: 1, y: 0 },
+    exit: reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.98 },
+    transition: { duration: reduceMotion ? 0.1 : 0.16, ease: EASE_OUT },
+  } as const;
 
   const openCreate = () => {
     setError(null);
@@ -95,45 +108,52 @@ export function KeywordFoldersSettings() {
         </Button>
       </div>
       <ul className="mt-5 flex flex-col gap-3">
-        {keywordFolders.length === 0 ? (
-          <li className="text-sm text-muted-foreground">
-            {copy.noKeywordFolders}
-          </li>
-        ) : (
-          keywordFolders.map((folder) => (
-            <li
-              key={folder.id}
-              className="flex items-center justify-between gap-3"
+        <AnimatePresence initial={false}>
+          {keywordFolders.length === 0 ? (
+            <motion.li
+              key="empty"
+              {...rowMotion}
+              className="text-sm text-muted-foreground"
             >
-              <div className="min-w-0 flex flex-col gap-0.5">
-                <span className="truncate text-sm font-medium">
-                  {folder.title}
-                </span>
-                <span className="truncate text-xs text-muted-foreground">
-                  {folder.query}
-                </span>
-              </div>
-              <div className="flex shrink-0 items-center gap-1">
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  aria-label={copy.editKeywordFolder}
-                  onClick={() => openEdit(folder)}
-                >
-                  <PencilSimple />
-                </Button>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  aria-label={copy.deleteKeywordFolder}
-                  onClick={() => void deleteKeywordFolder(folder.id)}
-                >
-                  <Trash />
-                </Button>
-              </div>
-            </li>
-          ))
-        )}
+              {copy.noKeywordFolders}
+            </motion.li>
+          ) : (
+            keywordFolders.map((folder) => (
+              <motion.li
+                key={folder.id}
+                {...rowMotion}
+                className="flex items-center justify-between gap-3"
+              >
+                <div className="min-w-0 flex flex-col gap-0.5">
+                  <span className="truncate text-sm font-medium">
+                    {folder.title}
+                  </span>
+                  <span className="truncate text-xs text-muted-foreground">
+                    {folder.query}
+                  </span>
+                </div>
+                <div className="flex shrink-0 items-center gap-1">
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    aria-label={copy.editKeywordFolder}
+                    onClick={() => openEdit(folder)}
+                  >
+                    <PencilSimple />
+                  </Button>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    aria-label={copy.deleteKeywordFolder}
+                    onClick={() => void deleteKeywordFolder(folder.id)}
+                  >
+                    <Trash />
+                  </Button>
+                </div>
+              </motion.li>
+            ))
+          )}
+        </AnimatePresence>
       </ul>
       <CenterMorphModal
         open={draft !== null}
@@ -183,11 +203,7 @@ export function KeywordFoldersSettings() {
                 {copy.keywordFolderQueryHint}
               </p>
             </div>
-            {error ? (
-              <p role="alert" className="text-sm text-destructive">
-                {error}
-              </p>
-            ) : null}
+            <ErrorRow message={error} />
             <div className="flex justify-end gap-2">
               <CenterMorphModalClose>
                 <Button type="button" variant="ghost">

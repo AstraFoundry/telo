@@ -28,6 +28,7 @@ import {
 import { useTelegramStore } from "entities/telegram";
 import { useTimeFormat } from "entities/preferences";
 import { copy } from "shared/config/copy";
+import { formatTime } from "shared/lib/format-time";
 import { userFacingErrorDetail } from "shared/lib/user-facing-error";
 import {
   Avatar,
@@ -98,16 +99,6 @@ function subtitle(chat: ChatDto): string | null {
   if (chat.kind === "group") return copy.chatKindGroup;
   if (chat.kind === "channel") return copy.chatKindChannel;
   return null;
-}
-
-// "system" defers to the locale's hour12 default, while 12h/24h pin it
-// explicitly — the same formatter the transcript timestamps use.
-function time(value: string, format: TimeFormatPreference): string {
-  return new Intl.DateTimeFormat(undefined, {
-    hour: "2-digit",
-    minute: "2-digit",
-    ...(format === "system" ? {} : { hour12: format === "12h" }),
-  }).format(new Date(value));
 }
 
 interface MediaTile {
@@ -349,7 +340,7 @@ function PinnedRow({
             {message.senderName}
           </span>
           <time className="shrink-0 text-xs font-normal text-muted-foreground tabular-nums">
-            {time(message.sentAt, timeFormat)}
+            {formatTime(message.sentAt, timeFormat)}
           </time>
         </span>
         <span className="mt-px block truncate text-callout font-normal text-muted-foreground">
@@ -646,7 +637,7 @@ export function ChatProfilePanel({
   };
 
   const renderGrid = (tiles: ReadonlyArray<MediaTile>) => (
-    <div className="grid grid-cols-3 gap-0.5 overflow-hidden rounded-lg outline outline-1 -outline-offset-1 outline-black/10 dark:outline-white/10">
+    <div className="grid grid-cols-3 gap-0.5 overflow-hidden rounded-lg outline outline-1 -outline-offset-1 outline-foreground/10">
       {tiles.map(({ message, media }) => (
         <MessageMedia
           key={message.id}

@@ -303,17 +303,22 @@ describe("MediaPicker", () => {
       name: copy.previewSticker,
     });
     expect(preview).toBeTruthy();
-    await user.click(
-      screen.getByRole("button", { name: copy.addFavoriteSticker }),
-    );
+    // The morph entrance moves the dialog's buttons while it settles; under
+    // full-suite load a coordinated user-event click can land on the old
+    // position. fireEvent targets the element directly instead.
     await waitFor(() => {
+      fireEvent.click(
+        screen.getByRole("button", { name: copy.addFavoriteSticker }),
+      );
       expect(telo.workspace.setStickerFavorite).toHaveBeenCalledWith(
         "sticker/1",
         true,
       );
     });
-    await user.click(screen.getByRole("button", { name: copy.sendSticker }));
-    expect(onPickSticker).toHaveBeenCalledWith(SET.stickers[0]);
+    await waitFor(() => {
+      fireEvent.click(screen.getByRole("button", { name: copy.sendSticker }));
+      expect(onPickSticker).toHaveBeenCalledWith(SET.stickers[0]);
+    });
   });
 
   it("reorders installed packs and persists their complete id order", async () => {

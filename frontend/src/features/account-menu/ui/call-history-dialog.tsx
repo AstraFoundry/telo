@@ -4,6 +4,7 @@ import {
   Phone,
   VideoCamera,
 } from "@phosphor-icons/react";
+import { AnimatePresence, motion, useReducedMotionConfig } from "motion/react";
 import { useEffect, useState } from "react";
 
 import type { TelegramCallDto } from "../../../../../contracts/src/ipc";
@@ -14,6 +15,7 @@ import {
   Button,
   CenterMorphModal,
   CenterMorphModalContent,
+  EASE_OUT,
   Skeleton,
   SkeletonGroup,
   StatefulButton,
@@ -45,6 +47,17 @@ export function CallHistoryDialog({
   const [loading, setLoading] = useState(open);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const reduce = useReducedMotionConfig() ?? false;
+
+  // Skeleton → list/empty/error swap inside the open dialog: an occasional,
+  // state-indicating change, so it crossfades instead of hard-cutting
+  // (mirrors add-contact-by-phone-dialog's swap).
+  const swap = {
+    initial: reduce ? { opacity: 0 } : { opacity: 0, y: 4 },
+    animate: { opacity: 1, y: 0 },
+    exit: reduce ? { opacity: 0 } : { opacity: 0, y: -4 },
+    transition: { duration: reduce ? 0.12 : 0.18, ease: EASE_OUT },
+  } as const;
 
   useEffect(() => {
     if (!open) return;
@@ -90,94 +103,109 @@ export function CallHistoryDialog({
         className="w-[min(92vw,440px)]"
       >
         <div className="flex max-h-[min(76vh,640px)] flex-col p-5">
-          <h2 className="pr-10 text-base font-semibold">{copy.calls}</h2>
+          <h2 className="pr-10 text-base font-semibold text-balance">
+            {copy.calls}
+          </h2>
           <div className="mt-4 min-h-0 overflow-y-auto">
-            {loading ? (
-              <SkeletonGroup label={copy.loading} className="space-y-3 p-1">
-                {[0, 1, 2, 3].map((index) => (
-                  <div key={index} className="flex items-center gap-3">
-                    <Skeleton circle className="size-10" />
-                    <div className="flex-1 space-y-2">
-                      <Skeleton className="h-3.5 w-2/5" />
-                      <Skeleton className="h-3 w-3/5" />
-                    </div>
-                  </div>
-                ))}
-              </SkeletonGroup>
-            ) : error ? (
-              <p
-                role="alert"
-                className="py-10 text-center text-sm text-destructive"
-              >
-                {error}
-              </p>
-            ) : calls.length === 0 ? (
-              <p className="py-10 text-center text-sm text-muted-foreground">
-                {copy.noCalls}
-              </p>
-            ) : (
-              <div className="space-y-0.5">
-                {calls.map((call) => {
-                  const Direction =
-                    call.kind === "outgoing" ? ArrowUpRight : ArrowDownLeft;
-                  const Media = call.video ? VideoCamera : Phone;
-                  return (
-                    <Button
-                      key={`${call.chatId}:${call.id}`}
-                      variant="ghost"
-                      pressScale={1}
-                      onClick={() => {
-                        onOpenChange(false);
-                        void selectChat(call.chatId);
-                      }}
-                      className="h-auto w-full justify-start rounded-xl px-2 py-2 text-left"
-                    >
-                      <Avatar
-                        src={call.avatarDataUrl}
-                        placeholder={call.avatarPlaceholder}
-                        className="size-10"
-                      />
-                      <span className="min-w-0 flex-1">
-                        <strong className="block truncate text-sm font-semibold">
-                          {call.title}
-                        </strong>
-                        <span
-                          className={`flex items-center gap-1 text-xs ${
-                            call.kind === "missed"
-                              ? "text-destructive"
-                              : "text-muted-foreground"
-                          }`}
-                        >
-                          <Direction aria-hidden="true" className="size-3.5" />
-                          {callLabel(call)}
-                          {call.durationSeconds > 0
-                            ? ` · ${duration(call.durationSeconds)}`
-                            : null}
+            <AnimatePresence mode="wait" initial={false}>
+              {loading ? (
+                <motion.div key="loading" {...swap}>
+                  <SkeletonGroup label={copy.loading} className="space-y-3 p-1">
+                    {[0, 1, 2, 3].map((index) => (
+                      <div key={index} className="flex items-center gap-3">
+                        <Skeleton circle className="size-10" />
+                        <div className="flex-1 space-y-2">
+                          <Skeleton className="h-3.5 w-2/5" />
+                          <Skeleton className="h-3 w-3/5" />
+                        </div>
+                      </div>
+                    ))}
+                  </SkeletonGroup>
+                </motion.div>
+              ) : error ? (
+                <motion.p
+                  key="error"
+                  role="alert"
+                  {...swap}
+                  className="py-10 text-center text-sm text-pretty text-destructive"
+                >
+                  {error}
+                </motion.p>
+              ) : calls.length === 0 ? (
+                <motion.p
+                  key="empty"
+                  {...swap}
+                  className="py-10 text-center text-sm text-pretty text-muted-foreground"
+                >
+                  {copy.noCalls}
+                </motion.p>
+              ) : (
+                <motion.div key="list" {...swap} className="space-y-0.5">
+                  {calls.map((call) => {
+                    const Direction =
+                      call.kind === "outgoing" ? ArrowUpRight : ArrowDownLeft;
+                    const Media = call.video ? VideoCamera : Phone;
+                    return (
+                      <Button
+                        key={`${call.chatId}:${call.id}`}
+                        variant="ghost"
+                        pressScale={1}
+                        onClick={() => {
+                          onOpenChange(false);
+                          void selectChat(call.chatId);
+                        }}
+                        className="h-auto w-full justify-start rounded-xl px-2 py-2 text-left"
+                      >
+                        <Avatar
+                          src={call.avatarDataUrl}
+                          placeholder={call.avatarPlaceholder}
+                          className="size-10"
+                        />
+                        <span className="min-w-0 flex-1">
+                          <strong className="block truncate text-sm font-semibold">
+                            {call.title}
+                          </strong>
+                          <span
+                            className={`flex items-center gap-1 text-xs ${
+                              call.kind === "missed"
+                                ? "text-destructive"
+                                : "text-muted-foreground"
+                            }`}
+                          >
+                            <Direction
+                              aria-hidden="true"
+                              className="size-3.5"
+                            />
+                            {callLabel(call)}
+                            {call.durationSeconds > 0
+                              ? ` · ${duration(call.durationSeconds)}`
+                              : null}
+                          </span>
                         </span>
-                      </span>
-                      <span className="flex flex-col items-end gap-1 text-caption text-muted-foreground">
-                        <Media aria-hidden="true" className="size-4" />
-                        {new Intl.DateTimeFormat(undefined, {
-                          month: "short",
-                          day: "numeric",
-                        }).format(new Date(call.occurredAt))}
-                      </span>
-                    </Button>
-                  );
-                })}
-                {nextCursor ? (
-                  <StatefulButton
-                    type="button"
-                    variant="ghost"
-                    state={loadingMore ? "loading" : "idle"}
-                    onClick={() => void loadMore()}
-                    className="mt-2 w-full"
-                  >
-                    {copy.loadMore}
-                  </StatefulButton>
-                ) : null}
-              </div>
-            )}
+                        <span className="flex flex-col items-end gap-1 text-caption text-muted-foreground">
+                          <Media aria-hidden="true" className="size-4" />
+                          {new Intl.DateTimeFormat(undefined, {
+                            month: "short",
+                            day: "numeric",
+                          }).format(new Date(call.occurredAt))}
+                        </span>
+                      </Button>
+                    );
+                  })}
+                  {nextCursor ? (
+                    <StatefulButton
+                      type="button"
+                      variant="ghost"
+                      state={loadingMore ? "loading" : "idle"}
+                      onClick={() => void loadMore()}
+                      className="mt-2 w-full"
+                    >
+                      {copy.loadMore}
+                    </StatefulButton>
+                  ) : null}
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
         </div>
       </CenterMorphModalContent>

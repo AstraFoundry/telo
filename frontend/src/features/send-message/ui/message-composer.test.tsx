@@ -6,7 +6,7 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type {
   ChatMemberDto,
@@ -673,6 +673,66 @@ describe("MessageComposer", () => {
     ).toBe("true");
   });
 
+  it("schedules a message from the send button's context menu", async () => {
+    const { onSend, textarea } = await renderComposer(true);
+    await flushPreferences();
+
+    fireEvent.change(textarea, { target: { value: "Later hello" } });
+    fireEvent.contextMenu(screen.getByRole("button", { name: "Send prompt" }));
+    const menu = await screen.findByRole("menu");
+    fireEvent.click(
+      within(menu).getByRole("menuitem", { name: copy.scheduleMessage }),
+    );
+    const dialog = await screen.findByRole("dialog", {
+      name: copy.scheduleMessage,
+    });
+    // Two hours out, in the datetime-local field's local-time shape.
+    const pick = new Date(Date.now() + 2 * 60 * 60 * 1000);
+    const pad = (part: number) => String(part).padStart(2, "0");
+    const fieldValue = `${pick.getFullYear()}-${pad(pick.getMonth() + 1)}-${pad(pick.getDate())}T${pad(pick.getHours())}:${pad(pick.getMinutes())}`;
+    fireEvent.change(within(dialog).getByLabelText(copy.scheduleTime), {
+      target: { value: fieldValue },
+    });
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: copy.scheduleConfirm }),
+    );
+
+    const expectedSendAt = Math.floor(new Date(fieldValue).getTime() / 1000);
+    await waitFor(() =>
+      expect(onSend).toHaveBeenCalledWith("Later hello", {
+        sendAt: expectedSendAt,
+      }),
+    );
+    await waitFor(() =>
+      expect((textarea as HTMLTextAreaElement).value).toBe(""),
+    );
+  });
+
+  it("rejects a past schedule time in the picker", async () => {
+    const { onSend, textarea } = await renderComposer(true);
+    await flushPreferences();
+
+    fireEvent.change(textarea, { target: { value: "Later hello" } });
+    fireEvent.contextMenu(screen.getByRole("button", { name: "Send prompt" }));
+    const menu = await screen.findByRole("menu");
+    fireEvent.click(
+      within(menu).getByRole("menuitem", { name: copy.scheduleMessage }),
+    );
+    const dialog = await screen.findByRole("dialog", {
+      name: copy.scheduleMessage,
+    });
+    fireEvent.change(within(dialog).getByLabelText(copy.scheduleTime), {
+      target: { value: "2020-01-01T10:00" },
+    });
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: copy.scheduleConfirm }),
+    );
+
+    expect(await within(dialog).findByText(copy.scheduleTimePast)).toBeTruthy();
+    expect(onSend).not.toHaveBeenCalled();
+    expect((textarea as HTMLTextAreaElement).value).toBe("Later hello");
+  });
+
   it("inserts a picked emoji at the caret and records it as recent", async () => {
     const { telo, useChatStore, textarea } = await renderComposer(true);
     act(() => useChatStore.setState({ activeChatId: "a", messages: [] }));
@@ -965,5 +1025,196 @@ describe("MessageComposer", () => {
     await waitFor(() =>
       expect((textarea as HTMLTextAreaElement).value).toBe("Standup notes:"),
     );
+  });
+
+  describe("voice recording", () => {
+    class FakeMediaRecorder {
+      static instances: FakeMediaRecorder[] = [];
+
+      static isTypeSupported(type: string): boolean {
+        return type === "audio/ogg;codecs=opus";
+      }
+
+      readonly mimeType: string;
+      state: "inactive" | "recording" = "inactive";
+      ondataavailable: ((event: { data: Blob }) => void) | null = null;
+      onerror: ((event: { error: Error }) => void) | null = null;
+      onstop: (() => void) | null = null;
+
+      constructor(
+        readonly stream: MediaStream,
+        options?: { mimeType?: string },
+      ) {
+        this.mimeType = options?.mimeType ?? "audio/ogg;codecs=opus";
+        FakeMediaRecorder.instances.push(this);
+      }
+
+      start(): void {
+        this.state = "recording";
+      }
+
+      stop(): void {
+        this.state = "inactive";
+        queueMicrotask(() => {
+          this.ondataavailable?.({
+            data: new Blob(["audio-bytes"], { type: this.mimeType }),
+          });
+          this.onstop?.();
+        });
+      }
+    }
+
+    const trackStop = vi.fn();
+
+    beforeEach(() => {
+      FakeMediaRecorder.instances = [];
+      trackStop.mockClear();
+      vi.stubGlobal("MediaRecorder", FakeMediaRecorder);
+      Object.defineProperty(navigator, "mediaDevices", {
+        value: {
+          getUserMedia: vi.fn(async () => ({
+            getTracks: () => [{ stop: trackStop }],
+          })),
+        },
+        configurable: true,
+      });
+    });
+
+    afterEach(() => {
+      vi.unstubAllGlobals();
+      delete (navigator as { mediaDevices?: unknown }).mediaDevices;
+    });
+
+    it("shows the microphone while the field is empty and swaps to send once typed", async () => {
+      const { textarea } = await renderComposer(true);
+      await flushPreferences();
+
+      expect(
+        screen.getByRole("button", { name: copy.recordVoiceMessage }),
+      ).toBeTruthy();
+
+      fireEvent.change(textarea, { target: { value: "Hello" } });
+
+      expect(
+        screen.queryByRole("button", { name: copy.recordVoiceMessage }),
+      ).toBeNull();
+    });
+
+    it("surfaces a graceful error when the platform cannot record", async () => {
+      vi.stubGlobal("MediaRecorder", undefined);
+      await renderComposer(true);
+      await flushPreferences();
+
+      fireEvent.click(
+        screen.getByRole("button", { name: copy.recordVoiceMessage }),
+      );
+
+      expect((await screen.findByRole("alert")).textContent).toContain(
+        copy.voiceRecordFailed,
+      );
+    });
+
+    it("records and sends the take through the media upload path as a voice note", async () => {
+      const { telo, useChatStore } = await renderComposer(true);
+      act(() => useChatStore.setState({ activeChatId: "a", messages: [] }));
+      telo.workspace.sendMedia.mockResolvedValue([]);
+      await flushPreferences();
+
+      fireEvent.click(
+        screen.getByRole("button", { name: copy.recordVoiceMessage }),
+      );
+
+      // The recording strip replaces the text input while the mic is open.
+      const strip = await screen.findByRole("status", {
+        name: copy.voiceRecordingInProgress,
+      });
+      expect(strip.textContent).toContain("0:00");
+      expect(screen.queryByRole("textbox")).toBeNull();
+
+      fireEvent.click(
+        screen.getByRole("button", { name: copy.sendVoiceMessage }),
+      );
+
+      await waitFor(() =>
+        expect(telo.workspace.sendMedia).toHaveBeenCalledTimes(1),
+      );
+      const [chatId, files, input] =
+        telo.workspace.sendMedia.mock.calls[0] ?? [];
+      expect(chatId).toBe("a");
+      expect(files).toHaveLength(1);
+      expect(files[0].name).toBe("voice-message.ogg");
+      expect(files[0].type).toBe("audio/ogg;codecs=opus");
+      expect(input).toMatchObject({
+        uploadId: expect.any(String),
+        voiceNote: { durationSeconds: expect.any(Number) },
+      });
+      expect(trackStop).toHaveBeenCalled();
+      // The strip is gone and the empty composer shows the mic slot again.
+      await waitFor(() =>
+        expect(
+          screen.getByRole("textbox", { name: copy.messagePlaceholder }),
+        ).toBeTruthy(),
+      );
+    });
+
+    it("discards the take on Escape without sending", async () => {
+      const { telo, useChatStore } = await renderComposer(true);
+      act(() => useChatStore.setState({ activeChatId: "a", messages: [] }));
+      await flushPreferences();
+
+      fireEvent.click(
+        screen.getByRole("button", { name: copy.recordVoiceMessage }),
+      );
+      await screen.findByRole("status", {
+        name: copy.voiceRecordingInProgress,
+      });
+
+      fireEvent.keyDown(document.body, { key: "Escape" });
+
+      await waitFor(() =>
+        expect(
+          screen.queryByRole("status", {
+            name: copy.voiceRecordingInProgress,
+          }),
+        ).toBeNull(),
+      );
+      expect(telo.workspace.sendMedia).not.toHaveBeenCalled();
+      expect(trackStop).toHaveBeenCalled();
+    });
+    afterEach(() => {
+      vi.unstubAllGlobals();
+      // jsdom's navigator has no mediaDevices; restore that shape.
+      Object.defineProperty(navigator, "mediaDevices", {
+        value: undefined,
+        configurable: true,
+      });
+    });
+
+    it("discards the take through the cancel button without sending", async () => {
+      const { telo, useChatStore } = await renderComposer(true);
+      act(() => useChatStore.setState({ activeChatId: "a", messages: [] }));
+      await flushPreferences();
+
+      fireEvent.click(
+        screen.getByRole("button", { name: copy.recordVoiceMessage }),
+      );
+      await screen.findByRole("status", {
+        name: copy.voiceRecordingInProgress,
+      });
+
+      fireEvent.click(
+        screen.getByRole("button", { name: copy.cancelVoiceRecording }),
+      );
+
+      await waitFor(() =>
+        expect(
+          screen.queryByRole("status", {
+            name: copy.voiceRecordingInProgress,
+          }),
+        ).toBeNull(),
+      );
+      expect(telo.workspace.sendMedia).not.toHaveBeenCalled();
+      expect(trackStop).toHaveBeenCalled();
+    });
   });
 });

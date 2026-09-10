@@ -629,6 +629,39 @@ describe("chat-store", () => {
     });
   });
 
+  it("send() with a schedule time draws no optimistic bubble and forwards sendAt", async () => {
+    const telo = installTeloApiMock();
+    const sendAt = Math.floor(Date.now() / 1000) + 3600;
+    telo.workspace.sendMessage.mockResolvedValue({
+      ...message("m9", "a"),
+      scheduledAt: new Date(sendAt * 1000).toISOString(),
+    });
+    useChatStore.setState({
+      activeChatId: "a",
+      messages: [message("m1", "a")],
+    });
+
+    await useChatStore.getState().send("later", { sendAt });
+
+    expect(telo.workspace.sendMessage).toHaveBeenCalledWith("a", "later", {
+      sendAt,
+    });
+    // The transcript is untouched: the scheduled list owns the message now.
+    expect(useChatStore.getState().messages).toEqual([message("m1", "a")]);
+  });
+
+  it("send() with a schedule time propagates a failure instead of marking a bubble", async () => {
+    const telo = installTeloApiMock();
+    const sendAt = Math.floor(Date.now() / 1000) + 3600;
+    telo.workspace.sendMessage.mockRejectedValue(new Error("offline"));
+    useChatStore.setState({ activeChatId: "a", messages: [] });
+
+    await expect(
+      useChatStore.getState().send("later", { sendAt }),
+    ).rejects.toThrow("offline");
+    expect(useChatStore.getState().messages).toEqual([]);
+  });
+
   it("setDraft() does not persist or signal typing in a read-only chat", () => {
     const telo = installTeloApiMock();
     useChatStore.setState({
@@ -1544,6 +1577,72 @@ describe("chat-store", () => {
     expect(useChatStore.getState().chats[0]?.pinned).toBe(false);
   });
 
+  it("toggleMessagePinned() pins through the API and flags the message", async () => {
+    const telo = installTeloApiMock();
+    useChatStore.setState({
+      activeChatId: "a",
+      messages: [message("1", "a"), message("2", "a")],
+    });
+
+    await useChatStore.getState().toggleMessagePinned("a", "1");
+
+    expect(telo.workspace.pinMessage).toHaveBeenCalledWith({
+      chatId: "a",
+      messageId: "1",
+      pinned: true,
+    });
+    const state = useChatStore.getState();
+    expect(state.messages.find((entry) => entry.id === "1")?.pinned).toBe(true);
+    expect(
+      state.messages.find((entry) => entry.id === "2")?.pinned,
+    ).toBeUndefined();
+  });
+
+  it("toggleMessagePinned() unpins a pinned message and keeps the state on failure", async () => {
+    const telo = installTeloApiMock();
+    useChatStore.setState({
+      activeChatId: "a",
+      messages: [{ ...message("1", "a"), pinned: true }],
+    });
+
+    await useChatStore.getState().toggleMessagePinned("a", "1");
+
+    expect(telo.workspace.pinMessage).toHaveBeenCalledWith({
+      chatId: "a",
+      messageId: "1",
+      pinned: false,
+    });
+    expect(
+      useChatStore.getState().messages.find((entry) => entry.id === "1")
+        ?.pinned,
+    ).toBeUndefined();
+
+    telo.workspace.pinMessage.mockRejectedValue(new Error("IPC down"));
+    useChatStore.setState({
+      messages: [{ ...message("1", "a"), pinned: true }],
+    });
+
+    await expect(
+      useChatStore.getState().toggleMessagePinned("a", "1"),
+    ).rejects.toThrow("IPC down");
+    expect(
+      useChatStore.getState().messages.find((entry) => entry.id === "1")
+        ?.pinned,
+    ).toBe(true);
+  });
+
+  it("toggleMessagePinned() returns early for a message outside the transcript", async () => {
+    const telo = installTeloApiMock();
+    useChatStore.setState({
+      activeChatId: "a",
+      messages: [message("1", "a")],
+    });
+
+    await useChatStore.getState().toggleMessagePinned("a", "missing");
+
+    expect(telo.workspace.pinMessage).not.toHaveBeenCalled();
+  });
+
   it("setArchived() flips folderId optimistically and lists the Archive folder", async () => {
     const telo = installTeloApiMock();
     let resolveIpc: () => void = () => {};
@@ -1577,6 +1676,70 @@ describe("chat-store", () => {
     resolveIpc();
     await pending;
     expect(telo.workspace.setChatArchived).toHaveBeenCalledWith("b", true);
+  });
+
+  it("createChatFolder() posts through IPC and reloads folders with chats", async () => {
+    const telo = installTeloApiMock();
+    telo.workspace.listFolders.mockResolvedValue([
+      { id: 3, title: "People", unreadCount: 0 },
+    ]);
+    telo.workspace.listChatPage.mockResolvedValue({
+      items: [{ ...chat("a"), folderId: 3 }],
+      nextCursor: null,
+    });
+    useChatStore.setState({ chats: [chat("a")] });
+
+    await useChatStore.getState().createChatFolder("People", ["a"]);
+
+    expect(telo.workspace.createChatFolder).toHaveBeenCalledWith({
+      title: "People",
+      chatIds: ["a"],
+    });
+    expect(useChatStore.getState().folders).toEqual([
+      { id: 3, title: "People", unreadCount: 0 },
+    ]);
+    expect(useChatStore.getState().chats[0]?.folderId).toBe(3);
+  });
+
+  it("updateChatFolder() edits through IPC and reloads", async () => {
+    const telo = installTeloApiMock();
+    telo.workspace.listFolders.mockResolvedValue([
+      { id: 2, title: "Studio", unreadCount: 0 },
+    ]);
+    telo.workspace.listChatPage.mockResolvedValue({
+      items: [],
+      nextCursor: null,
+    });
+
+    await useChatStore.getState().updateChatFolder(2, "Studio", ["a"]);
+
+    expect(telo.workspace.editChatFolder).toHaveBeenCalledWith({
+      id: 2,
+      title: "Studio",
+      chatIds: ["a"],
+    });
+    expect(useChatStore.getState().folders).toEqual([
+      { id: 2, title: "Studio", unreadCount: 0 },
+    ]);
+  });
+
+  it("deleteChatFolder() closes the deleted tab's view", async () => {
+    const telo = installTeloApiMock();
+    telo.workspace.listFolders.mockResolvedValue([]);
+    telo.workspace.listChatPage.mockResolvedValue({
+      items: [],
+      nextCursor: null,
+    });
+    useChatStore.setState({
+      folders: [{ id: 2, title: "Work", unreadCount: 3 }],
+      activeFolderId: 2,
+    });
+
+    await useChatStore.getState().deleteChatFolder(2);
+
+    expect(telo.workspace.deleteChatFolder).toHaveBeenCalledWith(2);
+    expect(useChatStore.getState().activeFolderId).toBeNull();
+    expect(useChatStore.getState().folders).toEqual([]);
   });
 
   it("setArchived() drops the Archive folder when its last chat is restored", async () => {
@@ -1986,6 +2149,52 @@ describe("chat-store", () => {
       caption: "caption",
       replyToId: undefined,
       clientId: expect.any(String),
+    });
+    expect(useChatStore.getState().messages).toEqual(ack);
+  });
+
+  it("sendMedia() sends a voice note optimistically with the voice kind", async () => {
+    const telo = installTeloApiMock();
+    let resolveSend: ((messages: MessageDto[]) => void) | undefined;
+    telo.workspace.sendMedia.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveSend = resolve;
+        }),
+    );
+    useChatStore.setState({ activeChatId: "a", messages: [] });
+    const recording = new File(["audio"], "voice-message.ogg", {
+      type: "audio/ogg",
+    });
+
+    const pending = useChatStore
+      .getState()
+      .sendMedia([recording], "", "upload-voice", { durationSeconds: 2.4 });
+
+    const optimistic = useChatStore.getState().messages;
+    expect(optimistic).toHaveLength(1);
+    expect(optimistic[0]?.status).toBe("sending");
+    expect(optimistic[0]?.groupedId).toBeNull();
+    // The bubble renders the voice player, not a file card, while it flies.
+    expect(optimistic[0]?.media).toMatchObject({
+      kind: "voice",
+      fileName: "voice-message.ogg",
+      mimeType: "audio/ogg",
+      duration: 2,
+    });
+
+    const ack = [
+      { ...message("m9", "a"), outgoing: true, status: "sent" as const },
+    ];
+    resolveSend?.(ack);
+    await pending;
+
+    expect(telo.workspace.sendMedia).toHaveBeenCalledWith("a", [recording], {
+      uploadId: "upload-voice",
+      caption: "",
+      replyToId: undefined,
+      clientId: expect.any(String),
+      voiceNote: { durationSeconds: 2.4 },
     });
     expect(useChatStore.getState().messages).toEqual(ack);
   });

@@ -11,6 +11,7 @@ import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { TelegramUploadFile } from "../../domain/telegram/telegram-ports";
+import type { TelegramWorkspaceEvent } from "../../../../contracts/src/ipc";
 import { ARCHIVE_FOLDER_ID } from "../../../../contracts/src/ipc";
 import {
   DEMO_SEND_FAIL_ONCE_MARKER,
@@ -236,6 +237,82 @@ describe("DemoTelegramRepository", () => {
     ]);
   });
 
+  it("creates a folder with member chats and emits the folder snapshot", async () => {
+    const repository = new DemoTelegramRepository();
+    const events: TelegramWorkspaceEvent[] = [];
+    repository.subscribe((event) => events.push(event));
+
+    const created = await repository.createChatFolder({
+      title: "People",
+      chatIds: ["mina", "aron"],
+    });
+
+    expect(created).toEqual({ id: 3, title: "People", unreadCount: 0 });
+    const chats = await listChats(repository);
+    expect(chats.find((chat) => chat.id === "mina")?.folderId).toBe(created.id);
+    // The sidebar tabs repaint from the folders event; the rows move through
+    // per-chat upserts, like TDLib's updateChatPosition.
+    expect(events).toContainEqual({
+      type: "folders",
+      folders: expect.arrayContaining([
+        { id: created.id, title: "People", unreadCount: 0 },
+      ]),
+    });
+    expect(events).toContainEqual({
+      type: "chat-upsert",
+      chat: expect.objectContaining({ id: "mina", folderId: created.id }),
+    });
+  });
+
+  it("edits a folder's title and membership, rejecting unknown ids", async () => {
+    const repository = new DemoTelegramRepository();
+
+    await expect(
+      repository.editChatFolder({ id: 99, title: "Nope", chatIds: [] }),
+    ).rejects.toThrow("Unknown chat folder 99");
+
+    const edited = await repository.editChatFolder({
+      id: 2,
+      title: "Studio",
+      chatIds: ["design"],
+    });
+
+    expect(edited).toEqual({ id: 2, title: "Studio", unreadCount: 3 });
+    await expect(repository.getChatFolder(2)).resolves.toEqual({
+      id: 2,
+      title: "Studio",
+      includedChatIds: ["design"],
+    });
+    // "product" was dropped from the folder and falls back to the main list.
+    const chats = await listChats(repository);
+    expect(chats.find((chat) => chat.id === "product")?.folderId).toBeNull();
+  });
+
+  it("deletes a folder and returns its chats to the main list", async () => {
+    const repository = new DemoTelegramRepository();
+    const events: TelegramWorkspaceEvent[] = [];
+    repository.subscribe((event) => events.push(event));
+
+    await repository.deleteChatFolder(2);
+
+    await expect(repository.listFolders()).resolves.toEqual([
+      { id: ARCHIVE_FOLDER_ID, title: "Archive", unreadCount: 2 },
+    ]);
+    const chats = await listChats(repository);
+    expect(chats.find((chat) => chat.id === "design")?.folderId).toBeNull();
+    expect(events).toContainEqual({
+      type: "chat-upsert",
+      chat: expect.objectContaining({ id: "design", folderId: null }),
+    });
+    await expect(repository.deleteChatFolder(2)).rejects.toThrow(
+      "Unknown chat folder 2",
+    );
+    await expect(repository.getChatFolder(2)).resolves.toBeNull();
+    await expect(
+      repository.getChatFolder(ARCHIVE_FOLDER_ID),
+    ).resolves.toBeNull();
+  });
+
   it("emits a folder snapshot when a read state change moves folder badges", async () => {
     const repository = new DemoTelegramRepository();
     const events: unknown[] = [];
@@ -336,6 +413,85 @@ describe("DemoTelegramRepository", () => {
       status: "sent",
     });
     expect(messages.at(-1)).toEqual(sent);
+  });
+
+  it("parks a scheduled send outside the transcript until it is listed", async () => {
+    const repository = new DemoTelegramRepository();
+    const events: Array<{ type: string }> = [];
+    repository.subscribe((event) => events.push(event));
+    const sendAt = Math.floor(Date.now() / 1000) + 3600;
+
+    const sent = await repository.sendMessage(
+      "design",
+      "Later",
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      sendAt,
+    );
+
+    expect(sent.scheduledAt).toBe(new Date(sendAt * 1000).toISOString());
+    // No transcript entry, no chat preview bump, no auto-reply — just the
+    // scheduled-list change signal.
+    expect(
+      (await listMessages(repository, "design")).some(
+        (message) => message.id === sent.id,
+      ),
+    ).toBe(false);
+    const chats = await listChats(repository);
+    expect(chats.find((chat) => chat.id === "design")?.preview).not.toBe(
+      "Later",
+    );
+    expect(events.map((event) => event.type)).toEqual(["scheduled-messages"]);
+
+    const scheduled = await repository.listScheduledMessages("design");
+    expect(scheduled.map((message) => message.id)).toEqual([sent.id]);
+  });
+
+  it("deletes a scheduled message through the regular delete path", async () => {
+    const repository = new DemoTelegramRepository();
+    const sendAt = Math.floor(Date.now() / 1000) + 3600;
+    const sent = await repository.sendMessage(
+      "design",
+      "Later",
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      sendAt,
+    );
+
+    await repository.deleteMessage({ chatId: "design", messageId: sent.id });
+
+    expect(await repository.listScheduledMessages("design")).toEqual([]);
+    expect(
+      (await listMessages(repository, "design")).some(
+        (message) => message.id === sent.id,
+      ),
+    ).toBe(false);
+  });
+
+  it("delivers a due scheduled message into the transcript on read", async () => {
+    const repository = new DemoTelegramRepository();
+    // The adapter accepts any sendAt (validation lives in the application
+    // layer), so a past time exercises due delivery directly.
+    const sendAt = Math.floor(Date.now() / 1000) - 60;
+    const sent = await repository.sendMessage(
+      "design",
+      "Due now",
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      sendAt,
+    );
+
+    expect(await repository.listScheduledMessages("design")).toEqual([]);
+    const delivered = (await listMessages(repository, "design")).find(
+      (message) => message.id === sent.id,
+    );
+    expect(delivered).toMatchObject({ body: "Due now", scheduledAt: null });
   });
 
   it("paginates messages backward without duplicating the boundary", async () => {
@@ -510,6 +666,9 @@ describe("DemoTelegramRepository", () => {
     const messages = await listMessages(repository, "design");
     expect(messages.map((message) => message.id)).toEqual([
       "design-2",
+      "design-poll-1",
+      "design-poll-2",
+      "design-poll-3",
       "design-3",
       "design-media-1",
       "design-media-2",
@@ -583,7 +742,7 @@ describe("DemoTelegramRepository", () => {
     expect(forwarded?.id).not.toBe("design-1");
     // The source conversation is untouched.
     const source = await listMessages(repository, "design");
-    expect(source).toHaveLength(11);
+    expect(source).toHaveLength(14);
   });
 
   it("attributes the forwarded copy to the original sender by default", async () => {
@@ -893,6 +1052,62 @@ describe("DemoTelegramRepository", () => {
       "design-6",
       "design-1",
     ]);
+  });
+
+  it("pins and unpins a message, emitting the pinned-messages event", async () => {
+    const repository = new DemoTelegramRepository();
+    const events: string[] = [];
+    repository.subscribe((event) => {
+      if (event.type === "pinned-messages") events.push(event.chatId);
+    });
+
+    await repository.pinMessage({
+      chatId: "design",
+      messageId: "design-3",
+      pinned: true,
+    });
+
+    // The fresh pin leads the list; the transcript read overlays the flag
+    // from the same map.
+    expect(
+      (await repository.listPinnedMessages("design")).map(
+        (message) => message.id,
+      ),
+    ).toEqual(["design-3", "design-6", "design-1"]);
+    const page = await repository.listMessagePage("design", { limit: 50 });
+    expect(
+      page.items.find((message) => message.id === "design-3")?.pinned,
+    ).toBe(true);
+    expect(events).toEqual(["design"]);
+
+    await repository.pinMessage({
+      chatId: "design",
+      messageId: "design-3",
+      pinned: false,
+    });
+
+    expect(
+      (await repository.listPinnedMessages("design")).map(
+        (message) => message.id,
+      ),
+    ).toEqual(["design-6", "design-1"]);
+    const unpinned = await repository.listMessagePage("design", { limit: 50 });
+    expect(
+      unpinned.items.find((message) => message.id === "design-3")?.pinned,
+    ).toBeUndefined();
+    expect(events).toEqual(["design", "design"]);
+  });
+
+  it("rejects a pin for an unknown message", async () => {
+    const repository = new DemoTelegramRepository();
+
+    await expect(
+      repository.pinMessage({
+        chatId: "design",
+        messageId: "missing",
+        pinned: true,
+      }),
+    ).rejects.toThrow("Unknown message missing");
   });
 
   it("lists no pinned messages for a chat without pins and rejects an unknown chat", async () => {
@@ -1278,6 +1493,42 @@ describe("DemoTelegramRepository", () => {
     );
   });
 
+  it("delivers a voice-stamped upload as a voice note with its duration", async () => {
+    const repository = new DemoTelegramRepository({ uploadStepMs: 1 });
+
+    const sent = await repository.sendMedia(
+      "design",
+      [
+        {
+          source: "/tmp/voice-message.ogg",
+          name: "voice-message.ogg",
+          mimeType: "audio/ogg",
+          size: 512,
+          kind: "voice",
+          durationSeconds: 2.4,
+        },
+      ],
+      "",
+      undefined,
+      "client-voice",
+      "upload-voice",
+    );
+
+    expect(sent).toHaveLength(1);
+    expect(sent[0]?.groupedId).toBeNull();
+    expect(sent[0]?.media).toMatchObject({
+      kind: "voice",
+      fileName: "voice-message.ogg",
+      mimeType: "audio/ogg",
+      duration: 2,
+    });
+    const chats = await listChats(repository);
+    // tdesktop's preview text, matching the mapper for received voice notes.
+    expect(chats.find((chat) => chat.id === "design")?.preview).toBe(
+      "Voice message",
+    );
+  });
+
   it("cancels an in-flight upload without delivering messages", async () => {
     // The step has to outlast scheduler jitter under a parallel suite run:
     // if all four steps elapse before the cancel lands, the upload delivers.
@@ -1320,6 +1571,9 @@ describe("DemoTelegramRepository", () => {
     expect(messages.map((message) => message.id)).toEqual([
       "design-1",
       "design-2",
+      "design-poll-1",
+      "design-poll-2",
+      "design-poll-3",
       "design-3",
       "design-media-1",
       "design-media-2",
@@ -1582,6 +1836,118 @@ describe("DemoTelegramRepository", () => {
     const sets = await repository.listStickerSets();
     expect(sets).toHaveLength(1);
     expect(sets[0]).toMatchObject({ shortName: "TeloPack", installed: true });
+  });
+  it("carries poll fixtures in the design transcript", async () => {
+    const repository = new DemoTelegramRepository();
+    const polls = (await listMessages(repository, "design"))
+      .map((message) => message.poll)
+      .filter(Boolean);
+    expect(polls.map((poll) => poll!.kind)).toEqual([
+      "regular",
+      "quiz",
+      "regular",
+    ]);
+    // The quiz's correct option stays hidden until the account answers.
+    expect(polls[1]?.correctOptionIds).toBeNull();
+    expect(polls[2]?.isClosed).toBe(true);
+  });
+
+  it("records a vote, retallies, and emits an edited upsert", async () => {
+    const repository = new DemoTelegramRepository();
+    const events: TelegramWorkspaceEvent[] = [];
+    repository.subscribe((event) => events.push(event));
+
+    await repository.setMessagePollAnswer("design", "design-poll-1", [0, 2]);
+
+    const edited = events.find(
+      (event) =>
+        event.type === "message-upsert" &&
+        event.cause === "edited" &&
+        event.message.id === "design-poll-1",
+    );
+    expect(edited).toBeDefined();
+    const poll = edited?.type === "message-upsert" ? edited.message.poll : null;
+    expect(poll?.options.map((option) => option.chosen)).toEqual([
+      true,
+      false,
+      true,
+    ]);
+    expect(poll?.options.map((option) => option.voterCount)).toEqual([3, 1, 1]);
+    expect(poll?.totalVoterCount).toBe(4);
+  });
+
+  it("rejects a vote on a closed poll", async () => {
+    const repository = new DemoTelegramRepository();
+    await expect(
+      repository.setMessagePollAnswer("design", "design-poll-3", [1]),
+    ).rejects.toThrow("The poll is closed");
+  });
+
+  it("rejects unknown options and extra picks on a single-answer poll", async () => {
+    const repository = new DemoTelegramRepository();
+    await expect(
+      repository.setMessagePollAnswer("design", "design-poll-1", [7]),
+    ).rejects.toThrow("Unknown poll option");
+    await expect(
+      repository.setMessagePollAnswer("design", "design-poll-2", [0, 1]),
+    ).rejects.toThrow("The poll allows a single answer");
+  });
+
+  it("records a wrong quiz answer and reveals the correct option", async () => {
+    const repository = new DemoTelegramRepository();
+
+    await repository.setMessagePollAnswer("design", "design-poll-2", [0]);
+
+    const message = (await listMessages(repository, "design")).find(
+      (entry) => entry.id === "design-poll-2",
+    );
+    // The wrong pick stays chosen — a quiz answer is not silently dropped —
+    // and the reveal arrives with the same update.
+    expect(message?.poll?.options[0]?.chosen).toBe(true);
+    expect(message?.poll?.correctOptionIds).toEqual([1]);
+  });
+
+  it("creates a poll as an outgoing message with zeroed tallies", async () => {
+    const repository = new DemoTelegramRepository();
+    const events: TelegramWorkspaceEvent[] = [];
+    repository.subscribe((event) => events.push(event));
+
+    const sent = await repository.sendPoll("design", {
+      question: "Retro when?",
+      options: ["Tuesday", "Thursday"],
+      isAnonymous: false,
+      kind: "regular",
+      allowMultipleAnswers: false,
+    });
+
+    expect(sent.poll).toMatchObject({
+      question: "Retro when?",
+      totalVoterCount: 0,
+      isClosed: false,
+    });
+    expect(sent.outgoing).toBe(true);
+    const chat = (await listChats(repository)).find(
+      (entry) => entry.id === "design",
+    );
+    expect(chat?.preview).toBe("Poll: Retro when?");
+    expect(events).toContainEqual({
+      type: "message-upsert",
+      cause: "new",
+      message: sent,
+    });
+  });
+
+  it("rejects sending a poll to an unknown chat", async () => {
+    const repository = new DemoTelegramRepository();
+    await expect(
+      repository.sendPoll("nope", {
+        question: "Q?",
+        options: ["A", "B"],
+        isAnonymous: true,
+        kind: "regular",
+        allowMultipleAnswers: false,
+      }),
+    ).rejects.toThrow("Unknown chat nope");
   });
 });
 

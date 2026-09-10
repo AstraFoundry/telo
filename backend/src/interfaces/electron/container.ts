@@ -55,6 +55,11 @@ import type {
   TelegramAuthState,
 } from "../../../../contracts/src/ipc";
 
+// The TDLib smoke probe runs before the container exists, but the entry
+// point still reaches it through the composition root like every other
+// infrastructure dependency.
+export { runTdlibSmoke } from "../../infrastructure/telegram/tdlib-probe";
+
 export interface ApplicationContainer {
   readonly workspace: TelegramWorkspaceService;
   readonly chatActions: ChatActionsService;

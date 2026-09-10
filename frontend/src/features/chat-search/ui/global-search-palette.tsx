@@ -1,3 +1,4 @@
+import { AnimatePresence, motion, useReducedMotionConfig } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 
 import type { GlobalSearchResultDto } from "../../../../../contracts/src/ipc";
@@ -15,6 +16,7 @@ import {
   ComboboxLabel,
   ComboboxList,
   ComboboxTrigger,
+  EASE_OUT,
   LoadIndicator,
 } from "shared/ui";
 
@@ -48,6 +50,17 @@ function PaletteSurface({ onClose }: { onClose(): void }) {
   const [results, setResults] = useState<GlobalSearchResultDto | null>(null);
   const [searching, setSearching] = useState(false);
   const requestRef = useRef(0);
+  const reduce = useReducedMotionConfig() ?? false;
+
+  // Searching ↔ results swap: the only motion this keyboard-summoned palette
+  // gets (open/close stays instant). A hard cut from the load indicator to
+  // the result list reads as a glitch, so the branches crossfade.
+  const swap = {
+    initial: reduce ? { opacity: 0 } : { opacity: 0, y: 4 },
+    animate: { opacity: 1, y: 0 },
+    exit: reduce ? { opacity: 0 } : { opacity: 0, y: -4 },
+    transition: { duration: reduce ? 0.12 : 0.18, ease: EASE_OUT },
+  } as const;
 
   // Query changes are handled here (an event), not in the effect: clearing
   // the field restores the empty palette immediately and invalidates any
@@ -122,50 +135,61 @@ function PaletteSurface({ onClose }: { onClose(): void }) {
       </ComboboxTrigger>
       <ComboboxContent className="shadow-lg">
         <ComboboxList ariaLabel={copy.searchEverywhereLabel}>
-          {searching ? <LoadIndicator label={copy.searchingServer} /> : null}
-          <ComboboxGroup>
-            <ComboboxLabel>{copy.chats}</ComboboxLabel>
-            {(results?.chats ?? []).map((chat) => (
-              <ComboboxItem
-                key={chat.id}
-                value={`chat:${chat.id}`}
-                textValue={displayChatTitle(chat)}
-              >
-                <span className="flex min-w-0 items-center gap-2">
-                  <Avatar
-                    src={chat.avatarDataUrl}
-                    pending={chat.avatarPending}
-                    mark={chat.kind === "saved" ? "saved" : undefined}
-                    placeholder={chat.avatarPlaceholder}
-                    className="size-6"
-                  />
-                  <span className="min-w-0 flex-1 truncate">
-                    {displayChatTitle(chat)}
-                  </span>
-                </span>
-              </ComboboxItem>
-            ))}
-          </ComboboxGroup>
-          <ComboboxGroup>
-            <ComboboxLabel>{copy.messages}</ComboboxLabel>
-            {(results?.messages ?? []).map((message) => (
-              <ComboboxItem
-                key={message.id}
-                value={`message:${message.chatId}:${message.id}`}
-                textValue={message.body}
-              >
-                <span className="flex min-w-0 flex-col">
-                  <span className="truncate text-sm">{message.senderName}</span>
-                  <span className="truncate text-xs text-muted-foreground">
-                    {message.body}
-                  </span>
-                </span>
-              </ComboboxItem>
-            ))}
-          </ComboboxGroup>
-          {!searching && results ? (
-            <ComboboxEmpty>{copy.noSearchResults}</ComboboxEmpty>
-          ) : null}
+          <AnimatePresence mode="wait" initial={false}>
+            {searching ? (
+              <motion.div key="searching" {...swap}>
+                <LoadIndicator label={copy.searchingServer} />
+              </motion.div>
+            ) : (
+              <motion.div key="results" {...swap}>
+                <ComboboxGroup>
+                  <ComboboxLabel>{copy.chats}</ComboboxLabel>
+                  {(results?.chats ?? []).map((chat) => (
+                    <ComboboxItem
+                      key={chat.id}
+                      value={`chat:${chat.id}`}
+                      textValue={displayChatTitle(chat)}
+                    >
+                      <span className="flex min-w-0 items-center gap-2">
+                        <Avatar
+                          src={chat.avatarDataUrl}
+                          pending={chat.avatarPending}
+                          mark={chat.kind === "saved" ? "saved" : undefined}
+                          placeholder={chat.avatarPlaceholder}
+                          className="size-6"
+                        />
+                        <span className="min-w-0 flex-1 truncate">
+                          {displayChatTitle(chat)}
+                        </span>
+                      </span>
+                    </ComboboxItem>
+                  ))}
+                </ComboboxGroup>
+                <ComboboxGroup>
+                  <ComboboxLabel>{copy.messages}</ComboboxLabel>
+                  {(results?.messages ?? []).map((message) => (
+                    <ComboboxItem
+                      key={message.id}
+                      value={`message:${message.chatId}:${message.id}`}
+                      textValue={message.body}
+                    >
+                      <span className="flex min-w-0 flex-col">
+                        <span className="truncate text-sm">
+                          {message.senderName}
+                        </span>
+                        <span className="truncate text-xs text-muted-foreground">
+                          {message.body}
+                        </span>
+                      </span>
+                    </ComboboxItem>
+                  ))}
+                </ComboboxGroup>
+                {results ? (
+                  <ComboboxEmpty>{copy.noSearchResults}</ComboboxEmpty>
+                ) : null}
+              </motion.div>
+            )}
+          </AnimatePresence>
         </ComboboxList>
       </ComboboxContent>
     </Combobox>

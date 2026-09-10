@@ -1,7 +1,4 @@
-import type {
-  AgentContextScope,
-  AgentRedactionCounts,
-} from "../../../../contracts/src/ipc";
+import type { AgentContextScope, AgentRedactionCounts } from "./agent-context";
 
 /**
  * Local audit trail entry for one agent run. Deliberately carries no raw

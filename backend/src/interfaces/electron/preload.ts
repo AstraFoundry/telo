@@ -64,6 +64,13 @@ const api: TeloDesktopApi = {
     },
     openSavedMessages: () => ipcRenderer.invoke(channels.savedMessagesOpen),
     listFolders: () => ipcRenderer.invoke(channels.folderList),
+    getChatFolder: (folderId) =>
+      ipcRenderer.invoke(channels.folderGet, folderId),
+    createChatFolder: (input) =>
+      ipcRenderer.invoke(channels.folderCreate, input),
+    editChatFolder: (input) => ipcRenderer.invoke(channels.folderUpdate, input),
+    deleteChatFolder: (folderId) =>
+      ipcRenderer.invoke(channels.folderDelete, folderId),
     createKeywordFolder: (input) =>
       ipcRenderer.invoke(channels.keywordFolderCreate, input),
     updateKeywordFolder: (input) =>
@@ -76,6 +83,8 @@ const api: TeloDesktopApi = {
       ipcRenderer.invoke(channels.sharedMediaList, chatId, input),
     listPinnedMessages: (chatId) =>
       ipcRenderer.invoke(channels.pinnedMessageList, chatId),
+    listScheduledMessages: (chatId) =>
+      ipcRenderer.invoke(channels.scheduledMessageList, chatId),
     listChatMembers: (chatId) =>
       ipcRenderer.invoke(channels.chatMemberList, chatId),
     getPeerProfile: (peerId) =>
@@ -140,6 +149,11 @@ const api: TeloDesktopApi = {
     deleteMessage: (input) => ipcRenderer.invoke(channels.messageDelete, input),
     forwardMessage: (input) =>
       ipcRenderer.invoke(channels.messageForward, input),
+    pinMessage: (input) => ipcRenderer.invoke(channels.messagePin, input),
+    setMessagePollAnswer: (chatId, messageId, optionIds) =>
+      ipcRenderer.invoke(channels.pollAnswerSet, chatId, messageId, optionIds),
+    sendPoll: (chatId, input) =>
+      ipcRenderer.invoke(channels.pollSend, chatId, input),
     setChatPinned: (chatId, pinned) =>
       ipcRenderer.invoke(channels.chatPinSet, chatId, pinned),
     setChatMuted: (chatId, muted) =>
