@@ -3,7 +3,7 @@
 [![English](https://img.shields.io/badge/README-English-blue?style=flat-square)](README.md)
 [![简体中文](https://img.shields.io/badge/README-简体中文-red?style=flat-square)](README.zh-CN.md)
 [![日本語](https://img.shields.io/badge/README-日本語-green?style=flat-square)](README.ja.md)
-[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-blue?style=flat-square)](https://github.com/ProjectKumo/telo)
+[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-blue?style=flat-square)](https://github.com/astrafoundry/telo)
 [![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE)
 
 > A modern, privacy-first desktop Telegram workspace with a context-aware global AI agent residing directly beside your conversations.
@@ -124,7 +124,7 @@ Telo enforces a clean separation of concerns using industry-standard architectur
 1. **Clone the repository**:
 
    ```sh
-   git clone https://github.com/ProjectKumo/telo.git
+   git clone https://github.com/astrafoundry/telo.git
    cd telo
    ```
 
