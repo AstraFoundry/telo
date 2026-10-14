@@ -3,7 +3,7 @@
 [![English](https://img.shields.io/badge/README-English-blue?style=flat-square)](README.md)
 [![简体中文](https://img.shields.io/badge/README-简体中文-red?style=flat-square)](README.zh-CN.md)
 [![日本語](https://img.shields.io/badge/README-日本語-green?style=flat-square)](README.ja.md)
-[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-blue?style=flat-square)](https://github.com/ProjectKumo/telo)
+[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-blue?style=flat-square)](https://github.com/astrafoundry/telo)
 [![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE)
 
 > 现代化、注重隐私的 Telegram 桌面工作区，内置具备工作区上下文感知能力的全局 AI 智能体。
@@ -122,7 +122,7 @@ Telo 采用业界成熟的分层与模块化架构设计：
 1. **克隆代码仓库**：
 
    ```sh
-   git clone https://github.com/ProjectKumo/telo.git
+   git clone https://github.com/astrafoundry/telo.git
    cd telo
    ```
 
