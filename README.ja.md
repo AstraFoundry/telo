@@ -10,11 +10,9 @@ AstraFoundry が開発する、会話の隣にワークスペース認識 AI エ
 [![Node](https://img.shields.io/badge/node-%3E%3D22.0.0-brightgreen?style=flat-square)](package.json)
 [![Electron](https://img.shields.io/badge/Electron-44-47848F?style=flat-square)](package.json)
 
-![チャット一覧、会話ビュー、AI エージェントパネルを表示する Telo デスクトップモック](docs/readme/hero.png)
+![チャット一覧、会話ビュー、AI エージェントパネルを表示する Telo デスクトップ画面](docs/readme/hero.png)
 
-![AstraFoundry 製品ページの Telo デスクトップモックによるスクリプトデモ](docs/readme/demo.gif)
-
-_上の画像と GIF は AstraFoundry 製品ページに掲載されている Telo デスクトップモック（チャット一覧、会話ビュー、エージェントパネル）とそのスクリプト化されたデモであり、実際の Telegram アカウントにサインインしたライブセッションではありません。_
+![チャット一覧、会話ビュー、AI エージェントパネルの操作を映した Telo デスクトップアニメーション](docs/readme/demo.gif)
 
 ## 主な機能
 
@@ -36,7 +34,7 @@ _上の画像と GIF は AstraFoundry 製品ページに掲載されている Te
 ### インストールと起動
 
 ```sh
-git clone https://github.com/astrafoundry/telo.git
+git clone https://github.com/AstraFoundry/telo.git
 cd telo
 make install
 make dev
@@ -98,6 +96,14 @@ OpenAI、Anthropic、xAI、Kimi は既定で各社の公開ネイティブ OAuth
 - [ビルドとリリース](docs/operations/deployment.md) — パッケージング、ネイティブ TDLib 配置、CI、リリース成果物。
 - [テスト戦略](docs/quality/testing.md) — Vitest カバレッジ基準と Playwright Electron E2E テスト。
 - [アーキテクチャ決定記録 (ADR)](docs/decisions/README.md) — IPC 境界、BYOA プロバイダー、自動化の安全性、TDLib カーネルに関する意思決定記録。
+
+## コントリビューター
+
+[![Telo コントリビューター](https://contrib.rocks/image?repo=AstraFoundry/telo)](https://github.com/AstraFoundry/telo/graphs/contributors)
+
+## Star 履歴
+
+[![Star History Chart](https://api.star-history.com/svg?repos=AstraFoundry/telo&type=Date)](https://star-history.com/#AstraFoundry/telo&Date)
 
 ## ライセンス
 

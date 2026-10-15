@@ -10,11 +10,9 @@
 [![Node](https://img.shields.io/badge/node-%3E%3D22.0.0-brightgreen?style=flat-square)](package.json)
 [![Electron](https://img.shields.io/badge/Electron-44-47848F?style=flat-square)](package.json)
 
-![展示聊天列表、会话视图与 AI 智能体面板的 Telo 桌面演示界面](docs/readme/hero.png)
+![展示聊天列表、会话视图与 AI 智能体面板的 Telo 桌面界面](docs/readme/hero.png)
 
-![来自 AstraFoundry 产品页的 Telo 桌面端脚本化交互演示](docs/readme/demo.gif)
-
-_上方截图与动图展示的是来自 AstraFoundry 产品页的 Telo 桌面演示模型（包含聊天列表、会话视图与智能体面板）及其脚本化演示流程，并非已登录真实 Telegram 账号的实时会话。_
+![展示聊天列表、会话视图与 AI 智能体面板交互的 Telo 桌面动态画面](docs/readme/demo.gif)
 
 ## 核心特性
 
@@ -36,7 +34,7 @@ _上方截图与动图展示的是来自 AstraFoundry 产品页的 Telo 桌面�
 ### 安装与运行
 
 ```sh
-git clone https://github.com/astrafoundry/telo.git
+git clone https://github.com/AstraFoundry/telo.git
 cd telo
 make install
 make dev
@@ -98,6 +96,14 @@ OpenAI、Anthropic、xAI 与 Kimi 默认使用各厂商公开的原生 OAuth 客
 - [构建与发布](docs/operations/deployment.md) — 打包流程、原生 TDLib 分发、CI 与发布产物。
 - [测试策略](docs/quality/testing.md) — Vitest 覆盖率门禁与 Playwright Electron 端到端测试。
 - [架构决策记录 (ADR)](docs/decisions/README.md) — 涵盖 IPC 边界、BYOA 服务商、自动化安全与 TDLib 内核的架构决策。
+
+## 贡献者
+
+[![Telo 贡献者](https://contrib.rocks/image?repo=AstraFoundry/telo)](https://github.com/AstraFoundry/telo/graphs/contributors)
+
+## Star 趋势
+
+[![Star History Chart](https://api.star-history.com/svg?repos=AstraFoundry/telo&type=Date)](https://star-history.com/#AstraFoundry/telo&Date)
 
 ## 开源协议
 

@@ -10,11 +10,9 @@ A privacy-first desktop Telegram client by AstraFoundry with a workspace-aware A
 [![Node](https://img.shields.io/badge/node-%3E%3D22.0.0-brightgreen?style=flat-square)](package.json)
 [![Electron](https://img.shields.io/badge/Electron-44-47848F?style=flat-square)](package.json)
 
-![Telo desktop mock showing the chat list, conversation view, and AI agent panel](docs/readme/hero.png)
+![Telo desktop interface showing the chat list, conversation view, and AI agent panel](docs/readme/hero.png)
 
-![Scripted demo of the Telo desktop mock from the AstraFoundry product page](docs/readme/demo.gif)
-
-_The captures above show the Telo desktop mock (chat list, conversation, and agent panel) and its scripted walkthrough from the AstraFoundry product page, not a live signed-in Telegram session._
+![Telo desktop interface in action with the chat list, conversation view, and AI agent panel](docs/readme/demo.gif)
 
 ## Features
 
@@ -36,7 +34,7 @@ _The captures above show the Telo desktop mock (chat list, conversation, and age
 ### Install and Run
 
 ```sh
-git clone https://github.com/astrafoundry/telo.git
+git clone https://github.com/AstraFoundry/telo.git
 cd telo
 make install
 make dev
@@ -98,6 +96,14 @@ OpenAI, Anthropic, xAI, and Kimi use their public native OAuth clients by defaul
 - [Build & Release](docs/operations/deployment.md) — Packaging, native TDLib staging, CI, and release artifacts.
 - [Testing Strategy](docs/quality/testing.md) — Vitest coverage gates and Playwright Electron E2E journeys.
 - [Architecture Decision Records](docs/decisions/README.md) — ADRs covering the IPC boundary, BYOA providers, automation safety, and TDLib kernel.
+
+## Contributors
+
+[![Telo Contributors](https://contrib.rocks/image?repo=AstraFoundry/telo)](https://github.com/AstraFoundry/telo/graphs/contributors)
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=AstraFoundry/telo&type=Date)](https://star-history.com/#AstraFoundry/telo&Date)
 
 ## License
 
