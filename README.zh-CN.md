@@ -1,263 +1,106 @@
 # Telo
 
+由 AstraFoundry 打造的隐私优先 Telegram 桌面客户端，在对话旁内置具备工作区上下文感知能力的 AI 智能体。
+
 [![English](https://img.shields.io/badge/README-English-blue?style=flat-square)](README.md)
 [![简体中文](https://img.shields.io/badge/README-简体中文-red?style=flat-square)](README.zh-CN.md)
 [![日本語](https://img.shields.io/badge/README-日本語-green?style=flat-square)](README.ja.md)
-[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-blue?style=flat-square)](https://github.com/astrafoundry/telo)
 [![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE)
+[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-blue?style=flat-square)](package.json)
+[![Node](https://img.shields.io/badge/node-%3E%3D22.0.0-brightgreen?style=flat-square)](package.json)
+[![Electron](https://img.shields.io/badge/Electron-44-47848F?style=flat-square)](package.json)
 
-> 现代化、注重隐私的 Telegram 桌面工作区，内置具备工作区上下文感知能力的全局 AI 智能体。
+![展示聊天列表、会话视图与 AI 智能体面板的 Telo 桌面演示界面](docs/readme/hero.png)
 
----
+![来自 AstraFoundry 产品页的 Telo 桌面端脚本化交互演示](docs/readme/demo.gif)
 
-## 概述
-
-**Telo** 是一款基于 **React 19**、**Electron 44** 与 **AI SDK** 构建的高性能 Telegram 桌面客户端。它将实时 Telegram 聊天体验与自主 AI 助手无缝融合——AI 智能体可感知当前可见的会话上下文，帮助用户快速总结长篇对话、起草上下文回复、跨语言实时翻译以及提炼待办事项。
-
-Telo 从架构根基上严格遵循隐私与零信任安全规范：所有凭据与 Telegram 会话密钥均驻留在 Electron 主进程中并通过系统级钥匙串（`safeStorage`）加密存储；前端渲染层运行在完全无特权的沙箱隔离环境中，无法接触到任何原始 API Key 或会话机密。
-
-```text
-+-------------------+----------------------------------+------------------------+
-|    会话列表侧栏   |          当前活动会话            |      全局 AI 智能体    |
-|                   |                                  |                        |
-| • 单聊 / 群组 / 频道| • 引用回复预览                   | • AG-UI 事件流式输出   |
-| • 未读计数与静音状态| • 原地消息编辑                   | • 思考中微光动效       |
-| • 置顶对话管理     | • 消息转发与确认删除             | • 工作区上下文感知工具 |
-| • 对话搜索过滤     | • 现代化 Markdown 消息输入框     | • 多会话历史记录切换   |
-| • 快捷右键操作菜单 | • 气泡右键菜单（复制/回复/编辑） | • 系统级后台完成通知   |
-+-------------------+----------------------------------+------------------------+
-```
-
----
+_上方截图与动图展示的是来自 AstraFoundry 产品页的 Telo 桌面演示模型（包含聊天列表、会话视图与智能体面板）及其脚本化演示流程，并非已登录真实 Telegram 账号的实时会话。_
 
 ## 核心特性
 
-### ⚡ 纯 TypeScript MTProto 客户端内核
+- **原生 TDLib 客户端内核**：在 Electron 主进程中运行 `tdl` 与 `prebuilt-tdlib`（TDLib 1.8.67），为每个账号维护经 `safeStorage` 密钥加密的独立 SQLite 数据库；支持多账号切换（最多 3 个账号）、加密私密聊天（Secret Chats）、服务端与本地关键词文件夹、投票、定时消息、语音消息、贴纸与动画表情。（`prebuilt-tdlib` 不支持 Windows arm64。）
+- **工作区上下文感知 AI 智能体**：常驻可折叠右侧面板（`Cmd/Ctrl + B`），基于 AG-UI 事件协议流式传输响应；支持总结未读讨论、提炼决策与待办事项、在输入框内直接翻译或改写/起草回复、通过 `telo://message/...` 链接引用原始消息、解析 `@Name` 提及，并提供触发规则与定时任务自动化（默认 `draft-only` 仅生成草稿，或配置为 `auto-send` 自动发送）。
+- **自带账号接入（BYOA）**：基于 AI SDK 原生支持 OpenAI、Anthropic、Google、Groq、xAI、Kimi、DeepSeek 与 Mistral（OpenAI、Anthropic、Google、xAI、Kimi 支持桌面 OAuth 登录；Groq、DeepSeek、Mistral 使用 API Key），并支持任意兼容 OpenAI 协议的 HTTPS 接口作为回退方案。
+- **零信任进程边界**：强制开启 `contextIsolation: true`、`sandbox: true` 与 `nodeIntegration: false`。API Key、OAuth 令牌与 Telegram 凭据均由主进程通过操作系统钥匙串（`safeStorage`）加密存储，绝不越过类型化 IPC 边界（`contracts/src/ipc.ts`）进入渲染进程。发送给智能体的上下文会自动脱敏邮箱、手机号与疑似密钥，并将请求提示词的 SHA-256 摘要记录至本地 `agent-audit.jsonl`。
+- **精致桌面交互与实时预览设置**：基于 React 19、Electron 44、Tailwind CSS v4、Motion 与 BEUI 组件构建；提供跟随系统 / 浅色 / 深色主题、5 套强调色、12px–18px 消息字号缩放、由主题令牌驱动的聊天背景、支持精确跳转与实时外观/通知预览的设置搜索，以及按会话类型和媒体类型细分的通知与自动下载控制。
 
-- **轻量高效**：主进程使用 TDLib（`tdl` + `prebuilt-tdlib`）。渲染进程不导入 `tdl` / `td_api`。打包产物会解压 `libtdjson`。Windows arm64 不受支持。已有 Teleproto 会话无法导入，需重新登录。
-- **顺畅登录流程**：标准手机号登录，支持短信 / Telegram 应用内验证码，以及两步验证云密码（2FA）。
-- **零登录演示模式（Demo Workspace）**：使用 `make dev DEMO=1` 启动即可体验完整界面与智能体，无需登录。界面上没有演示入口按钮。
-
-### 🤖 工作区上下文感知全局智能体
-
-- **多模型服务商接入**：原生支持 OpenAI（如 `gpt-4o`、`o3-mini`）及任何兼容 OpenAI 接口协议的服务商（如 DeepSeek、OpenRouter、Groq、Ollama、LM Studio 等）。
-- **工作区上下文感知（`inspectWorkspace`）**：智能体可按需读取当前可见的聊天元数据与消息流，基于真实上下文完成问答与任务处理。
-- **AG-UI 协议事件流**：遵循 AG-UI 协议进行实时事件流式传输，提供流畅的 `ThinkingShimmer` 思考状态指示、工具调用执行步骤呈现、Token 流式渐显以及友好的异常回退机制。
-- **多会话持久化（Threads）**：支持创建与切换多个独立的智能体对话流，会话数据持久保存在本地 `agent-threads.json` 中。
-- **智能后台系统通知**：当应用处于非活动或后台最小化状态时，AI 任务完成后将自动触发原生系统桌面通知。
-
-### 🛡️ 零信任安全架构与凭据隔离
-
-- **严格的沙箱与上下文隔离**：开启 `contextIsolation: true` 与 `sandbox: true`，禁用 `nodeIntegration`。禁止不受控的外部页面跳转，外部链接一律通过操作系统默认浏览器安全打开。
-- **系统钥匙串加密（`safeStorage`）**：API Key 与 Telegram 登录 Session 写入磁盘前均通过系统安全钥匙串进行加密。
-- **渲染层零机密接触**：前端渲染进程仅通过严格类型约束的 IPC 接口与主进程通信，绝不接收任何敏感原始密钥。
-
-### 🎨 匠心打磨的桌面级交互体验
-
-- **丝滑流畅动效**：基于 Motion（Framer Motion v13）与 BEUI 动效组件库构建，包含变形模态框（Morphing Modal）、弹出层与平滑收展侧边栏。
-- **全方位个性化定制**：
-  - 主题切换：**跟随系统**、**浅色模式** 与 **深色模式**。
-  - 5 款精致主题强调色：**经典蓝（Blue）**、**翡翠绿（Green）**、**优雅紫（Purple）**、**珊瑚红（Red）** 与 **活力橙（Orange）**。
-  - 动态消息字号调节滑块（**12px – 18px**）。
-  - 聊天背景：**纯色**、**圆点**、**网格** 与 **渐变**，全部由主题令牌绘制。
-  - 时间展示格式：**系统默认**、**12 小时制** 与 **24 小时制**。
-  - 灵活的发送快捷键：支持配置 `Enter` 发送或 `Cmd/Ctrl + Enter` 发送。
-  - 全局快捷键：`Cmd/Ctrl + B` 一键快速展开 / 收起 AI 智能体面板。
-- **会回答问题的设置面板**：
-  - 搜索索引到具体设置项而非分组：输入别名、方向键选中、回车直达该行，并以高亮闪烁提示落点。
-  - 以实时预览代替文字描述：外观页用会话本身的组件与令牌渲染真实气泡，通知页渲染系统将要弹出的横幅原样。
-  - 按会话类型控制通知（**私聊**、**群组**、**频道**），并可单独开关发送者名称、消息正文与提示音。
-  - 按媒体类型控制自动下载（**图片**、**视频与 GIF**、**文件**），与磁盘缓存上限相互独立。
-
-### 💬 完善的消息与会话操作
-
-- **引用回复**：可视化引用快照，清晰回溯上下文。
-- **消息原地编辑**：已发送消息即时编辑，并展示 `edited` 修改状态标记。
-- **跨会话转发**：支持将消息转发至目标会话，并实时更新侧边栏对话预览。
-- **安全删除**：带确认对话框的安全消息删除。
-- **动画表情**：仅含一个 emoji 的消息会播放 Telegram 官方动画，播放一次后静止。点击后向 Telegram 请求超大特效并覆盖在会话之上；对方点击时，同一段特效也会在你这边播放。没有动画的纯 emoji 文本按 Telegram 的三个上限放大显示。
-- **会话管理**：置顶 / 取消置顶、开启 / 关闭静音通知、标记已读 / 未读。
-
----
-
-## 架构设计与工程规范
-
-Telo 采用业界成熟的分层与模块化架构设计：
-
-```text
-+-------------------------------------------------------------------------+
-|                       前端：React 19 (特性切片设计 FSD)                  |
-|    app  -->  pages  -->  widgets  -->  features  -->  entities  --> shared|
-+-------------------------------------------------------------------------+
-                                    |
-                    严格类型约束的 IPC 通信层 (contextBridge)
-                    contracts/src/ipc.ts (TeloDesktopApi)
-                                    |
-+-------------------------------------------------------------------------+
-|                    后端：Electron 主进程 (领域驱动设计 DDD)              |
-|     interfaces  -->  application  -->  domain  <--  infrastructure     |
-+-------------------------------------------------------------------------+
-          |                         |                        |
-     [Teleproto]                [AI SDK]             [safeStorage]
-   (Telegram MTProto)      (OpenAI / 兼容接口)     (系统钥匙串加密本地存储)
-```
-
-- **前端（Feature-Sliced Design）**：清晰的单向依赖流，从高层到低层依次为 `app`、`pages`、`widgets`、`features`、`entities`、`shared`。
-- **后端（Domain-Driven Design）**：纯净无框架依赖的 `domain` 核心业务逻辑，通过 `application` 编排用例，并在 `infrastructure` 中对接具体适配器。
-- **类型安全 IPC 契约**：主进程与渲染进程之间的所有调用与事件均在 `contracts/src/ipc.ts` 中完成端到端类型定义。
-
----
-
-## 快速上手
+## 快速开始
 
 ### 环境要求
 
-- **Node.js**：`v22.0.0` 或更高版本
-- **包管理器**：`pnpm` `v9.0.0` 或更高版本
-- **构建工具**：`GNU Make`
-- **操作系统**：macOS、Windows 或带有图形界面的 Linux
+- **Node.js** `>= 22.0.0`
+- **pnpm** `9.0.0` 或更高版本
+- **GNU Make**
+- **操作系统**：macOS、Windows（x64）或带有图形会话的 Linux
 
-### 安装与启动
-
-1. **克隆代码仓库**：
-
-   ```sh
-   git clone https://github.com/astrafoundry/telo.git
-   cd telo
-   ```
-
-2. **安装项目依赖**：
-
-   ```sh
-   make install
-   ```
-
-3. **启动开发环境**：
-
-   ```sh
-   make dev
-   ```
-
-### 注入自定义 Telegram 凭据运行
-
-如需登录正式 Telegram 账号，请在启动时注入从 [my.telegram.org](https://my.telegram.org) 申请的 API 凭据：
+### 安装与运行
 
 ```sh
-TELO_TELEGRAM_API_ID=1234567 TELO_TELEGRAM_API_HASH=0123456789abcdef0123456789abcdef make dev
+git clone https://github.com/astrafoundry/telo.git
+cd telo
+make install
+make dev
 ```
 
-Google 账号登录需要 Google Cloud 的桌面应用 OAuth 客户端 ID（启用 Generative Language API，并允许回环 `http://127.0.0.1`）：
-
-```sh
-TELO_GOOGLE_OAUTH_CLIENT_ID=123456789.apps.googleusercontent.com make dev
-```
-
-OpenAI、Anthropic、xAI 和 Kimi 的 Connect 使用各厂商公开的原生 OAuth 客户端。如需覆盖，可设置 `TELO_OPENAI_OAUTH_CLIENT_ID`、`TELO_ANTHROPIC_OAUTH_CLIENT_ID`、`TELO_XAI_OAUTH_CLIENT_ID`、`TELO_KIMI_OAUTH_CLIENT_ID`。
-
-如需打开内存演示工作区而非引导页：
+若无需登录真实 Telegram 账号或配置 AI 服务商，直接体验内存演示工作区与确定性演示智能体：
 
 ```sh
 make dev DEMO=1
 ```
 
-_注：若构建时未提供 API 凭据，正式包会显示凭据缺失提示而非登录表单。演示工作区是本地启动参数，不是回退方案。_
+### Telegram 与 OAuth 凭据配置
 
----
-
-## 质量保障与测试体系
-
-Telo 配备了严格的端到端与单元测试流水线：
+如需在本地开发时连接真实 Telegram 账号，请传入从 [my.telegram.org](https://my.telegram.org) 申请的应用凭据（或参考 `.env.example` 写入本地 `.env` 文件）：
 
 ```sh
-# 运行完整质量把关门禁 (格式化、ESLint、类型检查、单元测试覆盖率、文档检查、E2E 测试)
-make check
-
-# 运行 Vitest 单元与集成测试（带覆盖率统计）
-make test
-
-# 运行 Playwright Electron 端到端自动化测试
-make test-e2e
-
-# 运行代码规范检查与格式化
-make lint
-make format
+TELO_TELEGRAM_API_ID=1234567 TELO_TELEGRAM_API_HASH=0123456789abcdef0123456789abcdef make dev
 ```
 
-- **Vitest**：运行前后端单元与集成测试，强制执行严格的代码覆盖率标准（行数、函数、语句不低于 80%，分支不低于 75%）。
-- **Playwright**：在真实的打包 Electron 环境中运行端到端测试，全面覆盖新手引导、消息收发、设置持久化、智能体问答与异常熔断等关键业务旅程。
-
----
-
-## 常用命令一览
-
-| 命令            | 说明                                                            |
-| --------------- | --------------------------------------------------------------- |
-| `make install`  | 按 lockfile 安装项目依赖并下载 Electron 二进制                  |
-| `make dev`      | 先安装依赖，再启动开发模式并开启热更新（Hot Reload）            |
-| `make check`    | 运行完整的发布前检查（格式化、Lint、类型、单元测试、文档、E2E） |
-| `make test`     | 运行基于 Vitest 的单元与集成测试，并输出覆盖率报告              |
-| `make test-e2e` | 运行基于 Playwright 的 Electron 端到端全流程测试                |
-| `make lint`     | 运行 ESLint 并校验 Feature-Sliced Design 架构层级边界           |
-| `make format`   | 使用 Prettier 自动格式化源码与文档                              |
-| `make docs`     | 使用 markdownlint 校验所有 Markdown 文档规范                    |
-| `make build`    | 使用 electron-vite 编译主进程、Preload 与渲染层代码             |
-| `make package`  | 构建未打包的应用程序产物目录                                    |
-| `make reset`    | 删除 Electron 用户数据，下次启动回到首次运行                    |
-
----
-
-## 配置与本地数据存储
-
-Telo 将所有用户数据与配置持久化在 Electron 的系统 `userData` 目录下：
-
-| 文件名称             | 作用说明                                      | 存储加密方式                    |
-| -------------------- | --------------------------------------------- | ------------------------------- |
-| `agent.json`         | AI 智能体模型配置、加密 API Key 与 OAuth 令牌 | 经 `safeStorage` 加密           |
-| `agent-threads.json` | 历史智能体对话流记录与当前活动会话 ID         | 明文 JSON                       |
-| `telegram.session`   | Telegram MTProto 登录鉴权 Session 密钥        | 经 `safeStorage` 系统钥匙串加密 |
-| `telegram.profile`   | 当前登录用户信息与头像缓存                    | 经 `safeStorage` 加密           |
-| `dialogs.json`       | 会话列表与文件夹角标快照，供恢复登录时使用    | 明文 JSON                       |
-| `preferences.json`   | 主题、强调色、字体大小、时间格式与快捷键偏好  | 明文 JSON                       |
-
-_在无桌面钥匙串的无头 Linux CI 环境中，可通过配置 `TELO_PLAINTEXT_SECRETS=1` 启用 base64 回退模式进行自动化测试。_
-
----
-
-## 打包与跨平台发布
-
-为目标操作系统生成开箱即用的安装包与可执行文件：
+如需启用 Google OAuth（`Connect account`），请提供已开启 Generative Language API 且允许本地回环重定向（`http://127.0.0.1`）的 Google Cloud 桌面端 OAuth 客户端 ID：
 
 ```sh
-# 构建跨平台发行包
-pnpm release
+TELO_GOOGLE_OAUTH_CLIENT_ID=123456789.apps.googleusercontent.com make dev
 ```
 
-- **macOS**：Apple Silicon (arm64) 与 Intel (x64) 的 DMG 安装包及 ZIP 压缩包（`.dmg`, `.zip`）
-- **Windows**：NSIS 安装引导程序（`.exe`）
-- **Linux**：通用 AppImage 与 Debian 安装包（`.AppImage`, `.deb`）
+OpenAI、Anthropic、xAI 与 Kimi 默认使用各厂商公开的原生 OAuth 客户端，也可通过 `TELO_OPENAI_OAUTH_CLIENT_ID`、`TELO_ANTHROPIC_OAUTH_CLIENT_ID`、`TELO_XAI_OAUTH_CLIENT_ID` 与 `TELO_KIMI_OAUTH_CLIENT_ID` 覆盖。未设置 `TELO_GOOGLE_OAUTH_CLIENT_ID` 时，Google 仍可通过 API Key 配置。
 
----
+### 常用命令
 
-## 技术文档索引
+| 命令 | 说明 |
+| --- | --- |
+| `make install` | 按 lockfile 安装依赖并下载 Electron 二进制文件 |
+| `make dev` | 安装依赖并以热重载模式启动 Electron 应用 |
+| `make dev DEMO=1` | 直接启动进入内存演示工作区 |
+| `make reset` | 删除 Electron `userData` 目录并恢复为首次启动状态 |
+| `make check` | 运行代码格式化检查、ESLint、TypeScript、单元覆盖率、TDLib 能力基线、Markdown 校验及 Playwright E2E 测试 |
+| `make test` | 运行带覆盖率统计的 Vitest 单元与集成测试 |
+| `make test-e2e` | 以 `e2e` 模式构建并运行 Playwright Electron 端到端测试 |
+| `make test-live` | 运行需凭据解锁的真实 Telegram E2E 测试（需设置 `TELO_LIVE_E2E=1`） |
+| `make lint` | 运行 ESLint（包含 Feature-Sliced Design 架构层级边界校验） |
+| `make format` | 使用 Prettier 格式化源码与文档 |
+| `make docs` | 使用 `markdownlint-cli2` 校验 `README*.md` 与 `docs/**/*.md` |
+| `make build` | 使用 `electron-vite` 编译主进程、Preload 与渲染进程产物 |
+| `make package` | 准备原生 TDLib 动态库并生成未打包的应用产物目录 |
+| `make tdlib-smoke` | 在 `make package` 后校验打包产物中的 `libtdjson` 是否正常加载 |
+| `pnpm release` | 使用 `electron-builder` 构建当前平台的安装包与发行产物 |
 
-欲深入了解系统设计与实现细节，请参阅 [`docs/`](docs/) 目录下的技术文档：
+## 文档索引
 
-- [系统架构设计 (Architecture)](docs/project/architecture.md) — 模块边界、数据流转与 IPC 通信设计。
-- [AI 智能体与 AG-UI 协议 (Agent & AG-UI)](docs/project/agent.md) — AG-UI 事件协议、工作区快照机制与多会话管理。
-- [前端开发规范 (FSD Guidelines)](docs/frontend/README.md) — Feature-Sliced Design 架构规范、层级划分与组件使用约定。
-- [后端开发规范 (DDD Guidelines)](docs/backend/README.md) — 领域驱动设计实践、仓储接口与用例编排。
-- [本地开发指南 (Local Development)](docs/operations/local-dev.md) — 详细环境配置、凭据调试与常见问题。
-- [测试策略规范 (Testing Strategy)](docs/quality/testing.md) — Vitest 覆盖率要求与 Playwright Electron 测试装置。
-- [构建与发布流程 (Release Process)](docs/operations/deployment.md) — 构建矩阵、代码签名、应用公证与发布回滚。
-
----
-
-## 免责声明
-
-Telo 是一个独立的第三方开源客户端，**未**与 Telegram FZ-LLC 或 Telegram Messenger Inc. 建立隶属、关联、授权、认可或以任何方式正式连接的关系。
-
----
+- [文档总览](docs/README.md) — 顶层文档地图与使用指南。
+- [项目概述](docs/project/README.md) — 产品目标与安全边界。
+- [系统架构](docs/project/architecture.md) — 前端 FSD 分层、后端 DDD 分层、IPC 契约与核心数据流。
+- [智能体与 AG-UI 集成](docs/project/agent.md) — 流式面板、消息引用、提及补全、BYOA 模型接入、脱敏审计与自动化。
+- [Telegram 能力基线](docs/telegram/README.md) — TDLib 能力覆盖矩阵与客户端工作流。
+- [前端开发规范 (FSD)](docs/frontend/README.md) — Feature-Sliced Design 规范与跨层导入规则。
+- [后端开发规范 (DDD)](docs/backend/README.md) — 领域驱动设计分层、端口与用例编排。
+- [本地数据持久化](docs/backend/database.md) — 加密 `userData` 存储文件与单账号 TDLib 数据库说明。
+- [本地开发指南](docs/operations/local-dev.md) — 环境变量、运行时配置与调试方法。
+- [构建与发布](docs/operations/deployment.md) — 打包流程、原生 TDLib 分发、CI 与发布产物。
+- [测试策略](docs/quality/testing.md) — Vitest 覆盖率门禁与 Playwright Electron 端到端测试。
+- [架构决策记录 (ADR)](docs/decisions/README.md) — 涵盖 IPC 边界、BYOA 服务商、自动化安全与 TDLib 内核的架构决策。
 
 ## 开源协议
 
-本项目采用 [MIT 许可证](LICENSE) 进行开源。
+本项目基于 [MIT 许可证](LICENSE) 开源。
+
+Telo 是由 AstraFoundry 开发的独立第三方客户端，与 Telegram FZ-LLC 或 Telegram Messenger Inc. 不存在隶属、关联、赞助或官方认可关系。
