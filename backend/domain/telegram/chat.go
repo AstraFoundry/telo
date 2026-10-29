@@ -203,3 +203,21 @@ type CreateChannelInput struct {
 	Title       string
 	Description string
 }
+
+// builtInAccents are Telegram's seven built-in peer colors (accent ids
+// 0–6), light and dark gradient stops of the empty userpic.
+var builtInAccents = [7][2]string{
+	{"#E17076", "#FF885E"}, {"#FAA774", "#FFCD6A"}, {"#A695E7", "#BFA0F3"}, {"#7BC862", "#6EC96C"},
+	{"#6EC9CB", "#53D4D4"}, {"#65AADD", "#54B3F0"}, {"#EE7AAE", "#F58FB7"},
+}
+
+// Placeholder is the empty userpic of title on built-in accent id; ids
+// past the built-in set wrap, as Telegram's fallback does.
+func Placeholder(title string, accentID int) *AvatarPlaceholder {
+	c := builtInAccents[((accentID%7)+7)%7]
+	glyph := FirstGrapheme(title)
+	if glyph == "" {
+		glyph = "?"
+	}
+	return &AvatarPlaceholder{Glyph: glyph, LightColors: []string{c[0], c[1]}, DarkColors: []string{c[0], c[1]}}
+}
