@@ -188,3 +188,13 @@ type TwoStepState struct {
 	Hint             string
 	RecoveryEmailSet bool
 }
+
+// Sign-in error codes carried by AuthState.Error; the UI words them.
+const (
+	AuthErrPhoneInvalid    = "phone-invalid"
+	AuthErrCodeInvalid     = "code-invalid"
+	AuthErrCodeExpired     = "code-expired"
+	AuthErrPasswordInvalid = "password-invalid"
+	AuthErrFlood           = "flood"
+	AuthErrFailed          = "failed"
+)

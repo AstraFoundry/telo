@@ -6,6 +6,7 @@ package kit
 import (
 	"time"
 
+	"github.com/AstraFoundry/telo/frontend/shared/assets"
 	"github.com/AstraFoundry/telo/frontend/shared/icons"
 	"github.com/AstraFoundry/telo/frontend/shared/theme"
 	"github.com/egoist/mygo/ui"
@@ -425,4 +426,9 @@ func Segmented(c *ui.Context, t theme.Tokens, chosen *int, labels []string) ui.E
 		}
 	})
 	return seg.Track
+}
+
+// Mark draws the app icon at size DIPs.
+func Mark(c *ui.Context, size float32) ui.Element {
+	return ui.Image(c, assets.Mark).Size(size, size).Fit(ui.Contain)
 }

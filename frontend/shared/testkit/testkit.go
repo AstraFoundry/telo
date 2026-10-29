@@ -4,7 +4,13 @@
 package testkit
 
 import (
+	"bytes"
+	"image/png"
+	"os"
+	"path/filepath"
+
 	"context"
+	"github.com/egoist/mygo/ui"
 	"sync"
 	"testing"
 	"time"
@@ -146,5 +152,25 @@ func (e *Env) Settle(t testing.TB, frame func()) {
 			t.Fatal("background work did not settle")
 		}
 		time.Sleep(time.Millisecond)
+	}
+}
+
+// Snapshot saves the tester's last frame as name.png when TELO_UI_SNAPSHOTS
+// names a directory, for visual review.
+func Snapshot(t testing.TB, tt *ui.Tester, name string) {
+	t.Helper()
+	dir := os.Getenv("TELO_UI_SNAPSHOTS")
+	if dir == "" {
+		return
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	var b bytes.Buffer
+	if err := png.Encode(&b, tt.Image()); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, name+".png"), b.Bytes(), 0o644); err != nil {
+		t.Fatal(err)
 	}
 }
