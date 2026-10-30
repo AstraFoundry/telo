@@ -1,6 +1,20 @@
 package agent
 
-import "context"
+import (
+	"context"
+	"errors"
+)
+
+// Outcomes of a run or a connection the UI words; adapters wrap them so
+// provider payloads, which can carry key material, never reach the UI.
+var (
+	ErrNoCredential     = errors.New("agent: no provider is connected")
+	ErrRejected         = errors.New("agent: the provider rejected the credentials")
+	ErrUnreachable      = errors.New("agent: the provider could not be reached")
+	ErrRequestFailed    = errors.New("agent: the request failed")
+	ErrOAuthFailed      = errors.New("agent: the account was not connected")
+	ErrOAuthUnavailable = errors.New("agent: this build has no OAuth client for the provider")
+)
 
 // ConfigurationStore persists the configuration with its secrets.
 type ConfigurationStore interface {
@@ -62,10 +76,12 @@ const (
 	OutputError
 )
 
-// Output is one piece of a streamed answer.
+// Output is one piece of a streamed answer: text, the name of a tool in
+// use, or the error that ended the run (one of the outcomes above).
 type Output struct {
 	Kind OutputKind
 	Text string
+	Err  error
 }
 
 // HistoryMessage is a prior turn replayed to the model.
