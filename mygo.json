@@ -1,0 +1,20 @@
+{
+  "name": "Telo",
+  "slug": "telo",
+  "identifier": "si.astrafoundry.telo",
+  "version": "0.1.0",
+  "copyright": "AstraFoundry",
+  "urlSchemes": ["tg"],
+  "out": "build",
+  "resources": ["build/tdlib-native"],
+  "macos": {
+    "minimumSystemVersion": "13.0",
+    "infoPlist": {
+      "LSApplicationCategoryType": "public.app-category.social-networking",
+      "CFBundleDevelopmentRegion": "en"
+    }
+  },
+  "windows": {
+    "notifications": true
+  }
+}

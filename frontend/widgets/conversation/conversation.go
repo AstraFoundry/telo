@@ -36,6 +36,8 @@ type Props struct {
 	Mac     bool
 	// TitleBar is the room the window controls take, for the header.
 	TitleBar ui.TitleBar
+	// Step opens the next (1) or previous (-1) chat.
+	Step func(step int)
 	// InfoOpen tells whether the profile panel shows; ToggleInfo flips it.
 	InfoOpen   bool
 	ToggleInfo func()
@@ -122,7 +124,8 @@ func (v *View) Render(c *ui.Context, p Props) {
 				if !p.InfoOpen {
 					p.ToggleInfo()
 				}
-			}}, ch.ID)
+			},
+			Step: p.Step}, ch.ID)
 	})
 	v.actions.Dialogs(c, v.actionEnv(p))
 }

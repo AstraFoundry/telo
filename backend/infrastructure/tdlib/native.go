@@ -123,6 +123,22 @@ func (l *Library) Execute(request tdapi.Object) (json.RawMessage, error) {
 	return raw, answerError(raw)
 }
 
+// Version is the TDLib version the library reports.
+func (l *Library) Version() (string, error) {
+	raw, err := l.Execute(&tdapi.GetOptionRequest{Name: "version"})
+	if err != nil {
+		return "", err
+	}
+	obj, err := tdapi.Decode(raw)
+	if err != nil {
+		return "", err
+	}
+	if v, ok := obj.(*tdapi.OptionValueString); ok {
+		return v.Value, nil
+	}
+	return "", fmt.Errorf("tdlib: version is %T", obj)
+}
+
 // NewClient creates a TDLib client instance; its updates arrive on
 // Updates until Close.
 func (l *Library) NewClient() *Client {

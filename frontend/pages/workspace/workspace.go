@@ -131,6 +131,11 @@ func (p *Page) Render(c *ui.Context, env Env) {
 			p.Conversation.Render(c, conversation.Props{
 				Tokens: t, Store: s, Runtime: env.Runtime, Images: env.Images, Formats: env.Formats, Prefs: env.Prefs, Mac: env.Mac,
 				TitleBar: bar, InfoOpen: p.Panel == PanelInfo, ToggleInfo: p.toggleInfo,
+				Step: func(step int) {
+					if id, ok := s.Neighbor(step); ok {
+						p.Open(env, id, 0)
+					}
+				},
 				OpenLink: env.OpenLink, OpenMedia: env.OpenMedia, Summarize: env.Summarize, Language: "en",
 			})
 		})

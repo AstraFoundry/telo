@@ -100,6 +100,12 @@ func (a *App) OpenSettings(s panes.Section) {
 	a.settings.Open(s)
 }
 
+// FocusSearch shows the chats and puts the keyboard in their search.
+func (a *App) FocusSearch() {
+	a.inSettings = false
+	a.workspace.Search.Focus()
+}
+
 // ToggleAgent opens or closes the agent panel.
 func (a *App) ToggleAgent() {
 	open := a.workspace.Panel != workspace.PanelAgent

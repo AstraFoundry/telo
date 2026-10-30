@@ -52,6 +52,8 @@ type Env struct {
 	Mac     bool
 	// OpenInfo opens the chat's info, which → does in an empty composer.
 	OpenInfo func()
+	// Step opens the next (1) or previous (-1) chat.
+	Step func(step int)
 }
 
 // Composer keeps the composer's own state between frames.
@@ -251,7 +253,7 @@ func (cp *Composer) attachButton(c *ui.Context, env Env, ch tg.Chat, state *chat
 		attach.Disabled(true).Opacity(0.4)
 		return
 	}
-	attach.PopoverMenu(func(m *ui.Menu) {
+	attach.PopoverMenuButton(func(m *ui.Menu) {
 		if m.Item(copy.T(copy.AttachPhotoOrVideo)).Disabled(!ch.CanSendMedia).Chosen() {
 			cp.stage(env, state, env.Runtime.Desktop.PickFiles(copy.T(copy.AttachPhotoOrVideo), true, true))
 		}
@@ -291,6 +293,22 @@ func (cp *Composer) field(c *ui.Context, env Env, ch tg.Chat, state *chat.Compos
 			k.SetText("")
 			env.Runtime.Post(func() { cp.send(env, ch.ID, state, text, tg.SendOptions{}) })
 			return true
+		case (k.Key == ui.KeyUp || k.Key == ui.KeyDown) && k.Mods == ui.Cmd:
+			// ⌘↑ and ⌘↓ pick the message to reply to, as upstream.
+			step := 1
+			if k.Key == ui.KeyUp {
+				step = -1
+			}
+			env.Runtime.Post(func() { s.ReplyStep(ch.ID, step) })
+			return true
+		case (k.Key == ui.KeyUp || k.Key == ui.KeyDown) && k.Mods == ui.Alt && env.Step != nil:
+			// ⌥↑ and ⌥↓ step through the chats from the composer too.
+			step := 1
+			if k.Key == ui.KeyUp {
+				step = -1
+			}
+			env.Runtime.Post(func() { env.Step(step) })
+			return true
 		case k.Key == ui.KeyRight && k.Mods == 0 && k.Text() == "" && env.OpenInfo != nil:
 			env.Runtime.Post(env.OpenInfo)
 			return true
@@ -310,6 +328,11 @@ func (cp *Composer) field(c *ui.Context, env Env, ch tg.Chat, state *chat.Compos
 		}
 		return false
 	})
+	// Escape drops the reply or edit target wherever the keyboard is, as
+	// upstream; the field itself may take Escape to let go of the focus.
+	if (state.ReplyTo != 0 || state.Editing != 0) && c.Shortcut(0, ui.KeyEscape) {
+		s.CancelTarget(ch.ID)
+	}
 	// Telegram's markdown shortcuts wrap the selection in markers that the
 	// send parses into entities.
 	for _, f := range []struct {
