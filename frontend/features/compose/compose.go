@@ -169,7 +169,7 @@ func target(c *ui.Context, env Env, chatID tg.ChatID, state *chat.Composer) {
 		body = state.Quote
 	}
 	ui.Row(c.Key("target")).Gap(10).Padding(6, 10).AlignItems(ui.Center).
-		Transition(ui.ElementTransition{Animation: &theme.Settle, Enter: &ui.Motion{Y: 8, Opacity: 0}, Exit: &ui.Motion{Opacity: 0}}).Children(func() {
+		Transition(t.Transition(theme.Settle, &ui.Motion{Y: 8, Opacity: 0}, &ui.Motion{Opacity: 0})).Children(func() {
 		ui.Icon(c, icon).FontSize(18).TextColor(t.AccentInk)
 		ui.Box(c).Width(2).Height(30).Radius(1).Background(t.Accent)
 		ui.Column(c).Grow(1).Shrink(1).Gap(1).Children(func() {

@@ -103,7 +103,7 @@ func (v *Viewer) Render(c *ui.Context, t theme.Tokens, rt *runtime.Runtime, s *c
 func (v *Viewer) layer(c *ui.Context, t theme.Tokens, rt *runtime.Runtime, s *chat.Store, images *media.Images, i int, m tg.Message, md *tg.Media) {
 	ink := ui.RGB(255, 255, 255)
 	ui.Box(c.Key("viewer")).Absolute().Left(0).Top(0).Right(0).Bottom(0).Background(t.Scrim.Alpha(0.97)).Role(ui.RoleDialog).Label(copy.T(copy.MediaViewer)).
-		Transition(ui.ElementTransition{Animation: &theme.Settle, Enter: &ui.Motion{Opacity: 0}, Exit: &ui.Motion{Opacity: 0}}).Children(func() {
+		Transition(t.Transition(theme.Settle, &ui.Motion{Opacity: 0}, &ui.Motion{Opacity: 0})).Children(func() {
 		ui.Column(c).Fill().Children(func() {
 			ui.Row(c).Height(52).Padding(0, 16).Gap(8).AlignItems(ui.Center).Children(func() {
 				ui.Column(c).Grow(1).Gap(1).Children(func() {

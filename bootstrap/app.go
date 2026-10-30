@@ -38,6 +38,9 @@ import (
 var (
 	apiID   string
 	apiHash string
+	// googleClientID is Telo's own Google Desktop OAuth client; Google
+	// has no public native client to reuse.
+	googleClientID string
 )
 
 // Options are the launch settings main reads from the environment.
@@ -141,7 +144,11 @@ func (a *App) build() error {
 		gateway, catalog = agentinfra.Demo{}, agentinfra.DemoCatalog{}
 	}
 	a.desk = &desktop{}
-	oauth := &agentinfra.OAuth{ClientIDs: agentinfra.ClientIDsFromEnv(), Open: a.desk.OpenURL}
+	clients := agentinfra.ClientIDsFromEnv()
+	if _, set := clients[agentdomain.ProviderGoogle]; !set && googleClientID != "" {
+		clients[agentdomain.ProviderGoogle] = googleClientID
+	}
+	oauth := &agentinfra.OAuth{ClientIDs: clients, Open: a.desk.OpenURL}
 	agent := agentapp.New(agentapp.Deps{Configurations: files.Configuration, OAuth: oauth, Catalog: catalog, Gateway: gateway,
 		Threads: files.Threads, Audits: files.Audits, Rules: files.Rules, Tasks: files.Tasks, Telegram: accounts.Active})
 	id, _ := credentials(a.opts)

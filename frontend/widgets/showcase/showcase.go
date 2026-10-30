@@ -45,7 +45,7 @@ const Window = 252
 // photograph's corners where it meets a rounded container.
 func Render(c *ui.Context, t theme.Tokens, scene Scene, radius ...float32) {
 	now := c.Now()
-	if scene == Conversation && c.Preferences().ReduceMotion {
+	if scene == Conversation && t.Still {
 		scene = Replied
 	}
 	if scene == Conversation {
@@ -118,7 +118,7 @@ func window(c *ui.Context, t theme.Tokens, scene Scene, replied bool) {
 			}
 			bubble(c, t, copy.T(copy.ShowcaseIncoming), false)
 			if replied {
-				ui.Box(c.Key("reply")).Transition(ui.ElementTransition{Animation: &theme.Settle, Enter: &ui.Motion{Y: 6, Opacity: 0}}).Children(func() {
+				ui.Box(c.Key("reply")).Transition(t.Transition(theme.Settle, &ui.Motion{Y: 6, Opacity: 0}, nil)).Children(func() {
 					bubble(c, t, copy.T(copy.ShowcaseOutgoing), true)
 				})
 			}
@@ -154,7 +154,7 @@ func pill(c *ui.Context, t theme.Tokens, scene Scene, streamed float32, replied 
 	}
 	kit.Pill(c.Key("pill"), t).Margin(-20, 0, 0, 0).MaxWidth(Window + 24).Children(func() {
 		ui.Row(c.Key(phase)).Gap(10).AlignItems(ui.Center).
-			Transition(ui.ElementTransition{Animation: &theme.Pop, Enter: &ui.Motion{Scale: 0.94}, Exit: &ui.Motion{Scale: 0.97}}).
+			Transition(t.Transition(theme.Pop, &ui.Motion{Scale: 0.94}, &ui.Motion{Scale: 0.97})).
 			Children(func() {
 				if replied {
 					mark := ui.Row(c).Size(18, 18).Radius(9).Background(t.Success).Justify(ui.Center).AlignItems(ui.Center)

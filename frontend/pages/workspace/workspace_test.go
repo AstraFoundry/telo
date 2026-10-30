@@ -31,7 +31,7 @@ func open(t *testing.T, appearance preferences.Theme) *harness {
 	view := func(c *ui.Context) {
 		env.Runtime.Drain()
 		prefs := env.Runtime.Preferences.Get()
-		tokens := theme.Apply(c, prefs.Theme, prefs.Accent)
+		tokens := theme.Apply(c, prefs)
 		h.page.Render(c, Env{
 			Tokens: tokens, Runtime: env.Runtime, Store: h.store, Images: images,
 			Formats: timefmt.Formats{Locale: "en-US"}, Prefs: prefs, Mac: true,

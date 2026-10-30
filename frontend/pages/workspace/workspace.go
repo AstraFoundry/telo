@@ -168,7 +168,7 @@ func (p *Page) toggleInfo() {
 func (p *Page) side(c *ui.Context, env Env, body func()) {
 	t := env.Tokens
 	ui.Column(c.Key(p.Panel)).Width(env.Prefs.AgentPanelWidth).Shrink(0).Background(t.Card).BorderWidth(0, 0, 0, 1).BorderColor(t.Hairline).
-		Transition(ui.ElementTransition{Animation: &theme.Settle, Enter: &ui.Motion{X: 24, Opacity: 0}, Exit: &ui.Motion{X: 16, Opacity: 0}}).
+		Transition(t.Transition(theme.Settle, &ui.Motion{X: 24, Opacity: 0}, &ui.Motion{X: 16, Opacity: 0})).
 		Children(body)
 }
 

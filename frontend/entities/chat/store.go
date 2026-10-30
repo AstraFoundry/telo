@@ -891,7 +891,8 @@ func (s *Store) Leave(id tg.ChatID) {
 
 // SaveDraft stores the composer's text as the chat's draft.
 func (s *Store) SaveDraft(id tg.ChatID, text string) {
-	if c, ok := s.chats[id]; ok && c.DraftPreview == strings.TrimSpace(text) {
+	c, ok := s.chats[id]
+	if !ok || !c.CanSendMessages || c.DraftPreview == strings.TrimSpace(text) {
 		return
 	}
 	s.do(func(ctx context.Context, r tg.Repository) error { return r.SaveDraft(ctx, id, text) }, nil)

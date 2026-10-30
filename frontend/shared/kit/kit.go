@@ -343,7 +343,7 @@ func Dialog(c *ui.Context, t theme.Tokens, open *bool, width float32, title, des
 	ui.DialogBase(c, open, func(backdrop, panel ui.Element) {
 		backdrop.Background(t.Scrim.Alpha(0.38))
 		panel.Width(width).Radius(theme.RadiusXL+2).Background(t.Card).Border(1, t.CardBorder).Clip().
-			Transition(ui.ElementTransition{Animation: &theme.Pop, Enter: &ui.Motion{Scale: 0.96, Opacity: 0}, Exit: &ui.Motion{Scale: 0.98, Opacity: 0}})
+			Transition(t.Transition(theme.Pop, &ui.Motion{Scale: 0.96, Opacity: 0}, &ui.Motion{Scale: 0.98, Opacity: 0}))
 		Raise(panel, t, Overlay)
 		ui.Column(c).Padding(20, 20, 4, 20).Gap(6).Children(func() {
 			ui.Text(c, title).FontSize(theme.Heading + 2).FontWeight(600)

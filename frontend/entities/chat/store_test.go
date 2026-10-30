@@ -147,3 +147,16 @@ func TestIncomingMessageCallback(t *testing.T) {
 	}
 	_ = time.Second
 }
+
+func TestReadOnlyChatKeepsNoDraft(t *testing.T) {
+	s, env := started(t)
+	s.SaveDraft(demo.ProductChat, "not allowed here")
+	s.SaveDraft(demo.DesignChat, "allowed")
+	env.Settle(t, nil)
+	if got := s.chats[demo.ProductChat].DraftPreview; got != "" {
+		t.Fatalf("read-only channel kept draft %q", got)
+	}
+	if got := s.chats[demo.DesignChat].DraftPreview; got != "allowed" {
+		t.Fatalf("group draft %q", got)
+	}
+}

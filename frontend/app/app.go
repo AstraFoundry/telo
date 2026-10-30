@@ -199,7 +199,7 @@ func (a *App) autoLock(p preferences.Preferences) {
 func (a *App) View(c *ui.Context) {
 	a.rt.Drain()
 	prefs := a.rt.Preferences.Get()
-	t := theme.Apply(c, prefs.Theme, prefs.Accent)
+	t := theme.Apply(c, prefs)
 	formats := timefmt.Formats{Locale: c.Locale(), Hours: prefs.TimeFormat}
 	a.follow()
 	a.autoLock(prefs)

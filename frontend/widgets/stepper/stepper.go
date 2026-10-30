@@ -21,7 +21,7 @@ func Render(c *ui.Context, t theme.Tokens, current, total int) {
 			case i < current:
 				color = t.Faint
 			}
-			dot.Width(dot.AnimateTo("w", width, theme.Settle)).Background(dot.AnimateColor("c", color, theme.Quick))
+			dot.Width(dot.AnimateTo("w", width, t.Motion(theme.Settle))).Background(dot.AnimateColor("c", color, theme.Quick))
 		}
 	})
 }

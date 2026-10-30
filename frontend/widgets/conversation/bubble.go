@@ -48,7 +48,7 @@ func (v *View) messageRow(c *ui.Context, p Props, ch tg.Chat, r row) {
 		line.Background(t.AccentSoft.Alpha(0.6)).Radius(theme.RadiusMD)
 	}
 	if v.highlight == m.ID && p.Runtime.Clock().Sub(v.lightAt) < 1500e6 {
-		line.Background(line.AnimateColor("light", t.Accent.Alpha(0.16), theme.Settle)).Radius(theme.RadiusMD)
+		line.Background(line.AnimateColor("light", t.Accent.Alpha(0.16), t.Motion(theme.Settle))).Radius(theme.RadiusMD)
 		c.After(1600e6)
 	}
 	line.Children(func() {

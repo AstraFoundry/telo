@@ -374,7 +374,7 @@ func (v *View) jumpButton(c *ui.Context, p Props, ch tg.Chat) {
 	}
 	b := ui.ButtonBase(c.Key("jump")).Size(40, 40).Radius(20).Background(t.Card).Border(1, t.CardBorder).Justify(ui.Center).AlignItems(ui.Center).
 		Label(copy.T(copy.JumpToLatest)).Attach(ui.AnchorBottomRight, ui.AnchorBottomRight).Right(18).Bottom(14).
-		Transition(ui.ElementTransition{Animation: &theme.Pop, Enter: &ui.Motion{Scale: 0.8, Opacity: 0}, Exit: &ui.Motion{Scale: 0.8, Opacity: 0}})
+		Transition(t.Transition(theme.Pop, &ui.Motion{Scale: 0.8, Opacity: 0}, &ui.Motion{Scale: 0.8, Opacity: 0}))
 	kit.Raise(b, t, kit.Lifted)
 	b.Children(func() {
 		ui.Icon(c, icons.CaretDown).FontSize(18).TextColor(t.Muted)

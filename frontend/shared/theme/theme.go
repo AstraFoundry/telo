@@ -77,6 +77,8 @@ func neutral(l, c float32) ui.Color { return ui.Oklch(l, c, 250) }
 // Tokens are semantic colors resolved for an appearance and an accent.
 type Tokens struct {
 	Dark bool
+	// Still is set when Telo's or the desktop's Reduce motion is on.
+	Still bool
 
 	Canvas     ui.Color // window background
 	Sidebar    ui.Color // the chat list column
@@ -204,12 +206,12 @@ func Resolve(dark bool, accent preferences.Accent) Tokens {
 
 // Apply installs Telo's theme for the window's appearance, so MyGo's own
 // controls (switches, radios, fields, lists) wear it too, and returns the
-// tokens for Telo's views. appearance overrides the desktop's light or
-// dark when not ThemeSystem.
-func Apply(c *ui.Context, appearance preferences.Theme, accent preferences.Accent) Tokens {
+// tokens for Telo's views. The preferences' theme overrides the desktop's
+// light or dark when not ThemeSystem.
+func Apply(c *ui.Context, prefs preferences.Preferences) Tokens {
 	base := c.Theme()
 	dark := base.Dark
-	switch appearance {
+	switch prefs.Theme {
 	case preferences.ThemeLight:
 		dark = false
 	case preferences.ThemeDark:
@@ -221,7 +223,8 @@ func Apply(c *ui.Context, appearance preferences.Theme, accent preferences.Accen
 			base = ui.DarkTheme()
 		}
 	}
-	tokens := Resolve(dark, accent)
+	tokens := Resolve(dark, prefs.Accent)
+	tokens.Still = prefs.ReduceMotion || c.Preferences().ReduceMotion
 	t := *base
 	t.Dark = dark
 	t.Background, t.Text, t.TextMuted, t.Border = tokens.Canvas, tokens.Text, tokens.Muted, tokens.CardBorder
@@ -268,3 +271,29 @@ var (
 	// Row fades chat-list rows as the order changes.
 	Row = ui.Animation{Duration: 150 * time.Millisecond, Ease: ui.EaseOut}
 )
+
+// Motion is a under the motion preference: with Reduce motion on, springs
+// and slides become a short fade.
+func (t Tokens) Motion(a ui.Animation) ui.Animation {
+	if t.Still {
+		return Quick
+	}
+	return a
+}
+
+// Transition animates an element entering from enter and leaving to exit
+// with a; with Reduce motion on, only their opacity remains.
+func (t Tokens) Transition(a ui.Animation, enter, exit *ui.Motion) ui.ElementTransition {
+	a = t.Motion(a)
+	if t.Still {
+		enter, exit = fade(enter), fade(exit)
+	}
+	return ui.ElementTransition{Animation: &a, Enter: enter, Exit: exit}
+}
+
+func fade(m *ui.Motion) *ui.Motion {
+	if m == nil {
+		return nil
+	}
+	return &ui.Motion{Opacity: m.Opacity}
+}

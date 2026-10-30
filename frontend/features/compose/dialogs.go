@@ -139,7 +139,7 @@ func (d *scheduleDialog) render(c *ui.Context, env Env, chat tg.ChatID, cp *Comp
 func (cp *Composer) renderPanel(c *ui.Context, env Env, ch tg.Chat) {
 	t, s := env.Tokens, env.Store
 	panel := kit.Card(c.Key("panel"), t).Height(300).Gap(0).
-		Transition(ui.ElementTransition{Animation: &theme.Settle, Enter: &ui.Motion{Y: 10, Opacity: 0}, Exit: &ui.Motion{Y: 6, Opacity: 0}})
+		Transition(t.Transition(theme.Settle, &ui.Motion{Y: 10, Opacity: 0}, &ui.Motion{Y: 6, Opacity: 0}))
 	panel.Children(func() {
 		ui.Row(c).Padding(8, 10).Gap(8).AlignItems(ui.Center).Children(func() {
 			kit.Segmented(c, t, &cp.panelTab, []string{copy.T(copy.Emoji), copy.T(copy.Stickers)})

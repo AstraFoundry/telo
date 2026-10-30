@@ -63,7 +63,7 @@ func (p *Page) Step(auth tg.AuthState) onboarding.Step {
 // the user leaves the flow for the workspace.
 func (p *Page) Render(c *ui.Context, rt *runtime.Runtime, auth tg.AuthState, finish func()) {
 	prefs := rt.Preferences.Get()
-	t := theme.Apply(c, prefs.Theme, prefs.Accent)
+	t := theme.Apply(c, prefs)
 	step := p.Step(auth)
 	if step != p.last {
 		if step > p.last {
