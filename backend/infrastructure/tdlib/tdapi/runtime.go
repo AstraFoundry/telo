@@ -119,3 +119,9 @@ func IsError(err error, code int32, message string) bool {
 	e, ok := err.(*Error)
 	return ok && e.Code == code && (message == "" || e.Message == message)
 }
+
+// Decodes tells whether this build generates the constructor named tdType.
+func Decodes(tdType string) bool {
+	_, ok := decoders[tdType]
+	return ok
+}

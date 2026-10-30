@@ -14,31 +14,30 @@ jobs:
       matrix:
         os: [macos-latest, windows-latest, ubuntu-latest]
     runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
-      # package.json `packageManager` already pins pnpm; passing `version`
-      # here would fail the action with ERR_PNPM_BAD_PM_VERSION.
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - name: Build release artifacts
-        run: pnpm release
+      - run: make check
+      - name: Build the packaged app
+        run: make package
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TELO_TELEGRAM_API_ID: ${{ secrets.TELO_TELEGRAM_API_ID }}
           TELO_TELEGRAM_API_HASH: ${{ secrets.TELO_TELEGRAM_API_HASH }}
           TELO_GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.TELO_GOOGLE_OAUTH_CLIENT_ID }}
-      - name: Packaged TDLib smoke
-        run: pnpm tdlib:smoke
-        env:
-          TELO_PLAINTEXT_SECRETS: "1"
       - uses: actions/upload-artifact@v4
         with:
           name: telo-${{ matrix.os }}
-          path: release/*
+          path: build/*/*
 
   publish:
     needs: build

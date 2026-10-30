@@ -15,7 +15,8 @@
         "logOut"
       ],
       "evidence": [
-        "backend/src/infrastructure/telegram/tdlib-telegram-repository.ts"
+        "backend/infrastructure/telegram/live/auth.go",
+        "backend/infrastructure/telegram/live/accounts.go"
       ],
       "state": "covered"
     },
@@ -38,10 +39,10 @@
         "createPrivateChat"
       ],
       "evidence": [
-        "backend/src/infrastructure/telegram/tdlib-telegram-repository.ts",
-        "backend/src/infrastructure/telegram/tdlib-mappers.ts",
-        "backend/src/infrastructure/telegram/demo-telegram-repository.ts",
-        "frontend/src/features/manage-chat-folders/ui/chat-folders-settings.tsx"
+        "backend/infrastructure/telegram/live/chats.go",
+        "backend/infrastructure/telegram/live/session.go",
+        "backend/infrastructure/telegram/demo/repository.go",
+        "frontend/widgets/settings/telegram.go"
       ],
       "state": "covered"
     },
@@ -59,69 +60,84 @@
         "getChatScheduledMessages"
       ],
       "evidence": [
-        "backend/src/infrastructure/telegram/tdlib-telegram-repository.ts",
-        "backend/src/infrastructure/telegram/demo-telegram-repository.ts",
-        "frontend/src/features/send-message/ui/schedule-message-dialog.tsx",
-        "frontend/src/features/send-message/ui/scheduled-messages-bar.tsx"
+        "backend/infrastructure/telegram/live/messages.go",
+        "backend/infrastructure/telegram/demo/repository.go",
+        "frontend/features/compose/dialogs.go"
       ],
       "state": "covered"
     },
     {
       "id": "polls",
       "workflow": "Render messagePoll cards with tallies, vote with retract, quiz answer reveal after voting, closed-poll final results, create polls (regular/quiz, anonymous, multiple answers) from the composer send-options menu",
-      "methods": ["sendMessage", "setPollAnswer", "updateMessageContent"],
+      "methods": [
+        "sendMessage",
+        "setPollAnswer",
+        "updateMessageContent"
+      ],
       "evidence": [
-        "backend/src/infrastructure/telegram/tdlib-telegram-repository.ts",
-        "backend/src/infrastructure/telegram/demo-telegram-repository.ts",
-        "frontend/src/widgets/conversation-view/ui/poll-message.tsx",
-        "frontend/src/features/create-poll/ui/create-poll-dialog.tsx"
+        "backend/infrastructure/telegram/live/messages.go",
+        "backend/infrastructure/telegram/demo/messaging.go",
+        "frontend/widgets/conversation/bubble.go",
+        "frontend/features/compose/dialogs.go"
       ],
       "state": "covered"
     },
     {
       "id": "composer",
-      "workflow": "Entities, media album, voice-note record and send (inputMessageVoiceNote), stickers, drafts, typing, content-type write-access gating",
+      "workflow": "Entities, media albums, voice notes sent from files (inputMessageVoiceNote), stickers, drafts, typing, content-type write-access gating; recording waits for audio capture in MyGo",
       "methods": [
         "sendMessage",
         "sendMessageAlbum",
         "sendChatAction",
         "setChatDraftMessage",
-        "getStickers",
+        "searchStickers",
         "getBasicGroup",
         "getSupergroup"
       ],
       "evidence": [
-        "backend/src/infrastructure/telegram/tdlib-telegram-repository.ts",
-        "frontend/src/features/send-message/model/voice-recorder.ts",
-        "frontend/src/features/send-message/ui/voice-recording-bar.tsx"
+        "backend/infrastructure/telegram/live/messages.go",
+        "frontend/features/compose/compose.go",
+        "frontend/features/compose/stickers.go"
       ],
       "state": "covered"
     },
     {
       "id": "search",
       "workflow": "Global and in-chat search",
-      "methods": ["searchMessages", "searchChatMessages", "searchChats"],
+      "methods": [
+        "searchMessages",
+        "searchChatMessages",
+        "searchChats"
+      ],
       "evidence": [
-        "backend/src/infrastructure/telegram/tdlib-telegram-repository.ts"
+        "backend/infrastructure/telegram/live/messages.go",
+        "frontend/features/search/search.go"
       ],
       "state": "covered"
     },
     {
       "id": "media",
       "workflow": "Progress/cancel, telo-media, cache cap, chat and user avatars, stripped thumbnails, link-preview photos",
-      "methods": ["downloadFile", "cancelDownloadFile"],
+      "methods": [
+        "downloadFile",
+        "cancelDownloadFile"
+      ],
       "evidence": [
-        "backend/src/infrastructure/telegram/tdlib-telegram-repository.ts",
-        "backend/src/infrastructure/telegram/media-cache.ts"
+        "backend/infrastructure/telegram/live/media.go",
+        "frontend/shared/media/images.go"
       ],
       "state": "covered"
     },
     {
       "id": "presence",
       "workflow": "Presence, typing, read receipts",
-      "methods": ["viewMessages", "sendChatAction", "getUser"],
+      "methods": [
+        "viewMessages",
+        "sendChatAction",
+        "getUser"
+      ],
       "evidence": [
-        "backend/src/infrastructure/telegram/tdlib-telegram-repository.ts"
+        "backend/infrastructure/telegram/live/session.go"
       ],
       "state": "covered"
     },
@@ -135,16 +151,18 @@
         "getCallbackQueryAnswer"
       ],
       "evidence": [
-        "backend/src/infrastructure/telegram/tdlib-telegram-repository.ts"
+        "backend/infrastructure/telegram/live/messages.go"
       ],
       "state": "covered"
     },
     {
       "id": "reconnect",
-      "workflow": "Offline \u2192 synchronizing \u2192 connected, no dup/miss",
-      "methods": ["updateConnectionState"],
+      "workflow": "Offline → synchronizing → connected, no dup/miss",
+      "methods": [
+        "updateConnectionState"
+      ],
       "evidence": [
-        "backend/src/infrastructure/telegram/tdlib-telegram-repository.ts"
+        "backend/infrastructure/telegram/live/session.go"
       ],
       "state": "covered"
     },
@@ -161,12 +179,10 @@
         "removeContacts"
       ],
       "evidence": [
-        "backend/src/infrastructure/telegram/tdlib-telegram-repository.ts",
-        "frontend/src/features/account-menu/ui/account-menu.tsx",
-        "frontend/src/features/account-menu/ui/contact-action-dialog.tsx",
-        "frontend/src/features/account-menu/ui/create-channel-dialog.tsx",
-        "frontend/src/features/add-contact/ui/add-contact-by-phone-dialog.tsx",
-        "frontend/src/features/add-contact/ui/edit-peer-contact-dialog.tsx"
+        "backend/infrastructure/telegram/live/chats.go",
+        "backend/infrastructure/telegram/live/people.go",
+        "frontend/features/accountmenu/accountmenu.go",
+        "frontend/widgets/profile/profile.go"
       ],
       "state": "covered"
     },
@@ -182,33 +198,34 @@
         "getUserFullInfo"
       ],
       "evidence": [
-        "backend/src/infrastructure/telegram/tdlib-telegram-repository.ts",
-        "frontend/src/features/edit-profile/ui/edit-name-dialog.tsx",
-        "frontend/src/features/edit-profile/ui/edit-username-dialog.tsx",
-        "frontend/src/features/edit-profile/ui/edit-bio-field.tsx",
-        "frontend/src/features/edit-profile/ui/profile-photo-button.tsx",
-        "frontend/src/pages/settings/ui/sections/account-section.tsx",
-        "frontend/src/widgets/chat-profile/ui/chat-profile-panel.tsx"
+        "backend/infrastructure/telegram/live/people.go",
+        "frontend/widgets/settings/account.go",
+        "frontend/widgets/profile/profile.go"
       ],
       "state": "covered"
     },
     {
       "id": "secret-chats",
       "workflow": "Create, device-local history, lock UI",
-      "methods": ["createNewSecretChat", "createSecretChat"],
+      "methods": [
+        "createNewSecretChat",
+        "createNewSecretChat"
+      ],
       "evidence": [
-        "backend/src/infrastructure/telegram/tdlib-telegram-repository.ts",
-        "frontend/src/features/start-secret-chat/ui/start-secret-chat-dialog.tsx"
+        "backend/infrastructure/telegram/live/chats.go",
+        "frontend/widgets/profile/profile.go"
       ],
       "state": "covered"
     },
     {
       "id": "call-history",
       "workflow": "Paged incoming, outgoing, missed, voice, and video call-message history; transcript renders messageCall/messageGroupCall as call cards (tdesktop HistoryView::Media::Call parity). VoIP media stays out of scope: no initiation, no redial",
-      "methods": ["searchCallMessages"],
+      "methods": [
+        "searchCallMessages"
+      ],
       "evidence": [
-        "backend/src/infrastructure/telegram/tdlib-telegram-repository.ts",
-        "frontend/src/features/account-menu/ui/call-history-dialog.tsx"
+        "backend/infrastructure/telegram/live/messages.go",
+        "frontend/features/accountmenu/accountmenu.go"
       ],
       "state": "covered"
     },
@@ -222,10 +239,13 @@
     {
       "id": "story-posting",
       "workflow": "Post normalized photo and TDLib-compatible video stories with privacy, active period, caption, and content protection",
-      "methods": ["createPrivateChat", "postStory"],
+      "methods": [
+        "createPrivateChat",
+        "postStory"
+      ],
       "evidence": [
-        "backend/src/infrastructure/telegram/tdlib-telegram-repository.ts",
-        "frontend/src/features/account-menu/ui/post-story-dialog.tsx"
+        "backend/infrastructure/telegram/live/people.go",
+        "frontend/features/accountmenu/accountmenu.go"
       ],
       "state": "covered"
     },

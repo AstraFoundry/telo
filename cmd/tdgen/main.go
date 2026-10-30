@@ -448,6 +448,7 @@ func main() {
 	listPath := flag.String("list", "backend/infrastructure/tdlib/tdapi/tdapi.list", "allowlist")
 	out := flag.String("out", "backend/infrastructure/tdlib/tdapi/tdapi_gen.go", "output")
 	commit := flag.String("tdlib", "1.8.67 (d1085f9cebc5a62379991ae1652673954f229c1f)", "TDLib version recorded in the header")
+	check := flag.Bool("check", false, "fail when the generated file is stale instead of writing it")
 	flag.Parse()
 	s, err := parse(*schemaPath)
 	if err != nil {
@@ -495,7 +496,15 @@ func main() {
 		g.needType(r)
 	}
 	g.closure()
-	if err := os.WriteFile(*out, g.generate(*commit), 0o644); err != nil {
+	code := g.generate(*commit)
+	if *check {
+		have, err := os.ReadFile(*out)
+		if err != nil || !bytes.Equal(have, code) {
+			fail("%s is stale: run go generate ./backend/infrastructure/tdlib/tdapi", *out)
+		}
+		return
+	}
+	if err := os.WriteFile(*out, code, 0o644); err != nil {
 		fail("%v", err)
 	}
 	fmt.Printf("tdgen: %d functions, %d constructors, %d classes\n", len(g.funcs), len(g.types), len(g.classes))
