@@ -187,6 +187,7 @@ var (
 	ErrCannotStickers = errors.New("telegram: the account can't send stickers to this chat")
 	ErrCannotMedia    = errors.New("telegram: the account can't send media to this chat")
 	ErrNotFound       = errors.New("telegram: not found")
+	ErrEmptyMessage   = errors.New("telegram: the message is empty")
 	ErrPending        = errors.New("telegram: the message is still being sent")
 	ErrTooManyFiles   = errors.New("telegram: an album holds at most 10 files")
 	ErrFileTooLarge   = errors.New("telegram: the file is larger than 2 GB")

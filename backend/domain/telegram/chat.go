@@ -61,9 +61,13 @@ type Avatar struct {
 
 // Chat is one dialog of the chat list.
 type Chat struct {
-	ID          ChatID
-	Title       string
-	Preview     string
+	ID      ChatID
+	Title   string
+	Preview string
+	// LastMessage is the message Preview comes from, for the list to say
+	// what kind it is (a photo, a poll, a member joining); nil when the
+	// adapter only knows the text.
+	LastMessage *Message
 	UpdatedAt   time.Time
 	UnreadCount int
 	// UnreadMentions counts unread messages mentioning the account.

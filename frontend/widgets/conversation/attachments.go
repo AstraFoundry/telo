@@ -6,6 +6,7 @@ import (
 	"math"
 
 	tg "github.com/AstraFoundry/telo/backend/domain/telegram"
+	"github.com/AstraFoundry/telo/frontend/entities/chat"
 	"github.com/AstraFoundry/telo/frontend/shared/copy"
 	"github.com/AstraFoundry/telo/frontend/shared/icons"
 	"github.com/AstraFoundry/telo/frontend/shared/kit"
@@ -86,7 +87,7 @@ func picture(c *ui.Context, p Props, m tg.Message, w, h float32) {
 	if md.Kind == tg.MediaVideoNote {
 		radius = w / 2
 	}
-	frame := ui.ButtonBase(c.Key("picture")).Size(w, h).Radius(radius).Clip().Background(t.Subtle).Justify(ui.Center).AlignItems(ui.Center).Label(mediaName(md))
+	frame := ui.ButtonBase(c.Key("picture")).Size(w, h).Radius(radius).Clip().Background(t.Subtle).Justify(ui.Center).AlignItems(ui.Center).Label(chat.MediaName(md))
 	frame.Children(func() {
 		var bitmap *ui.Bitmap
 		if md.Kind == tg.MediaPhoto {
@@ -224,7 +225,7 @@ func document(c *ui.Context, p Props, m tg.Message, ink, meta ui.Color) {
 		ui.Column(c).Gap(2).Shrink(1).Children(func() {
 			name := md.FileName
 			if name == "" {
-				name = mediaName(md)
+				name = chat.MediaName(md)
 			}
 			ui.Text(c, name).FontSize(theme.Body).FontWeight(600).SingleLine()
 			size := copy.Bytes(md.Size)

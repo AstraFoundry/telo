@@ -68,6 +68,36 @@ func unmarshalAuthenticationCodeType(raw json.RawMessage) (AuthenticationCodeTyp
 		return nil, err
 	}
 	switch t {
+	case "authenticationCodeTypeCall":
+		v := new(AuthenticationCodeTypeCall)
+		return v, json.Unmarshal(raw, v)
+	case "authenticationCodeTypeFirebaseAndroid":
+		v := new(AuthenticationCodeTypeFirebaseAndroid)
+		return v, json.Unmarshal(raw, v)
+	case "authenticationCodeTypeFirebaseIos":
+		v := new(AuthenticationCodeTypeFirebaseIos)
+		return v, json.Unmarshal(raw, v)
+	case "authenticationCodeTypeFlashCall":
+		v := new(AuthenticationCodeTypeFlashCall)
+		return v, json.Unmarshal(raw, v)
+	case "authenticationCodeTypeFragment":
+		v := new(AuthenticationCodeTypeFragment)
+		return v, json.Unmarshal(raw, v)
+	case "authenticationCodeTypeMissedCall":
+		v := new(AuthenticationCodeTypeMissedCall)
+		return v, json.Unmarshal(raw, v)
+	case "authenticationCodeTypeSms":
+		v := new(AuthenticationCodeTypeSMS)
+		return v, json.Unmarshal(raw, v)
+	case "authenticationCodeTypeSmsPhrase":
+		v := new(AuthenticationCodeTypeSMSPhrase)
+		return v, json.Unmarshal(raw, v)
+	case "authenticationCodeTypeSmsWord":
+		v := new(AuthenticationCodeTypeSMSWord)
+		return v, json.Unmarshal(raw, v)
+	case "authenticationCodeTypeTelegramMessage":
+		v := new(AuthenticationCodeTypeTelegramMessage)
+		return v, json.Unmarshal(raw, v)
 	}
 	return &UnknownAuthenticationCodeType{Type: t, Raw: append(json.RawMessage(nil), raw...)}, nil
 }
@@ -1125,6 +1155,81 @@ func unmarshalFileType(raw json.RawMessage) (FileType, error) {
 		return nil, err
 	}
 	switch t {
+	case "fileTypeAnimation":
+		v := new(FileTypeAnimation)
+		return v, json.Unmarshal(raw, v)
+	case "fileTypeAudio":
+		v := new(FileTypeAudio)
+		return v, json.Unmarshal(raw, v)
+	case "fileTypeDocument":
+		v := new(FileTypeDocument)
+		return v, json.Unmarshal(raw, v)
+	case "fileTypeLivePhotoVideo":
+		v := new(FileTypeLivePhotoVideo)
+		return v, json.Unmarshal(raw, v)
+	case "fileTypeNone":
+		v := new(FileTypeNone)
+		return v, json.Unmarshal(raw, v)
+	case "fileTypeNotificationSound":
+		v := new(FileTypeNotificationSound)
+		return v, json.Unmarshal(raw, v)
+	case "fileTypePhoto":
+		v := new(FileTypePhoto)
+		return v, json.Unmarshal(raw, v)
+	case "fileTypePhotoStory":
+		v := new(FileTypePhotoStory)
+		return v, json.Unmarshal(raw, v)
+	case "fileTypeProfilePhoto":
+		v := new(FileTypeProfilePhoto)
+		return v, json.Unmarshal(raw, v)
+	case "fileTypeSecret":
+		v := new(FileTypeSecret)
+		return v, json.Unmarshal(raw, v)
+	case "fileTypeSecretThumbnail":
+		v := new(FileTypeSecretThumbnail)
+		return v, json.Unmarshal(raw, v)
+	case "fileTypeSecure":
+		v := new(FileTypeSecure)
+		return v, json.Unmarshal(raw, v)
+	case "fileTypeSelfDestructingLivePhotoVideo":
+		v := new(FileTypeSelfDestructingLivePhotoVideo)
+		return v, json.Unmarshal(raw, v)
+	case "fileTypeSelfDestructingPhoto":
+		v := new(FileTypeSelfDestructingPhoto)
+		return v, json.Unmarshal(raw, v)
+	case "fileTypeSelfDestructingVideo":
+		v := new(FileTypeSelfDestructingVideo)
+		return v, json.Unmarshal(raw, v)
+	case "fileTypeSelfDestructingVideoNote":
+		v := new(FileTypeSelfDestructingVideoNote)
+		return v, json.Unmarshal(raw, v)
+	case "fileTypeSelfDestructingVoiceNote":
+		v := new(FileTypeSelfDestructingVoiceNote)
+		return v, json.Unmarshal(raw, v)
+	case "fileTypeSticker":
+		v := new(FileTypeSticker)
+		return v, json.Unmarshal(raw, v)
+	case "fileTypeThumbnail":
+		v := new(FileTypeThumbnail)
+		return v, json.Unmarshal(raw, v)
+	case "fileTypeUnknown":
+		v := new(FileTypeUnknown)
+		return v, json.Unmarshal(raw, v)
+	case "fileTypeVideo":
+		v := new(FileTypeVideo)
+		return v, json.Unmarshal(raw, v)
+	case "fileTypeVideoNote":
+		v := new(FileTypeVideoNote)
+		return v, json.Unmarshal(raw, v)
+	case "fileTypeVideoStory":
+		v := new(FileTypeVideoStory)
+		return v, json.Unmarshal(raw, v)
+	case "fileTypeVoiceNote":
+		v := new(FileTypeVoiceNote)
+		return v, json.Unmarshal(raw, v)
+	case "fileTypeWallpaper":
+		v := new(FileTypeWallpaper)
+		return v, json.Unmarshal(raw, v)
 	}
 	return &UnknownFileType{Type: t, Raw: append(json.RawMessage(nil), raw...)}, nil
 }
@@ -1160,6 +1265,42 @@ func unmarshalFirebaseAuthenticationSettings(raw json.RawMessage) (FirebaseAuthe
 	switch t {
 	}
 	return &UnknownFirebaseAuthenticationSettings{Type: t, Raw: append(json.RawMessage(nil), raw...)}, nil
+}
+
+// FirebaseDeviceVerificationParameters is the TDLib class
+// FirebaseDeviceVerificationParameters. Describes parameters to be used for
+// device verification
+type FirebaseDeviceVerificationParameters interface {
+	Object
+	isFirebaseDeviceVerificationParameters()
+}
+
+// UnknownFirebaseDeviceVerificationParameters is a
+// FirebaseDeviceVerificationParameters constructor this build does not
+// generate; Raw keeps its JSON.
+type UnknownFirebaseDeviceVerificationParameters struct {
+	Type string
+	Raw  json.RawMessage
+}
+
+// TDType returns the constructor name.
+func (u *UnknownFirebaseDeviceVerificationParameters) TDType() string { return u.Type }
+
+func (*UnknownFirebaseDeviceVerificationParameters) isFirebaseDeviceVerificationParameters() {}
+
+// MarshalJSON returns the raw JSON.
+func (u *UnknownFirebaseDeviceVerificationParameters) MarshalJSON() ([]byte, error) {
+	return u.Raw, nil
+}
+
+func unmarshalFirebaseDeviceVerificationParameters(raw json.RawMessage) (FirebaseDeviceVerificationParameters, error) {
+	t, err := typeOf(raw)
+	if err != nil || t == "" {
+		return nil, err
+	}
+	switch t {
+	}
+	return &UnknownFirebaseDeviceVerificationParameters{Type: t, Raw: append(json.RawMessage(nil), raw...)}, nil
 }
 
 // InlineKeyboardButtonType is the TDLib class InlineKeyboardButtonType.
@@ -2507,8 +2648,45 @@ func unmarshalNetworkStatisticsEntry(raw json.RawMessage) (NetworkStatisticsEntr
 		return nil, err
 	}
 	switch t {
+	case "networkStatisticsEntryCall":
+		v := new(NetworkStatisticsEntryCall)
+		return v, json.Unmarshal(raw, v)
+	case "networkStatisticsEntryFile":
+		v := new(NetworkStatisticsEntryFile)
+		return v, json.Unmarshal(raw, v)
 	}
 	return &UnknownNetworkStatisticsEntry{Type: t, Raw: append(json.RawMessage(nil), raw...)}, nil
+}
+
+// NetworkType is the TDLib class NetworkType. Represents the type of network
+type NetworkType interface {
+	Object
+	isNetworkType()
+}
+
+// UnknownNetworkType is a NetworkType constructor this build does not
+// generate; Raw keeps its JSON.
+type UnknownNetworkType struct {
+	Type string
+	Raw  json.RawMessage
+}
+
+// TDType returns the constructor name.
+func (u *UnknownNetworkType) TDType() string { return u.Type }
+
+func (*UnknownNetworkType) isNetworkType() {}
+
+// MarshalJSON returns the raw JSON.
+func (u *UnknownNetworkType) MarshalJSON() ([]byte, error) { return u.Raw, nil }
+
+func unmarshalNetworkType(raw json.RawMessage) (NetworkType, error) {
+	t, err := typeOf(raw)
+	if err != nil || t == "" {
+		return nil, err
+	}
+	switch t {
+	}
+	return &UnknownNetworkType{Type: t, Raw: append(json.RawMessage(nil), raw...)}, nil
 }
 
 // NotificationSettingsScope is the TDLib class NotificationSettingsScope.
@@ -4640,6 +4818,235 @@ func (o *AuthenticationCodeInfo) UnmarshalJSON(data []byte) error {
 	}
 	return nil
 }
+
+// AuthenticationCodeTypeCall is TDLib authenticationCodeTypeCall. A digit-only
+// authentication code is delivered via a phone call to the specified phone
+// number
+type AuthenticationCodeTypeCall struct {
+	// Length of the code
+	Length int32 `json:"length,omitempty"`
+}
+
+// TDType returns "authenticationCodeTypeCall".
+func (*AuthenticationCodeTypeCall) TDType() string { return "authenticationCodeTypeCall" }
+
+// MarshalJSON adds the @type tag.
+func (o *AuthenticationCodeTypeCall) MarshalJSON() ([]byte, error) {
+	type plain AuthenticationCodeTypeCall
+	return marshalTyped("authenticationCodeTypeCall", (*plain)(o))
+}
+
+func (*AuthenticationCodeTypeCall) isAuthenticationCodeType() {}
+
+// AuthenticationCodeTypeFirebaseAndroid is TDLib
+// authenticationCodeTypeFirebaseAndroid. A digit-only authentication code is
+// delivered via Firebase Authentication to the official Android application
+type AuthenticationCodeTypeFirebaseAndroid struct {
+	// Parameters to be used for device verification
+	DeviceVerificationParameters FirebaseDeviceVerificationParameters `json:"device_verification_parameters,omitempty"`
+	// Length of the code
+	Length int32 `json:"length,omitempty"`
+}
+
+// TDType returns "authenticationCodeTypeFirebaseAndroid".
+func (*AuthenticationCodeTypeFirebaseAndroid) TDType() string {
+	return "authenticationCodeTypeFirebaseAndroid"
+}
+
+// MarshalJSON adds the @type tag.
+func (o *AuthenticationCodeTypeFirebaseAndroid) MarshalJSON() ([]byte, error) {
+	type plain AuthenticationCodeTypeFirebaseAndroid
+	return marshalTyped("authenticationCodeTypeFirebaseAndroid", (*plain)(o))
+}
+
+// UnmarshalJSON decodes the class-typed fields by their @type.
+func (o *AuthenticationCodeTypeFirebaseAndroid) UnmarshalJSON(data []byte) error {
+	type plain AuthenticationCodeTypeFirebaseAndroid
+	var raw struct {
+		*plain
+		DeviceVerificationParameters json.RawMessage `json:"device_verification_parameters"`
+	}
+	raw.plain = (*plain)(o)
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	if v, err := unmarshalFirebaseDeviceVerificationParameters(raw.DeviceVerificationParameters); err != nil {
+		return err
+	} else {
+		o.DeviceVerificationParameters = v
+	}
+	return nil
+}
+
+func (*AuthenticationCodeTypeFirebaseAndroid) isAuthenticationCodeType() {}
+
+// AuthenticationCodeTypeFirebaseIos is TDLib
+// authenticationCodeTypeFirebaseIos. A digit-only authentication code is
+// delivered via Firebase Authentication to the official iOS application
+type AuthenticationCodeTypeFirebaseIos struct {
+	// Receipt of successful application token validation to compare with receipt
+	// from push notification
+	Receipt string `json:"receipt,omitempty"`
+	// Time after the next authentication method is expected to be used if
+	// verification push notification isn't received, in seconds
+	PushTimeout int32 `json:"push_timeout,omitempty"`
+	// Length of the code
+	Length int32 `json:"length,omitempty"`
+}
+
+// TDType returns "authenticationCodeTypeFirebaseIos".
+func (*AuthenticationCodeTypeFirebaseIos) TDType() string { return "authenticationCodeTypeFirebaseIos" }
+
+// MarshalJSON adds the @type tag.
+func (o *AuthenticationCodeTypeFirebaseIos) MarshalJSON() ([]byte, error) {
+	type plain AuthenticationCodeTypeFirebaseIos
+	return marshalTyped("authenticationCodeTypeFirebaseIos", (*plain)(o))
+}
+
+func (*AuthenticationCodeTypeFirebaseIos) isAuthenticationCodeType() {}
+
+// AuthenticationCodeTypeFlashCall is TDLib authenticationCodeTypeFlashCall. An
+// authentication code is delivered by an immediately canceled call to the
+// specified phone number. The phone number that calls is the code that must be
+// entered automatically
+type AuthenticationCodeTypeFlashCall struct {
+	// Pattern of the phone number from which the call will be made
+	Pattern string `json:"pattern,omitempty"`
+}
+
+// TDType returns "authenticationCodeTypeFlashCall".
+func (*AuthenticationCodeTypeFlashCall) TDType() string { return "authenticationCodeTypeFlashCall" }
+
+// MarshalJSON adds the @type tag.
+func (o *AuthenticationCodeTypeFlashCall) MarshalJSON() ([]byte, error) {
+	type plain AuthenticationCodeTypeFlashCall
+	return marshalTyped("authenticationCodeTypeFlashCall", (*plain)(o))
+}
+
+func (*AuthenticationCodeTypeFlashCall) isAuthenticationCodeType() {}
+
+// AuthenticationCodeTypeFragment is TDLib authenticationCodeTypeFragment. A
+// digit-only authentication code is delivered to https://fragment.com. The
+// user must be logged in there via a wallet owning the phone number's NFT
+type AuthenticationCodeTypeFragment struct {
+	// URL to open to receive the code
+	URL string `json:"url,omitempty"`
+	// Length of the code
+	Length int32 `json:"length,omitempty"`
+}
+
+// TDType returns "authenticationCodeTypeFragment".
+func (*AuthenticationCodeTypeFragment) TDType() string { return "authenticationCodeTypeFragment" }
+
+// MarshalJSON adds the @type tag.
+func (o *AuthenticationCodeTypeFragment) MarshalJSON() ([]byte, error) {
+	type plain AuthenticationCodeTypeFragment
+	return marshalTyped("authenticationCodeTypeFragment", (*plain)(o))
+}
+
+func (*AuthenticationCodeTypeFragment) isAuthenticationCodeType() {}
+
+// AuthenticationCodeTypeMissedCall is TDLib authenticationCodeTypeMissedCall.
+// An authentication code is delivered by an immediately canceled call to the
+// specified phone number. The last digits of the phone number that calls are
+// the code that must be entered manually by the user
+type AuthenticationCodeTypeMissedCall struct {
+	// Prefix of the phone number from which the call will be made
+	PhoneNumberPrefix string `json:"phone_number_prefix,omitempty"`
+	// Number of digits in the code, excluding the prefix
+	Length int32 `json:"length,omitempty"`
+}
+
+// TDType returns "authenticationCodeTypeMissedCall".
+func (*AuthenticationCodeTypeMissedCall) TDType() string { return "authenticationCodeTypeMissedCall" }
+
+// MarshalJSON adds the @type tag.
+func (o *AuthenticationCodeTypeMissedCall) MarshalJSON() ([]byte, error) {
+	type plain AuthenticationCodeTypeMissedCall
+	return marshalTyped("authenticationCodeTypeMissedCall", (*plain)(o))
+}
+
+func (*AuthenticationCodeTypeMissedCall) isAuthenticationCodeType() {}
+
+// AuthenticationCodeTypeSMS is TDLib authenticationCodeTypeSms. A digit-only
+// authentication code is delivered via an SMS message to the specified phone
+// number; non-official applications may not receive this type of code
+type AuthenticationCodeTypeSMS struct {
+	// Length of the code
+	Length int32 `json:"length,omitempty"`
+}
+
+// TDType returns "authenticationCodeTypeSms".
+func (*AuthenticationCodeTypeSMS) TDType() string { return "authenticationCodeTypeSms" }
+
+// MarshalJSON adds the @type tag.
+func (o *AuthenticationCodeTypeSMS) MarshalJSON() ([]byte, error) {
+	type plain AuthenticationCodeTypeSMS
+	return marshalTyped("authenticationCodeTypeSms", (*plain)(o))
+}
+
+func (*AuthenticationCodeTypeSMS) isAuthenticationCodeType() {}
+
+// AuthenticationCodeTypeSMSPhrase is TDLib authenticationCodeTypeSmsPhrase. An
+// authentication code is a phrase from multiple words delivered via an SMS
+// message to the specified phone number; non-official applications may not
+// receive this type of code
+type AuthenticationCodeTypeSMSPhrase struct {
+	// The first word of the phrase if known
+	FirstWord string `json:"first_word,omitempty"`
+}
+
+// TDType returns "authenticationCodeTypeSmsPhrase".
+func (*AuthenticationCodeTypeSMSPhrase) TDType() string { return "authenticationCodeTypeSmsPhrase" }
+
+// MarshalJSON adds the @type tag.
+func (o *AuthenticationCodeTypeSMSPhrase) MarshalJSON() ([]byte, error) {
+	type plain AuthenticationCodeTypeSMSPhrase
+	return marshalTyped("authenticationCodeTypeSmsPhrase", (*plain)(o))
+}
+
+func (*AuthenticationCodeTypeSMSPhrase) isAuthenticationCodeType() {}
+
+// AuthenticationCodeTypeSMSWord is TDLib authenticationCodeTypeSmsWord. An
+// authentication code is a word delivered via an SMS message to the specified
+// phone number; non-official applications may not receive this type of code
+type AuthenticationCodeTypeSMSWord struct {
+	// The first letters of the word if known
+	FirstLetter string `json:"first_letter,omitempty"`
+}
+
+// TDType returns "authenticationCodeTypeSmsWord".
+func (*AuthenticationCodeTypeSMSWord) TDType() string { return "authenticationCodeTypeSmsWord" }
+
+// MarshalJSON adds the @type tag.
+func (o *AuthenticationCodeTypeSMSWord) MarshalJSON() ([]byte, error) {
+	type plain AuthenticationCodeTypeSMSWord
+	return marshalTyped("authenticationCodeTypeSmsWord", (*plain)(o))
+}
+
+func (*AuthenticationCodeTypeSMSWord) isAuthenticationCodeType() {}
+
+// AuthenticationCodeTypeTelegramMessage is TDLib
+// authenticationCodeTypeTelegramMessage. A digit-only authentication code is
+// delivered via a private Telegram message, which can be viewed from another
+// active session
+type AuthenticationCodeTypeTelegramMessage struct {
+	// Length of the code
+	Length int32 `json:"length,omitempty"`
+}
+
+// TDType returns "authenticationCodeTypeTelegramMessage".
+func (*AuthenticationCodeTypeTelegramMessage) TDType() string {
+	return "authenticationCodeTypeTelegramMessage"
+}
+
+// MarshalJSON adds the @type tag.
+func (o *AuthenticationCodeTypeTelegramMessage) MarshalJSON() ([]byte, error) {
+	type plain AuthenticationCodeTypeTelegramMessage
+	return marshalTyped("authenticationCodeTypeTelegramMessage", (*plain)(o))
+}
+
+func (*AuthenticationCodeTypeTelegramMessage) isAuthenticationCodeType() {}
 
 // AuthorizationStateClosed is TDLib authorizationStateClosed. TDLib client is
 // in its final state. All databases are closed and all resources are released.
@@ -7799,6 +8206,399 @@ func (o *File) MarshalJSON() ([]byte, error) {
 	type plain File
 	return marshalTyped("file", (*plain)(o))
 }
+
+// FileTypeAnimation is TDLib fileTypeAnimation. The file is an animation
+type FileTypeAnimation struct {
+}
+
+// TDType returns "fileTypeAnimation".
+func (*FileTypeAnimation) TDType() string { return "fileTypeAnimation" }
+
+// MarshalJSON adds the @type tag.
+func (o *FileTypeAnimation) MarshalJSON() ([]byte, error) {
+	type plain FileTypeAnimation
+	return marshalTyped("fileTypeAnimation", (*plain)(o))
+}
+
+func (*FileTypeAnimation) isFileType() {}
+
+// FileTypeAudio is TDLib fileTypeAudio. The file is an audio file
+type FileTypeAudio struct {
+}
+
+// TDType returns "fileTypeAudio".
+func (*FileTypeAudio) TDType() string { return "fileTypeAudio" }
+
+// MarshalJSON adds the @type tag.
+func (o *FileTypeAudio) MarshalJSON() ([]byte, error) {
+	type plain FileTypeAudio
+	return marshalTyped("fileTypeAudio", (*plain)(o))
+}
+
+func (*FileTypeAudio) isFileType() {}
+
+// FileTypeDocument is TDLib fileTypeDocument. The file is a document
+type FileTypeDocument struct {
+}
+
+// TDType returns "fileTypeDocument".
+func (*FileTypeDocument) TDType() string { return "fileTypeDocument" }
+
+// MarshalJSON adds the @type tag.
+func (o *FileTypeDocument) MarshalJSON() ([]byte, error) {
+	type plain FileTypeDocument
+	return marshalTyped("fileTypeDocument", (*plain)(o))
+}
+
+func (*FileTypeDocument) isFileType() {}
+
+// FileTypeLivePhotoVideo is TDLib fileTypeLivePhotoVideo. The file is a video
+// for a live photo
+type FileTypeLivePhotoVideo struct {
+}
+
+// TDType returns "fileTypeLivePhotoVideo".
+func (*FileTypeLivePhotoVideo) TDType() string { return "fileTypeLivePhotoVideo" }
+
+// MarshalJSON adds the @type tag.
+func (o *FileTypeLivePhotoVideo) MarshalJSON() ([]byte, error) {
+	type plain FileTypeLivePhotoVideo
+	return marshalTyped("fileTypeLivePhotoVideo", (*plain)(o))
+}
+
+func (*FileTypeLivePhotoVideo) isFileType() {}
+
+// FileTypeNone is TDLib fileTypeNone. The data is not a file
+type FileTypeNone struct {
+}
+
+// TDType returns "fileTypeNone".
+func (*FileTypeNone) TDType() string { return "fileTypeNone" }
+
+// MarshalJSON adds the @type tag.
+func (o *FileTypeNone) MarshalJSON() ([]byte, error) {
+	type plain FileTypeNone
+	return marshalTyped("fileTypeNone", (*plain)(o))
+}
+
+func (*FileTypeNone) isFileType() {}
+
+// FileTypeNotificationSound is TDLib fileTypeNotificationSound. The file is a
+// notification sound
+type FileTypeNotificationSound struct {
+}
+
+// TDType returns "fileTypeNotificationSound".
+func (*FileTypeNotificationSound) TDType() string { return "fileTypeNotificationSound" }
+
+// MarshalJSON adds the @type tag.
+func (o *FileTypeNotificationSound) MarshalJSON() ([]byte, error) {
+	type plain FileTypeNotificationSound
+	return marshalTyped("fileTypeNotificationSound", (*plain)(o))
+}
+
+func (*FileTypeNotificationSound) isFileType() {}
+
+// FileTypePhoto is TDLib fileTypePhoto. The file is a photo
+type FileTypePhoto struct {
+}
+
+// TDType returns "fileTypePhoto".
+func (*FileTypePhoto) TDType() string { return "fileTypePhoto" }
+
+// MarshalJSON adds the @type tag.
+func (o *FileTypePhoto) MarshalJSON() ([]byte, error) {
+	type plain FileTypePhoto
+	return marshalTyped("fileTypePhoto", (*plain)(o))
+}
+
+func (*FileTypePhoto) isFileType() {}
+
+// FileTypePhotoStory is TDLib fileTypePhotoStory. The file is a photo
+// published as a story
+type FileTypePhotoStory struct {
+}
+
+// TDType returns "fileTypePhotoStory".
+func (*FileTypePhotoStory) TDType() string { return "fileTypePhotoStory" }
+
+// MarshalJSON adds the @type tag.
+func (o *FileTypePhotoStory) MarshalJSON() ([]byte, error) {
+	type plain FileTypePhotoStory
+	return marshalTyped("fileTypePhotoStory", (*plain)(o))
+}
+
+func (*FileTypePhotoStory) isFileType() {}
+
+// FileTypeProfilePhoto is TDLib fileTypeProfilePhoto. The file is a profile
+// photo
+type FileTypeProfilePhoto struct {
+}
+
+// TDType returns "fileTypeProfilePhoto".
+func (*FileTypeProfilePhoto) TDType() string { return "fileTypeProfilePhoto" }
+
+// MarshalJSON adds the @type tag.
+func (o *FileTypeProfilePhoto) MarshalJSON() ([]byte, error) {
+	type plain FileTypeProfilePhoto
+	return marshalTyped("fileTypeProfilePhoto", (*plain)(o))
+}
+
+func (*FileTypeProfilePhoto) isFileType() {}
+
+// FileTypeSecret is TDLib fileTypeSecret. The file was sent to a secret chat
+// (the file type is not known to the server)
+type FileTypeSecret struct {
+}
+
+// TDType returns "fileTypeSecret".
+func (*FileTypeSecret) TDType() string { return "fileTypeSecret" }
+
+// MarshalJSON adds the @type tag.
+func (o *FileTypeSecret) MarshalJSON() ([]byte, error) {
+	type plain FileTypeSecret
+	return marshalTyped("fileTypeSecret", (*plain)(o))
+}
+
+func (*FileTypeSecret) isFileType() {}
+
+// FileTypeSecretThumbnail is TDLib fileTypeSecretThumbnail. The file is a
+// thumbnail of a file from a secret chat
+type FileTypeSecretThumbnail struct {
+}
+
+// TDType returns "fileTypeSecretThumbnail".
+func (*FileTypeSecretThumbnail) TDType() string { return "fileTypeSecretThumbnail" }
+
+// MarshalJSON adds the @type tag.
+func (o *FileTypeSecretThumbnail) MarshalJSON() ([]byte, error) {
+	type plain FileTypeSecretThumbnail
+	return marshalTyped("fileTypeSecretThumbnail", (*plain)(o))
+}
+
+func (*FileTypeSecretThumbnail) isFileType() {}
+
+// FileTypeSecure is TDLib fileTypeSecure. The file is a file from Secure
+// storage used for storing Telegram Passport files
+type FileTypeSecure struct {
+}
+
+// TDType returns "fileTypeSecure".
+func (*FileTypeSecure) TDType() string { return "fileTypeSecure" }
+
+// MarshalJSON adds the @type tag.
+func (o *FileTypeSecure) MarshalJSON() ([]byte, error) {
+	type plain FileTypeSecure
+	return marshalTyped("fileTypeSecure", (*plain)(o))
+}
+
+func (*FileTypeSecure) isFileType() {}
+
+// FileTypeSelfDestructingLivePhotoVideo is TDLib
+// fileTypeSelfDestructingLivePhotoVideo. The file is a self-destructing video
+// for a live photo in a private chat
+type FileTypeSelfDestructingLivePhotoVideo struct {
+}
+
+// TDType returns "fileTypeSelfDestructingLivePhotoVideo".
+func (*FileTypeSelfDestructingLivePhotoVideo) TDType() string {
+	return "fileTypeSelfDestructingLivePhotoVideo"
+}
+
+// MarshalJSON adds the @type tag.
+func (o *FileTypeSelfDestructingLivePhotoVideo) MarshalJSON() ([]byte, error) {
+	type plain FileTypeSelfDestructingLivePhotoVideo
+	return marshalTyped("fileTypeSelfDestructingLivePhotoVideo", (*plain)(o))
+}
+
+func (*FileTypeSelfDestructingLivePhotoVideo) isFileType() {}
+
+// FileTypeSelfDestructingPhoto is TDLib fileTypeSelfDestructingPhoto. The file
+// is a self-destructing photo in a private chat
+type FileTypeSelfDestructingPhoto struct {
+}
+
+// TDType returns "fileTypeSelfDestructingPhoto".
+func (*FileTypeSelfDestructingPhoto) TDType() string { return "fileTypeSelfDestructingPhoto" }
+
+// MarshalJSON adds the @type tag.
+func (o *FileTypeSelfDestructingPhoto) MarshalJSON() ([]byte, error) {
+	type plain FileTypeSelfDestructingPhoto
+	return marshalTyped("fileTypeSelfDestructingPhoto", (*plain)(o))
+}
+
+func (*FileTypeSelfDestructingPhoto) isFileType() {}
+
+// FileTypeSelfDestructingVideo is TDLib fileTypeSelfDestructingVideo. The file
+// is a self-destructing video in a private chat
+type FileTypeSelfDestructingVideo struct {
+}
+
+// TDType returns "fileTypeSelfDestructingVideo".
+func (*FileTypeSelfDestructingVideo) TDType() string { return "fileTypeSelfDestructingVideo" }
+
+// MarshalJSON adds the @type tag.
+func (o *FileTypeSelfDestructingVideo) MarshalJSON() ([]byte, error) {
+	type plain FileTypeSelfDestructingVideo
+	return marshalTyped("fileTypeSelfDestructingVideo", (*plain)(o))
+}
+
+func (*FileTypeSelfDestructingVideo) isFileType() {}
+
+// FileTypeSelfDestructingVideoNote is TDLib fileTypeSelfDestructingVideoNote.
+// The file is a self-destructing video note in a private chat
+type FileTypeSelfDestructingVideoNote struct {
+}
+
+// TDType returns "fileTypeSelfDestructingVideoNote".
+func (*FileTypeSelfDestructingVideoNote) TDType() string { return "fileTypeSelfDestructingVideoNote" }
+
+// MarshalJSON adds the @type tag.
+func (o *FileTypeSelfDestructingVideoNote) MarshalJSON() ([]byte, error) {
+	type plain FileTypeSelfDestructingVideoNote
+	return marshalTyped("fileTypeSelfDestructingVideoNote", (*plain)(o))
+}
+
+func (*FileTypeSelfDestructingVideoNote) isFileType() {}
+
+// FileTypeSelfDestructingVoiceNote is TDLib fileTypeSelfDestructingVoiceNote.
+// The file is a self-destructing voice note in a private chat
+type FileTypeSelfDestructingVoiceNote struct {
+}
+
+// TDType returns "fileTypeSelfDestructingVoiceNote".
+func (*FileTypeSelfDestructingVoiceNote) TDType() string { return "fileTypeSelfDestructingVoiceNote" }
+
+// MarshalJSON adds the @type tag.
+func (o *FileTypeSelfDestructingVoiceNote) MarshalJSON() ([]byte, error) {
+	type plain FileTypeSelfDestructingVoiceNote
+	return marshalTyped("fileTypeSelfDestructingVoiceNote", (*plain)(o))
+}
+
+func (*FileTypeSelfDestructingVoiceNote) isFileType() {}
+
+// FileTypeSticker is TDLib fileTypeSticker. The file is a sticker
+type FileTypeSticker struct {
+}
+
+// TDType returns "fileTypeSticker".
+func (*FileTypeSticker) TDType() string { return "fileTypeSticker" }
+
+// MarshalJSON adds the @type tag.
+func (o *FileTypeSticker) MarshalJSON() ([]byte, error) {
+	type plain FileTypeSticker
+	return marshalTyped("fileTypeSticker", (*plain)(o))
+}
+
+func (*FileTypeSticker) isFileType() {}
+
+// FileTypeThumbnail is TDLib fileTypeThumbnail. The file is a thumbnail of
+// another file
+type FileTypeThumbnail struct {
+}
+
+// TDType returns "fileTypeThumbnail".
+func (*FileTypeThumbnail) TDType() string { return "fileTypeThumbnail" }
+
+// MarshalJSON adds the @type tag.
+func (o *FileTypeThumbnail) MarshalJSON() ([]byte, error) {
+	type plain FileTypeThumbnail
+	return marshalTyped("fileTypeThumbnail", (*plain)(o))
+}
+
+func (*FileTypeThumbnail) isFileType() {}
+
+// FileTypeUnknown is TDLib fileTypeUnknown. The file type is not yet known
+type FileTypeUnknown struct {
+}
+
+// TDType returns "fileTypeUnknown".
+func (*FileTypeUnknown) TDType() string { return "fileTypeUnknown" }
+
+// MarshalJSON adds the @type tag.
+func (o *FileTypeUnknown) MarshalJSON() ([]byte, error) {
+	type plain FileTypeUnknown
+	return marshalTyped("fileTypeUnknown", (*plain)(o))
+}
+
+func (*FileTypeUnknown) isFileType() {}
+
+// FileTypeVideo is TDLib fileTypeVideo. The file is a video
+type FileTypeVideo struct {
+}
+
+// TDType returns "fileTypeVideo".
+func (*FileTypeVideo) TDType() string { return "fileTypeVideo" }
+
+// MarshalJSON adds the @type tag.
+func (o *FileTypeVideo) MarshalJSON() ([]byte, error) {
+	type plain FileTypeVideo
+	return marshalTyped("fileTypeVideo", (*plain)(o))
+}
+
+func (*FileTypeVideo) isFileType() {}
+
+// FileTypeVideoNote is TDLib fileTypeVideoNote. The file is a video note
+type FileTypeVideoNote struct {
+}
+
+// TDType returns "fileTypeVideoNote".
+func (*FileTypeVideoNote) TDType() string { return "fileTypeVideoNote" }
+
+// MarshalJSON adds the @type tag.
+func (o *FileTypeVideoNote) MarshalJSON() ([]byte, error) {
+	type plain FileTypeVideoNote
+	return marshalTyped("fileTypeVideoNote", (*plain)(o))
+}
+
+func (*FileTypeVideoNote) isFileType() {}
+
+// FileTypeVideoStory is TDLib fileTypeVideoStory. The file is a video
+// published as a story
+type FileTypeVideoStory struct {
+}
+
+// TDType returns "fileTypeVideoStory".
+func (*FileTypeVideoStory) TDType() string { return "fileTypeVideoStory" }
+
+// MarshalJSON adds the @type tag.
+func (o *FileTypeVideoStory) MarshalJSON() ([]byte, error) {
+	type plain FileTypeVideoStory
+	return marshalTyped("fileTypeVideoStory", (*plain)(o))
+}
+
+func (*FileTypeVideoStory) isFileType() {}
+
+// FileTypeVoiceNote is TDLib fileTypeVoiceNote. The file is a voice note
+type FileTypeVoiceNote struct {
+}
+
+// TDType returns "fileTypeVoiceNote".
+func (*FileTypeVoiceNote) TDType() string { return "fileTypeVoiceNote" }
+
+// MarshalJSON adds the @type tag.
+func (o *FileTypeVoiceNote) MarshalJSON() ([]byte, error) {
+	type plain FileTypeVoiceNote
+	return marshalTyped("fileTypeVoiceNote", (*plain)(o))
+}
+
+func (*FileTypeVoiceNote) isFileType() {}
+
+// FileTypeWallpaper is TDLib fileTypeWallpaper. The file is a wallpaper or a
+// background pattern
+type FileTypeWallpaper struct {
+}
+
+// TDType returns "fileTypeWallpaper".
+func (*FileTypeWallpaper) TDType() string { return "fileTypeWallpaper" }
+
+// MarshalJSON adds the @type tag.
+func (o *FileTypeWallpaper) MarshalJSON() ([]byte, error) {
+	type plain FileTypeWallpaper
+	return marshalTyped("fileTypeWallpaper", (*plain)(o))
+}
+
+func (*FileTypeWallpaper) isFileType() {}
 
 // FormattedText is TDLib formattedText. A text with some entities
 type FormattedText struct {
@@ -12921,6 +13721,58 @@ func (o *MessageLink) MarshalJSON() ([]byte, error) {
 	return marshalTyped("messageLink", (*plain)(o))
 }
 
+// MessageLinkInfo is TDLib messageLinkInfo. Contains information about a link
+// to a message or a forum topic in a chat
+type MessageLinkInfo struct {
+	// True, if the link is a public link for a message or a forum topic in a chat
+	IsPublic bool `json:"is_public,omitempty"`
+	// If found, identifier of the chat to which the link points, 0 otherwise
+	ChatID int64 `json:"chat_id,omitempty"`
+	// Identifier of the specific topic in which the message must be opened, or a
+	// topic to open if the message is missing; may be null if none
+	TopicID MessageTopic `json:"topic_id,omitempty"`
+	// If found, the linked message; may be null
+	Message *Message `json:"message,omitempty"`
+	// Timestamp from which the video/audio/video note/voice note/story playing
+	// must start, in seconds; 0 if not specified. The media can be in the message
+	// content or in its link preview
+	MediaTimestamp int32 `json:"media_timestamp,omitempty"`
+	// Identifier of the checklist task that is linked; 0 if none
+	ChecklistTaskID int32 `json:"checklist_task_id,omitempty"`
+	// Identifier of the poll option that is linked; empty if none
+	PollOptionID string `json:"poll_option_id,omitempty"`
+	// True, if the whole media album to which the message belongs is linked
+	ForAlbum bool `json:"for_album,omitempty"`
+}
+
+// TDType returns "messageLinkInfo".
+func (*MessageLinkInfo) TDType() string { return "messageLinkInfo" }
+
+// MarshalJSON adds the @type tag.
+func (o *MessageLinkInfo) MarshalJSON() ([]byte, error) {
+	type plain MessageLinkInfo
+	return marshalTyped("messageLinkInfo", (*plain)(o))
+}
+
+// UnmarshalJSON decodes the class-typed fields by their @type.
+func (o *MessageLinkInfo) UnmarshalJSON(data []byte) error {
+	type plain MessageLinkInfo
+	var raw struct {
+		*plain
+		TopicID json.RawMessage `json:"topic_id"`
+	}
+	raw.plain = (*plain)(o)
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	if v, err := unmarshalMessageTopic(raw.TopicID); err != nil {
+		return err
+	} else {
+		o.TopicID = v
+	}
+	return nil
+}
+
 // MessageLocation is TDLib messageLocation. A message with a location
 type MessageLocation struct {
 	// The location
@@ -13845,6 +14697,102 @@ func (o *NetworkStatistics) UnmarshalJSON(data []byte) error {
 	}
 	return nil
 }
+
+// NetworkStatisticsEntryCall is TDLib networkStatisticsEntryCall. Contains
+// information about the total amount of data that was used for calls
+type NetworkStatisticsEntryCall struct {
+	// Type of the network the data was sent through. Call setNetworkType to
+	// maintain the actual network type
+	NetworkType NetworkType `json:"network_type,omitempty"`
+	// Total number of bytes sent
+	SentBytes int64 `json:"sent_bytes,omitempty"`
+	// Total number of bytes received
+	ReceivedBytes int64 `json:"received_bytes,omitempty"`
+	// Total call duration, in seconds
+	Duration float64 `json:"duration,omitempty"`
+}
+
+// TDType returns "networkStatisticsEntryCall".
+func (*NetworkStatisticsEntryCall) TDType() string { return "networkStatisticsEntryCall" }
+
+// MarshalJSON adds the @type tag.
+func (o *NetworkStatisticsEntryCall) MarshalJSON() ([]byte, error) {
+	type plain NetworkStatisticsEntryCall
+	return marshalTyped("networkStatisticsEntryCall", (*plain)(o))
+}
+
+// UnmarshalJSON decodes the class-typed fields by their @type.
+func (o *NetworkStatisticsEntryCall) UnmarshalJSON(data []byte) error {
+	type plain NetworkStatisticsEntryCall
+	var raw struct {
+		*plain
+		NetworkType json.RawMessage `json:"network_type"`
+	}
+	raw.plain = (*plain)(o)
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	if v, err := unmarshalNetworkType(raw.NetworkType); err != nil {
+		return err
+	} else {
+		o.NetworkType = v
+	}
+	return nil
+}
+
+func (*NetworkStatisticsEntryCall) isNetworkStatisticsEntry() {}
+
+// NetworkStatisticsEntryFile is TDLib networkStatisticsEntryFile. Contains
+// information about the total amount of data that was used to send and receive
+// files
+type NetworkStatisticsEntryFile struct {
+	// Type of the file the data is part of; pass null if the data isn't related to
+	// files
+	FileType FileType `json:"file_type,omitempty"`
+	// Type of the network the data was sent through. Call setNetworkType to
+	// maintain the actual network type
+	NetworkType NetworkType `json:"network_type,omitempty"`
+	// Total number of bytes sent
+	SentBytes int64 `json:"sent_bytes,omitempty"`
+	// Total number of bytes received
+	ReceivedBytes int64 `json:"received_bytes,omitempty"`
+}
+
+// TDType returns "networkStatisticsEntryFile".
+func (*NetworkStatisticsEntryFile) TDType() string { return "networkStatisticsEntryFile" }
+
+// MarshalJSON adds the @type tag.
+func (o *NetworkStatisticsEntryFile) MarshalJSON() ([]byte, error) {
+	type plain NetworkStatisticsEntryFile
+	return marshalTyped("networkStatisticsEntryFile", (*plain)(o))
+}
+
+// UnmarshalJSON decodes the class-typed fields by their @type.
+func (o *NetworkStatisticsEntryFile) UnmarshalJSON(data []byte) error {
+	type plain NetworkStatisticsEntryFile
+	var raw struct {
+		*plain
+		FileType    json.RawMessage `json:"file_type"`
+		NetworkType json.RawMessage `json:"network_type"`
+	}
+	raw.plain = (*plain)(o)
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	if v, err := unmarshalFileType(raw.FileType); err != nil {
+		return err
+	} else {
+		o.FileType = v
+	}
+	if v, err := unmarshalNetworkType(raw.NetworkType); err != nil {
+		return err
+	} else {
+		o.NetworkType = v
+	}
+	return nil
+}
+
+func (*NetworkStatisticsEntryFile) isNetworkStatisticsEntry() {}
 
 // NotificationSettingsScopeChannelChats is TDLib
 // notificationSettingsScopeChannelChats. Notification settings applied to all
@@ -21970,6 +22918,35 @@ func (c *Client) GetMessageLink(ctx context.Context, r *GetMessageLinkRequest) (
 	return out, json.Unmarshal(raw, out)
 }
 
+// GetMessageLinkInfoRequest is TDLib getMessageLinkInfo. Returns information
+// about a public or private message link. Can be called for any internal link
+// of the type internalLinkTypeMessage
+type GetMessageLinkInfoRequest struct {
+	// The message link
+	URL string `json:"url"`
+}
+
+// TDType returns "getMessageLinkInfo".
+func (*GetMessageLinkInfoRequest) TDType() string { return "getMessageLinkInfo" }
+
+// MarshalJSON adds the @type tag.
+func (o *GetMessageLinkInfoRequest) MarshalJSON() ([]byte, error) {
+	type plain GetMessageLinkInfoRequest
+	return marshalTyped("getMessageLinkInfo", (*plain)(o))
+}
+
+// GetMessageLinkInfo calls TDLib getMessageLinkInfo. Returns information about
+// a public or private message link. Can be called for any internal link of the
+// type internalLinkTypeMessage
+func (c *Client) GetMessageLinkInfo(ctx context.Context, r *GetMessageLinkInfoRequest) (*MessageLinkInfo, error) {
+	raw, err := c.Call(ctx, r)
+	if err != nil {
+		return nil, err
+	}
+	out := new(MessageLinkInfo)
+	return out, json.Unmarshal(raw, out)
+}
+
 // GetMessagesRequest is TDLib getMessages. Returns information about messages.
 // If a message is not found, returns null on the corresponding position of the
 // result
@@ -25389,6 +26366,46 @@ var decoders = map[string]func(json.RawMessage) (Object, error){
 		v := new(AuthenticationCodeInfo)
 		return v, json.Unmarshal(raw, v)
 	},
+	"authenticationCodeTypeCall": func(raw json.RawMessage) (Object, error) {
+		v := new(AuthenticationCodeTypeCall)
+		return v, json.Unmarshal(raw, v)
+	},
+	"authenticationCodeTypeFirebaseAndroid": func(raw json.RawMessage) (Object, error) {
+		v := new(AuthenticationCodeTypeFirebaseAndroid)
+		return v, json.Unmarshal(raw, v)
+	},
+	"authenticationCodeTypeFirebaseIos": func(raw json.RawMessage) (Object, error) {
+		v := new(AuthenticationCodeTypeFirebaseIos)
+		return v, json.Unmarshal(raw, v)
+	},
+	"authenticationCodeTypeFlashCall": func(raw json.RawMessage) (Object, error) {
+		v := new(AuthenticationCodeTypeFlashCall)
+		return v, json.Unmarshal(raw, v)
+	},
+	"authenticationCodeTypeFragment": func(raw json.RawMessage) (Object, error) {
+		v := new(AuthenticationCodeTypeFragment)
+		return v, json.Unmarshal(raw, v)
+	},
+	"authenticationCodeTypeMissedCall": func(raw json.RawMessage) (Object, error) {
+		v := new(AuthenticationCodeTypeMissedCall)
+		return v, json.Unmarshal(raw, v)
+	},
+	"authenticationCodeTypeSms": func(raw json.RawMessage) (Object, error) {
+		v := new(AuthenticationCodeTypeSMS)
+		return v, json.Unmarshal(raw, v)
+	},
+	"authenticationCodeTypeSmsPhrase": func(raw json.RawMessage) (Object, error) {
+		v := new(AuthenticationCodeTypeSMSPhrase)
+		return v, json.Unmarshal(raw, v)
+	},
+	"authenticationCodeTypeSmsWord": func(raw json.RawMessage) (Object, error) {
+		v := new(AuthenticationCodeTypeSMSWord)
+		return v, json.Unmarshal(raw, v)
+	},
+	"authenticationCodeTypeTelegramMessage": func(raw json.RawMessage) (Object, error) {
+		v := new(AuthenticationCodeTypeTelegramMessage)
+		return v, json.Unmarshal(raw, v)
+	},
 	"authorizationStateClosed": func(raw json.RawMessage) (Object, error) {
 		v := new(AuthorizationStateClosed)
 		return v, json.Unmarshal(raw, v)
@@ -25759,7 +26776,83 @@ var decoders = map[string]func(json.RawMessage) (Object, error){
 		v := new(FailedToAddMembers)
 		return v, json.Unmarshal(raw, v)
 	},
-	"file":          func(raw json.RawMessage) (Object, error) { v := new(File); return v, json.Unmarshal(raw, v) },
+	"file": func(raw json.RawMessage) (Object, error) { v := new(File); return v, json.Unmarshal(raw, v) },
+	"fileTypeAnimation": func(raw json.RawMessage) (Object, error) {
+		v := new(FileTypeAnimation)
+		return v, json.Unmarshal(raw, v)
+	},
+	"fileTypeAudio": func(raw json.RawMessage) (Object, error) { v := new(FileTypeAudio); return v, json.Unmarshal(raw, v) },
+	"fileTypeDocument": func(raw json.RawMessage) (Object, error) {
+		v := new(FileTypeDocument)
+		return v, json.Unmarshal(raw, v)
+	},
+	"fileTypeLivePhotoVideo": func(raw json.RawMessage) (Object, error) {
+		v := new(FileTypeLivePhotoVideo)
+		return v, json.Unmarshal(raw, v)
+	},
+	"fileTypeNone": func(raw json.RawMessage) (Object, error) { v := new(FileTypeNone); return v, json.Unmarshal(raw, v) },
+	"fileTypeNotificationSound": func(raw json.RawMessage) (Object, error) {
+		v := new(FileTypeNotificationSound)
+		return v, json.Unmarshal(raw, v)
+	},
+	"fileTypePhoto": func(raw json.RawMessage) (Object, error) { v := new(FileTypePhoto); return v, json.Unmarshal(raw, v) },
+	"fileTypePhotoStory": func(raw json.RawMessage) (Object, error) {
+		v := new(FileTypePhotoStory)
+		return v, json.Unmarshal(raw, v)
+	},
+	"fileTypeProfilePhoto": func(raw json.RawMessage) (Object, error) {
+		v := new(FileTypeProfilePhoto)
+		return v, json.Unmarshal(raw, v)
+	},
+	"fileTypeSecret": func(raw json.RawMessage) (Object, error) { v := new(FileTypeSecret); return v, json.Unmarshal(raw, v) },
+	"fileTypeSecretThumbnail": func(raw json.RawMessage) (Object, error) {
+		v := new(FileTypeSecretThumbnail)
+		return v, json.Unmarshal(raw, v)
+	},
+	"fileTypeSecure": func(raw json.RawMessage) (Object, error) { v := new(FileTypeSecure); return v, json.Unmarshal(raw, v) },
+	"fileTypeSelfDestructingLivePhotoVideo": func(raw json.RawMessage) (Object, error) {
+		v := new(FileTypeSelfDestructingLivePhotoVideo)
+		return v, json.Unmarshal(raw, v)
+	},
+	"fileTypeSelfDestructingPhoto": func(raw json.RawMessage) (Object, error) {
+		v := new(FileTypeSelfDestructingPhoto)
+		return v, json.Unmarshal(raw, v)
+	},
+	"fileTypeSelfDestructingVideo": func(raw json.RawMessage) (Object, error) {
+		v := new(FileTypeSelfDestructingVideo)
+		return v, json.Unmarshal(raw, v)
+	},
+	"fileTypeSelfDestructingVideoNote": func(raw json.RawMessage) (Object, error) {
+		v := new(FileTypeSelfDestructingVideoNote)
+		return v, json.Unmarshal(raw, v)
+	},
+	"fileTypeSelfDestructingVoiceNote": func(raw json.RawMessage) (Object, error) {
+		v := new(FileTypeSelfDestructingVoiceNote)
+		return v, json.Unmarshal(raw, v)
+	},
+	"fileTypeSticker": func(raw json.RawMessage) (Object, error) { v := new(FileTypeSticker); return v, json.Unmarshal(raw, v) },
+	"fileTypeThumbnail": func(raw json.RawMessage) (Object, error) {
+		v := new(FileTypeThumbnail)
+		return v, json.Unmarshal(raw, v)
+	},
+	"fileTypeUnknown": func(raw json.RawMessage) (Object, error) { v := new(FileTypeUnknown); return v, json.Unmarshal(raw, v) },
+	"fileTypeVideo":   func(raw json.RawMessage) (Object, error) { v := new(FileTypeVideo); return v, json.Unmarshal(raw, v) },
+	"fileTypeVideoNote": func(raw json.RawMessage) (Object, error) {
+		v := new(FileTypeVideoNote)
+		return v, json.Unmarshal(raw, v)
+	},
+	"fileTypeVideoStory": func(raw json.RawMessage) (Object, error) {
+		v := new(FileTypeVideoStory)
+		return v, json.Unmarshal(raw, v)
+	},
+	"fileTypeVoiceNote": func(raw json.RawMessage) (Object, error) {
+		v := new(FileTypeVoiceNote)
+		return v, json.Unmarshal(raw, v)
+	},
+	"fileTypeWallpaper": func(raw json.RawMessage) (Object, error) {
+		v := new(FileTypeWallpaper)
+		return v, json.Unmarshal(raw, v)
+	},
 	"formattedText": func(raw json.RawMessage) (Object, error) { v := new(FormattedText); return v, json.Unmarshal(raw, v) },
 	"forwardSource": func(raw json.RawMessage) (Object, error) { v := new(ForwardSource); return v, json.Unmarshal(raw, v) },
 	"foundChatMessages": func(raw json.RawMessage) (Object, error) {
@@ -26435,6 +27528,7 @@ var decoders = map[string]func(json.RawMessage) (Object, error){
 		return v, json.Unmarshal(raw, v)
 	},
 	"messageLink":     func(raw json.RawMessage) (Object, error) { v := new(MessageLink); return v, json.Unmarshal(raw, v) },
+	"messageLinkInfo": func(raw json.RawMessage) (Object, error) { v := new(MessageLinkInfo); return v, json.Unmarshal(raw, v) },
 	"messageLocation": func(raw json.RawMessage) (Object, error) { v := new(MessageLocation); return v, json.Unmarshal(raw, v) },
 	"messageOriginChannel": func(raw json.RawMessage) (Object, error) {
 		v := new(MessageOriginChannel)
@@ -26536,6 +27630,14 @@ var decoders = map[string]func(json.RawMessage) (Object, error){
 	"minithumbnail": func(raw json.RawMessage) (Object, error) { v := new(Minithumbnail); return v, json.Unmarshal(raw, v) },
 	"networkStatistics": func(raw json.RawMessage) (Object, error) {
 		v := new(NetworkStatistics)
+		return v, json.Unmarshal(raw, v)
+	},
+	"networkStatisticsEntryCall": func(raw json.RawMessage) (Object, error) {
+		v := new(NetworkStatisticsEntryCall)
+		return v, json.Unmarshal(raw, v)
+	},
+	"networkStatisticsEntryFile": func(raw json.RawMessage) (Object, error) {
+		v := new(NetworkStatisticsEntryFile)
 		return v, json.Unmarshal(raw, v)
 	},
 	"notificationSettingsScopeChannelChats": func(raw json.RawMessage) (Object, error) {
@@ -27296,6 +28398,7 @@ var Methods = []string{
 	"getMessage",
 	"getMessageAvailableReactions",
 	"getMessageLink",
+	"getMessageLinkInfo",
 	"getMessages",
 	"getNetworkStatistics",
 	"getOption",

@@ -23,6 +23,7 @@ fn terminateSession
 fn terminateAllOtherSessions
 fn getPasswordState
 class AuthorizationState
+class AuthenticationCodeType
 class ConnectionState
 
 # Chats and folders
@@ -72,6 +73,7 @@ fn setScopeNotificationSettings
 fn resetAllNotificationSettings
 fn getMessageLink
 fn getInternalLinkType
+fn getMessageLinkInfo
 class ChatType
 class ChatList
 class ChatMemberStatus
@@ -246,6 +248,8 @@ fn enableProxy
 fn disableProxy
 fn pingProxy
 class ProxyType
+class FileType
+class NetworkStatisticsEntry
 
 # Updates Telo consumes
 type updateAuthorizationState

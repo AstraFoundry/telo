@@ -4,40 +4,13 @@ import (
 	"slices"
 
 	tg "github.com/AstraFoundry/telo/backend/domain/telegram"
+	"github.com/AstraFoundry/telo/frontend/entities/chat"
 	"github.com/AstraFoundry/telo/frontend/shared/copy"
 	"github.com/AstraFoundry/telo/frontend/shared/icons"
 	"github.com/AstraFoundry/telo/frontend/shared/kit"
 	"github.com/AstraFoundry/telo/frontend/shared/theme"
 	"github.com/egoist/mygo/ui"
 )
-
-// serviceText words a service message.
-func serviceText(m tg.Message) string {
-	who := m.SenderName
-	switch m.Service {
-	case tg.ServiceChatCreated:
-		return copy.F(copy.ChatCreated, who)
-	case tg.ServiceTitleChanged:
-		return copy.F(copy.TitleChanged, who, m.Body)
-	case tg.ServicePhotoChanged:
-		return copy.F(copy.PhotoChanged, who)
-	case tg.ServiceMembersAdded:
-		return copy.F(copy.MembersAdded, who)
-	case tg.ServiceMemberJoined:
-		return copy.F(copy.MemberJoined, who)
-	case tg.ServiceMemberLeft:
-		return copy.F(copy.MemberLeft, who)
-	case tg.ServicePinned:
-		return copy.F(copy.MessagePinnedService, who)
-	case tg.ServiceScreenshot:
-		return copy.F(copy.ScreenshotTaken, who)
-	case tg.ServiceAutoDelete:
-		return copy.F(copy.AutoDeleteSet, who)
-	case tg.ServiceJoinedTelegram:
-		return copy.F(copy.JoinedTelegram, who)
-	}
-	return m.Body
-}
 
 // bare tells messages drawn without a bubble: stickers and emoji-only text.
 func bare(m tg.Message) bool {
@@ -55,7 +28,7 @@ func (v *View) messageRow(c *ui.Context, p Props, ch tg.Chat, r row) {
 	if m.Service != tg.ServiceNone {
 		ui.Row(c).Padding(4, 0).Justify(ui.Center).Children(func() {
 			ui.Row(c).Padding(3, 10).Radius(theme.RadiusPill).Background(t.Card.Alpha(0.86)).Border(1, t.Hairline).Children(func() {
-				ui.Text(c, serviceText(m)).FontSize(theme.Caption + 1).TextColor(t.Muted).MaxLines(2)
+				ui.Text(c, chat.ServiceText(m)).FontSize(theme.Caption + 1).TextColor(t.Muted).MaxLines(2)
 			})
 		})
 		return
@@ -455,18 +428,7 @@ func pollCard(c *ui.Context, p Props, ch tg.Chat, m tg.Message, ink, meta ui.Col
 // callCard draws a call message, as tdesktop folds them.
 func callCard(c *ui.Context, t theme.Tokens, m tg.Message, ink, meta ui.Color) {
 	call := m.Call
-	label := map[tg.CallStatus]copy.Key{tg.CallOutgoing: copy.CallOutgoing, tg.CallIncoming: copy.CallIncoming, tg.CallMissed: copy.CallMissed,
-		tg.CallDeclined: copy.CallDeclined, tg.CallCancelled: copy.CallCancelled, tg.CallGroup: copy.CallGroup}[call.Status]
-	if call.Video {
-		switch call.Status {
-		case tg.CallOutgoing:
-			label = copy.CallVideoOutgoing
-		case tg.CallIncoming:
-			label = copy.CallVideoIncoming
-		case tg.CallMissed:
-			label = copy.CallVideoMissed
-		}
-	}
+	label := chat.CallLabel(*call)
 	icon := icons.PhoneOutgoing
 	color := t.Success
 	switch call.Status {

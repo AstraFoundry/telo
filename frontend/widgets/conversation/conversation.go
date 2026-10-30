@@ -271,7 +271,7 @@ func (v *View) pinnedBar(c *ui.Context, p Props, ch tg.Chat) {
 				label = copy.F(copy.PinnedMessageOf, len(pinned)-v.pinnedAt, len(pinned))
 			}
 			ui.Text(c, label).FontSize(theme.Callout).FontWeight(600).TextColor(t.AccentInk)
-			ui.Text(c, summary(m)).FontSize(theme.Callout).TextColor(t.Text).SingleLine()
+			ui.Text(c, chat.Summary(m)).FontSize(theme.Callout).TextColor(t.Text).SingleLine()
 		})
 		if canUnpin(ch) {
 			kit.IconButton(c.Key("unpin"), t, icons.PushPinSlash, copy.T(copy.UnpinMessage)).OnClick(func() { s.Pin(ch.ID, m.ID, false, false) })
@@ -284,53 +284,6 @@ func (v *View) pinnedBar(c *ui.Context, p Props, ch tg.Chat) {
 }
 
 func canUnpin(ch tg.Chat) bool { return ch.Kind != tg.ChatChannel || ch.CanSendMessages }
-
-// summary is a one-line rendering of a message, for bars and quotes.
-func summary(m tg.Message) string {
-	if m.Body != "" {
-		return strings.Join(strings.Fields(m.Body), " ")
-	}
-	switch {
-	case m.Poll != nil:
-		return "📊 " + m.Poll.Question
-	case m.Call != nil:
-		return copy.T(copy.CallOutgoing)
-	case m.Media == nil:
-		return ""
-	}
-	return mediaName(m.Media)
-}
-
-func mediaName(md *tg.Media) string {
-	switch md.Kind {
-	case tg.MediaPhoto:
-		return copy.T(copy.Photo)
-	case tg.MediaVideo:
-		return copy.T(copy.Video)
-	case tg.MediaAnimation:
-		return copy.T(copy.Gif)
-	case tg.MediaVoice:
-		return copy.T(copy.VoiceMessage)
-	case tg.MediaVideoNote:
-		return copy.T(copy.VideoMessage)
-	case tg.MediaAudio:
-		return copy.T(copy.Audio)
-	case tg.MediaSticker:
-		if md.Sticker != nil {
-			return md.Sticker.Emoji + " " + copy.T(copy.Sticker)
-		}
-		return copy.T(copy.Sticker)
-	case tg.MediaLocation:
-		return copy.T(copy.Location)
-	case tg.MediaContact:
-		return copy.T(copy.ContactCard)
-	case tg.MediaWebPage:
-		if md.WebPage != nil {
-			return md.WebPage.URL
-		}
-	}
-	return copy.T(copy.File)
-}
 
 // jump scrolls to a message, loading the page around it first, and
 // highlights it briefly.

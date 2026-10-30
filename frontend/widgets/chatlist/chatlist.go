@@ -236,7 +236,7 @@ func preview(c *ui.Context, t theme.Tokens, ch tg.Chat, selected bool, ink, mute
 			ui.Text(c, oneLine(ch.DraftPreview))
 		})
 	default:
-		line.Children(func() { ui.Text(c, oneLine(ch.Preview)) })
+		line.Children(func() { ui.Text(c, oneLine(chat.Preview(ch))) })
 	}
 }
 

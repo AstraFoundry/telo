@@ -157,7 +157,7 @@ func (r *Repository) SendMessage(_ context.Context, chat tg.ChatID, body string,
 	}
 	body, opts.Entities = tg.TrimOutgoing(body, opts.Entities)
 	if body == "" {
-		return tg.Message{}, fmt.Errorf("demo: empty message")
+		return tg.Message{}, tg.ErrEmptyMessage
 	}
 	return r.deliver(r.outgoing(chat, body, opts), opts)
 }
