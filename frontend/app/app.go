@@ -371,6 +371,7 @@ func (a *App) workspaceEnv(t theme.Tokens, formats timefmt.Formats, prefs prefer
 			a.panel.Attach(agentEnv, m.ChatID, []tg.MessageID{m.ID}, copy.T(copy.AgentSummarizeUnread))
 		},
 		Dialogs: func(c *ui.Context) { a.menu.Dialogs(c, menu) },
+		Modal:   a.viewer.Showing(),
 	}
 }
 

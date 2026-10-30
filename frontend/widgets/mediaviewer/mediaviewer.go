@@ -25,11 +25,15 @@ type Viewer struct {
 	id    tg.MessageID
 	zoom  float32
 	items []tg.Message
+	// focus moves the keyboard to the viewer as it opens, so arrows and
+	// Escape reach it rather than the composer under it.
+	focus  bool
+	handle ui.Handle
 }
 
 // Open shows a message's picture with the others the chat holds.
 func (v *Viewer) Open(s *chat.Store, m tg.Message) {
-	v.open, v.chat, v.id, v.zoom = true, m.ChatID, m.ID, 1
+	v.open, v.chat, v.id, v.zoom, v.focus = true, m.ChatID, m.ID, 1, true
 	v.items = nil
 	for _, x := range s.Transcript(m.ChatID).Messages {
 		if visual(x) {
@@ -98,7 +102,7 @@ func (v *Viewer) Render(c *ui.Context, t theme.Tokens, rt *runtime.Runtime, s *c
 
 func (v *Viewer) layer(c *ui.Context, t theme.Tokens, rt *runtime.Runtime, s *chat.Store, images *media.Images, i int, m tg.Message, md *tg.Media) {
 	ink := ui.RGB(255, 255, 255)
-	ui.Box(c.Key("viewer")).Absolute().Left(0).Top(0).Right(0).Bottom(0).Background(t.Scrim.Alpha(0.92)).Role(ui.RoleDialog).Label(copy.T(copy.MediaViewer)).
+	ui.Box(c.Key("viewer")).Absolute().Left(0).Top(0).Right(0).Bottom(0).Background(t.Scrim.Alpha(0.97)).Role(ui.RoleDialog).Label(copy.T(copy.MediaViewer)).
 		Transition(ui.ElementTransition{Animation: &theme.Settle, Enter: &ui.Motion{Opacity: 0}, Exit: &ui.Motion{Opacity: 0}}).Children(func() {
 		ui.Column(c).Fill().Children(func() {
 			ui.Row(c).Height(52).Padding(0, 16).Gap(8).AlignItems(ui.Center).Children(func() {
@@ -129,9 +133,13 @@ func (v *Viewer) layer(c *ui.Context, t theme.Tokens, rt *runtime.Runtime, s *ch
 						button("play", icons.Play, copy.T(copy.OpenFile), func() { _ = rt.Desktop.OpenFile(path) })
 					}
 				}
-				button("close", icons.X, copy.T(copy.Close), func() { v.open = false })
+				kit.IconButton(c.Key("close"), t, icons.X, copy.T(copy.Close)).TextColor(ink).Bind(&v.handle).OnClick(func() { v.open = false })
+				if v.focus {
+					v.focus = false
+					v.handle.Focus(c)
+				}
 			})
-			ui.Row(c).Grow(1).AlignItems(ui.Center).Children(func() {
+			ui.Row(c).Grow(1).Basis(0).MinHeight(0).AlignItems(ui.Center).Children(func() {
 				nav := func(key string, icon *ui.SVG, label string, enabled bool, d int) {
 					b := kit.IconButton(c.Key(key), t, icon, label).TextColor(ink).Margin(0, 12)
 					if !enabled {
@@ -140,7 +148,9 @@ func (v *Viewer) layer(c *ui.Context, t theme.Tokens, rt *runtime.Runtime, s *ch
 					b.OnClick(func() { v.step(d) })
 				}
 				nav("prev", icons.CaretLeft, copy.T(copy.PreviousMedia), i > 0, -1)
-				stage := ui.Box(c).Grow(1).Fill().Justify(ui.Center).AlignItems(ui.Center).Clip()
+				// The stage takes what the bar and the arrows leave; the picture
+				// fits inside it whatever its own size.
+				stage := ui.Box(c).Grow(1).Shrink(1).Basis(0).MinWidth(0).AlignSelf(ui.Stretch).Justify(ui.Center).AlignItems(ui.Center).Clip()
 				stage.Children(func() {
 					path := md.Path
 					if md.Kind != tg.MediaPhoto {
@@ -157,7 +167,8 @@ func (v *Viewer) layer(c *ui.Context, t theme.Tokens, rt *runtime.Runtime, s *ch
 						ui.Spinner(c).Size(28, 28)
 						return
 					}
-					ui.Image(c, img).Fill().Fit(ui.Contain).Scale(v.zoom, v.zoom)
+					w, h := fit(c, md, m.Body != "")
+					ui.Image(c, img).Size(w*v.zoom, h*v.zoom).Fit(ui.Contain)
 				})
 				nav("next", icons.CaretRight, copy.T(copy.NextMedia), i < len(v.items)-1, 1)
 			})
@@ -168,4 +179,20 @@ func (v *Viewer) layer(c *ui.Context, t theme.Tokens, rt *runtime.Runtime, s *ch
 			}
 		})
 	})
+}
+
+// fit is the picture's size inside the window, leaving the bar, the
+// arrows and a caption their room, never larger than the picture.
+func fit(c *ui.Context, md *tg.Media, caption bool) (float32, float32) {
+	ww, wh := c.Size()
+	availW, availH := ww-2*72, wh-52-24
+	if caption {
+		availH -= 64
+	}
+	w, h := float32(md.Width), float32(md.Height)
+	if w <= 0 || h <= 0 {
+		w, h = availW, availH
+	}
+	scale := min(availW/w, availH/h, 1)
+	return w * scale, h * scale
 }

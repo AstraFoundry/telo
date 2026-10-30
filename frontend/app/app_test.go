@@ -166,3 +166,34 @@ func TestProfileAndAccountMenu(t *testing.T) {
 	}
 	_ = demo.SavedChat
 }
+
+func TestMediaViewer(t *testing.T) {
+	h := open(t, nil)
+	h.click(t, "Telo Design")
+	h.app.workspace.Conversation.Composer.Focus()
+	ms := h.app.Store.Transcript(demo.DesignChat).Messages
+	var shown int
+	for _, m := range ms {
+		if m.Media != nil && m.Media.Kind == "photo" {
+			shown++
+			if shown == 1 {
+				h.app.viewer.Open(h.app.Store, m)
+			}
+		}
+	}
+	h.settle(t)
+	if !h.app.viewer.Showing() || !h.tt.HasText(copy.F(copy.MediaOf, 1, shown)) {
+		t.Fatalf("viewer of %d photos: %q", shown, h.tt.Texts())
+	}
+	testkit.Snapshot(t, h.tt, "media-viewer")
+	h.tt.Key(0, ui.KeyRight)
+	h.settle(t)
+	if shown > 1 && !h.tt.HasText(copy.F(copy.MediaOf, 2, shown)) {
+		t.Fatal("→ steps to the next photo")
+	}
+	h.tt.Key(0, ui.KeyEscape)
+	h.settle(t)
+	if h.app.viewer.Showing() {
+		t.Fatal("Escape closes the viewer")
+	}
+}

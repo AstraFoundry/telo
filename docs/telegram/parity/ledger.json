@@ -1,0 +1,2029 @@
+{
+  "inventory": "docs/telegram/parity/upstream-inventory.json",
+  "commit": "de608bb0d6b5f464f4d0a04deff719644e178556",
+  "summary": {
+    "implemented": 51,
+    "partial": 21,
+    "planned": 43,
+    "not-applicable": 17
+  },
+  "entries": [
+    {
+      "id": "sign-in",
+      "title": "Sign-in with phone, code, password, registration and QR",
+      "upstream": [
+        "module:AuthUI",
+        "module:PhoneInputUI",
+        "module:SelectCountryUI",
+        "module:QRCodeUtils",
+        "module:PhoneNumberUtils"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "frontend/features/signin.State.SubmitPhone",
+        "frontend/features/signin.QRCode",
+        "frontend/shared/config.CountryForPhone",
+        "backend/infrastructure/telegram/live.Session.SubmitCode"
+      ],
+      "tests": [
+        "frontend/pages/onboarding.TestSignInFlow",
+        "frontend/pages/onboarding.TestQRSignIn",
+        "backend/infrastructure/telegram/live.TestSignInReachesPhoneStep"
+      ]
+    },
+    {
+      "id": "chat-list",
+      "title": "Chat list with folders, archive, pins, badges, typing and drafts",
+      "upstream": [
+        "module:ChatListUI",
+        "module:ArchiveUtils"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "frontend/widgets/chatlist.Column.Render",
+        "backend/infrastructure/telegram/live.Session.ChatPage"
+      ],
+      "tests": [
+        "frontend/pages/workspace.TestWorkspaceShowsListAndConversation",
+        "frontend/pages/workspace.TestChatListContextMenu",
+        "frontend/entities/chat.TestStartLoadsListFoldersAndUser"
+      ]
+    },
+    {
+      "id": "conversation",
+      "title": "Conversation transcript: bubbles, runs, albums, days, unread divider, pinned bar, jump",
+      "upstream": [
+        "module:ChatUI",
+        "module:ChatHistoryModel"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "frontend/widgets/conversation.View.Render",
+        "frontend/entities/chat.Store.LoadOlder",
+        "backend/infrastructure/telegram/live.Session.Messages"
+      ],
+      "tests": [
+        "frontend/pages/workspace.TestWorkspaceShowsListAndConversation",
+        "frontend/pages/workspace.TestMessageContextMenu",
+        "frontend/entities/chat.TestSelectLoadsTranscriptAndPins",
+        "backend/infrastructure/telegram/demo.TestPagingAndUnreadBoundary"
+      ]
+    },
+    {
+      "id": "composer",
+      "title": "Composer: Markdown shortcuts, reply and edit targets, drafts, mentions, send options",
+      "upstream": [
+        "module:InputView",
+        "module:InputTextView",
+        "module:TGModernGrowingTextView"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "frontend/features/compose.Composer.Render",
+        "backend/domain/telegram.ParseMarkdown"
+      ],
+      "tests": [
+        "frontend/pages/workspace.TestComposerFormattingAndAttach",
+        "frontend/pages/workspace.TestWorkspaceSendsAndSearches",
+        "backend/domain/telegram.TestParseMarkdown"
+      ]
+    },
+    {
+      "id": "message-text",
+      "title": "Message entities: links, mentions, code, spoilers, quotes, isolated emoji",
+      "upstream": [
+        "module:MessageTextUtils",
+        "module:MessageUtils"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "frontend/shared/kit.RichBody",
+        "frontend/shared/kit.Spans",
+        "backend/domain/telegram.IsolatedEmojiCount"
+      ],
+      "tests": [
+        "frontend/shared/kit.TestSpans",
+        "backend/domain/telegram.TestIsolatedEmojiCount",
+        "backend/infrastructure/telegram/live.TestEntitiesRoundTrip"
+      ]
+    },
+    {
+      "id": "peer-info",
+      "title": "Chat info panel: profile, bio, username, phone, contact, block, auto-delete, secret chat",
+      "upstream": [
+        "module:PeerInfoUI",
+        "module:PeerMediaUI",
+        "module:SidebarUI"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "frontend/widgets/profile.Panel.Render",
+        "frontend/widgets/profile.Panel.sharedMedia",
+        "backend/infrastructure/telegram/live.Session.PeerProfile"
+      ],
+      "tests": [
+        "frontend/app.TestProfileAndAccountMenu"
+      ]
+    },
+    {
+      "id": "groups-in-common",
+      "title": "Groups in common",
+      "upstream": [
+        "module:GroupsInCommonUI"
+      ],
+      "status": "partial",
+      "priority": "P2",
+      "reason": "Telo shows the count; the list of common groups is not drawn yet.",
+      "evidence": [
+        "frontend/widgets/profile.Panel.info"
+      ],
+      "tests": [
+        "frontend/app.TestProfileAndAccountMenu"
+      ]
+    },
+    {
+      "id": "settings",
+      "title": "Settings: searchable index and panes",
+      "upstream": [
+        "module:SettingsUI",
+        "module:GeneralRows",
+        "module:InAppSettings"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "frontend/pages/settings.Page.Render",
+        "frontend/widgets/settings.Search"
+      ],
+      "tests": [
+        "frontend/app.TestSettingsSearchAndPanes"
+      ]
+    },
+    {
+      "id": "sessions",
+      "title": "Active sessions: list, terminate one or all others",
+      "upstream": [
+        "module:SessionsUI"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "frontend/widgets/settings.View.sessionsPane",
+        "backend/infrastructure/telegram/live.Session.TerminateOtherSessions"
+      ],
+      "tests": [
+        "frontend/app.TestSettingsSearchAndPanes",
+        "backend/infrastructure/telegram/demo.TestSessionsPrivacyProxies"
+      ]
+    },
+    {
+      "id": "passcode",
+      "title": "Passcode lock with auto-lock",
+      "upstream": [
+        "module:PasscodeUI"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "frontend/pages/lock.Page.Render",
+        "backend/domain/preferences.HashPasscode",
+        "frontend/app.App.autoLock"
+      ],
+      "tests": [
+        "frontend/app.TestPasscodeLocksAndUnlocks",
+        "backend/domain/preferences.TestPasscodeHash"
+      ]
+    },
+    {
+      "id": "proxy",
+      "title": "Proxies: SOCKS5, HTTP and MTProto",
+      "upstream": [
+        "module:ProxyUI",
+        "module:ProxyUtils"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "frontend/widgets/settings.View.proxyPane",
+        "backend/infrastructure/telegram/live.Session.AddProxy"
+      ],
+      "tests": [
+        "frontend/app.TestSettingsSearchAndPanes",
+        "backend/infrastructure/telegram/demo.TestSessionsPrivacyProxies"
+      ]
+    },
+    {
+      "id": "data-usage",
+      "title": "Storage and network usage, cache limit, clearing",
+      "upstream": [
+        "module:DataUsageUI"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "frontend/widgets/settings.View.dataPane",
+        "backend/infrastructure/telegram/live.Session.StorageUsage"
+      ],
+      "tests": [
+        "frontend/app.TestSettingsSearchAndPanes"
+      ]
+    },
+    {
+      "id": "theme",
+      "title": "Light, dark and system appearance with accent colors",
+      "upstream": [
+        "module:ThemeSettings",
+        "module:TelegramTheme",
+        "module:ColorPalette",
+        "module:Colors",
+        "module:TelegramIconsTheme"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "frontend/shared/theme.Resolve",
+        "frontend/shared/theme.Apply",
+        "frontend/shared/icons.Chats"
+      ],
+      "tests": [
+        "frontend/app.TestSettingsSearchAndPanes",
+        "frontend/pages/workspace.TestWorkspaceShowsListAndConversation"
+      ]
+    },
+    {
+      "id": "wallpaper",
+      "title": "Chat background",
+      "upstream": [
+        "module:WallpaperUI"
+      ],
+      "status": "partial",
+      "priority": "P2",
+      "reason": "Telo draws its pattern backgrounds; Telegram cloud wallpapers and custom images are not loaded.",
+      "evidence": [
+        "frontend/widgets/settings.appearancePane"
+      ],
+      "tests": [
+        "frontend/app.TestSettingsSearchAndPanes"
+      ]
+    },
+    {
+      "id": "strings",
+      "title": "One copy catalog with plurals",
+      "upstream": [
+        "module:Strings",
+        "module:NumberPluralization"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "frontend/shared/copy.T",
+        "frontend/shared/copy.Plural"
+      ],
+      "tests": [
+        "frontend/shared/copy.TestEveryKeyResolves",
+        "frontend/shared/copy.TestFormatting"
+      ]
+    },
+    {
+      "id": "localization",
+      "title": "Interface languages",
+      "upstream": [
+        "module:Localization"
+      ],
+      "status": "partial",
+      "priority": "P2",
+      "reason": "The interface is English; Telegram language packs are not loaded.",
+      "evidence": [
+        "frontend/widgets/settings.languagePane"
+      ],
+      "tests": [
+        "frontend/app.TestSettingsSearchAndPanes"
+      ]
+    },
+    {
+      "id": "dates",
+      "title": "Dates and times in the user's region",
+      "upstream": [
+        "module:DateUtils",
+        "module:CalendarUtils",
+        "module:DateSelectorUI"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "frontend/shared/lib/timefmt.Formats.ListTime",
+        "frontend/shared/kit.DateTime"
+      ],
+      "tests": [
+        "frontend/shared/lib/timefmt.TestFormats"
+      ]
+    },
+    {
+      "id": "calendar",
+      "title": "Jump to a date",
+      "upstream": [
+        "module:CalendarUI"
+      ],
+      "status": "planned",
+      "priority": "P1",
+      "reason": "The repository answers MessageAtDate; the calendar picker in the conversation header is not built yet."
+    },
+    {
+      "id": "gallery",
+      "title": "Media viewer",
+      "upstream": [
+        "module:GalleryUI"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "frontend/widgets/mediaviewer.Viewer.Render"
+      ],
+      "tests": [
+        "frontend/app.TestMediaViewer"
+      ]
+    },
+    {
+      "id": "avatars",
+      "title": "Avatars with minithumbnails and lettered placeholders",
+      "upstream": [
+        "module:AvatarUI"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "frontend/shared/kit.Avatar",
+        "backend/domain/telegram.Placeholder"
+      ],
+      "tests": [
+        "backend/infrastructure/telegram/live.TestProfilePictureSettles"
+      ]
+    },
+    {
+      "id": "alerts",
+      "title": "Dialogs and confirmations",
+      "upstream": [
+        "module:AlertsUI"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "frontend/shared/kit.Dialog",
+        "frontend/features/chatactions.Confirm"
+      ],
+      "tests": [
+        "frontend/app.TestProfileAndAccountMenu"
+      ]
+    },
+    {
+      "id": "components",
+      "title": "Shared components: rows, groups, buttons, selects",
+      "upstream": [
+        "module:ComponentsUI",
+        "module:TGUIKit",
+        "module:ShortPeerRow"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "frontend/shared/kit.Row",
+        "frontend/shared/kit.Group",
+        "frontend/shared/kit.Button",
+        "frontend/shared/kit.Select"
+      ],
+      "tests": [
+        "frontend/app.TestSettingsSearchAndPanes"
+      ]
+    },
+    {
+      "id": "select-peers",
+      "title": "Pick contacts and chats",
+      "upstream": [
+        "module:SelectPeersUI"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "frontend/features/accountmenu.State.contactList",
+        "frontend/features/messageactions.State.Dialogs"
+      ],
+      "tests": [
+        "frontend/app.TestProfileAndAccountMenu"
+      ]
+    },
+    {
+      "id": "share",
+      "title": "Forward to chats",
+      "upstream": [
+        "module:ShareUI"
+      ],
+      "status": "partial",
+      "priority": "P2",
+      "reason": "Forwarding goes to Telegram chats; the macOS share sheet is not offered.",
+      "evidence": [
+        "frontend/features/messageactions.State.OpenForward"
+      ],
+      "tests": [
+        "backend/infrastructure/telegram/demo.TestSendEditDeleteForward"
+      ]
+    },
+    {
+      "id": "report",
+      "title": "Report chats and messages",
+      "upstream": [
+        "module:ReportUI"
+      ],
+      "status": "partial",
+      "priority": "P2",
+      "reason": "Reports go with a free-text reason; Telegram's report option flow is not walked.",
+      "evidence": [
+        "backend/infrastructure/telegram/live.Session.ReportChat"
+      ],
+      "tests": [
+        "frontend/pages/workspace.TestWorkspaceShowsListAndConversation",
+        "frontend/pages/workspace.TestMessageContextMenu"
+      ]
+    },
+    {
+      "id": "reactions",
+      "title": "Reactions",
+      "upstream": [
+        "module:Reactions"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "frontend/entities/chat.Store.React",
+        "backend/infrastructure/telegram/live.Session.SetReaction"
+      ],
+      "tests": [
+        "backend/infrastructure/telegram/demo.TestReactionsAndFolders",
+        "backend/infrastructure/telegram/live.TestMessagesMapFromUpdates"
+      ]
+    },
+    {
+      "id": "polls",
+      "title": "Polls and quizzes",
+      "upstream": [
+        "module:PollResultsUI"
+      ],
+      "status": "partial",
+      "priority": "P2",
+      "reason": "Results show counts and the quiz answer; the voter lists of public polls are not shown.",
+      "evidence": [
+        "frontend/features/compose.Composer.Render",
+        "backend/infrastructure/telegram/live.Session.SendPoll"
+      ],
+      "tests": [
+        "backend/infrastructure/telegram/demo.TestPollVoting",
+        "backend/infrastructure/telegram/live.TestMessagesMapFromUpdates"
+      ]
+    },
+    {
+      "id": "translate",
+      "title": "Message translation",
+      "upstream": [
+        "module:Translate",
+        "module:TranslateUI"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "frontend/entities/chat.Store.Translate",
+        "backend/infrastructure/telegram/live.Session.Translate"
+      ],
+      "tests": [
+        "frontend/pages/workspace.TestWorkspaceShowsListAndConversation",
+        "frontend/pages/workspace.TestMessageContextMenu"
+      ]
+    },
+    {
+      "id": "links",
+      "title": "Telegram links open in Telo",
+      "upstream": [
+        "module:TelegramLinks"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "frontend/app.App.openLink",
+        "backend/infrastructure/telegram/live.Session.ResolveLink"
+      ],
+      "tests": [
+        "frontend/pages/workspace.TestWorkspaceShowsListAndConversation",
+        "frontend/pages/workspace.TestMessageContextMenu"
+      ]
+    },
+    {
+      "id": "media",
+      "title": "Media downloads, cache and previews",
+      "upstream": [
+        "module:FetchManager",
+        "module:TelegramMedia",
+        "module:TelegramMediaResources",
+        "module:TelegramMediaUtils",
+        "module:InlineMediaGrid",
+        "module:FilePanels"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "frontend/shared/media.Images.File",
+        "frontend/entities/chat.Store.Download",
+        "backend/infrastructure/telegram/live.Session.Download"
+      ],
+      "tests": [
+        "backend/infrastructure/telegram/demo.TestDownloadsMaterializeFiles",
+        "frontend/pages/workspace.TestWorkspaceShowsListAndConversation"
+      ]
+    },
+    {
+      "id": "quick-switcher",
+      "title": "Quick switcher: search chats and messages",
+      "upstream": [
+        "module:QuickSwitcher"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "frontend/features/search.Search.Results"
+      ],
+      "tests": [
+        "frontend/pages/workspace.TestKeyboardShortcuts",
+        "frontend/pages/workspace.TestWorkspaceSendsAndSearches"
+      ]
+    },
+    {
+      "id": "hotkeys",
+      "title": "Keyboard shortcuts",
+      "upstream": [
+        "module:HotKey",
+        "module:KeyboardKey"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "frontend/shared/config.Shortcuts",
+        "frontend/shared/config.Pressed"
+      ],
+      "tests": [
+        "frontend/pages/workspace.TestKeyboardShortcuts"
+      ]
+    },
+    {
+      "id": "chat-modes",
+      "title": "Scheduled and pinned message lists",
+      "upstream": [
+        "module:ChatModeTypes"
+      ],
+      "status": "partial",
+      "priority": "P1",
+      "reason": "Pinned and scheduled messages show in the transcript and the pinned bar; the separate list screens are not built.",
+      "evidence": [
+        "frontend/entities/chat.Store.RefreshScheduled",
+        "frontend/entities/chat.Store.RefreshPinned"
+      ],
+      "tests": [
+        "backend/infrastructure/telegram/demo.TestScheduledAndPinned"
+      ]
+    },
+    {
+      "id": "invite-links",
+      "title": "Invite links",
+      "upstream": [
+        "module:InviteLinksUI"
+      ],
+      "status": "partial",
+      "priority": "P2",
+      "reason": "The primary link shows and copies; managing additional links is not built.",
+      "evidence": [
+        "frontend/widgets/profile.Panel.info"
+      ],
+      "tests": [
+        "frontend/app.TestProfileAndAccountMenu"
+      ]
+    },
+    {
+      "id": "stickers",
+      "title": "Stickers and emoji: panel, sets, recents, favorites",
+      "upstream": [
+        "module:StickerSettingsUI",
+        "module:InlineStickers"
+      ],
+      "status": "partial",
+      "priority": "P1",
+      "reason": "Animated (TGS) and video stickers show their first frame: MyGo has no Lottie or WebM decoder yet.",
+      "evidence": [
+        "frontend/widgets/settings.View.stickersPane",
+        "backend/infrastructure/telegram/live.Session.StickerCatalog"
+      ],
+      "tests": [
+        "frontend/app.TestSettingsSearchAndPanes"
+      ]
+    },
+    {
+      "id": "stories",
+      "title": "Stories",
+      "upstream": [
+        "module:StoriesUI"
+      ],
+      "status": "partial",
+      "priority": "P2",
+      "reason": "Telo posts stories; browsing others' stories is not built.",
+      "evidence": [
+        "frontend/features/accountmenu.State.post",
+        "backend/infrastructure/telegram/live.Session.PostStory"
+      ],
+      "tests": [
+        "frontend/app.TestProfileAndAccountMenu"
+      ]
+    },
+    {
+      "id": "audio",
+      "title": "Voice and audio playback",
+      "upstream": [
+        "module:AudioPlayerCore",
+        "module:AudioPlayerUI"
+      ],
+      "status": "partial",
+      "priority": "P1",
+      "reason": "MyGo decodes no Opus, so voice notes and music open in the system player.",
+      "evidence": [
+        "frontend/widgets/conversation.View.voice"
+      ],
+      "tests": [
+        "frontend/pages/workspace.TestWorkspaceShowsListAndConversation",
+        "frontend/pages/workspace.TestMessageContextMenu"
+      ]
+    },
+    {
+      "id": "recording",
+      "title": "Record voice and video messages",
+      "upstream": [
+        "module:MediaRecorderUI",
+        "module:TGVideoCameraMovie"
+      ],
+      "status": "planned",
+      "priority": "P1",
+      "reason": "Needs microphone capture and Opus encoding in the MyGo audio stack."
+    },
+    {
+      "id": "lottie",
+      "title": "Animated stickers and emoji",
+      "upstream": [
+        "module:TLottie",
+        "module:InlineStickerLayer",
+        "module:LocalAnimations",
+        "module:DiceCache"
+      ],
+      "status": "planned",
+      "priority": "P1",
+      "reason": "Needs a Lottie renderer for MyGo."
+    },
+    {
+      "id": "gifs",
+      "title": "GIFs",
+      "upstream": [
+        "module:TGGifConverter"
+      ],
+      "status": "partial",
+      "priority": "P2",
+      "reason": "GIF files animate; MP4 animations show their thumbnail.",
+      "evidence": [
+        "frontend/widgets/conversation.View.attachment"
+      ],
+      "tests": [
+        "frontend/pages/workspace.TestWorkspaceShowsListAndConversation",
+        "frontend/pages/workspace.TestMessageContextMenu"
+      ]
+    },
+    {
+      "id": "speech",
+      "title": "Speech recognition and text in images",
+      "upstream": [
+        "module:DetectSpeech",
+        "module:OCR",
+        "module:TextRecognizing"
+      ],
+      "status": "planned",
+      "priority": "P2",
+      "reason": "Needs on-device recognition; Telo ships none yet."
+    },
+    {
+      "id": "export",
+      "title": "Chat export",
+      "upstream": [
+        "module:ChatExportUI"
+      ],
+      "status": "planned",
+      "priority": "P2",
+      "reason": "Not built."
+    },
+    {
+      "id": "location",
+      "title": "Locations and venues",
+      "upstream": [
+        "module:LocationUI"
+      ],
+      "status": "partial",
+      "priority": "P2",
+      "reason": "Received locations open a map; sending a location is not built.",
+      "evidence": [
+        "frontend/widgets/conversation.View.attachment"
+      ],
+      "tests": [
+        "frontend/pages/workspace.TestWorkspaceShowsListAndConversation",
+        "frontend/pages/workspace.TestMessageContextMenu"
+      ]
+    },
+    {
+      "id": "preview-sender",
+      "title": "Preview files before sending",
+      "upstream": [
+        "module:PreviewSenderUI"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "frontend/features/compose.UploadFiles"
+      ],
+      "tests": [
+        "frontend/pages/workspace.TestComposerFormattingAndAttach",
+        "frontend/pages/workspace.TestWorkspaceSendsAndSearches"
+      ]
+    },
+    {
+      "id": "avatar-editor",
+      "title": "Crop a new profile photo",
+      "upstream": [
+        "module:AvatarEditorUI",
+        "module:ImageCanvasUI"
+      ],
+      "status": "planned",
+      "priority": "P2",
+      "reason": "Photos upload as chosen."
+    },
+    {
+      "id": "rich-editor",
+      "title": "Articles",
+      "upstream": [
+        "module:RichTextEditorUI"
+      ],
+      "status": "planned",
+      "priority": "P2",
+      "reason": "Telegram articles are not built."
+    },
+    {
+      "id": "emoji-suggestions",
+      "title": "Emoji suggestions while typing",
+      "upstream": [
+        "module:EmojiSuggestions",
+        "module:EmojiReplacements"
+      ],
+      "status": "planned",
+      "priority": "P2",
+      "reason": "The composer offers the emoji panel; inline suggestions are not built."
+    },
+    {
+      "id": "channel-admin",
+      "title": "Channel and group administration",
+      "upstream": [
+        "module:ChannelSettingsUI",
+        "module:ChannelAdminUI",
+        "module:PeerModerationUI",
+        "module:ForumSettingsUI",
+        "module:GigagroupUI",
+        "module:InactiveChannelsUI",
+        "module:EditTagLabelUI"
+      ],
+      "status": "planned",
+      "priority": "P1",
+      "reason": "Editing titles, permissions, admins and members of groups and channels Telo cannot yet do."
+    },
+    {
+      "id": "statistics",
+      "title": "Channel statistics and boosts",
+      "upstream": [
+        "module:StatisticsUI",
+        "module:GraphUI",
+        "module:BoostUI",
+        "module:MonetizationUI",
+        "module:AffiliateUI"
+      ],
+      "status": "planned",
+      "priority": "P2",
+      "reason": "Admin statistics are not built."
+    },
+    {
+      "id": "communities",
+      "title": "Communities and shared folders",
+      "upstream": [
+        "module:CommunityUI",
+        "module:FolderSharingUI"
+      ],
+      "status": "planned",
+      "priority": "P2",
+      "reason": "Chat folders sync with Telegram; sharing folders and communities is not built."
+    },
+    {
+      "id": "instant-view",
+      "title": "Instant View",
+      "upstream": [
+        "module:InstantPageUI"
+      ],
+      "status": "planned",
+      "priority": "P2",
+      "reason": "Needs a native renderer for Instant View pages."
+    },
+    {
+      "id": "compose-ui",
+      "title": "New message screen",
+      "upstream": [
+        "module:ComposeUI"
+      ],
+      "status": "planned",
+      "priority": "P2",
+      "reason": "New groups, channels and secret chats are created from dialogs; a full-window compose screen is not built."
+    },
+    {
+      "id": "change-phone",
+      "title": "Change the phone number",
+      "upstream": [
+        "module:ChangePhoneNumberUI"
+      ],
+      "status": "planned",
+      "priority": "P2",
+      "reason": "Telo shows the number; changing it happens on Telegram's own apps."
+    },
+    {
+      "id": "input-data",
+      "title": "Form fields",
+      "upstream": [
+        "module:InputDataUI"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "frontend/shared/kit.Field"
+      ],
+      "tests": [
+        "frontend/app.TestSettingsSearchAndPanes"
+      ]
+    },
+    {
+      "id": "qr",
+      "title": "QR codes for links and contacts",
+      "upstream": [
+        "module:QrStudioUI"
+      ],
+      "status": "planned",
+      "priority": "P2",
+      "reason": "Telo draws the sign-in QR code only."
+    },
+    {
+      "id": "passkeys",
+      "title": "Passkey sign-in",
+      "upstream": [
+        "module:PasskeysUI"
+      ],
+      "status": "planned",
+      "priority": "P2",
+      "reason": "Sign-in uses the phone, the code, the password or a QR code."
+    },
+    {
+      "id": "calls",
+      "title": "Calls and video chats",
+      "upstream": [
+        "module:CallsUI",
+        "module:PrivateCallScreen",
+        "module:GroupCallScreenUI",
+        "module:TelegramCallsCore",
+        "module:CallVideoLayer",
+        "module:PushToTalk",
+        "module:CaptureExclusion"
+      ],
+      "status": "not-applicable",
+      "reason": "VoIP needs tgcalls and native media capture (decision 007, item 1).",
+      "decision": "docs/decisions/007-telegram-macos-parity-scope.md"
+    },
+    {
+      "id": "payments",
+      "title": "Premium, Stars, gifts, TON and payments",
+      "upstream": [
+        "module:PremiumUI",
+        "module:PremiumStatusUI",
+        "module:StarsUI",
+        "module:PaymentsUI",
+        "module:InAppPurchaseManager",
+        "module:WalletUI",
+        "module:WalletEngine",
+        "module:AddTonBalanceUI",
+        "module:TGCurrencyFormatter",
+        "module:CurrencyFormat",
+        "module:GiftCraftingUI",
+        "module:UniqueGiftBackground",
+        "module:UniqueGiftRenderer"
+      ],
+      "status": "not-applicable",
+      "reason": "Payments are out of scope (decision 007, item 2).",
+      "decision": "docs/decisions/007-telegram-macos-parity-scope.md"
+    },
+    {
+      "id": "business",
+      "title": "Business and identity",
+      "upstream": [
+        "module:BusinessUI",
+        "module:PassportUI",
+        "module:SecureIdUtils",
+        "module:TGPassportMRZ",
+        "module:VerifyAgeUI"
+      ],
+      "status": "not-applicable",
+      "reason": "Decision 007, item 3.",
+      "decision": "docs/decisions/007-telegram-macos-parity-scope.md"
+    },
+    {
+      "id": "web",
+      "title": "Mini Apps and web content",
+      "upstream": [
+        "module:WebAppUI",
+        "module:EntertainmentUI",
+        "module:WidgetUI",
+        "module:InAppVideoServices",
+        "module:ExternalVideoUtils"
+      ],
+      "status": "not-applicable",
+      "reason": "Web views are out (decisions 006 and 007, item 4).",
+      "decision": "docs/decisions/007-telegram-macos-parity-scope.md"
+    },
+    {
+      "id": "premium-custom",
+      "title": "Premium customizations",
+      "upstream": [
+        "module:SelectColorUI"
+      ],
+      "status": "not-applicable",
+      "reason": "Decision 007, item 6.",
+      "decision": "docs/decisions/007-telegram-macos-parity-scope.md"
+    },
+    {
+      "id": "platform",
+      "title": "Upstream platform libraries",
+      "upstream": [
+        "module:GZIP",
+        "module:RingBuffer",
+        "module:ObjcUtils",
+        "module:FoundationUtils",
+        "module:TelegramUtils",
+        "module:TelegramContext",
+        "module:ApiCredentials",
+        "module:CrashReports",
+        "module:CrashRecoveryUI",
+        "module:PerfLab",
+        "module:NetworkLab",
+        "module:SystemPermissions",
+        "module:SwiftMath",
+        "module:Svg",
+        "module:FastBlur",
+        "module:DustLayer",
+        "module:SceneEffects",
+        "module:EDSunriseSet",
+        "module:CubeUI"
+      ],
+      "status": "not-applicable",
+      "reason": "Plumbing Telo gets from TDLib, Go and MyGo (decision 007, item 8).",
+      "decision": "docs/decisions/007-telegram-macos-parity-scope.md"
+    },
+    {
+      "id": "about",
+      "title": "About Telo",
+      "upstream": [
+        "module:AboutFeatureUI"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "frontend/widgets/settings.aboutPane"
+      ],
+      "tests": [
+        "frontend/app.TestSettingsSearchAndPanes"
+      ]
+    },
+    {
+      "id": "settings-sections",
+      "title": "Settings sections",
+      "upstream": [
+        "settings-row:accountRecord",
+        "settings-row:info",
+        "settings-row:general",
+        "settings-row:notifications",
+        "settings-row:privacy",
+        "settings-row:dataAndStorage",
+        "settings-row:appearance",
+        "settings-row:language",
+        "settings-row:stickers",
+        "settings-row:filters",
+        "settings-row:activeSessions",
+        "settings-row:proxy",
+        "settings-row:about"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "frontend/widgets/settings.Sections",
+        "frontend/pages/settings.Page.navItem"
+      ],
+      "tests": [
+        "frontend/app.TestSettingsSearchAndPanes"
+      ]
+    },
+    {
+      "id": "add-account",
+      "title": "Several accounts",
+      "upstream": [
+        "settings-row:addAccount",
+        "setting:profile(4)"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "backend/infrastructure/telegram/live.Accounts.StartSignIn",
+        "frontend/features/accountmenu.State.AccountMenu"
+      ],
+      "tests": [
+        "backend/infrastructure/telegram/live.TestSignInReachesPhoneStep",
+        "frontend/app.TestProfileAndAccountMenu"
+      ]
+    },
+    {
+      "id": "faq",
+      "title": "Telegram FAQ",
+      "upstream": [
+        "settings-row:faq"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "frontend/widgets/settings.aboutPane",
+        "frontend/shared/config.FAQURL"
+      ],
+      "tests": [
+        "frontend/app.TestSettingsSearchAndPanes"
+      ]
+    },
+    {
+      "id": "ask",
+      "title": "Ask a volunteer",
+      "upstream": [
+        "settings-row:ask"
+      ],
+      "status": "planned",
+      "priority": "P2",
+      "reason": "Needs getSupportUser, which the TDLib allowlist does not generate yet."
+    },
+    {
+      "id": "two-step",
+      "title": "Two-step verification",
+      "upstream": [
+        "settings-row:set2Fa",
+        "settings-row:set2FaAlert",
+        "setting:privacy(8)"
+      ],
+      "status": "partial",
+      "priority": "P1",
+      "reason": "Telo shows whether the password is on; setting and changing it happens on Telegram's own apps.",
+      "evidence": [
+        "backend/infrastructure/telegram/live.Session.TwoStep",
+        "frontend/widgets/settings.View.privacyPane"
+      ],
+      "tests": [
+        "frontend/app.TestSettingsSearchAndPanes"
+      ]
+    },
+    {
+      "id": "stories-row",
+      "title": "My stories",
+      "upstream": [
+        "settings-row:stories"
+      ],
+      "status": "partial",
+      "priority": "P2",
+      "reason": "Posting only.",
+      "evidence": [
+        "frontend/features/accountmenu.State.post"
+      ],
+      "tests": [
+        "frontend/app.TestProfileAndAccountMenu"
+      ]
+    },
+    {
+      "id": "update",
+      "title": "Updates",
+      "upstream": [
+        "settings-row:update",
+        "menu:TelegramMac › Check for Updates"
+      ],
+      "status": "partial",
+      "priority": "P1",
+      "reason": "Updates are published on GitHub; Telo does not install them itself yet.",
+      "evidence": [
+        "bootstrap.App.action",
+        "bootstrap.Menus"
+      ],
+      "tests": [
+        "bootstrap.TestMenus"
+      ]
+    },
+    {
+      "id": "rows-payments",
+      "title": "Premium, Stars, TON, wallet and gifts rows",
+      "upstream": [
+        "settings-row:premium",
+        "settings-row:stars",
+        "settings-row:ton",
+        "settings-row:wallet",
+        "settings-row:giftPremium"
+      ],
+      "status": "not-applicable",
+      "reason": "Decision 007, item 2.",
+      "decision": "docs/decisions/007-telegram-macos-parity-scope.md"
+    },
+    {
+      "id": "rows-business",
+      "title": "Business and Passport rows",
+      "upstream": [
+        "settings-row:business",
+        "settings-row:passport"
+      ],
+      "status": "not-applicable",
+      "reason": "Decision 007, item 3.",
+      "decision": "docs/decisions/007-telegram-macos-parity-scope.md"
+    },
+    {
+      "id": "rows-attach",
+      "title": "Bots in the attachment menu",
+      "upstream": [
+        "settings-row:attach"
+      ],
+      "status": "not-applicable",
+      "reason": "Decision 007, item 4.",
+      "decision": "docs/decisions/007-telegram-macos-parity-scope.md"
+    },
+    {
+      "id": "rows-premium",
+      "title": "Profile color and emoji status",
+      "upstream": [
+        "settings-row:setProfileColor",
+        "settings-row:setStatus"
+      ],
+      "status": "not-applicable",
+      "reason": "Decision 007, item 6.",
+      "decision": "docs/decisions/007-telegram-macos-parity-scope.md"
+    },
+    {
+      "id": "settings-profile",
+      "title": "Edit profile: name, bio, username, photo, log out",
+      "upstream": [
+        "setting:profile(0)",
+        "setting:profile(1)",
+        "setting:profile(3)",
+        "setting:profile(5)"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "frontend/widgets/settings.View.profilePane",
+        "backend/infrastructure/telegram/live.Session.UpdateName",
+        "backend/infrastructure/telegram/live.Session.SetUsername"
+      ],
+      "tests": [
+        "frontend/app.TestSettingsSearchAndPanes"
+      ]
+    },
+    {
+      "id": "change-number",
+      "title": "Change number",
+      "upstream": [
+        "setting:profile(2)"
+      ],
+      "status": "partial",
+      "priority": "P2",
+      "reason": "Telo shows the number; changing it happens on Telegram's own apps.",
+      "evidence": [
+        "frontend/widgets/settings.Entries"
+      ],
+      "tests": [
+        "frontend/app.TestSettingsSearchAndPanes"
+      ]
+    },
+    {
+      "id": "settings-notifications",
+      "title": "Notifications: chats, groups, channels, previews, sound, badge, reset",
+      "upstream": [
+        "setting:notifications(0)",
+        "setting:notifications(base)",
+        "setting:notifications(18)",
+        "setting:notifications(19)",
+        "setting:notifications(2)",
+        "setting:notifications(20)",
+        "setting:notifications(24)",
+        "setting:notifications(22)"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "frontend/widgets/settings.View.notificationsPane",
+        "backend/application/telegram.Notify",
+        "backend/infrastructure/telegram/live.Session.ResetNotifications"
+      ],
+      "tests": [
+        "frontend/app.TestSettingsSearchAndPanes",
+        "backend/application/telegram.TestNotify"
+      ]
+    },
+    {
+      "id": "notify-new-contacts",
+      "title": "New contacts joined",
+      "upstream": [
+        "setting:notifications(21)"
+      ],
+      "status": "planned",
+      "priority": "P2",
+      "reason": "Telo shows the joined-Telegram service message; the switch is not offered."
+    },
+    {
+      "id": "notify-all-accounts",
+      "title": "Notifications from all accounts",
+      "upstream": [
+        "setting:notifications(23)"
+      ],
+      "status": "planned",
+      "priority": "P2",
+      "reason": "Only the connected account notifies; parked accounts stay closed."
+    },
+    {
+      "id": "notify-reactions",
+      "title": "Reaction notifications",
+      "upstream": [
+        "setting:notifications(70)"
+      ],
+      "status": "planned",
+      "priority": "P2",
+      "reason": "Not offered."
+    },
+    {
+      "id": "notify-exceptions",
+      "title": "Per-chat notification exceptions",
+      "upstream": [
+        "setting:notifications(71+Int32(i))",
+        "setting:notifications(base+1+Int32(i))"
+      ],
+      "status": "planned",
+      "priority": "P2",
+      "reason": "Chats mute from their menu; the exception list is not shown."
+    },
+    {
+      "id": "settings-privacy",
+      "title": "Privacy rules, blocked users, deleting the account",
+      "upstream": [
+        "setting:privacy(0)",
+        "setting:privacy(1)",
+        "setting:privacy(2)",
+        "setting:privacy(3)",
+        "setting:privacy(4)",
+        "setting:privacy(5)",
+        "setting:privacy(6)",
+        "setting:privacy(10)"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "frontend/widgets/settings.View.privacyPane",
+        "backend/infrastructure/telegram/live.Session.SetPrivacy",
+        "backend/infrastructure/telegram/live.Session.BlockedPeers"
+      ],
+      "tests": [
+        "frontend/app.TestSettingsSearchAndPanes",
+        "backend/infrastructure/telegram/demo.TestSessionsPrivacyProxies"
+      ]
+    },
+    {
+      "id": "settings-passcode",
+      "title": "Passcode",
+      "upstream": [
+        "setting:privacy(7)"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "frontend/widgets/settings.View.passcodeDialog"
+      ],
+      "tests": [
+        "frontend/app.TestPasscodeLocksAndUnlocks"
+      ]
+    },
+    {
+      "id": "settings-sessions",
+      "title": "Active sessions",
+      "upstream": [
+        "setting:privacy(9)"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "frontend/widgets/settings.View.sessionsPane"
+      ],
+      "tests": [
+        "frontend/app.TestSettingsSearchAndPanes"
+      ]
+    },
+    {
+      "id": "suggest-contacts",
+      "title": "Suggest frequent contacts",
+      "upstream": [
+        "setting:privacy(14)"
+      ],
+      "status": "planned",
+      "priority": "P2",
+      "reason": "Needs the disable_top_chats option."
+    },
+    {
+      "id": "delete-drafts",
+      "title": "Delete all cloud drafts",
+      "upstream": [
+        "setting:privacy(15)"
+      ],
+      "status": "planned",
+      "priority": "P2",
+      "reason": "Needs clearAllDraftMessages in the TDLib allowlist."
+    },
+    {
+      "id": "settings-data",
+      "title": "Data and storage",
+      "upstream": [
+        "setting:data(0)",
+        "setting:data(1)",
+        "setting:data(3)",
+        "setting:data(4)",
+        "setting:data(7)",
+        "setting:data(8)",
+        "setting:data(9)"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "frontend/widgets/settings.View.dataPane",
+        "backend/infrastructure/telegram/live.Session.ClearCache"
+      ],
+      "tests": [
+        "frontend/app.TestSettingsSearchAndPanes"
+      ]
+    },
+    {
+      "id": "keep-media",
+      "title": "Keep media",
+      "upstream": [
+        "setting:data(2)"
+      ],
+      "status": "partial",
+      "priority": "P2",
+      "reason": "Telo limits the cache by size; keeping media for a period is not offered.",
+      "evidence": [
+        "frontend/widgets/settings.Entries"
+      ],
+      "tests": [
+        "frontend/app.TestSettingsSearchAndPanes"
+      ]
+    },
+    {
+      "id": "settings-appearance",
+      "title": "Appearance: theme, auto-night, accent, text size, background",
+      "upstream": [
+        "setting:appearance(0)",
+        "setting:appearance(1)",
+        "setting:appearance(2)",
+        "setting:appearance(5)",
+        "setting:appearance(6)"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "frontend/widgets/settings.appearancePane"
+      ],
+      "tests": [
+        "frontend/app.TestSettingsSearchAndPanes"
+      ]
+    },
+    {
+      "id": "settings-language",
+      "title": "Language",
+      "upstream": [
+        "setting:language(0)",
+        "setting:language(index)"
+      ],
+      "status": "partial",
+      "priority": "P2",
+      "reason": "English only.",
+      "evidence": [
+        "frontend/widgets/settings.languagePane"
+      ],
+      "tests": [
+        "frontend/app.TestSettingsSearchAndPanes"
+      ]
+    },
+    {
+      "id": "settings-stickers",
+      "title": "Stickers: suggestions, trending, archived",
+      "upstream": [
+        "setting:stickers(0)",
+        "setting:stickers(1)",
+        "setting:stickers(3)",
+        "setting:stickers(4)"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "frontend/widgets/settings.View.stickersPane"
+      ],
+      "tests": [
+        "frontend/app.TestSettingsSearchAndPanes"
+      ]
+    },
+    {
+      "id": "settings-proxy",
+      "title": "Proxy",
+      "upstream": [
+        "setting:proxy(0)",
+        "setting:proxy(1)"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "frontend/widgets/settings.View.proxyPane"
+      ],
+      "tests": [
+        "frontend/app.TestSettingsSearchAndPanes"
+      ]
+    },
+    {
+      "id": "proxy-calls",
+      "title": "Proxy for calls",
+      "upstream": [
+        "setting:proxy(2)"
+      ],
+      "status": "not-applicable",
+      "reason": "Decision 007, item 1.",
+      "decision": "docs/decisions/007-telegram-macos-parity-scope.md"
+    },
+    {
+      "id": "shortcuts-chat",
+      "title": "Chat shortcuts",
+      "upstream": [
+        "shortcut:chat_open_info",
+        "shortcut:reply_to_message",
+        "shortcut:edit_message",
+        "shortcut:search_in_chat"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "frontend/shared/config.Shortcuts",
+        "frontend/features/compose.Composer.field"
+      ],
+      "tests": [
+        "frontend/pages/workspace.TestKeyboardShortcuts",
+        "frontend/pages/workspace.TestComposerFormattingAndAttach",
+        "frontend/pages/workspace.TestWorkspaceSendsAndSearches"
+      ]
+    },
+    {
+      "id": "shortcuts-search",
+      "title": "Search and account shortcuts",
+      "upstream": [
+        "shortcut:quick_search",
+        "shortcut:global_search",
+        "shortcut:switch_account"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "frontend/shared/config.Shortcuts",
+        "frontend/app.App.shortcuts"
+      ],
+      "tests": [
+        "frontend/pages/workspace.TestKeyboardShortcuts"
+      ]
+    },
+    {
+      "id": "shortcuts-markdown",
+      "title": "Markdown shortcuts",
+      "upstream": [
+        "shortcut:markdown_bold",
+        "shortcut:markdown_italic",
+        "shortcut:markdown_monospace",
+        "shortcut:markdown_url",
+        "shortcut:markdown_strikethrough"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "frontend/shared/config.Shortcuts",
+        "frontend/features/compose.Composer.field"
+      ],
+      "tests": [
+        "frontend/pages/workspace.TestComposerFormattingAndAttach"
+      ]
+    },
+    {
+      "id": "shortcuts-lock",
+      "title": "Lock by passcode",
+      "upstream": [
+        "shortcut:lock_passcode"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "frontend/app.App.Lock"
+      ],
+      "tests": [
+        "frontend/app.TestPasscodeLocksAndUnlocks"
+      ]
+    },
+    {
+      "id": "shortcuts-mouse",
+      "title": "Double-click to reply, Option-click to schedule",
+      "upstream": [
+        "shortcut:fast_reply",
+        "shortcut:schedule"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "frontend/widgets/conversation.View.messageRow",
+        "frontend/features/compose.Composer.Render"
+      ],
+      "tests": [
+        "frontend/pages/workspace.TestWorkspaceShowsListAndConversation",
+        "frontend/pages/workspace.TestMessageContextMenu"
+      ]
+    },
+    {
+      "id": "shortcut-record",
+      "title": "Record voice or video message",
+      "upstream": [
+        "shortcut:edit_media"
+      ],
+      "status": "planned",
+      "priority": "P1",
+      "reason": "Waits for recording."
+    },
+    {
+      "id": "gestures",
+      "title": "Trackpad swipe gestures",
+      "upstream": [
+        "shortcut:swipe_actions",
+        "shortcut:swipe_navigation",
+        "shortcut:swipe_reply",
+        "shortcut:swipe_stickers"
+      ],
+      "status": "planned",
+      "priority": "P2",
+      "reason": "Clicks and keys reach every action; swipes are not bound."
+    },
+    {
+      "id": "call-keys",
+      "title": "Call shortcuts",
+      "upstream": [
+        "shortcut:toggle_camera",
+        "shortcut:toggle_screen"
+      ],
+      "status": "not-applicable",
+      "reason": "Decision 007, item 1.",
+      "decision": "docs/decisions/007-telegram-macos-parity-scope.md"
+    },
+    {
+      "id": "menu-app",
+      "title": "App menu",
+      "upstream": [
+        "menu:TelegramMac",
+        "menu:TelegramMac › About Telegram",
+        "menu:TelegramMac › Preferences…",
+        "menu:TelegramMac › Quick Switcher",
+        "menu:TelegramMac › Hide",
+        "menu:TelegramMac › Hide Telegram",
+        "menu:TelegramMac › Hide Others",
+        "menu:TelegramMac › Show All",
+        "menu:TelegramMac › Quit Telegram"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "bootstrap.Menus",
+        "bootstrap.MenuItems"
+      ],
+      "tests": [
+        "bootstrap.TestMenus"
+      ]
+    },
+    {
+      "id": "menu-edit",
+      "title": "Edit menu",
+      "upstream": [
+        "menu:Edit",
+        "menu:Edit › Undo",
+        "menu:Edit › Redo",
+        "menu:Edit › Cut",
+        "menu:Edit › Copy",
+        "menu:Edit › Paste",
+        "menu:Edit › Paste and Match Style",
+        "menu:Edit › Delete",
+        "menu:Edit › Select All"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "bootstrap.Menus"
+      ],
+      "tests": [
+        "bootstrap.TestMenus"
+      ]
+    },
+    {
+      "id": "menu-view-window",
+      "title": "View and Window menus",
+      "upstream": [
+        "menu:View",
+        "menu:View › Enter Full Screen",
+        "menu:Window",
+        "menu:Window › Minimize",
+        "menu:Window › Zoom",
+        "menu:Window › Telegram",
+        "menu:Window › Bring All to Front"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "bootstrap.Menus"
+      ],
+      "tests": [
+        "bootstrap.TestMenus"
+      ]
+    },
+    {
+      "id": "menu-text-services",
+      "title": "Spelling, substitutions and transformations",
+      "upstream": [
+        "menu:Edit › Spelling and Grammar",
+        "menu:Edit › Spelling and Grammar › Check Document Now",
+        "menu:Edit › Spelling and Grammar › Check Grammar With Spelling",
+        "menu:Edit › Spelling and Grammar › Check Spelling While Typing",
+        "menu:Edit › Spelling and Grammar › Correct Spelling Automatically",
+        "menu:Edit › Spelling and Grammar › Show Spelling and Grammar",
+        "menu:Edit › Substitutions",
+        "menu:Edit › Substitutions › Data Detectors",
+        "menu:Edit › Substitutions › Show Substitutions",
+        "menu:Edit › Substitutions › Smart Copy/Paste",
+        "menu:Edit › Substitutions › Smart Dashes",
+        "menu:Edit › Substitutions › Smart Links",
+        "menu:Edit › Substitutions › Smart Quotes",
+        "menu:Edit › Substitutions › Text Replacement",
+        "menu:Edit › Transformations",
+        "menu:Edit › Transformations › Capitalize",
+        "menu:Edit › Transformations › Make Lower Case",
+        "menu:Edit › Transformations › Make Upper Case"
+      ],
+      "status": "not-applicable",
+      "reason": "Decision 007, item 7.",
+      "decision": "docs/decisions/007-telegram-macos-parity-scope.md"
+    },
+    {
+      "id": "message-menu",
+      "title": "Message context menu",
+      "upstream": [
+        "message-action:messageContextReply1",
+        "message-action:chatMessageContextQuote",
+        "message-action:messageContextEdit",
+        "message-action:chatContextCancelEditing",
+        "message-action:chatContextCopyText",
+        "message-action:chatCopySelectedText",
+        "message-action:contextCopy",
+        "message-action:messageContextCopyMessageLink1",
+        "message-action:messageContextForward",
+        "message-action:chatContextForwardMore",
+        "message-action:peerSavedMessages",
+        "message-action:messageContextPin",
+        "message-action:messageContextUnpin",
+        "message-action:messageContextSelect",
+        "message-action:messageContextDelete",
+        "message-action:chatContextTranslate",
+        "message-action:chatContextSaveMedia",
+        "message-action:contextViewStickerSet",
+        "message-action:chatPollUnvote",
+        "message-action:chatContextScheduledSendNow",
+        "message-action:chatContextScheduledReschedule",
+        "message-action:messageContextReport",
+        "message-action:chatContextEditedAt",
+        "message-action:chatMessageMenuSentAt",
+        "message-action:chatContextSummarize"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "frontend/features/messageactions.Items",
+        "frontend/features/messageactions.State.Menu"
+      ],
+      "tests": [
+        "frontend/pages/workspace.TestMessageContextMenu",
+        "backend/infrastructure/telegram/demo.TestSendEditDeleteForward"
+      ]
+    },
+    {
+      "id": "message-moderation",
+      "title": "Block, ban and restrict from a message",
+      "upstream": [
+        "message-action:chatContextBan",
+        "message-action:chatContextBlockGroup",
+        "message-action:chatContextBlockUser",
+        "message-action:chatContextRestrict"
+      ],
+      "status": "planned",
+      "priority": "P2",
+      "reason": "Blocking is in the chat info; moderation waits for channel administration."
+    },
+    {
+      "id": "message-media",
+      "title": "Copy and save media",
+      "upstream": [
+        "message-action:chatContextCopyMedia",
+        "message-action:chatContextSaveAllPhotos",
+        "message-action:chatContextSaveSelectedPhotos",
+        "message-action:galleryContextOriginal",
+        "message-action:galleryContextSaveVideo"
+      ],
+      "status": "planned",
+      "priority": "P2",
+      "reason": "Save As keeps one file; copying images and saving several are not offered."
+    },
+    {
+      "id": "message-gifs",
+      "title": "Saved GIFs",
+      "upstream": [
+        "message-action:messageContextSaveGif",
+        "message-action:messageContextRemoveGif"
+      ],
+      "status": "planned",
+      "priority": "P2",
+      "reason": "The GIF panel is not built."
+    },
+    {
+      "id": "message-threads",
+      "title": "Replies and comments threads",
+      "upstream": [
+        "message-action:messageContextViewCommentsOther",
+        "message-action:messageContextViewRepliesOther"
+      ],
+      "status": "planned",
+      "priority": "P1",
+      "reason": "Message threads and channel comments are not built."
+    },
+    {
+      "id": "message-folders",
+      "title": "Message folders menu",
+      "upstream": [
+        "message-action:chatContextFolders"
+      ],
+      "status": "planned",
+      "priority": "P2",
+      "reason": "Not built."
+    },
+    {
+      "id": "message-share",
+      "title": "Share with other apps",
+      "upstream": [
+        "message-action:messageContextShare"
+      ],
+      "status": "planned",
+      "priority": "P2",
+      "reason": "The macOS share sheet is not offered."
+    },
+    {
+      "id": "message-stats",
+      "title": "Message statistics",
+      "upstream": [
+        "message-action:chatMessageMenuItemsViewStats"
+      ],
+      "status": "planned",
+      "priority": "P2",
+      "reason": "Waits for statistics."
+    },
+    {
+      "id": "message-poll-options",
+      "title": "Poll option actions",
+      "upstream": [
+        "message-action:chatMenuDeleteOption",
+        "message-action:chatMenuReplyToOption"
+      ],
+      "status": "planned",
+      "priority": "P2",
+      "reason": "Not built."
+    },
+    {
+      "id": "message-ads",
+      "title": "Sponsored messages",
+      "upstream": [
+        "message-action:chatContextHideAd",
+        "message-action:chatMessageSponsoredAbout",
+        "message-action:chatMessageSponsoredAdvertiser",
+        "message-action:chatMessageSponsoredReport",
+        "message-action:chatMessageSponsoredWhat",
+        "message-action:chatContextReportFalsePositive"
+      ],
+      "status": "not-applicable",
+      "reason": "Decision 007, item 5.",
+      "decision": "docs/decisions/007-telegram-macos-parity-scope.md"
+    },
+    {
+      "id": "message-premium",
+      "title": "Checklists, fact checks, money and ringtones",
+      "upstream": [
+        "message-action:chatContextMenuAddTask",
+        "message-action:chatContextTodoDelete",
+        "message-action:chatContextTodoEdit",
+        "message-action:factCheckContextEdit",
+        "message-action:chatMessageMenuItemsSendMoney",
+        "message-action:chatContextSaveRingtoneAdd",
+        "message-action:chatContextSaveRingtoneRemove",
+        "message-action:chatEphemeralMessageRevert"
+      ],
+      "status": "not-applicable",
+      "reason": "Decision 007, items 2 and 6.",
+      "decision": "docs/decisions/007-telegram-macos-parity-scope.md"
+    },
+    {
+      "id": "chat-menu",
+      "title": "Chat context menu",
+      "upstream": [
+        "chat-action:chatListContextMaskAsRead",
+        "chat-action:chatListContextMaskAsUnread",
+        "chat-action:chatListMute1Hour",
+        "chat-action:chatListMute8Hours",
+        "chat-action:chatListMute3Days",
+        "chat-action:chatListMuteForever",
+        "chat-action:chatListContextSound",
+        "chat-action:chatListSwipingArchive",
+        "chat-action:chatListSwipingUnarchive",
+        "chat-action:chatListFilterAddToFolder",
+        "chat-action:chatListFilterRemoveFromFolder",
+        "chat-action:chatListContextClearHistory",
+        "chat-action:chatListContextDeleteChat",
+        "chat-action:chatListContextLeaveGroup",
+        "chat-action:chatListContextLeaveChannel",
+        "chat-action:chatListContextDeleteAndExit"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "frontend/features/chatactions.Items",
+        "frontend/features/chatactions.Menu"
+      ],
+      "tests": [
+        "frontend/pages/workspace.TestChatListContextMenu",
+        "frontend/entities/chat.TestChatActions"
+      ]
+    },
+    {
+      "id": "chat-delete",
+      "title": "Delete",
+      "upstream": [
+        "chat-action:chatListContextDelete"
+      ],
+      "status": "partial",
+      "priority": "P2",
+      "reason": "Delete Chat, Leave Group and Leave Channel cover it; the generic item is not a row of its own.",
+      "evidence": [
+        "frontend/features/chatactions.Menu"
+      ],
+      "tests": [
+        "frontend/pages/workspace.TestChatListContextMenu"
+      ]
+    },
+    {
+      "id": "chat-window",
+      "title": "Open a chat in its own window",
+      "upstream": [
+        "chat-action:accountOpenInWindow"
+      ],
+      "status": "planned",
+      "priority": "P2",
+      "reason": "One window."
+    },
+    {
+      "id": "chat-preview",
+      "title": "Peek a chat",
+      "upstream": [
+        "chat-action:chatListContextPreview"
+      ],
+      "status": "planned",
+      "priority": "P2",
+      "reason": "Not built."
+    },
+    {
+      "id": "mute-until",
+      "title": "Mute until a date",
+      "upstream": [
+        "chat-action:chatListMuteUntil"
+      ],
+      "status": "planned",
+      "priority": "P2",
+      "reason": "The menu offers fixed durations."
+    },
+    {
+      "id": "archive-collapse",
+      "title": "Collapse the archive",
+      "upstream": [
+        "chat-action:chatListRevealActionCollapse",
+        "chat-action:chatListRevealActionExpand"
+      ],
+      "status": "planned",
+      "priority": "P2",
+      "reason": "The archive is a row and a tab."
+    },
+    {
+      "id": "saved-views",
+      "title": "Saved Messages by chat",
+      "upstream": [
+        "chat-action:chatSavedMessagesViewAsChats",
+        "chat-action:chatSavedMessagesViewAsMessages"
+      ],
+      "status": "planned",
+      "priority": "P2",
+      "reason": "Saved Messages shows as one chat."
+    },
+    {
+      "id": "chat-community",
+      "title": "Remove from community and ungroup",
+      "upstream": [
+        "chat-action:chatListRemoveFromCommunity",
+        "chat-action:chatListUngroup"
+      ],
+      "status": "planned",
+      "priority": "P2",
+      "reason": "Waits for communities."
+    },
+    {
+      "id": "chat-promo",
+      "title": "Hide a promoted chat",
+      "upstream": [
+        "chat-action:chatListContextHidePromo"
+      ],
+      "status": "not-applicable",
+      "reason": "Decision 007, item 5.",
+      "decision": "docs/decisions/007-telegram-macos-parity-scope.md"
+    },
+    {
+      "id": "attach-menu",
+      "title": "Attach menu: photos and videos, files, polls",
+      "upstream": [
+        "attach-action:inputAttachPopoverPhotoOrVideo",
+        "attach-action:inputAttachPopoverFile",
+        "attach-action:inputAttachPopoverPoll"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "frontend/features/compose.AttachItems",
+        "frontend/features/compose.Composer.attachButton"
+      ],
+      "tests": [
+        "frontend/pages/workspace.TestComposerFormattingAndAttach"
+      ]
+    },
+    {
+      "id": "attach-kinds",
+      "title": "Photos, videos, audio and music",
+      "upstream": [
+        "attach-action:inputAttachPopoverPhoto",
+        "attach-action:inputAttachPopoverVideo",
+        "attach-action:inputAttachAudio",
+        "attach-action:inputAttachPopoverMusic"
+      ],
+      "status": "partial",
+      "priority": "P2",
+      "reason": "Photo or Video and File cover them; the kind follows the file.",
+      "evidence": [
+        "backend/infrastructure/telegram/live.Session.SendMedia"
+      ],
+      "tests": [
+        "frontend/pages/workspace.TestComposerFormattingAndAttach"
+      ]
+    },
+    {
+      "id": "attach-location",
+      "title": "Send a location",
+      "upstream": [
+        "attach-action:inputAttachPopoverLocation"
+      ],
+      "status": "planned",
+      "priority": "P2",
+      "reason": "Not built."
+    },
+    {
+      "id": "attach-camera",
+      "title": "Camera",
+      "upstream": [
+        "attach-action:inputAttachPopoverPicture"
+      ],
+      "status": "planned",
+      "priority": "P2",
+      "reason": "Needs camera capture."
+    },
+    {
+      "id": "attach-edit-photo",
+      "title": "Edit a photo before sending",
+      "upstream": [
+        "attach-action:editMessageEditCurrentPhoto"
+      ],
+      "status": "planned",
+      "priority": "P2",
+      "reason": "Not built."
+    },
+    {
+      "id": "attach-article",
+      "title": "Article",
+      "upstream": [
+        "attach-action:richTextEditorAttachTitle"
+      ],
+      "status": "planned",
+      "priority": "P2",
+      "reason": "Waits for articles."
+    },
+    {
+      "id": "attach-premium",
+      "title": "Checklist, gift, money and quick replies",
+      "upstream": [
+        "attach-action:inputAttachPopoverChecklist",
+        "attach-action:inputAttachPopoverGift",
+        "attach-action:chatInputAttachViewMoney",
+        "attach-action:chatInputAttachQuickReply"
+      ],
+      "status": "not-applicable",
+      "reason": "Decision 007, items 2, 3 and 6.",
+      "decision": "docs/decisions/007-telegram-macos-parity-scope.md"
+    }
+  ]
+}

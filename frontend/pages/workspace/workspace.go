@@ -62,6 +62,9 @@ type Env struct {
 	Opened func()
 	// Dialogs draws the dialogs the menus open.
 	Dialogs func(c *ui.Context)
+	// Modal tells that a view over the page (the media viewer) has the
+	// keyboard, so the page's shortcuts wait.
+	Modal bool
 }
 
 // Page keeps the page's state.
@@ -149,7 +152,9 @@ func (p *Page) Render(c *ui.Context, env Env) {
 	if env.Dialogs != nil {
 		env.Dialogs(c)
 	}
-	p.shortcuts(c, env)
+	if !env.Modal {
+		p.shortcuts(c, env)
+	}
 }
 
 func (p *Page) toggleInfo() {

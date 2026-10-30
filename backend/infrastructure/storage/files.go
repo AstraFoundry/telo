@@ -8,7 +8,9 @@ import (
 )
 
 // PreferencesFile keeps the preferences in a JSON file.
-type PreferencesFile struct{ File *JSON[preferences.Preferences] }
+type PreferencesFile struct {
+	File *JSON[preferences.Preferences]
+}
 
 func (f PreferencesFile) Get(context.Context) (preferences.Preferences, error) {
 	p := preferences.Default()
@@ -18,7 +20,9 @@ func (f PreferencesFile) Get(context.Context) (preferences.Preferences, error) {
 	return p, nil
 }
 
-func (f PreferencesFile) Save(_ context.Context, p preferences.Preferences) error { return f.File.Save(p) }
+func (f PreferencesFile) Save(_ context.Context, p preferences.Preferences) error {
+	return f.File.Save(p)
+}
 
 // KeywordFolderFile keeps the keyword folders, sealed: their terms can
 // name people.
@@ -32,7 +36,9 @@ func (f KeywordFolderFile) List(context.Context) ([]keywordfolder.Folder, error)
 	return out, err
 }
 
-func (f KeywordFolderFile) Save(_ context.Context, fs []keywordfolder.Folder) error { return f.File.Save(fs) }
+func (f KeywordFolderFile) Save(_ context.Context, fs []keywordfolder.Folder) error {
+	return f.File.Save(fs)
+}
 
 var (
 	_ preferences.Store   = PreferencesFile{}
