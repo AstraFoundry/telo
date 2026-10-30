@@ -125,8 +125,6 @@ type Preferences struct {
 	ArchiveKeepUnmuted bool `json:"archiveKeepUnmuted"`
 	// OnboardingDone is set once the first-run flow finished.
 	OnboardingDone bool `json:"onboardingDone"`
-	// SpellCheck draws the system's spelling suggestions in the composer.
-	SpellCheck bool `json:"spellCheck"`
 }
 
 // Default returns the settings of a fresh install.
@@ -136,7 +134,7 @@ func Default() Preferences {
 		SendWithEnter: true, Notifications: true, SidebarWidth: SidebarWidthDefault, AgentPanelWidth: AgentPanelWidthDefault,
 		LoopStickers: true, NotifySender: true, NotifyPreview: true, CacheLimitMB: CacheLimitDefault,
 		Wallpaper: WallpaperPlain, NotifyDirect: true, NotifyGroups: true, NotifyChannels: true, NotifySound: true,
-		AutoPhotos: true, AutoVideos: true, SuggestStickers: true, AutoLockMinutes: AutoLockDefault, SpellCheck: true,
+		AutoPhotos: true, AutoVideos: true, SuggestStickers: true, AutoLockMinutes: AutoLockDefault,
 	}
 }
 

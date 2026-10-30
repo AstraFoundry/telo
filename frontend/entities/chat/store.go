@@ -81,6 +81,7 @@ type Store struct {
 
 	Selected    tg.ChatID
 	transcripts map[tg.ChatID]*Transcript
+	composers   map[tg.ChatID]*Composer
 
 	Connection tg.ConnectionState
 	User       tg.CurrentUser
@@ -966,4 +967,65 @@ func (s *Store) Neighbor(step int) (tg.ChatID, bool) {
 		return 0, false
 	}
 	return list[j].ID, true
+}
+
+// Now is the runtime's clock, for relative times.
+func (s *Store) Now() time.Time { return s.rt.Clock() }
+
+// SendScheduledNowAction delivers a scheduled message now.
+func (s *Store) SendScheduledNowAction(id tg.ChatID, message tg.MessageID) {
+	s.do(func(ctx context.Context, r tg.Repository) error { return r.SendScheduledNow(ctx, id, message) }, nil)
+}
+
+// RescheduleAction moves a scheduled message.
+func (s *Store) RescheduleAction(id tg.ChatID, message tg.MessageID, at time.Time) {
+	s.do(func(ctx context.Context, r tg.Repository) error { return r.Reschedule(ctx, id, message, at) }, nil)
+}
+
+// ForwardToSaved forwards messages to Saved Messages.
+func (s *Store) ForwardToSaved(from tg.ChatID, ids []tg.MessageID) {
+	repo := s.rt.Repo()
+	if repo == nil {
+		return
+	}
+	s.rt.Go(func(ctx context.Context) func() {
+		saved, err := repo.OpenSavedMessages(ctx)
+		if err == nil {
+			err = repo.ForwardMessages(ctx, from, ids, saved.ID, false)
+		}
+		return func() { s.fail(err) }
+	})
+}
+
+// Report reports a chat as spam.
+func (s *Store) Report(id tg.ChatID) {
+	s.do(func(ctx context.Context, r tg.Repository) error { return r.ReportChat(ctx, id, "spam") }, nil)
+}
+
+// SendPoll posts a poll.
+func (s *Store) SendPoll(id tg.ChatID, poll tg.PollInput) {
+	t := s.Transcript(id)
+	s.do(func(ctx context.Context, repo tg.Repository) error {
+		m, err := repo.SendPoll(ctx, id, poll, tg.SendOptions{})
+		if err == nil && t.Loaded {
+			s.rt.Post(func() { s.merge(t, m) })
+		}
+		return err
+	}, nil)
+}
+
+// ClickEmoji asks Telegram for an animated emoji's burst and plays it.
+func (s *Store) ClickEmoji(id tg.ChatID, message tg.MessageID) {
+	repo := s.rt.Repo()
+	if repo == nil {
+		return
+	}
+	s.rt.Go(func(ctx context.Context) func() {
+		effect, err := repo.ClickAnimatedEmoji(ctx, id, message)
+		return func() {
+			if err == nil && effect != nil {
+				s.Effects[message] = *effect
+			}
+		}
+	})
 }

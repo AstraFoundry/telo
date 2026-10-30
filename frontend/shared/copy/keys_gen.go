@@ -87,6 +87,7 @@ const (
 	SearchEverywhere            Key = "searchEverywhere"
 	RecentSearches              Key = "recentSearches"
 	ClearSearchHistory          Key = "clearSearchHistory"
+	ClearSearch                 Key = "clearSearch"
 	RemoveFromHistory           Key = "removeFromHistory"
 	NoRecentSearches            Key = "noRecentSearches"
 	SearchSectionChats          Key = "searchSectionChats"
@@ -481,7 +482,6 @@ const (
 	GeneralReduceMotion         Key = "generalReduceMotion"
 	GeneralReduceMotionHint     Key = "generalReduceMotionHint"
 	GeneralLoopStickers         Key = "generalLoopStickers"
-	GeneralSpellCheck           Key = "generalSpellCheck"
 	GeneralTemplates            Key = "generalTemplates"
 	NotifyDesktop               Key = "notifyDesktop"
 	NotifyDesktopHint           Key = "notifyDesktopHint"
@@ -729,4 +729,6 @@ const (
 	MinutesAgo                  Key = "minutesAgo"
 	HoursAgo                    Key = "hoursAgo"
 	JustNow                     Key = "justNow"
+	StickersDisabledNote        Key = "stickersDisabledNote"
+	Percent                     Key = "percent"
 )

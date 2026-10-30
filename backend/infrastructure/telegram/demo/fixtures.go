@@ -167,8 +167,8 @@ func seedMessages(files *assets) map[tg.ChatID][]tg.Message {
 	// Everything past the read boundary is unread: three messages, the
 	// chat's unread count.
 	design = append(design,
-		msg(DesignChat, 14, Lev, "The retry flow needs a failed state in the transcript.", ago(92*time.Minute-4*time.Minute)),
-		mention(msg(DesignChat, 15, Lev, "And the unread divider has to survive paging, @you.", ago(90*time.Minute-4*time.Minute))),
+		msg(DesignChat, 14, Lev, "The retry flow needs a failed state in the transcript.", ago(92*time.Minute)),
+		mention(msg(DesignChat, 15, Lev, "And the unread divider has to survive paging, @you.", ago(90*time.Minute))),
 		msg(DesignChat, 16, Lev, "Ship both with the next build.", ago(88*time.Minute)),
 	)
 	design[len(design)-1].Pinned = true

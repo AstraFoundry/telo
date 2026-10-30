@@ -93,6 +93,9 @@ type Tokens struct {
 	AccentSoft ui.Color // hover and selection wash
 	AccentInk  ui.Color // the accent as text or a line on a surface
 	Ring       ui.Color // the focus ring
+	// Selection fills the chosen row of a list, under SelectionText.
+	Selection     ui.Color
+	SelectionText ui.Color
 
 	BubbleIn      ui.Color
 	BubbleInText  ui.Color
@@ -176,6 +179,7 @@ func Resolve(dark bool, accent preferences.Accent) Tokens {
 		t.AccentSoft = ui.Oklch(0.28, 0.035, hue)
 		t.AccentInk = ui.Oklch(0.78, 0.1, hue)
 		t.Ring = ui.Oklch(0.7, 0.13, hue)
+		t.Selection = ui.Oklch(0.5, 0.12, hue)
 		t.BubbleIn = neutral(0.24, 0.014)
 		t.BubbleOut = ui.Oklch(0.45, 0.12, hue)
 		t.BackdropInk = white.Alpha(0.07)
@@ -188,6 +192,10 @@ func Resolve(dark bool, accent preferences.Accent) Tokens {
 		t.PillSurface = neutral(0.12, 0.012).Alpha(0.96)
 		t.PillBorder = neutral(0.3, 0.014)
 	}
+	if !dark {
+		t.Selection = t.Accent
+	}
+	t.SelectionText = white
 	t.BubbleInText = t.Text
 	t.BubbleOutText = white
 	t.BubbleOutMeta = white.Alpha(0.72)

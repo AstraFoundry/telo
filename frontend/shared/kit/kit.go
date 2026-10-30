@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/AstraFoundry/telo/frontend/shared/assets"
+	"github.com/AstraFoundry/telo/frontend/shared/copy"
 	"github.com/AstraFoundry/telo/frontend/shared/icons"
 	"github.com/AstraFoundry/telo/frontend/shared/theme"
 	"github.com/egoist/mygo/ui"
@@ -317,13 +318,13 @@ func Field(input ui.Element, t theme.Tokens) ui.Element {
 // SearchBox is the chat list's search field: a quiet filled pill with a
 // magnifier, which Escape clears.
 func SearchBox(c *ui.Context, t theme.Tokens, text *string, placeholder string) ui.Element {
-	box := ui.Row(c).Height(32).Padding(0, 10).Gap(8).Radius(theme.RadiusControl).Background(t.Subtle).AlignItems(ui.Center)
+	box := ui.Row(c).Grow(1).Height(32).Padding(0, 10).Gap(8).Radius(theme.RadiusControl).Background(t.Subtle).AlignItems(ui.Center)
 	var input ui.Element
 	box.Children(func() {
 		ui.Icon(c, icons.MagnifyingGlass).FontSize(15).TextColor(t.Muted)
 		input = ui.TextInputBase(c.Key("search"), text).Placeholder(placeholder).Label(placeholder).Grow(1).FontSize(theme.Callout).FocusRing(false)
 		if *text != "" {
-			clear := ui.ButtonBase(c).Size(18, 18).Radius(9).Justify(ui.Center).AlignItems(ui.Center).Background(t.Faint.Alpha(0.5)).Label(placeholder)
+			clear := ui.ButtonBase(c).Size(18, 18).Radius(9).Justify(ui.Center).AlignItems(ui.Center).Background(t.Faint.Alpha(0.5)).Label(copy.T(copy.ClearSearch))
 			clear.Children(func() { ui.Icon(c, icons.X).FontSize(10).TextColor(t.Card) })
 			if clear.Clicked() {
 				*text = ""
@@ -431,4 +432,31 @@ func Segmented(c *ui.Context, t theme.Tokens, chosen *int, labels []string) ui.E
 // Mark draws the app icon at size DIPs.
 func Mark(c *ui.Context, size float32) ui.Element {
 	return ui.Image(c, assets.Mark).Size(size, size).Fit(ui.Contain)
+}
+
+// DateTime edits one moment with a date field and a time field side by
+// side, as the schedule dialogs ask for it.
+func DateTime(c *ui.Context, t theme.Tokens, at *time.Time, label string) {
+	ui.Row(c).Gap(8).Children(func() {
+		ui.DateInput(c.Key("date"), at).Label(label).Grow(1)
+		ui.TimeInput(c.Key("time"), at).Label(label)
+	})
+}
+
+// Toggle is a labeled switch on one line: the label left, the switch
+// right, the whole row naming the switch for assistive technology.
+func Toggle(c *ui.Context, t theme.Tokens, value *bool, label string) bool {
+	changed := false
+	ui.Row(c).Gap(12).MinHeight(28).AlignItems(ui.Center).Children(func() {
+		ui.Text(c, label).FontSize(theme.Body).Grow(1).Shrink(1)
+		changed = ui.Switch(c, value).Label(label).Changed()
+	})
+	return changed
+}
+
+// SwitchRow is a settings row with a switch.
+func SwitchRow(c *ui.Context, t theme.Tokens, value *bool, title, detail string) bool {
+	changed := false
+	Row(c, t, title, detail, func() { changed = ui.Switch(c, value).Label(title).Changed() })
+	return changed
 }

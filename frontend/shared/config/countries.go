@@ -64,3 +64,32 @@ func CountryForPhone(digits string) (Country, bool) {
 	}
 	return best, best.Code != ""
 }
+
+// Emoji is an entry of the composer's emoji picker.
+type Emoji struct {
+	Category string
+	Glyph    string
+	// Name holds the lowercase search terms.
+	Name string
+}
+
+// emoji.tsv is the curated picker set Telo shipped before the native
+// rewrite: glyphs with English search names, by category.
+//
+//go:embed emoji.tsv
+var emojiTSV string
+
+// EmojiCategories are the picker's sections in order.
+var EmojiCategories = []string{"smileys", "people", "animals", "food", "activity", "travel", "objects", "symbols"}
+
+// EmojiSet is the picker's emoji.
+var EmojiSet = func() []Emoji {
+	var out []Emoji
+	for _, line := range strings.Split(strings.TrimSpace(emojiTSV), "\n") {
+		f := strings.Split(line, "\t")
+		if len(f) == 3 {
+			out = append(out, Emoji{Category: f[0], Glyph: f[1], Name: f[2]})
+		}
+	}
+	return out
+}()
