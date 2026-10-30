@@ -1,6 +1,6 @@
 # TDLib ablation
 
-Recorded comparisons for the Teleproto → TDLib cutover. Same Telo `TelegramRepository` port. After cutover the production adapter is TDLib only.
+Recorded comparisons for the Teleproto → TDLib cutover, measured on the Electron build that preceded the Go rewrite ([`006`](../decisions/006-mygo-native-desktop.md)); the packaging rows describe that build. Kept as a record. Same Telo `TelegramRepository` port. After cutover the production adapter is TDLib only.
 
 Go/no-go after **A0** (packaging). Numbers below were taken on the Linux x64 cloud agent host unless noted.
 

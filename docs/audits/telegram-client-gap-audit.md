@@ -1,5 +1,7 @@
 # Telo client audit — feature gaps, architecture compliance, UI polish
 
+> **Historical.** This audit covers the Electron build (`backend/src`, `frontend/src`), which the Go rewrite replaced ([`006`](../decisions/006-mygo-native-desktop.md)). Current gaps are the parity ledger's open entries ([`../telegram/parity.md`](../telegram/parity.md)).
+
 Date: 2026-09-09. Scope: read-only audit of the whole repository. Benchmarks: Telegram Desktop (tdesktop), Telegram X, Nekogram.
 
 **Method.** Telo's current state is grounded in repository evidence: `docs/telegram/tdlib-capability-matrix.json` (TDLib 1.8.67), `docs/telegram/baseline.md`, `docs/project/architecture.md`, and grep verification of `backend/src` / `frontend/src` (message content-type mappers, composer, IPC channels). Benchmark-client columns reflect the reference clients' well-known feature sets; they are used for gap direction, not per-cell re-verification. Three parallel code audits covered FSD (`frontend/src`), DDD (`backend/src`), and UI polish/animation opportunities (`frontend/src`); their findings are reproduced with `file:line` evidence.

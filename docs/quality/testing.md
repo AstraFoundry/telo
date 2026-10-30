@@ -2,45 +2,49 @@
 
 ## Quality gate
 
-`make check` is the local release gate. It checks formatting, ESLint (including FSD layer and slice boundaries via `eslint-plugin-boundaries`; see [`docs/frontend/import-rules.md`](../frontend/import-rules.md)), TypeScript, unit/integration coverage, the TDLib product capability baseline, Markdown, and Electron E2E behavior. GitHub Actions splits that gate into a `check` job (format, lint, TypeScript, coverage-gated tests, TDLib baseline, Markdown) and a dedicated `e2e` job that launches Electron under Xvfb.
+`make check` is the gate, locally and in CI on Ubuntu, macOS and Windows:
 
-The Telegram check reads [`../telegram/tdlib-capability-matrix.json`](../telegram/tdlib-capability-matrix.json). It fingerprints the installed `prebuilt-tdlib` version and commit and fails if a `covered` capability is missing evidence. Live Telegram E2E is `make test-live` (secret-gated, not PR CI). Packaged `libtdjson` load is `make tdlib-smoke` after `make package`.
+| Step | Target | Fails when |
+| --- | --- | --- |
+| Format | `make fmt` | a Go file is not gofmt'd |
+| Vet | `make vet` | `go vet` reports a problem |
+| Generated code | `make generated` | the copy keys or the TDLib bindings differ from what `cmd/copygen` and `cmd/tdgen` generate |
+| Architecture | `make arch` | an import breaks the FSD or DDD rules ([`../frontend/import-rules.md`](../frontend/import-rules.md)) |
+| TDLib capabilities | `make capabilities` | [`tdlib-capability-matrix.json`](../telegram/tdlib-capability-matrix.json) pins a TDLib other than the one `package.json` stages, a `covered` capability names a TDLib function or update the bindings do not generate, or its evidence file does not exist |
+| telegram-macos parity | `make parity` | the ledger and the upstream inventory disagree ([`../telegram/parity.md`](../telegram/parity.md)) |
+| Tests | `make test` | a Go test fails; runs against the staged libtdjson (`TELO_REQUIRE_TDLIB=1`) |
+| Documentation | `make docs` | Markdown lint fails, a relative link points nowhere, or a document names a `make` target the Makefile does not define |
 
 ## Unit and integration tests
 
-Vitest runs two projects: `backend` (node environment, `backend/src/**/*.test.ts`) and `frontend` (jsdom environment, `frontend/src/**/*.test.{ts,tsx}`, with `frontend/src/shared/test/setup.ts` as the setup file). The frontend project mirrors the renderer's FSD aliases from `electron.vite.config.ts` so component tests resolve layer imports. Frontend tests mock the `window.telo` preload contract via the shared helper in `frontend/src/shared/test/mock-telo.ts`.
+- **Domain**: rules, cron, redaction, Markdown, send permissions, preferences normalization and the passcode hash.
+- **Application**: agent runs with audit and redaction, scopes, automation (triggers, schedule, delivery and draft conflicts), notification rules — over the demo workspace and fake gateways.
+- **Infrastructure**: sealed and atomic storage, the HTTP gateways against local test servers (streaming, tool loops, errors), TDLib loading, the mapping from TDLib objects, and `TestSignInReachesPhoneStep`, which drives a real TDLib client to the phone step without a network login.
+- **Checks**: `cmd/archcheck`, `cmd/capabilitycheck`, `cmd/paritycheck` and `internal/parity` test their own rules, including synthetic violations.
 
-Vitest covers domain invariants, application orchestration, adapter behavior, invalid input, secret preservation, deterministic demo data, frontend entity stores (AG-UI event reduction, chat selection/sending, Telegram auth error mapping), and widget behavior (sidebar chat-selection callback, Agent panel configuration states). Agent multi-session (threads) behavior is covered end to end at the domain (`agent-thread.test.ts`), application (`agent-threads.test.ts`), infrastructure (`file-agent-thread-repository.test.ts`), and IPC handler (`register-ipc.test.ts`) levels. Coverage is collected for `backend/src/domain/**`, `backend/src/application/**`, the file-based/demo repositories and TDLib adapter under `backend/src/infrastructure` (`demo-telegram-repository.ts`, `file-telegram-connection-profile-repository.ts`, `tdlib-json-path.ts`, `tdlib-client.ts`, `tdlib-probe.ts`, `tdlib-mappers.ts`, `tdlib-telegram-repository.ts`, `file-agent-configuration-repository.ts`, `file-user-preferences-repository.ts`), and frontend entity models (`frontend/src/entities/**/model/**`). The vendored beUI registry under `frontend/src/shared/beui/**` is excluded from coverage. Coverage thresholds are 80% for lines, functions, and statements and 75% for branches across all included files.
+## UI tests
 
-## End-to-end tests
+MyGo's headless `ui.Tester` renders the real views over `frontend/shared/testkit` (the demo workspace, a fixed clock, in-memory stores and a recording desktop) and drives them by text, role and keys: click, right-click, type, press, open menus. They cover:
 
-Playwright launches the packaged Electron entry. Specs share the Electron launch/teardown fixtures in `tests/e2e/fixtures.ts` (`test` for onboarding, `demoTest` for `TELO_DEMO_WORKSPACE=1`); each test gets an isolated `--user-data-dir`. The fixture launches Electron with `TELO_PLAINTEXT_SECRETS=1` because `safeStorage` has no keychain under Playwright (see [`docs/backend/database.md`](../backend/database.md)); without it the main process cannot persist an API key or OAuth tokens. Under `CI=1` it also passes `--no-sandbox`, which GitHub-hosted Linux runners require. Demo journeys wait on the chat navigation via `waitForDemoWorkspace` — there is no in-app demo button. Covered journeys:
+- **Onboarding** — sign-in by phone and code, QR sign-in, the agent step, a build without credentials.
+- **Workspace** — the chat list and conversation in light and dark, sending with formatting, search.
+- **Interactions** — the message context menu, the chat context menu, composer formatting and the attach menu, and the keyboard shortcuts (reply stepping, chat stepping, edit last, Esc, info).
+- **App** — settings search and panes, the passcode lock, the agent panel summarizing unread messages, the profile and account menu, the media viewer.
+- **Bootstrap** — the menu registry and its key bindings.
 
-- `workspace.spec.ts` — first-launch onboarding has no demo-workspace action; with the launch flag, current-account identity area, the dedicated Settings surface from the account menu, the unconfigured Agent panel state, and returning to the conversation surface when a chat is selected while Settings is open.
-- `login-error.spec.ts` — credentials are injected at build time and the e2e build ships none, so clicking Start Messaging on the onboarding welcome step swaps the view straight into the terminal credentials-missing alert; the phone step stays unreachable.
-- `messaging.spec.ts` — chat selection in the demo workspace, composer input, and the sent message rendering in the conversation log.
-- `messaging-sync.spec.ts` — after sending, the demo counterpart types then replies; a composer draft survives switching chats and coming back; clicking a reply quote scrolls the source message into view.
-- `chat-navigation.spec.ts` — switching between demo chats swaps the conversation heading and messages, and the chat-search field queries the server and shows matching chats (including the empty-result state).
-- `search.spec.ts` — the global search finds a message in another chat and jumps to it (select chat, scroll, highlight); the in-chat search counts matches and navigates them with Enter/Shift+Enter and the up/down buttons, Escape closing the bar and clearing the highlight; the header shows the avatar, the online presence line, and pins the chat.
-- `agent-not-configured.spec.ts` — with no credential configured, the Agent panel blocks the composer and links to the Agent section of Settings; after connecting a fixture OAuth account through the Settings Agent form, the demo gateway streams into the panel.
-- `agent-markdown.spec.ts` — a deterministic response crosses the Electron IPC stream in multiple chunks, remains pinned at the live edge in a compact overflowing viewport without word-entry or repeated smooth-scroll animations, and settles as a heading, emphasis, list, blockquote, safe external link, and beUI/Shiki code block with its copy control. Widget tests additionally assert that citation updates preserve settled Markdown DOM nodes and resize bursts produce one immediate live-edge scroll per frame.
-- `agent-byoa.spec.ts` — Agent settings lists named providers first; picking Anthropic fills that account's default model, hides the base URL and API key, Connect account stores a fixture OAuth session (`TELO_E2E=1`, no browser), shows the account email, and unblocks the panel composer. Google and Kimi follow the same Connect path. OpenAI-compatible is the fallback: the base URL appears and an HTTPS endpoint plus model persist. The model field is a combobox: a credential triggers `agent:list-models` (fixture catalog under `TELO_E2E=1`); a typed id that is not in the list still saves.
-- `settings-persistence.spec.ts` — editing the Agent configuration form in Settings, saving, and reopening Settings shows the persisted values after the form's asynchronous backfill.
-- `context-menu.spec.ts` — right-clicking a chat row opens the state-aware context menu (Mark as read clears the unread badge, and reopening the menu offers Mark as unread); right-clicking a message bubble offers Copy Text, and activating it closes the menu. Clipboard contents are asserted when Electron grants read permission; otherwise the clickable item and the menu dismissal carry the journey.
-- `message-actions.spec.ts` — the message action journeys: Reply opens the composer preview bar and the sent message carries a quote block with the original sender and body; Edit prefills the composer with the outgoing message and the resent bubble shows the new body with an `edited` marker; Delete asks for confirmation in a dialog before the message disappears; Forward opens the chat-picker dialog and the target chat's sidebar preview updates to the forwarded body.
-- `stickers.spec.ts` — all three Telegram sticker encodings render without attachment chrome; picker send, server search, context-menu preview/favorite, and hold-and-slide transient preview work; releasing a held preview does not send; tapping a received sticker opens its pack and toggles installation; custom emoji renders inline. Catalog and pack loading skeleton geometry, real pack thumbnails, pack reordering, gesture thresholds, and recent-list rollback permutations remain in Vitest.
-- `preferences.spec.ts` — changing every Settings preference (Theme, Accent color, Message text size, Time format, Send with Enter, Desktop notifications) and reopening Settings shows the persisted values from `preferences.json`; switching Time format to 24-hour re-renders the sidebar chat-row timestamps live (while Settings is still open) and the conversation message timestamps without AM/PM markers, and switching Send with to Cmd+Enter makes a bare Enter insert a newline while Cmd+Enter sends the message.
-- `secret-chat.spec.ts` — demo secret chat lock in the sidebar and header, plus sending text.
-- `logout.spec.ts` — the Telegram account section's Log out button arms a two-step confirm, and the second click clears the demo workspace and returns the shell to onboarding without a demo-workspace action.
+`make snapshots` writes each test's rendered frames to `.workspace/snapshots` for review; CI uploads them from Ubuntu.
 
-Selectors use stable semantic locators (roles, labels, names) rather than DOM structure; names that collide with the "Saved Messages" demo chat are scoped to the chat navigation or matched exactly. The onboarding sign-in flow is a full-screen step sequence, so its content is located by inner semantics (the `role="alert"` terminal states, input labels, submit buttons, and the back button). The onboarding heading is rendered by TextReveal, which splits the copy into per-word inline-block spans while preserving whitespace, so the computed accessible name still matches the full string. Context menus render in a `body` portal and are located by their `role="menu"` / `role="menuitem"` semantics (closed menus carry `aria-hidden`, so they never match while dismissed). Forms that backfill asynchronously (for example the Agent configuration form) must be awaited on their loaded default values before typing. The Message text size slider is driven by keyboard (`ArrowRight` steps by one) and asserted through `aria-valuenow`, because a pointer drag would depend on the track's pixel width. Add E2E coverage only for critical cross-process journeys; keep domain permutations in Vitest.
+Locate elements by visible text and role, never by layout position. Keep permutations in unit tests and use UI tests for journeys.
+
+## Live Telegram
+
+`make test-live` runs `TestLiveBaseline` against a real account, driving [`../telegram/baseline.md`](../telegram/baseline.md). It needs `TELO_LIVE_E2E=1`, `TELO_LIVE_DIR` (the `telegram` directory of a profile `make dev` signed in) and the API credentials. It is not part of `make check` or CI.
 
 ## Commands
 
 ```sh
 make test
-make test-e2e
+make snapshots
 make test-live
-make tdlib-smoke
 make check
 ```

@@ -4,17 +4,23 @@
 
 ### Architecture
 
-- [ ] Does the change respect FSD/DDD layer boundaries? (`pnpm lint` enforces FSD layer direction and same-layer slice isolation; any new violation must fail the gate, not be suppressed.)
+- [ ] Does the change respect FSD/DDD layer boundaries? (`make arch` enforces them; a new violation fails the gate and is never suppressed.)
 - [ ] Is business logic in the domain layer, not in controllers or components?
 - [ ] Are repository/ports defined in domain and implemented in infrastructure?
 
 ### Code quality
 
 - [ ] Is all code and commentary in English?
-- [ ] Are there no hardcoded strings?
+- [ ] Is every visible string a key of the copy catalog?
+- [ ] Are colors, radii and type sizes tokens from `theme`?
 - [ ] Is there no redundant UI copy?
 - [ ] Is there no duplicated logic that could be extracted?
 - [ ] Is there no fallback/clever bypass logic?
+
+### Parity
+
+- [ ] Does a new menu item, shortcut, settings row or context-menu item carry its telegram-macos id, and does the ledger entry name its evidence and tests? (`make parity`)
+- [ ] Does a new gap have a ledger entry with a priority and a reason?
 
 ### Testing
 
@@ -30,8 +36,9 @@
 ### Security
 
 - [ ] Are user inputs validated at the boundary?
-- [ ] Are secrets and PII masked in logs?
-- [ ] Are error responses safe for production?
+- [ ] Do secrets stay sealed and out of the UI?
+- [ ] Does agent context go through the scoped, redacted payload?
+- [ ] Are errors shown to the user domain errors worded from the catalog?
 
 ## Review culture
 

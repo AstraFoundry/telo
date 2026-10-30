@@ -1,5 +1,7 @@
 # FSD Overview
 
+> **Telo mapping.** Telo applies FSD to Go: layers are directories under `frontend/`, slices are Go packages, and a segment is a file inside the package (`compose.go`, `dialogs.go`) rather than a sub-directory. The TypeScript-style examples below are illustrative. See [`layers.md`](layers.md).
+
 Feature-Sliced Design (FSD) is an architectural methodology for frontend applications. It splits the codebase into layers, slices, and segments so that each file has a clear, enforceable location.
 
 ## Why FSD

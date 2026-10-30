@@ -2,6 +2,8 @@
 
 The domain layer contains the business rules of the system. It has no dependencies on frameworks, databases, or transport details.
 
+> **Telo mapping.** `backend/domain/telegram`, `agent`, `preferences` and `keywordfolder` are Go packages that import only the standard library and each other. The TypeScript examples below are illustrative.
+
 ## What belongs in `domain/`
 
 - **Entities** — objects with identity that change over time (e.g., `Order`, `User`).
@@ -13,18 +15,20 @@ The domain layer contains the business rules of the system. It has no dependenci
 
 ## Rules
 
-- The domain layer must not import from `application`, `infrastructure`, or `interfaces`.
-- Domain code must be pure JavaScript/TypeScript or the equivalent in your language. No HTTP, no SQL, no framework annotations.
+- The domain layer must not import from `application`, `infrastructure`, or `interfaces` (`make arch`).
+- Domain code is plain Go: no HTTP, no TDLib, no MyGo.
 - Validation of business invariants happens here.
-- Domain-owned vocabulary (chat/message/sticker/story/call/contact/profile DTO shapes, agent provider ids and bounds, preference unions, upload limits) is declared in the domain modules and mirrored by `contracts/src/ipc.ts` through re-exports, so the domain never imports the transport contract.
+- Domain-owned vocabulary (chats, messages, media, stickers, stories, people, accounts and sign-in steps, agent providers and bounds, preferences, upload limits) is declared here and used by every other layer, the UI included.
 - Use rich domain models when the rules are complex. Use anemic models with domain services only when the rules are trivial.
 
 ## Telegram vocabulary and rules
 
-`domain/telegram/` owns the Telegram vocabulary (`chat.ts`, `message.ts`, `sticker.ts`, `story.ts`, `call.ts`, `contact.ts`, `profile.ts`, `workspace-event.ts`) plus two rule modules:
+`domain/telegram` owns the Telegram vocabulary (`chat.go`, `message.go`, `people.go`, `account.go`, `events.go`), the ports (`ports.go`: `Repository` for the active account, `Accounts` for sign-in and switching) and these rules:
 
-- **`can-send-content.ts`** — evaluates a chat's `canSendMessages`/`canSendStickers`/`canSendMedia` flags against a content kind (`text` / `stickers` / `media` / `any`). Omitted flags mean writable, and omitted sticker/media flags follow the text flag, matching the `ChatDto` contract. Application send paths consult `assertCanSendContent` before invoking the repository port; adapters only map raw permission data into the flags.
-- **`upload-policy.ts`** — Telegram's vendor upload limits (album ≤ 10 files, 2 GB per upload, 10 MB story photos). The IPC boundary and the application layer validate against the same constants.
+- **Send permissions.** `Chat.CanSend` evaluates `CanSendMessages`, `CanSendStickers` and `CanSendMedia` for a content kind; `RequireSend` returns `ErrCannotWrite`, `ErrCannotStickers` or `ErrCannotMedia`. Both adapters and the automation runner call it before sending, so the TDLib and demo workspaces cannot diverge.
+- **Upload limits.** `MaxAlbumFiles` (10), `MaxUploadBytes` (2 GB) and `StoryPhotoMaxSize` (10 MB), as Telegram enforces them; the composer and both adapters check the same constants.
+- **Text.** `ParseMarkdown` turns Telegram's inline Markdown into a body and entities; UTF-16 offsets (`UTF16Len`) match TDLib's.
+- **Events.** `ChatUpserted`, `MessageUpserted`, `MessagesDeleted`, `MessagesRead`, `TypingChanged`, `DraftChanged`, `AvatarChanged`, `FoldersChanged` and the rest are what the chat store and automation consume.
 
 ## Example
 
@@ -69,11 +73,11 @@ Implementations of these ports live in `infrastructure/`.
 
 ## Agent automation
 
-The automation subsystem (`domain/agent/`) adds two entities and the shared vocabulary they use (`agent-automation.ts`).
+`domain/agent` holds the configuration, threads, redaction and audit records, and automation (`automation.go`):
 
-- **`AgentDeliveryMode`** — `"auto-send" | "draft-only"`, declared per rule/task. The global default is `AGENT_DELIVERY_DEFAULT = "draft-only"`: nothing leaves the account unless an entry explicitly opts into auto-send. `AgentAutomationCreator` (`"user" | "agent"`) records who authored the entry; agent-authored entries take effect immediately.
-- **`AgentTriggerRule`** (`agent-trigger-rule.ts`) — fires an agent run when an incoming message matches. The match dimensions (`chatIds`, `senderIds`, `keywords`, `pattern`, `excludeMuted`) combine with AND; several keywords are OR within their dimension (case-insensitive substring); `pattern` is a case-insensitive JavaScript regex validated at construction. A rule must restrict at least one dimension, so it cannot match every message by accident; `excludeMuted` defaults to true. Outgoing messages never match — the anti-loop invariant lives in `matches()`. New rules start enabled.
-- **`AgentScheduledTask`** (`agent-scheduled-task.ts`) — fires an agent run on a timer and delivers the result to a fixed `chatId`. The schedule is `{ kind: "cron", expression }` (recurring) or `{ kind: "once", runAt }` (one ISO instant; once attempted, the task is spent and never fires again, even if re-enabled). The optional context scope is `unread` or `folder` — never `selected`, because pinned message ids go stale between scheduling and firing; an `unread` scope without an explicit chat defaults to the delivery chat. `nextRunAt` returns null for spent one-shots and impossible crons.
-- **`CronExpression`** (`agent-cron.ts`) — five-field cron (minute hour day-of-month month day-of-week) in the machine's local timezone: star wildcards, numbers, ranges `a-b`, steps (`*/n`, `a-b/n`), comma-separated lists, three-letter English month/day names, both 0 and 7 for Sunday. When day-of-month and day-of-week are both restricted, a day matches either field (Vixie cron semantics). The next-fire search gives up after four years, so an impossible expression ("Feb 30") resolves to no occurrence instead of hanging.
+- **`Delivery`** — `auto-send` or `draft-only`, per rule and task; new entries default to draft-only, so nothing leaves the account unless an entry opts in. `Creator` (`user` or `agent`) records who wrote the entry; agent-written entries take effect at once ([`003`](../decisions/003-agent-automation-safety.md)).
+- **`Rule`** — fires on an incoming message. Match dimensions (`ChatIDs`, `SenderIDs`, `Keywords`, `Pattern`, `ExcludeMuted`) combine with AND; keywords are OR within their dimension (case-insensitive substring); `Pattern` is case-insensitive RE2, compiled in `NewRule`. A rule restricts at least one dimension. `Matches` never accepts an outgoing message: the anti-loop rule lives in the domain.
+- **`Task`** — fires on a schedule (`cron`, or `once` at an instant; a one-shot is spent once attempted) and delivers to a chat, with an optional unread or folder scope. `NextRun` reports no next run for spent one-shots and impossible expressions.
+- **`Cron`** — five fields in local time: wildcards, numbers, ranges, steps, lists, English month and day names, 0 and 7 for Sunday; when both day fields are restricted, either matches (Vixie cron). The search gives up after four years, so "Feb 30" has no next run instead of hanging.
 
-Both entities validate in `create` and re-validate on `restore`, so a hand-edited persistence file cannot smuggle in an invalid match or schedule.
+`NewRule` and `NewTask` validate on creation and when a stored file is read back, so a hand-edited file cannot introduce an invalid entry.

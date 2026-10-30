@@ -1,5 +1,7 @@
 # Slices
 
+> **Telo mapping.** Slices are Go packages named with one lowercase word (`chatlist`, `messageactions`, `mediaviewer`), as Go requires; the kebab-case examples below are illustrative.
+
 A slice is a business-domain grouping inside a layer. Slices make the codebase searchable and keep related code together.
 
 ## Naming slices

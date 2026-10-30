@@ -1,62 +1,29 @@
 # Interfaces Layer
 
-The interfaces layer adapts the application layer to the outside world. In Telo the only adapter is **Electron IPC** — there is no HTTP server, CLI, or event-bus consumer. Wire-level conventions live in [`api-conventions.md`](api-conventions.md).
+The interfaces layer adapts the application to the outside world. Telo has no network server, IPC bridge or CLI: the UI runs in the same Go process. Two packages play this role.
 
-## Layout
+## `bootstrap` — the composition root
 
-`interfaces/electron/` contains the whole adapter:
+`bootstrap` (called from `main.go`) builds everything once:
 
-- **`main.ts`** — Electron main-process entry point. Builds the container, registers IPC handlers, hides Chromium's application menu, creates the window (Linux frameless; Windows/macOS hidden title bar with overlay controls), and pushes Telegram auth-state events to the renderer. The `TELO_TDLIB_SMOKE=1` probe runs through the container module like every other infrastructure dependency, so the entry point imports only interface-layer siblings.
-- **`container.ts`** — composition root. Wires infrastructure implementations into application services.
-- **`channels.ts`** — IPC channel names. Private to this layer; the renderer never references raw channel strings.
-- **`register-ipc.ts`** — one `ipcMain.handle` registration per capability, plus the AG-UI event stream for agent runs. Upload handlers stage pasted bytes, validate against the shared `domain/telegram/upload-policy` limits (album ≤ 10 files, 2 GB per file, 10 MB story photos), and sweep temp files through one `withStagedUploads` helper.
-- **`preload.ts`** — the `contextBridge` surface exposed as `window.telo`, typed by `TeloDesktopApi` from `contracts/src/ipc.ts`.
+- **`app.go`** opens the user data directory, the keychain, the preferences and keyword-folder stores, the Telegram accounts over TDLib (or the demo workspace with `TELO_DEMO=1`), the agent service with its gateway, OAuth and sealed stores, and the runtime the UI receives. It holds the release credentials linked in by `make package`, takes the single-instance lock, and opens the window (`TitleBarHidden`, 1180 × 760, minimum 760 × 520, its frame remembered).
+- **`menus.go`** declares the menu bar as data (`Menus`): roles for the standard items and actions for Telo's. Each item carries the telegram-macos id it reproduces, which `make parity` checks with the keys.
+- **`desktop.go`** implements `runtime.Desktop` with MyGo: notifications that open their chat, the dock badge, the clipboard, file dialogs, opening and revealing files, and URLs.
 
-## What belongs in `interfaces/`
+Only `bootstrap` imports infrastructure and MyGo's app-level APIs; the UI never imports `bootstrap` (`make arch`).
 
-- **IPC handlers** — receive the invoke payload, call an application service, return its DTO.
-- **Preload bridge methods** — the renderer-facing surface of each capability.
-- **Event push** — `webContents.send` streams for agent events (AG-UI), Telegram auth state, and typed Telegram workspace updates (new/edited/deleted/read messages, message reaction changes, plus synchronization failures).
-- **Input validation** — validate the shape at the boundary; application and domain code re-validate.
+## `frontend/shared/runtime` — the boundary the UI calls
+
+`runtime.Runtime` is everything a view may reach: `Accounts` (and through it the active `tg.Repository`), the `Preferences`, `KeywordFolders` and `Agent` services, the `Desktop` adapter and the build `Info`. `Runtime.Go` runs a call off the main thread and `Runtime.Post` brings the result back; the root view drains posts at the start of each frame.
 
 ## Rules
 
-- Handlers must be thin. No business logic, no direct persistence access.
-- The preload exposes one method per capability — never raw `ipcRenderer` access or arbitrary channel-send capability.
-- Do not pass Electron event objects into application services; extract the payload first.
-- Everything crossing the bridge uses the DTOs defined in `contracts/src/ipc.ts`.
-- Collection reads expose cursor pages through `workspace:list-chat-page` and `workspace:list-message-page`; do not add fixed-limit list channels beside them.
-- Event subscriptions return an unsubscribe function.
-- Adding a channel requires a contract entry, a preload method, a handler, and a test (see `register-ipc.test.ts`).
-- The renderer must never receive an API key, OAuth token, Telegram session, filesystem path, or Electron object.
-
-## Example
-
-```ts
-// interfaces/electron/register-ipc.ts
-ipcMain.handle(
-  channels.messageSend,
-  (_event, chatId: string, body: string, input?: SendMessageInput) =>
-    container.workspace.sendMessage(chatId, body, input),
-);
-
-// interfaces/electron/preload.ts
-sendMessage: (chatId, body, input) =>
-  ipcRenderer.invoke(channels.messageSend, chatId, body, input),
-```
+- Keep `bootstrap` thin: construct, wire, and route menu actions to the root view. No business rules.
+- Views call services, never infrastructure, and never block the main thread on Telegram, the network or the disk.
+- Nothing secret crosses into the UI ([`api-conventions.md`](api-conventions.md)).
+- A new capability needs a port in the domain, an implementation in infrastructure, the wiring in `bootstrap`, and a test at the service level.
 
 ## Error handling
 
-- Expected application/domain errors cross IPC as concise, user-safe messages (see [`api-conventions.md`](api-conventions.md)).
-- Unexpected errors are logged in the main process (see [`logging.md`](logging.md)) and reach the renderer as generic failures. Never leak stack traces, secrets, or filesystem paths.
-
-## Agent automation channels
-
-The automation management surface adds eight invoke channels and one event stream, all exposed under `window.telo.agent`:
-
-- `agent:trigger-rules-list`, `agent:trigger-rule-save`, `agent:trigger-rule-remove`, `agent:trigger-rule-enable`
-- `agent:scheduled-tasks-list`, `agent:scheduled-task-save`, `agent:scheduled-task-remove`, `agent:scheduled-task-enable`
-
-Saves are create-or-replace (`SaveTriggerRuleInput` / `SaveScheduledTaskInput`): an absent id mints one in the main process, a present id replaces the editable fields of that entry. Handlers validate that name and prompt template are non-empty, then call `AgentAutomationService` with `createdBy: "user"`; the agent's own tools reach the same service with `createdBy: "agent"`. Scheduled-task reads derive `nextRunAt` per request, so the renderer always sees the next fire relative to now; `null` means the task never fires again (spent one-shot or impossible cron).
-
-`agent:automation-event` pushes an `AgentAutomationEvent` (`type: "automation-run"`) after every automation run: `source` (`trigger` or `schedule`), the entry id and name, the delivery chat and mode, the outcome (`sent`, `draft`, `draft-conflict`, `empty`, `error`), and a 200-character preview of the reply text. Like every event channel, the subscription returns an unsubscribe function.
+- Expected failures are domain errors the UI words from the copy catalog ([`api-conventions.md`](api-conventions.md)).
+- A failure at start (libtdjson missing or unloadable, an unreadable store) shows a native error dialog and quits; Telo does not start half-configured.

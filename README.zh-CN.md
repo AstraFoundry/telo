@@ -6,9 +6,9 @@
 [![简体中文](https://img.shields.io/badge/README-简体中文-red?style=flat-square)](README.zh-CN.md)
 [![日本語](https://img.shields.io/badge/README-日本語-green?style=flat-square)](README.ja.md)
 [![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE)
-[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-blue?style=flat-square)](package.json)
-[![Node](https://img.shields.io/badge/node-%3E%3D22.0.0-brightgreen?style=flat-square)](package.json)
-[![Electron](https://img.shields.io/badge/Electron-44-47848F?style=flat-square)](package.json)
+[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-blue?style=flat-square)](mygo.json)
+[![Go](https://img.shields.io/badge/Go-1.27-00ADD8?style=flat-square)](go.mod)
+[![MyGo](https://img.shields.io/badge/MyGo-0.7-47848F?style=flat-square)](go.mod)
 
 ![展示聊天列表、会话视图与 AI 智能体面板的 Telo 桌面界面](docs/readme/hero.png)
 
@@ -16,18 +16,19 @@
 
 ## 核心特性
 
-- **原生 TDLib 客户端内核**：在 Electron 主进程中运行 `tdl` 与 `prebuilt-tdlib`（TDLib 1.8.67），为每个账号维护经 `safeStorage` 密钥加密的独立 SQLite 数据库；支持多账号切换（最多 3 个账号）、加密私密聊天（Secret Chats）、服务端与本地关键词文件夹、投票、定时消息、语音消息、贴纸与动画表情。（`prebuilt-tdlib` 不支持 Windows arm64。）
-- **工作区上下文感知 AI 智能体**：常驻可折叠右侧面板（`Cmd/Ctrl + B`），基于 AG-UI 事件协议流式传输响应；支持总结未读讨论、提炼决策与待办事项、在输入框内直接翻译或改写/起草回复、通过 `telo://message/...` 链接引用原始消息、解析 `@Name` 提及，并提供触发规则与定时任务自动化（默认 `draft-only` 仅生成草稿，或配置为 `auto-send` 自动发送）。
-- **自带账号接入（BYOA）**：基于 AI SDK 原生支持 OpenAI、Anthropic、Google、Groq、xAI、Kimi、DeepSeek 与 Mistral（OpenAI、Anthropic、Google、xAI、Kimi 支持桌面 OAuth 登录；Groq、DeepSeek、Mistral 使用 API Key），并支持任意兼容 OpenAI 协议的 HTTPS 接口作为回退方案。
-- **零信任进程边界**：强制开启 `contextIsolation: true`、`sandbox: true` 与 `nodeIntegration: false`。API Key、OAuth 令牌与 Telegram 凭据均由主进程通过操作系统钥匙串（`safeStorage`）加密存储，绝不越过类型化 IPC 边界（`contracts/src/ipc.ts`）进入渲染进程。发送给智能体的上下文会自动脱敏邮箱、手机号与疑似密钥，并将请求提示词的 SHA-256 摘要记录至本地 `agent-audit.jsonl`。
-- **精致桌面交互与实时预览设置**：基于 React 19、Electron 44、Tailwind CSS v4、Motion 与 BEUI 组件构建；提供跟随系统 / 浅色 / 深色主题、5 套强调色、12px–18px 消息字号缩放、由主题令牌驱动的聊天背景、支持精确跳转与实时外观/通知预览的设置搜索，以及按会话类型和媒体类型细分的通知与自动下载控制。
+- **原生单进程**：使用 Go 基于 [MyGo](https://github.com/egoist/mygo) 编写：原生窗口，无 Electron、无 WebView、无需 C 工具链。TDLib 1.8.67 通过 `purego` 加载，每个账号的数据库由系统凭据存储中的密钥加密；支持最多 3 个账号、私密聊天、服务端与关键词文件夹、投票、定时消息与贴纸。（`prebuilt-tdlib` 不支持 Windows arm64。）
+- **对齐 Telegram for macOS**：交互对齐 [telegram-macos](https://github.com/TelegramMessenger/telegram-macos)：菜单、快捷键、设置项与右键菜单都标注了所对应的上游条目；一旦 Telo 偏离已提交的对齐台账，`make check` 即失败。
+- **工作区上下文感知 AI 智能体**：右侧面板（`⌘J` / `Ctrl+J`）可总结未读讨论、提炼决策与待办、将翻译 / 改写 / 回复草稿写入输入框、以带编号的 `telo://message/...` 链接引用消息，并运行触发规则与定时任务（默认 `draft-only`，或 `auto-send`）。
+- **自带账号接入（BYOA）**：支持 OpenAI、Anthropic、Google、Groq、xAI、Kimi、DeepSeek 与 Mistral（OpenAI、Anthropic、Google、xAI、Kimi 支持厂商登录，其余使用 API Key），以及任意兼容 OpenAI 协议的 HTTPS 接口。
+- **密钥始终加密**：API Key、OAuth 令牌与 Telegram 数据库密钥以 AES-256-GCM 加密，密钥保存在系统凭据存储中，绝不进入界面层。智能体上下文在离开设备前自动脱敏（邮箱、手机号、API Key），每次运行仅将提示词的 SHA-256 记录到 `agent-audit.jsonl`，从不记录原文。
+- **精致桌面体验**：沿用 AstraFoundry Arion 的 coss 组件结构，配色保持 Telo 独立：跟随系统 / 浅色 / 深色主题、5 套强调色、12–18 px 消息字号、本地密码锁与自动锁定、可搜索的设置，以及按会话类型细分的通知与媒体下载控制。
 
 ## 快速开始
 
 ### 环境要求
 
-- **Node.js** `>= 22.0.0`
-- **pnpm** `9.0.0` 或更高版本
+- **Go**：`go.mod` 中声明的版本
+- **Node.js** `>= 22.0.0` 与 **pnpm** `9.0.0` 或更高版本（用于准备固定版本的 TDLib 并校验文档）
 - **GNU Make**
 - **操作系统**：macOS、Windows（x64）或带有图形会话的 Linux
 
@@ -43,7 +44,7 @@ make dev
 若无需登录真实 Telegram 账号或配置 AI 服务商，直接体验内存演示工作区与确定性演示智能体：
 
 ```sh
-make dev DEMO=1
+make demo
 ```
 
 ### Telegram 与 OAuth 凭据配置
@@ -54,48 +55,46 @@ make dev DEMO=1
 TELO_TELEGRAM_API_ID=1234567 TELO_TELEGRAM_API_HASH=0123456789abcdef0123456789abcdef make dev
 ```
 
-如需启用 Google OAuth（`Connect account`），请提供已开启 Generative Language API 且允许本地回环重定向（`http://127.0.0.1`）的 Google Cloud 桌面端 OAuth 客户端 ID：
+如需为智能体启用 Google 登录，请提供已开启 Generative Language API 且允许本地回环重定向（`http://127.0.0.1`）的 Google Cloud 桌面端 OAuth 客户端 ID：
 
 ```sh
 TELO_GOOGLE_OAUTH_CLIENT_ID=123456789.apps.googleusercontent.com make dev
 ```
 
-OpenAI、Anthropic、xAI 与 Kimi 默认使用各厂商公开的原生 OAuth 客户端，也可通过 `TELO_OPENAI_OAUTH_CLIENT_ID`、`TELO_ANTHROPIC_OAUTH_CLIENT_ID`、`TELO_XAI_OAUTH_CLIENT_ID` 与 `TELO_KIMI_OAUTH_CLIENT_ID` 覆盖。未设置 `TELO_GOOGLE_OAUTH_CLIENT_ID` 时，Google 仍可通过 API Key 配置。
+OpenAI、Anthropic、xAI 与 Kimi 默认使用各厂商公开的原生 OAuth 客户端，也可通过 `TELO_OPENAI_OAUTH_CLIENT_ID`、`TELO_ANTHROPIC_OAUTH_CLIENT_ID`、`TELO_XAI_OAUTH_CLIENT_ID` 与 `TELO_KIMI_OAUTH_CLIENT_ID` 覆盖。未设置 `TELO_GOOGLE_OAUTH_CLIENT_ID` 时，Google 使用 API Key。
 
 ### 常用命令
 
 | 命令 | 说明 |
 | --- | --- |
-| `make install` | 按 lockfile 安装依赖并下载 Electron 二进制文件 |
-| `make dev` | 安装依赖并以热重载模式启动 Electron 应用 |
-| `make dev DEMO=1` | 直接启动进入内存演示工作区 |
-| `make reset` | 删除 Electron `userData` 目录并恢复为首次启动状态 |
-| `make check` | 运行代码格式化检查、ESLint、TypeScript、单元覆盖率、TDLib 能力基线、Markdown 校验及 Playwright E2E 测试 |
-| `make test` | 运行带覆盖率统计的 Vitest 单元与集成测试 |
-| `make test-e2e` | 以 `e2e` 模式构建并运行 Playwright Electron 端到端测试 |
-| `make test-live` | 运行需凭据解锁的真实 Telegram E2E 测试（需设置 `TELO_LIVE_E2E=1`） |
-| `make lint` | 运行 ESLint（包含 Feature-Sliced Design 架构层级边界校验） |
-| `make format` | 使用 Prettier 格式化源码与文档 |
-| `make docs` | 使用 `markdownlint-cli2` 校验 `README*.md` 与 `docs/**/*.md` |
-| `make build` | 使用 `electron-vite` 编译主进程、Preload 与渲染进程产物 |
-| `make package` | 准备原生 TDLib 动态库并生成未打包的应用产物目录 |
-| `make tdlib-smoke` | 在 `make package` 后校验打包产物中的 `libtdjson` 是否正常加载 |
-| `pnpm release` | 使用 `electron-builder` 构建当前平台的安装包与发行产物 |
+| `make install` | 按 lockfile 安装固定版本的 TDLib 包与文档工具 |
+| `make dev` | 准备 TDLib 并以热重载模式运行 Telo |
+| `make demo` | 在内存演示工作区中运行 Telo |
+| `make reset` | 使用一次性的空白配置运行 Telo |
+| `make check` | 运行 CI 的全部门禁：gofmt、vet、生成代码、FSD/DDD 导入、TDLib 能力、telegram-macos 对齐、测试与文档 |
+| `make test` | 基于已准备的 libtdjson 运行 Go 测试（含无头 UI 测试） |
+| `make parity` | 校验 telegram-macos 对齐台账与代码是否一致 |
+| `make snapshots` | 将 UI 测试画面渲染到 `.workspace/snapshots` |
+| `make test-live` | 在已登录账号上运行真实 Telegram 基线（`TELO_LIVE_E2E=1`） |
+| `make build` | 构建当前平台的 Telo 可执行文件 |
+| `make package` | 使用 `mygo build` 构建应用包与安装程序 |
+| `make help` | 列出全部目标 |
 
 ## 文档索引
 
 - [文档总览](docs/README.md) — 顶层文档地图与使用指南。
-- [项目概述](docs/project/README.md) — 产品目标与安全边界。
-- [系统架构](docs/project/architecture.md) — 前端 FSD 分层、后端 DDD 分层、IPC 契约与核心数据流。
-- [智能体与 AG-UI 集成](docs/project/agent.md) — 流式面板、消息引用、提及补全、BYOA 模型接入、脱敏审计与自动化。
-- [Telegram 能力基线](docs/telegram/README.md) — TDLib 能力覆盖矩阵与客户端工作流。
-- [前端开发规范 (FSD)](docs/frontend/README.md) — Feature-Sliced Design 规范与跨层导入规则。
-- [后端开发规范 (DDD)](docs/backend/README.md) — 领域驱动设计分层、端口与用例编排。
-- [本地数据持久化](docs/backend/database.md) — 加密 `userData` 存储文件与单账号 TDLib 数据库说明。
-- [本地开发指南](docs/operations/local-dev.md) — 环境变量、运行时配置与调试方法。
-- [构建与发布](docs/operations/deployment.md) — 打包流程、原生 TDLib 分发、CI 与发布产物。
-- [测试策略](docs/quality/testing.md) — Vitest 覆盖率门禁与 Playwright Electron 端到端测试。
-- [架构决策记录 (ADR)](docs/decisions/README.md) — 涵盖 IPC 边界、BYOA 服务商、自动化安全与 TDLib 内核的架构决策。
+- [项目概述](docs/project/README.md) — 产品目标与边界。
+- [系统架构](docs/project/architecture.md) — 前端 FSD 分层、后端 DDD 分层、线程模型与数据流。
+- [智能体](docs/project/agent.md) — 面板、消息引用、BYOA 模型接入、脱敏与自动化。
+- [Telegram](docs/telegram/README.md) — TDLib 能力矩阵与真实账号基线。
+- [telegram-macos 对齐](docs/telegram/parity.md) — 对齐台账及 `make check` 中的门禁。
+- [前端开发规范 (FSD)](docs/frontend/README.md) — Go 中的 Feature-Sliced Design 与设计系统。
+- [后端开发规范 (DDD)](docs/backend/README.md) — 领域驱动设计分层、端口与用例。
+- [本地数据持久化](docs/backend/database.md) — 加密文件与按账号划分的 TDLib 存储。
+- [本地开发指南](docs/operations/local-dev.md) — 环境变量与运行时配置。
+- [构建与发布](docs/operations/deployment.md) — 打包、CI 与发布产物。
+- [测试策略](docs/quality/testing.md) — `make check` 的各项门禁与无头 UI 测试。
+- [架构决策记录 (ADR)](docs/decisions/README.md) — 涵盖原生桌面、BYOA 服务商、自动化安全、TDLib 内核与对齐范围的决策。
 
 ## 贡献者
 

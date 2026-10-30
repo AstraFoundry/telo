@@ -2,15 +2,15 @@
 
 Standard Telo workflows that must be `covered` in [`tdlib-capability-matrix.json`](tdlib-capability-matrix.json) and exercised before cutover. Compared against Telegram Desktop on the same account. Not in this baseline: VoIP media, story browsing, Mini Apps, Stars, wallets.
 
-Live runs are secret-gated (`make test-live`; the full driver needs `TELO_LIVE_E2E=1` plus a signed-in user-data directory). Demo Playwright remains the PR merge gate for UI.
+Live runs are secret-gated: `make test-live` runs `TestLiveBaseline` ([`../../backend/infrastructure/telegram/live/baseline_test.go`](../../backend/infrastructure/telegram/live/baseline_test.go)) with `TELO_LIVE_E2E=1`, `TELO_LIVE_DIR` (the `telegram` directory of a profile `make dev` signed in) and the API credentials. It drives the chat list, Saved Messages, send, history, edit, delete and the session list through the same `live` adapter the app uses. The other items are checked by hand with `make dev`. The demo-workspace UI tests in `make check` are the merge gate for the interface.
 
-**Last live verification (single rented account, TDLib 1.8.67):** every item below passed except where annotated. The driver is [`../../tests/live/live-baseline.spec.ts`](../../tests/live/live-baseline.spec.ts). Annotations: group creation was BLOCKED (the account had no contacts, and a basic group requires at least one member); 2FA, multi-account (needs three accounts), secret-chat interop (needs a second official client online), and reconnect (needs a controlled network cut) are not automated by the driver.
+**Last live verification** was on the Electron build (single rented account, TDLib 1.8.67): every item passed except group creation (the account had no contacts, and a basic group needs a member); 2FA, multi-account, secret-chat interop and reconnect were not automated. The Go driver has not yet run against a live account.
 
 ## Auth
 
 - [ ] Phone number + login code
 - [ ] Cloud password (2FA)
-- [ ] Restore after restart from `tdlib/<accountId>/`
+- [ ] Restore after restart from `telegram/<accountId>/`
 - [ ] Log out deletes the account directory
 - [ ] Three accounts; only the active one stays connected
 
@@ -19,7 +19,7 @@ Live runs are secret-gated (`make test-live`; the full driver needs `TELO_LIVE_E
 - [ ] Order matches Desktop for main, pin, Archive, and folders
 - [ ] Create, edit, and delete server folders from Settings → Folders; tabs update live
 - [ ] Mute, unread, Saved Messages
-- [ ] Restart paints from SQLite before network catch-up
+- [ ] Restart paints from the TDLib database before network catch-up
 
 ## History
 
@@ -27,7 +27,7 @@ Live runs are secret-gated (`make test-live`; the full driver needs `TELO_LIVE_E
 - [ ] Live new / edit / delete
 - [ ] Reply, forward, silent send, pin/unpin
 - [ ] Schedule a message from the send-options menu; scheduled bar lists, deletes
-- [ ] Optimistic `clientId` reconcile
+- [ ] Optimistic send reconciles by client id
 - [ ] Polls render as cards; vote single/multiple, quiz reveals after answering, closed polls read final results
 
 ## Composer
@@ -42,7 +42,7 @@ Live runs are secret-gated (`make test-live`; the full driver needs `TELO_LIVE_E
 
 - [ ] Global + in-chat search
 - [ ] Download progress and cancel
-- [ ] `telo-media:` serving and cache cap
+- [ ] Media cache and its size cap
 
 ## Presence and extras
 

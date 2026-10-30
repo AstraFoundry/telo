@@ -1,26 +1,17 @@
 # Official references
 
-- [Electron security](https://www.electronjs.org/docs/latest/tutorial/security)
-- [Electron context isolation](https://www.electronjs.org/docs/latest/tutorial/context-isolation)
-- [Electron notifications](https://www.electronjs.org/docs/latest/tutorial/notifications)
-- [AI SDK core tools](https://ai-sdk.dev/docs/ai-sdk-core/tools-and-tool-calling)
-- [AI SDK text generation](https://ai-sdk.dev/docs/ai-sdk-core/generating-text)
-- [AI SDK providers and models](https://ai-sdk.dev/docs/foundations/providers-and-models)
-- [AI SDK OpenAI-compatible provider](https://ai-sdk.dev/providers/openai-compatible-providers)
-- [Google OAuth 2.0 for desktop apps](https://developers.google.com/identity/protocols/oauth2/native-app)
-- [Gemini API OAuth](https://ai.google.dev/gemini-api/docs/oauth)
-- [RFC 8628 Device Authorization Grant](https://datatracker.ietf.org/doc/html/rfc8628)
-- [Kimi CLI OAuth](https://github.com/MoonshotAI/kimi-cli/blob/main/src/kimi_cli/auth/oauth.py)
-- [AG-UI protocol](https://docs.ag-ui.com/)
-- [Teleproto](https://github.com/Sanyok12345/Teleproto)
-- [TDLib](https://github.com/tdlib/td) — production Telegram client kernel; see [`../decisions/005-tdlib-client-kernel.md`](../decisions/005-tdlib-client-kernel.md)
+- [MyGo](https://github.com/egoist/mygo) — the native UI toolkit; its `docs/ui` describe views, lists, menus and the headless `ui.Tester`.
+- [coss UI](https://coss.com/ui) — the component anatomy Telo's kit follows (`npx skills add cosscom/ui`).
+- [Telegram for macOS](https://github.com/TelegramMessenger/telegram-macos) — the client Telo aligns with; see [`../telegram/parity.md`](../telegram/parity.md).
+- [TDLib](https://github.com/tdlib/td) and its [JSON interface](https://core.telegram.org/tdlib/docs/td__json__client_8h.html) — the Telegram kernel; see [`../decisions/005-tdlib-client-kernel.md`](../decisions/005-tdlib-client-kernel.md).
+- [purego](https://github.com/ebitengine/purego) — calling `libtdjson` without cgo.
+- [prebuilt-tdlib](https://github.com/eilvelia/tdl/tree/main/packages/prebuilt-tdlib) — the pinned `libtdjson` builds `make tdlib` stages.
 - [Telegram update synchronization](https://core.telegram.org/api/updates)
-- [Telegram iOS Postbox chat-list view](https://github.com/TelegramMessenger/Telegram-iOS/blob/master/submodules/Postbox/Sources/ChatListView.swift)
-- [Nicegram iOS (Telegram-iOS fork)](https://github.com/nicegram/Nicegram-iOS)
-- [Playwright Electron](https://playwright.dev/docs/api/class-electron)
-- [Phosphor Icons React](https://github.com/phosphor-icons/react)
-- [BEUI registry](https://beui.dev/)
-- [Electron Vite](https://electron-vite.org/)
-- [Tailwind CSS](https://tailwindcss.com/docs)
+- [OpenAI chat completions streaming](https://platform.openai.com/docs/api-reference/chat-streaming)
+- [Anthropic messages streaming](https://docs.anthropic.com/en/api/messages-streaming)
+- [Gemini generateContent](https://ai.google.dev/api/generate-content)
+- [Google OAuth 2.0 for desktop apps](https://developers.google.com/identity/protocols/oauth2/native-app)
+- [RFC 7636 PKCE](https://datatracker.ietf.org/doc/html/rfc7636) and [RFC 8628 Device Authorization Grant](https://datatracker.ietf.org/doc/html/rfc8628)
+- [Phosphor Icons](https://phosphoricons.com/) — the vendored icon set (`frontend/shared/icons/svg`, MIT).
 
 Research notes and source comparisons are kept in the untracked `.workspace/notes/research.md` file.

@@ -1,68 +1,35 @@
 # Logging
 
-This document defines logging and error-observability conventions for Telo's Electron main process.
+> **Status.** Telo writes no diagnostic log. Failures reach the person as UI states and toasts worded from the copy catalog, and TDLib's own log goes to stderr at verbosity 1, errors only (`TELO_TDLIB_VERBOSITY` raises it while developing). The agent audit log (`agent/agent-audit.jsonl`, [`database.md`](database.md)) is the only record Telo keeps, and it holds no message text. Do not add incidental `fmt.Println` or `log` debugging.
 
-> **Status: partial.** There is no structured logger yet. Unexpected Telegram
-> adapter failures are written with `console.error` from
-> `TdlibTelegramRepository` and `TdlibClientCoordinator`. Do not add incidental `console.log`
-> debugging.
-
-## Scope
-
-- These rules cover the **main process** (backend: domain, application, infrastructure, interfaces).
-- Renderer diagnostics are out of scope here; renderer failures surface to the user through UI states, not logs.
+When a diagnostic log is added, it follows these rules.
 
 ## Requirements
 
-- Logs are structured (one JSON object per line) and written to stdout; the packaged app redirects stdout to a log file under the user-data directory.
-- Logs are written in English.
-- Sensitive data is masked before it is logged (see Masking).
+- Structured: `log/slog` with a JSON handler, one object per line, in a file under the user data directory.
+- English messages.
+- Sensitive data masked before it is logged.
 
-## Log levels
+## Levels
 
-| Level   | Use                                                                                                                |
-| ------- | ------------------------------------------------------------------------------------------------------------------ |
-| `debug` | Detailed diagnostics (IPC payload shapes, retry attempts). Off by default in packaged builds.                      |
-| `info`  | Lifecycle and business events: app ready, window created, Telegram auth state transitions, agent run start/finish. |
-| `warn`  | Recoverable problems: a reconnect, a rejected notification, an unsupported platform capability.                    |
-| `error` | Failures that require attention: IPC handler errors, persistence write failures, agent run failures.               |
+| Level | Use |
+| --- | --- |
+| `debug` | Detailed diagnostics (TDLib request names, retries). Off in release builds. |
+| `info` | Lifecycle: start, window, Telegram authorization steps, account switches, agent run start and end. |
+| `warn` | Recoverable problems: reconnects, a rejected notification, a missing platform capability. |
+| `error` | Failures that need attention: store writes, agent run failures, TDLib errors the UI cannot word. |
 
-## What to log
+## What never appears
 
-- App lifecycle: startup, window creation, shutdown.
-- IPC handler outcomes: channel name, duration, success/failure — **not** raw payloads.
-- External service calls (Telegram, agent backend) with duration and outcome.
-- Agent runs: include the `runId` already generated in `register-ipc.ts`; it acts as the correlation ID for all events of that run.
-- Errors with context, but without sensitive payloads.
-
-## What not to log
-
-- API keys, OAuth tokens, Telegram session strings, login codes, or passwords.
-- Message bodies or other user content crossing IPC.
-- Full IPC payloads that contain user data — log shape and identifiers only.
-- Filesystem paths in user-facing error messages (they may appear in internal debug logs only).
-
-## Masking
-
-Mask sensitive fields with a consistent pattern:
-
-```json
-{
-  "phone": "+1-***-****-1234",
-  "session": "tg_***"
-}
-```
+- API keys, OAuth tokens, database keys, login codes, passwords, the passcode.
+- Message bodies, captions, drafts or agent prompts.
+- Phone numbers and emails, except masked (`+1-***-****-1234`).
 
 ## Correlation
 
-- An agent run propagates its `runId` through every log entry and AG-UI event of that run.
-- One-shot IPC calls are correlated by channel name; if cross-layer tracing is ever needed, generate a request ID in the handler and pass it inward.
+An agent run's id (`NewID`) correlates its log lines with its audit record.
 
 ## Errors
 
-- Log unexpected errors with full context in the main process.
-- Do not swallow errors with silent `catch` blocks.
-- Translate low-level errors into domain/application errors before they cross IPC; the renderer only receives concise, user-safe messages (see [`api-conventions.md`](api-conventions.md)).
-- Language-level Telegram sync failures (`TypeError`, `instanceof` not callable, and similar) stay in the main-process log. They are not published as `sync-error` workspace events, and the conversation header has no error strip for them.
-- A sync failure raised while the transport is down is published as `connection-state: "offline"`, never as `sync-error`. Telegram's `ConnectionsManager` reports exactly this condition as a connection state — the chat list title reads "Connecting…" — and never as an error surface, because reconnecting is not something the reader can act on. TDLib reports the same condition as `connectionStateWaitingForNetwork` / `connectionStateConnecting`. The failure is still logged in the main process.
-- User-facing catch-up and update-queue failures (`FLOOD_WAIT_*` and similar) are logged the same way. They are not published as workspace events and are not painted in the renderer.
+- Never swallow an error silently. Return it, or turn it into a domain error the UI shows.
+- A dropped connection is a connection state (`tg.ConnectionChanged`: "Connecting…", "Updating…" in the chat list title, as Telegram shows it), never an error banner.
