@@ -14,6 +14,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	agentapp "github.com/AstraFoundry/telo/backend/application/agent"
 	"github.com/AstraFoundry/telo/backend/application/keywordfolder"
 	"github.com/AstraFoundry/telo/backend/application/preferences"
 	apptg "github.com/AstraFoundry/telo/backend/application/telegram"
@@ -53,6 +54,7 @@ type Runtime struct {
 	Accounts       tg.Accounts
 	Preferences    *preferences.Service
 	KeywordFolders *keywordfolder.Service
+	Agent          *agentapp.Service
 	Desktop        Desktop
 	Info           Info
 	Demo           bool

@@ -15,11 +15,14 @@ import (
 	"testing"
 	"time"
 
+	agentapp "github.com/AstraFoundry/telo/backend/application/agent"
 	kfapp "github.com/AstraFoundry/telo/backend/application/keywordfolder"
 	prefapp "github.com/AstraFoundry/telo/backend/application/preferences"
 	apptg "github.com/AstraFoundry/telo/backend/application/telegram"
 	"github.com/AstraFoundry/telo/backend/domain/keywordfolder"
 	"github.com/AstraFoundry/telo/backend/domain/preferences"
+	tg "github.com/AstraFoundry/telo/backend/domain/telegram"
+	agentinfra "github.com/AstraFoundry/telo/backend/infrastructure/agent"
 	"github.com/AstraFoundry/telo/backend/infrastructure/telegram/demo"
 	"github.com/AstraFoundry/telo/frontend/shared/runtime"
 )
@@ -121,8 +124,13 @@ func New(t testing.TB, edit func(*preferences.Preferences)) *Env {
 		t.Fatal(err)
 	}
 	desk := &Desktop{}
-	rt := &runtime.Runtime{
-		Accounts: demo.NewAccounts(repo), Preferences: prefs, KeywordFolders: kfapp.New(&folderStore{}),
+	accounts := demo.NewAccounts(repo)
+	files := agentinfra.OpenFiles(t.TempDir(), fixedKeys{})
+	agent := agentapp.New(agentapp.Deps{Configurations: files.Configuration, OAuth: &agentinfra.OAuth{}, Catalog: agentinfra.DemoCatalog{},
+		Gateway: agentinfra.Demo{}, Threads: files.Threads, Audits: files.Audits, Rules: files.Rules, Tasks: files.Tasks,
+		Telegram: func() tg.Repository { return accounts.Active() }, Now: func() time.Time { return demo.Base }})
+	rt := &runtime.Runtime{Agent: agent,
+		Accounts: accounts, Preferences: prefs, KeywordFolders: kfapp.New(&folderStore{}),
 		Desktop: desk, Demo: true, Now: func() time.Time { return demo.Base },
 		Info: runtime.Info{Version: "0.1.0", TDLib: "1.8.67", TelegramConfigured: true, Platform: "darwin"},
 	}
@@ -174,3 +182,8 @@ func Snapshot(t testing.TB, tt *ui.Tester, name string) {
 		t.Fatal(err)
 	}
 }
+
+// fixedKeys seals the tests' files with one fixed key.
+type fixedKeys struct{}
+
+func (fixedKeys) Key(string) ([]byte, error) { return bytes.Repeat([]byte{7}, 32), nil }

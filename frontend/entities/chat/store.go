@@ -110,6 +110,20 @@ func New(rt *runtime.Runtime) *Store {
 		keywordChats: map[int][]tg.ChatID{}, Connection: tg.ConnectionReady}
 }
 
+// Message finds a loaded message.
+func (s *Store) Message(chat tg.ChatID, id tg.MessageID) (tg.Message, bool) {
+	t, ok := s.transcripts[chat]
+	if !ok {
+		return tg.Message{}, false
+	}
+	for _, m := range t.Messages {
+		if m.ID == id {
+			return m, true
+		}
+	}
+	return tg.Message{}, false
+}
+
 // Notify queues a notice for the view.
 func (s *Store) Notify(text string, isError bool) {
 	s.notices = append(s.notices, Notice{Text: text, Error: isError})

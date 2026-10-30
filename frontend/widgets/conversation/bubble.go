@@ -124,7 +124,7 @@ func (v *View) bubble(c *ui.Context, p Props, ch tg.Chat, r row, group bool) {
 		revealed = new(bool)
 		v.revealed[m.ID] = revealed
 	}
-	style := richStyle{size: float32(p.Prefs.TextSize), ink: ink, linkInk: linkInk, codeFill: ink.Alpha(0.09), revealed: revealed, onLink: p.OpenLink}
+	style := kit.RichStyle{Size: float32(p.Prefs.TextSize), Ink: ink, LinkInk: linkInk, CodeFill: ink.Alpha(0.09), Revealed: revealed, OnLink: p.OpenLink}
 	bub.Selectable()
 	bub.Children(func() {
 		if group && r.first && !bareMsg {
@@ -147,22 +147,22 @@ func (v *View) bubble(c *ui.Context, p Props, ch tg.Chat, r row, group bool) {
 			v.attachment(c, p, m, ink, meta)
 		}
 		if m.Body != "" && !(m.Media != nil && m.Media.Kind == tg.MediaSticker) {
-			size := style.size
+			size := style.Size
 			if m.IsolatedEmoji > 0 && m.Media == nil {
 				size = []float32{0, 48, 40, 32}[min(m.IsolatedEmoji, 3)]
 			}
 			st := style
-			st.size = size
+			st.Size = size
 			body := ui.Column(c)
 			if mediaOnly(m) {
 				body.Padding(4, theme.BubblePadX, 0, theme.BubblePadX)
 			}
-			body.Children(func() { RichBody(c, t, m.Body, m.Entities, st) })
+			body.Children(func() { kit.RichBody(c, t, m.Body, m.Entities, st) })
 		}
 		if tr, ok := s.Transcript(ch.ID).Translations[m.ID]; ok {
 			ui.Column(c).Gap(2).Padding(6, 0, 0, 0).BorderWidth(1, 0, 0, 0).BorderColor(ink.Alpha(0.12)).Children(func() {
 				ui.Text(c, copy.T(copy.Translation)).FontSize(theme.Caption).FontWeight(600).TextColor(meta)
-				ui.Text(c, tr).FontSize(style.size).LineHeight(1.3125)
+				ui.Text(c, tr).FontSize(style.Size).LineHeight(1.3125)
 			})
 		}
 		if m.Keyboard != nil {

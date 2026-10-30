@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io/fs"
 	"os"
+	"path/filepath"
 	"slices"
 	"sync"
 
@@ -248,3 +249,25 @@ var (
 	_ domain.RuleStore          = (*RuleFile)(nil)
 	_ domain.TaskStore          = (*TaskFile)(nil)
 )
+
+// Files are the agent's stores in one directory, sealed with keys from
+// the credential store.
+type Files struct {
+	Configuration ConfigurationFile
+	Threads       *ThreadFile
+	Audits        AuditFile
+	Rules         *RuleFile
+	Tasks         *TaskFile
+}
+
+// OpenFiles lays the stores out under dir.
+func OpenFiles(dir string, keys storage.KeySource) Files {
+	p := func(name string) string { return filepath.Join(dir, name) }
+	return Files{
+		Configuration: ConfigurationFile{File: &storage.Sealed[domain.Configuration]{Path: p("agent-configuration.sealed"), Keys: keys, KeyName: "agent-configuration"}},
+		Threads:       &ThreadFile{File: &storage.Sealed[threadFile]{Path: p("agent-threads.sealed"), Keys: keys, KeyName: "agent-threads"}},
+		Audits:        AuditFile{Path: p("agent-audit.jsonl")},
+		Rules:         &RuleFile{File: &storage.Sealed[[]domain.Rule]{Path: p("agent-rules.sealed"), Keys: keys, KeyName: "agent-rules"}},
+		Tasks:         &TaskFile{File: &storage.Sealed[[]domain.Task]{Path: p("agent-tasks.sealed"), Keys: keys, KeyName: "agent-tasks"}},
+	}
+}

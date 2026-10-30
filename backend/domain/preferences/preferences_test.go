@@ -62,3 +62,19 @@ func TestPushRecent(t *testing.T) {
 		t.Fatal(got)
 	}
 }
+
+func TestPasscodeHash(t *testing.T) {
+	if _, err := HashPasscode("12"); err != ErrPasscodeShort {
+		t.Fatalf("short passcode: %v", err)
+	}
+	h, err := HashPasscode("2468")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !CheckPasscode(h, "2468") || CheckPasscode(h, "2469") || CheckPasscode("plain", "2468") {
+		t.Fatal("passcode check")
+	}
+	if h2, _ := HashPasscode("2468"); h2 == h {
+		t.Fatal("hashes are salted")
+	}
+}

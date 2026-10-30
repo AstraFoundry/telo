@@ -50,6 +50,8 @@ type Env struct {
 	Images  *media.Images
 	Prefs   preferences.Preferences
 	Mac     bool
+	// OpenInfo opens the chat's info, which → does in an empty composer.
+	OpenInfo func()
 }
 
 // Composer keeps the composer's own state between frames.
@@ -288,6 +290,9 @@ func (cp *Composer) field(c *ui.Context, env Env, ch tg.Chat, state *chat.Compos
 			text := k.Text()
 			k.SetText("")
 			env.Runtime.Post(func() { cp.send(env, ch.ID, state, text, tg.SendOptions{}) })
+			return true
+		case k.Key == ui.KeyRight && k.Mods == 0 && k.Text() == "" && env.OpenInfo != nil:
+			env.Runtime.Post(env.OpenInfo)
 			return true
 		case k.Key == ui.KeyUp && k.Mods == 0 && k.Text() == "" && state.Editing == 0:
 			if m, ok := s.LastOutgoing(ch.ID); ok {

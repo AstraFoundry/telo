@@ -117,7 +117,12 @@ func (v *View) Render(c *ui.Context, p Props) {
 		if ids := s.SelectedIDs(ch.ID); len(ids) > 0 {
 			v.selectionBar(c, p, ch, ids)
 		}
-		v.Composer.Render(c, compose.Env{Tokens: t, Store: s, Runtime: p.Runtime, Images: p.Images, Prefs: p.Prefs, Mac: p.Mac}, ch.ID)
+		v.Composer.Render(c, compose.Env{Tokens: t, Store: s, Runtime: p.Runtime, Images: p.Images, Prefs: p.Prefs, Mac: p.Mac,
+			OpenInfo: func() {
+				if !p.InfoOpen {
+					p.ToggleInfo()
+				}
+			}}, ch.ID)
 	})
 	v.actions.Dialogs(c, v.actionEnv(p))
 }

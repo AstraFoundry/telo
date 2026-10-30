@@ -79,7 +79,8 @@ var Shortcuts = []Shortcut{
 	{Action: ActLink, Upstream: "shortcut:markdown_url", Section: copy.ShortcutsMarkdown, Title: copy.ShortcutLink, Bindings: []Binding{{ui.Cmd, ui.KeyU}}, InText: true},
 	{Action: ActStrikethrough, Upstream: "shortcut:markdown_strikethrough", Section: copy.ShortcutsMarkdown, Title: copy.ShortcutStrike, Bindings: []Binding{{ui.Cmd | ui.Shift, ui.KeyX}}, InText: true},
 	{Action: ActLock, Upstream: "shortcut:lock_passcode", Section: copy.ShortcutsOther, Title: copy.ShortcutLock, Bindings: []Binding{{ui.Cmd, ui.KeyL}}, InText: true},
-	{Action: ActToggleAgent, Section: copy.ShortcutsOther, Title: copy.ShortcutAgent, Bindings: []Binding{{ui.Cmd, ui.KeyB}}},
+	// ⌘B is bold in the composer, as upstream; the agent takes ⌘J.
+	{Action: ActToggleAgent, Section: copy.ShortcutsOther, Title: copy.ShortcutAgent, Bindings: []Binding{{ui.Cmd, ui.KeyJ}}, InText: true},
 	{Action: ActSettings, Section: copy.ShortcutsOther, Title: copy.ShortcutSettings, Bindings: []Binding{{ui.Cmd, ui.KeyComma}}, InText: true},
 	{Action: ActNextChat, Section: copy.ShortcutsChat, Title: copy.ShortcutNextChat, Bindings: []Binding{{ui.Ctrl, ui.KeyTab}, {ui.Alt, ui.KeyDown}}, InText: true},
 	{Action: ActPrevChat, Section: copy.ShortcutsChat, Title: copy.ShortcutPrevChat, Bindings: []Binding{{ui.Ctrl | ui.Shift, ui.KeyTab}, {ui.Alt, ui.KeyUp}}, InText: true},
@@ -184,4 +185,39 @@ func AllMacKeys(s Shortcut) string {
 		out = append(out, MacKeys(b))
 	}
 	return strings.Join(out, " / ")
+}
+
+// ShortcutGroup is a section of the Shortcuts screen.
+type ShortcutGroup struct {
+	Title     copy.Key
+	Shortcuts []Shortcut
+}
+
+// ShortcutGroups groups the registry as the Shortcuts screen lists it.
+func ShortcutGroups() []ShortcutGroup {
+	order := []copy.Key{copy.ShortcutsChat, copy.ShortcutsSearch, copy.ShortcutsMarkdown, copy.ShortcutsOther, copy.ShortcutsMouse}
+	var out []ShortcutGroup
+	for _, section := range order {
+		g := ShortcutGroup{Title: section}
+		for _, s := range Shortcuts {
+			if s.Section == section {
+				g.Shortcuts = append(g.Shortcuts, s)
+			}
+		}
+		out = append(out, g)
+	}
+	return out
+}
+
+// Keys writes how a shortcut is triggered on this platform: its bindings,
+// or its gesture.
+func Keys(s Shortcut, mac bool) []string {
+	if s.Gesture != "" {
+		return []string{copy.T(s.Gesture)}
+	}
+	var out []string
+	for _, b := range s.Bindings {
+		out = append(out, Label(b, mac))
+	}
+	return out
 }

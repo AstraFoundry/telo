@@ -60,6 +60,8 @@ type Env struct {
 	Summarize func(m tg.Message)
 	// Opened runs after a chat was picked, as the app leaves Settings.
 	Opened func()
+	// Dialogs draws the dialogs the menus open.
+	Dialogs func(c *ui.Context)
 }
 
 // Page keeps the page's state.
@@ -139,6 +141,9 @@ func (p *Page) Render(c *ui.Context, env Env) {
 			p.side(c, env, func() { env.Agent(c) })
 		}
 	})
+	if env.Dialogs != nil {
+		env.Dialogs(c)
+	}
 	p.shortcuts(c, env)
 }
 
@@ -217,7 +222,8 @@ func (p *Page) shortcuts(c *ui.Context, env Env) {
 			p.Open(env, id, 0)
 		}
 	}
-	if s.Selected != 0 && !p.Conversation.Composer.Input.FocusWithin(c) && config.Pressed(c, config.ActOpenInfo) {
+	// → opens the info, as upstream, unless it moves a caret through text.
+	if s.Selected != 0 && s.Composer(s.Selected).Text == "" && config.Pressed(c, config.ActOpenInfo) {
 		p.Panel = PanelInfo
 	}
 	if s.Selected != 0 && config.Pressed(c, config.ActReplyPrev) {

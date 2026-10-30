@@ -1,4 +1,4 @@
-package conversation
+package kit
 
 import (
 	"slices"
@@ -11,7 +11,7 @@ import (
 )
 
 // span is a run of a message body with one set of formatting.
-type span struct {
+type Span struct {
 	text      string
 	bold      bool
 	italic    bool
@@ -30,7 +30,7 @@ type span struct {
 
 // Spans splits a body at its entities' UTF-16 boundaries into styled
 // runs. Malformed ranges were dropped by the domain already.
-func Spans(body string, entities []tg.Entity) []span {
+func Spans(body string, entities []tg.Entity) []Span {
 	units := utf16.Encode([]rune(body))
 	cuts := []int{0, len(units)}
 	for _, e := range entities {
@@ -38,13 +38,13 @@ func Spans(body string, entities []tg.Entity) []span {
 	}
 	slices.Sort(cuts)
 	cuts = slices.Compact(cuts)
-	var out []span
+	var out []Span
 	for i := 0; i+1 < len(cuts); i++ {
 		from, to := cuts[i], cuts[i+1]
 		if from >= to || from >= len(units) {
 			continue
 		}
-		s := span{text: string(utf16.Decode(units[from:to]))}
+		s := Span{text: string(utf16.Decode(units[from:to]))}
 		for _, e := range entities {
 			if e.Offset > from || e.Offset+e.Length < to {
 				continue
@@ -112,21 +112,21 @@ func itoa(v int64) string {
 	return string(b[i:])
 }
 
-// richStyle is how a message body is drawn.
-type richStyle struct {
-	size     float32
-	ink      ui.Color
-	linkInk  ui.Color
-	codeFill ui.Color
-	// revealed tells which spoilers were clicked open.
-	revealed *bool
-	onLink   func(link string)
+// RichStyle is how a message body is drawn.
+type RichStyle struct {
+	Size     float32
+	Ink      ui.Color
+	LinkInk  ui.Color
+	CodeFill ui.Color
+	// Revealed tells whether the spoilers were clicked open.
+	Revealed *bool
+	OnLink   func(link string)
 }
 
 // RichBody draws a message body with its entities.
-func RichBody(c *ui.Context, t theme.Tokens, body string, entities []tg.Entity, st richStyle) ui.Element {
+func RichBody(c *ui.Context, t theme.Tokens, body string, entities []tg.Entity, st RichStyle) ui.Element {
 	spans := Spans(body, entities)
-	para := ui.RichText(c).FontSize(st.size).LineHeight(1.3125).TextColor(st.ink)
+	para := ui.RichText(c).FontSize(st.Size).LineHeight(1.3125).TextColor(st.Ink)
 	para.Children(func() {
 		for i, s := range spans {
 			el := ui.Text(c.Key(i), s.text)
@@ -143,26 +143,26 @@ func RichBody(c *ui.Context, t theme.Tokens, body string, entities []tg.Entity, 
 				el.Strikethrough()
 			}
 			if s.code || s.pre {
-				el.Font("monospace").TextBackground(st.codeFill).FontSize(st.size - 1)
+				el.Font("monospace").TextBackground(st.CodeFill).FontSize(st.Size - 1)
 			}
 			if s.quote {
-				el.Italic().TextColor(st.ink.Alpha(0.85))
+				el.Italic().TextColor(st.Ink.Alpha(0.85))
 			}
-			if s.spoiler && (st.revealed == nil || !*st.revealed) {
-				el.TextColor(ui.Transparent).TextBackground(st.ink.Alpha(0.35))
-				if el.Clicked() && st.revealed != nil {
-					*st.revealed = true
+			if s.spoiler && (st.Revealed == nil || !*st.Revealed) {
+				el.TextColor(ui.Transparent).TextBackground(st.Ink.Alpha(0.35))
+				if el.Clicked() && st.Revealed != nil {
+					*st.Revealed = true
 				}
 				continue
 			}
 			if s.link != "" {
-				el.TextColor(st.linkInk)
+				el.TextColor(st.LinkInk)
 				if strings.HasPrefix(s.link, "http") {
-					el.Underline().DecorationColor(st.linkInk.Alpha(0.4))
+					el.Underline().DecorationColor(st.LinkInk.Alpha(0.4))
 				}
 				link := s.link
-				if el.Clicked() && st.onLink != nil {
-					st.onLink(link)
+				if el.Clicked() && st.OnLink != nil {
+					st.OnLink(link)
 				}
 				el.Cursor(ui.CursorPointer)
 			}
