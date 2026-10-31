@@ -11,15 +11,10 @@ import (
 var (
 	//go:embed mark.png
 	markPNG []byte
-	//go:embed backdrop.jpg
-	backdropJPG []byte
 )
 
-// Mark is the app icon; Backdrop the illustrations' soft ground.
-var (
-	Mark     = mustDecode(markPNG)
-	Backdrop = mustDecode(backdropJPG)
-)
+// Mark is the app icon.
+var Mark = mustDecode(markPNG)
 
 func mustDecode(data []byte) *ui.Bitmap {
 	b, err := ui.DecodeBitmap(data)

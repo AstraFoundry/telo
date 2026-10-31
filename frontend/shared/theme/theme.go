@@ -120,11 +120,25 @@ type Tokens struct {
 	// Scrim darkens photographs under text.
 	Scrim ui.Color
 
-	// Pill is the floating dark surface of the illustrations' toasts.
-	PillSurface ui.Color
-	PillText    ui.Color
-	PillMuted   ui.Color
-	PillBorder  ui.Color
+	// Plan is onboarding's blueprint: its ground, grid, and the ink of
+	// its dimension lines and lettering; PlanActive marks the fold being
+	// made, the figure's one accent.
+	PlanGround    ui.Color
+	PlanGrid      ui.Color
+	PlanGridMajor ui.Color
+	PlanInk       ui.Color
+	PlanInkMuted  ui.Color
+	PlanActive    ui.Color
+	// Paper is the folding sheet: its top tone, four shades by facing
+	// (darkest first, as the anatomy kit's), its cut edges, creases and
+	// the shadow it casts on the table.
+	PaperTop    ui.Color
+	PaperShade  [4]ui.Color
+	PaperEdge   ui.Color
+	PaperCrease ui.Color
+	PaperShadow ui.Color
+	// PaperActive marks the active fold where it lies on the paper.
+	PaperActive ui.Color
 }
 
 // Resolve returns the tokens for an appearance and an accent.
@@ -160,11 +174,8 @@ func Resolve(dark bool, accent preferences.Accent) Tokens {
 		Shade:       neutral(0.18, 0.03),
 		Highlight:   white.Alpha(0.18),
 		Scrim:       neutral(0.12, 0.02),
-		PillSurface: neutral(0.17, 0.014).Alpha(0.94),
-		PillText:    neutral(0.97, 0.004),
-		PillMuted:   neutral(0.97, 0.004).Alpha(0.62),
-		PillBorder:  neutral(0.28, 0.014),
 	}
+	plan(&t, dark, hue)
 	if dark {
 		t.Dark = true
 		t.Canvas = neutral(0.17, 0.014)
@@ -191,8 +202,6 @@ func Resolve(dark bool, accent preferences.Accent) Tokens {
 		t.Danger = ui.Oklch(0.68, 0.18, 25)
 		t.Shade = ui.RGB(0, 0, 0)
 		t.Highlight = white.Alpha(0.06)
-		t.PillSurface = neutral(0.12, 0.012).Alpha(0.96)
-		t.PillBorder = neutral(0.3, 0.014)
 	}
 	if !dark {
 		t.Selection = t.Accent
@@ -202,6 +211,28 @@ func Resolve(dark bool, accent preferences.Accent) Tokens {
 	t.BubbleOutText = white
 	t.BubbleOutMeta = white.Alpha(0.72)
 	return t
+}
+
+// plan resolves the blueprint and the paper: a whiteprint (navy ink on
+// pale ground) in light, a blueprint (pale ink on navy) in dark, both on
+// Telo's hue-250 neutrals.
+func plan(t *Tokens, dark bool, accent float32) {
+	ink := func(l, c float32) ui.Color { return ui.Oklch(l, c, 250) }
+	if dark {
+		t.PlanGround, t.PlanGrid, t.PlanGridMajor = ink(0.26, 0.055), ink(0.295, 0.052), ink(0.345, 0.052)
+		t.PlanInk, t.PlanInkMuted, t.PlanActive = ink(0.9, 0.03), ink(0.68, 0.045), ui.Oklch(0.8, 0.12, accent)
+		t.PaperTop = ink(0.97, 0.006)
+		t.PaperShade = [4]ui.Color{ink(0.74, 0.02), ink(0.8, 0.016), ink(0.86, 0.012), ink(0.92, 0.008)}
+		t.PaperEdge, t.PaperCrease, t.PaperShadow = ink(0.24, 0.05), ink(0.6, 0.03), ink(0.1, 0.04).Alpha(0.3)
+		t.PaperActive = ui.Oklch(0.55, 0.15, accent)
+		return
+	}
+	t.PlanGround, t.PlanGrid, t.PlanGridMajor = ink(0.965, 0.012), ink(0.915, 0.022), ink(0.86, 0.032)
+	t.PlanInk, t.PlanInkMuted, t.PlanActive = ink(0.34, 0.075), ink(0.55, 0.05), ui.Oklch(0.52, 0.15, accent)
+	t.PaperTop = ui.RGB(255, 255, 255)
+	t.PaperShade = [4]ui.Color{ink(0.85, 0.014), ink(0.89, 0.011), ink(0.93, 0.008), ink(0.965, 0.005)}
+	t.PaperEdge, t.PaperCrease, t.PaperShadow = ink(0.3, 0.05), ink(0.68, 0.03), ink(0.4, 0.06).Alpha(0.1)
+	t.PaperActive = ui.Oklch(0.52, 0.15, accent)
 }
 
 // Apply installs Telo's theme for the window's appearance, so MyGo's own

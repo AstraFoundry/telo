@@ -30,6 +30,7 @@ MyGo's headless `ui.Tester` renders the real views over `frontend/shared/testkit
 - **Workspace** — the chat list and conversation in light and dark, sending with formatting, search.
 - **Interactions** — the message context menu, the chat context menu, composer formatting and the attach menu, and the keyboard shortcuts (reply stepping, chat stepping, edit last, Esc, info).
 - **App** — settings search and panes, the passcode lock, the agent panel summarizing unread messages, the profile and account menu, the media viewer.
+- **Onboarding figure** — `widgets/paperplane` folds the sheet through every stage in both themes, resting and halfway through each fold; its tests check that each step adds a fold and moves the camera, that every mark reads the model (W, L, 45°, 22.5°, the crease, K), and that Reduce motion lands a step at once.
 - **Bootstrap** — the menu registry and its key bindings.
 
 `make snapshots` writes each test's rendered frames to `.workspace/snapshots` for review; CI uploads them from Ubuntu.

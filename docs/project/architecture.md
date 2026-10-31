@@ -32,7 +32,7 @@ Feature-Sliced Design, with Go packages as slices ([`../frontend/README.md`](../
 | --- | --- |
 | `app` | `frontend/app`: routing, theme, global shortcuts, notifications, badge, toasts, automation lifecycle |
 | `pages` | `onboarding`, `workspace` (three columns), `settings`, `lock` |
-| `widgets` | `chatlist`, `conversation`, `profile`, `settings` (panes and search index), `mediaviewer`, `showcase`, `stepper` |
+| `widgets` | `chatlist`, `conversation`, `profile`, `settings` (panes and search index), `mediaviewer`, `paperplane` (onboarding's folding blueprint), `stepper` |
 | `features` | `signin`, `compose`, `messageactions`, `chatactions`, `search`, `accountmenu`, `agent` |
 | `entities` | `chat` (the chat store: list, transcripts, composers, downloads), `onboarding` |
 | `shared` | `kit` (coss anatomy), `theme`, `copy`, `icons`, `config` (shortcuts, countries, emoji, links), `media`, `runtime`, `testkit`, `lib/timefmt`, `assets` |

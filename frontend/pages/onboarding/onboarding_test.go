@@ -5,7 +5,9 @@ import (
 	"testing"
 
 	tg "github.com/AstraFoundry/telo/backend/domain/telegram"
+	"github.com/AstraFoundry/telo/frontend/shared/copy"
 	"github.com/AstraFoundry/telo/frontend/shared/testkit"
+	"github.com/AstraFoundry/telo/frontend/widgets/paperplane"
 	"github.com/egoist/mygo/ui"
 )
 
@@ -124,6 +126,12 @@ func TestReadyFlowEndsInWorkspace(t *testing.T) {
 	}
 	tt.Advance(800e6)
 	testkit.Snapshot(t, tt, "onboarding-6-done")
+	if got := page.plane.Target(); got != paperplane.Stages {
+		t.Fatalf("the plane heads for stage %d at the last step", got)
+	}
+	if want := copy.F(copy.OnbDoneBody, "⌘J"); !tt.HasText(want) {
+		t.Fatalf("done step does not name the agent's shortcut: %q", tt.Texts())
+	}
 	if err := tt.Click("Start messaging"); err != nil {
 		t.Fatal(err)
 	}

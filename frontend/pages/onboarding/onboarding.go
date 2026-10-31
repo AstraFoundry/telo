@@ -12,12 +12,13 @@ import (
 	tg "github.com/AstraFoundry/telo/backend/domain/telegram"
 	"github.com/AstraFoundry/telo/frontend/entities/onboarding"
 	"github.com/AstraFoundry/telo/frontend/features/signin"
+	"github.com/AstraFoundry/telo/frontend/shared/config"
 	"github.com/AstraFoundry/telo/frontend/shared/copy"
 	"github.com/AstraFoundry/telo/frontend/shared/icons"
 	"github.com/AstraFoundry/telo/frontend/shared/kit"
 	"github.com/AstraFoundry/telo/frontend/shared/runtime"
 	"github.com/AstraFoundry/telo/frontend/shared/theme"
-	"github.com/AstraFoundry/telo/frontend/widgets/showcase"
+	"github.com/AstraFoundry/telo/frontend/widgets/paperplane"
 	"github.com/AstraFoundry/telo/frontend/widgets/stepper"
 	"github.com/egoist/mygo/ui"
 )
@@ -45,6 +46,8 @@ type Page struct {
 	// Adding is set when signing in an additional account: the welcome
 	// and agent steps are skipped.
 	Adding bool
+	// plane is the illustration: the sheet folds once for each step.
+	plane paperplane.Figure
 }
 
 // New starts the flow; region picks the phone form's first country.
@@ -81,7 +84,8 @@ func (p *Page) Render(c *ui.Context, rt *runtime.Runtime, auth tg.AuthState, fin
 	}
 	ui.Row(c).Fill().AlignItems(ui.Stretch).Background(t.Canvas).Children(func() {
 		ui.Column(c).Width(Pane).Children(func() {
-			showcase.Render(c, t, scene(step))
+			current, _ := onboarding.Progress(step)
+			p.plane.Render(c, t, current, top)
 			ui.Box(c).Absolute().Top(0).Left(0).Right(0).Height(top).DragWindow()
 		})
 		ui.Column(c).Grow(1).Children(func() {
@@ -103,19 +107,6 @@ func (p *Page) Render(c *ui.Context, rt *runtime.Runtime, auth tg.AuthState, fin
 			})
 		})
 	})
-}
-
-// scene picks the illustration of a step.
-func scene(s onboarding.Step) showcase.Scene {
-	switch s {
-	case onboarding.Phone, onboarding.QR, onboarding.Code, onboarding.Password, onboarding.Register:
-		return showcase.Locked
-	case onboarding.Agent:
-		return showcase.Agent
-	case onboarding.Done:
-		return showcase.Replied
-	}
-	return showcase.Conversation
 }
 
 func heading(c *ui.Context, t theme.Tokens, title, body string) {
@@ -160,7 +151,9 @@ func (p *Page) step(c *ui.Context, rt *runtime.Runtime, t theme.Tokens, auth tg.
 	case onboarding.Done:
 		mark := ui.Row(c).Size(56, 56).Radius(28).Background(t.Success).Justify(ui.Center).AlignItems(ui.Center)
 		mark.TextColor(t.OnFill).Children(func() { ui.Icon(c, icons.Check).FontSize(30) })
-		heading(c, t, copy.T(copy.OnbDoneTitle), copy.T(copy.OnbDoneBody))
+		agent, _ := config.ByAction(config.ActToggleAgent)
+		keys := config.Label(agent.Bindings[0], rt.Info.Platform == "darwin")
+		heading(c, t, copy.T(copy.OnbDoneTitle), copy.F(copy.OnbDoneBody, keys))
 	}
 }
 

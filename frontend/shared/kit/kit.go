@@ -258,17 +258,6 @@ func Status(c *ui.Context, t theme.Tokens, icon *ui.SVG, color ui.Color, text st
 	})
 }
 
-// Pill is the floating dark surface of the illustrations: a hairline, a
-// 1px top light, a contact and an ambient shadow, so it reads over a
-// photograph.
-func Pill(c *ui.Context, t theme.Tokens) ui.Element {
-	return ui.Row(c).Gap(10).Padding(0, 16, 0, 14).MinHeight(40).AlignItems(ui.Center).
-		Radius(theme.RadiusPill).Background(t.PillSurface).Border(1, t.PillBorder).
-		InsetShadow(0, 1, 0, 0, t.PillText.Alpha(0.06)).
-		Shadow(0, 2, 4, 0, t.Shade.Alpha(0.22)).Shadow(0, 10, 24, -6, t.Shade.Alpha(0.36)).
-		TextColor(t.PillText)
-}
-
 // Kbd is coss Kbd: one key on a muted fill, 20 DIP high, radius 4.
 func Kbd(c *ui.Context, t theme.Tokens, key string) ui.Element {
 	return ui.Row(c).Height(20).MinWidth(20).Padding(0, 5).Justify(ui.Center).AlignItems(ui.Center).
