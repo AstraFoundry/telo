@@ -19,3 +19,7 @@ out/
 *.swp
 *.swo
 *~
+# Anatomy skill examples: generated pages and printed sheets, rebuilt by
+# each example's build.mjs.
+.agents/skills/anatomy/examples/**/*.html
+.agents/skills/anatomy/examples/**/*.pdf

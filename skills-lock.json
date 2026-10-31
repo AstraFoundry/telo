@@ -1,6 +1,12 @@
 {
   "version": 1,
   "skills": {
+    "anatomy": {
+      "source": "wheresryan22/anatomy",
+      "sourceType": "github",
+      "skillPath": "SKILL.md",
+      "computedHash": "37fe1f16683eddee1b3723a3fe8e4a5b92bb653a6991128a372d3268730cdc90"
+    },
     "animate": {
       "source": "emilkowalski/skill",
       "sourceType": "github",
@@ -36,6 +42,18 @@
       "sourceType": "github",
       "skillPath": "skills/beui/SKILL.md",
       "computedHash": "376f66cd971464942de99b11bf17d939d98d894904f4b2fea0570446baefff1a"
+    },
+    "dimensional-drawing": {
+      "source": "enesozturk/dimensional-drawing",
+      "sourceType": "github",
+      "skillPath": "skills/dimensional-drawing/SKILL.md",
+      "computedHash": "11dab38d9119004969944aad1e435597e4a1be9cb398c9ff7fa9d78cce48b758"
+    },
+    "dimensional-drawing-motion": {
+      "source": "enesozturk/dimensional-drawing",
+      "sourceType": "github",
+      "skillPath": "skills/dimensional-drawing-motion/SKILL.md",
+      "computedHash": "1ec9fcebe298df01fc6111504554d003b523c68dbceda1249238b82628fed7be"
     },
     "emil-design-eng": {
       "source": "emilkowalski/skill",
