@@ -1,14 +1,13 @@
-# IPC conventions
+# Service conventions
 
-Telo's backend API is Electron IPC, not HTTP. Shared request and response DTOs are imported from `contracts/src/ipc.ts`; the vocabulary itself is declared in the backend domain and re-exported by the contracts module, so the domain never imports the transport contract. Channel names are private to the interfaces adapter.
+Telo has no HTTP or IPC API: the UI calls Go services in the same process through `frontend/shared/runtime.Runtime` ([`interfaces.md`](interfaces.md)). These rules keep that boundary as strict as a process boundary would be.
 
 ## Rules
 
-- Preload exposes one method per supported capability rather than raw `ipcRenderer` access.
-- Inputs are validated again in application or domain code.
-- Errors crossing IPC contain concise user-safe messages and no secret values or stack traces.
-- Long-running agent responses return lifecycle and text deltas as AG-UI events.
-- Event subscriptions return an unsubscribe function.
-- Adding a channel requires a contract, preload method, handler, and test.
-
-The renderer must never receive an API key, OAuth token, Telegram session, filesystem path, Electron object, or arbitrary channel-send capability.
+- **Values, not handles.** Services return domain values (`tg.Chat`, `agent.Thread`); never TDLib objects, file handles or HTTP responses.
+- **No secrets cross.** API keys, OAuth tokens, Telegram database keys and session data never reach the UI. The agent settings pane sees an account label and whether a key is stored, never the key.
+- **Errors are domain errors.** Ports return the domain's sentinel errors (`agent.ErrNoCredential`, `agent.ErrRejected`, `agent.ErrUnreachable`, `tg.ErrCannotWrite`, …), and the UI words them from the copy catalog. Provider payloads, stack traces and file paths are not shown.
+- **Context first.** Calls that can block take a `context.Context`; cancelling it (closing the panel, Stop) stops the work.
+- **Off the main thread.** The UI calls services from `Runtime.Go` and applies results on the next frame; services never touch view state.
+- **Events are subscriptions.** `Repository.Subscribe` delivers domain events (`tg.ChatUpserted`, `tg.MessageUpserted`, …) and returns an unsubscribe function.
+- **Validation twice.** The UI validates for feedback; the domain validates again (`agent.NewRule`, `agent.NewTask`, `Preferences.Normalize`), so nothing invalid is stored whichever caller made it.

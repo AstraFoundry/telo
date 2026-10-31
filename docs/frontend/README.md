@@ -1,6 +1,6 @@
 # Frontend
 
-This section defines how the frontend is organized using **Feature-Sliced Design (FSD)**.
+This section defines how Telo's MyGo frontend (`frontend/`, Go packages) is organized using **Feature-Sliced Design (FSD)**.
 
 ## Documents
 
@@ -10,14 +10,15 @@ This section defines how the frontend is organized using **Feature-Sliced Design
 - [`segments.md`](segments.md) — `ui`, `model`, `lib`, `api`, `config` segments.
 - [`public-api.md`](public-api.md) — public API and re-export rules.
 - [`import-rules.md`](import-rules.md) — cross-layer and cross-slice import rules.
-- [`ui-patterns.md`](ui-patterns.md) — semantic styling, no hardcoded copy, no redundant copy.
+- [`design-system.md`](design-system.md) — coss anatomy shared with Arion, Telo's palette, onboarding layout.
+- [`ui-patterns.md`](ui-patterns.md) — copy catalog, structure, telegram-macos interaction, accessibility.
 
 ## Quick start
 
 1. Read [`fsd-overview.md`](fsd-overview.md) if FSD is new to you.
 2. Read [`layers.md`](layers.md) to understand where a new file belongs.
 3. Read [`import-rules.md`](import-rules.md) before adding any import.
-4. Read [`ui-patterns.md`](ui-patterns.md) before writing UI code.
+4. Read [`design-system.md`](design-system.md) and [`ui-patterns.md`](ui-patterns.md) before writing UI code.
 
 ## Core principle
 

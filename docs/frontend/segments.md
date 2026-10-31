@@ -1,5 +1,7 @@
 # Segments
 
+> **Telo mapping.** Telo slices are single Go packages, so segments are files rather than directories: the view (`compose.go`), its dialogs (`dialogs.go`), state (`State` types beside it). The directory layout below is illustrative.
+
 Segments group files inside a slice by technical responsibility. Not every slice needs every segment.
 
 ## `ui/`

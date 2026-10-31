@@ -1,24 +1,28 @@
 # Backend
 
-This section defines how the backend is organized using **Domain-Driven Design (DDD)** layered architecture.
+This section defines how Telo's backend (`backend/`, Go packages in the same process as the UI) is organized using **Domain-Driven Design (DDD)**.
+
+> **Telo mapping.** `domain` and `application` are as described here. `infrastructure` holds TDLib, the Telegram adapters, the agent gateways and the stores. Telo has no network server: the **interfaces** role is played by `bootstrap` (the composition root, menus and the desktop adapter) and by `frontend/shared/runtime`, the services the UI calls. Generic examples in these documents are illustrative; the Telo sections name the Go code.
 
 ## Documents
 
-- [`domain.md`](domain.md) — entities, value objects, aggregates, domain services, and domain events.
-- [`application.md`](application.md) — use cases, application services, transactions, and DTOs.
-- [`infrastructure.md`](infrastructure.md) — persistence, external services, messaging, and configuration.
-- [`interfaces.md`](interfaces.md) — Electron IPC handlers, the preload bridge, and input validation.
-- [`api-conventions.md`](api-conventions.md) — response format, error codes, and versioning.
-- [`database.md`](database.md) — local file persistence for agent and Telegram records.
-- [`logging.md`](logging.md) — logging, tracing, and masking.
+- [`domain.md`](domain.md) — entities, value objects, ports and domain events.
+- [`application.md`](application.md) — use cases and the agent's automation.
+- [`infrastructure.md`](infrastructure.md) — TDLib, Telegram adapters, agent gateways, storage.
+- [`interfaces.md`](interfaces.md) — the composition root and the runtime boundary the UI calls.
+- [`api-conventions.md`](api-conventions.md) — conventions of that boundary: results, errors, events.
+- [`database.md`](database.md) — every file Telo writes.
+- [`logging.md`](logging.md) — diagnostics and masking.
 
-## Quick start
+## Dependency direction
 
-1. Read [`domain.md`](domain.md) to understand where business rules live.
-2. Read [`application.md`](application.md) before adding a new use case.
-3. Read [`interfaces.md`](interfaces.md) before adding a controller or handler.
-4. Read [`api-conventions.md`](api-conventions.md) before designing an endpoint.
+```text
+interfaces (bootstrap, runtime) -> application -> domain
+infrastructure -> domain (implements its ports)
+```
+
+`make arch` enforces it: the domain imports nothing outside itself, the application imports only the domain (tests may use infrastructure fakes), and infrastructure never imports the UI or `bootstrap`.
 
 ## Core principle
 
-Business rules are isolated in the `domain` layer. All other layers depend on `domain` through abstractions. Infrastructure implements those abstractions. Interfaces adapt the application to the outside world.
+Business rules live in `domain`. The other layers depend on it through ports the domain defines; infrastructure implements them.

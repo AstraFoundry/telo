@@ -10,7 +10,7 @@ The product now requires a complete Telegram client kernel (local message databa
 
 Telo is an Electron desktop Telegram client. The Telegram workspace is implemented as a DDD port (`TelegramRepository`) with two adapters: an in-memory demo workspace and a production adapter over [`teleproto`](https://github.com/sanyok12345/teleproto) (a maintained TypeScript fork of GramJS that speaks Telegram's MTProto TL API at layer 229).
 
-The production adapter is not a thin client wrapper. It owns authentication, multi-account session lifecycle, live update mapping, dialog pagination (including a Teleproto 1.229 `ignoreMigrated` workaround), media upload/download, stickers, folders, search, reactions, and entity conversion into Telo DTOs. That surface is audited by `pnpm teleproto:check` against [`docs/telegram/teleproto-capability-matrix.json`](../telegram/teleproto-capability-matrix.json).
+The production adapter is not a thin client wrapper. It owns authentication, multi-account session lifecycle, live update mapping, dialog pagination (including a Teleproto 1.229 `ignoreMigrated` workaround), media upload/download, stickers, folders, search, reactions, and entity conversion into Telo DTOs. That surface is audited by `pnpm teleproto:check` against `docs/telegram/teleproto-capability-matrix.json` (removed with the cutover).
 
 [`tdlib/td`](https://github.com/tdlib/td) is Telegram's official C++ client library. It exposes a high-level JSON API (`td_api.tl`), not the raw MTProto schema, and persists a local encrypted database. Node access is through a third-party binding (`tdl` + `prebuilt-tdlib`), not an official first-party npm package.
 
@@ -97,7 +97,7 @@ Accepted as the incremental path if live sync becomes the problem. Architecture 
 
 - [`../project/architecture.md`](../project/architecture.md) — Teleproto as the production Telegram adapter; paged reads as the authoritative snapshot.
 - [`../telegram/README.md`](../telegram/README.md) — Teleproto capability baseline and `pnpm teleproto:check`.
-- [`../todo/gaps.md`](../todo/gaps.md) — Wave 6 voice notes are Teleproto-ready; Wave 7 calls/secret chats/stories are out of scope.
+- `docs/todo/gaps.md` (retired; see [`../todo/README.md`](../todo/README.md)) — Wave 6 voice notes are Teleproto-ready; Wave 7 calls/secret chats/stories are out of scope.
 - [`../backend/database.md`](../backend/database.md) — no application database.
 - [teleproto](https://github.com/sanyok12345/teleproto) / [teleproto FAQ on TDLib](https://docs.teleproto.dev/faq)
 - [tdlib/td](https://github.com/tdlib/td) / [TDLib getting started](https://core.telegram.org/tdlib/getting-started)

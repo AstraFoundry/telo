@@ -1,0 +1,2604 @@
+{
+  "repository": "https://github.com/TelegramMessenger/telegram-macos",
+  "commit": "de608bb0d6b5f464f4d0a04deff719644e178556",
+  "items": [
+    {
+      "id": "module:AboutFeatureUI",
+      "kind": "module",
+      "title": "AboutFeatureUI",
+      "source": "packages/AboutFeatureUI/Package.swift"
+    },
+    {
+      "id": "module:AddTonBalanceUI",
+      "kind": "module",
+      "title": "AddTonBalanceUI",
+      "source": "packages/AddTonBalanceUI/Package.swift"
+    },
+    {
+      "id": "module:AffiliateUI",
+      "kind": "module",
+      "title": "AffiliateUI",
+      "source": "packages/AffiliateUI/Package.swift"
+    },
+    {
+      "id": "module:AlertsUI",
+      "kind": "module",
+      "title": "AlertsUI",
+      "source": "packages/AlertsUI/Package.swift"
+    },
+    {
+      "id": "module:ApiCredentials",
+      "kind": "module",
+      "title": "ApiCredentials",
+      "source": "packages/ApiCredentials/Package.swift"
+    },
+    {
+      "id": "module:ArchiveUtils",
+      "kind": "module",
+      "title": "ArchiveUtils",
+      "source": "packages/ArchiveUtils/Package.swift"
+    },
+    {
+      "id": "module:AudioPlayerCore",
+      "kind": "module",
+      "title": "AudioPlayerCore",
+      "source": "packages/AudioPlayerCore/Package.swift"
+    },
+    {
+      "id": "module:AudioPlayerUI",
+      "kind": "module",
+      "title": "AudioPlayerUI",
+      "source": "packages/AudioPlayerUI/Package.swift"
+    },
+    {
+      "id": "module:AuthUI",
+      "kind": "module",
+      "title": "AuthUI",
+      "source": "packages/AuthUI/Package.swift"
+    },
+    {
+      "id": "module:AvatarEditorUI",
+      "kind": "module",
+      "title": "AvatarEditorUI",
+      "source": "packages/AvatarEditorUI/Package.swift"
+    },
+    {
+      "id": "module:AvatarUI",
+      "kind": "module",
+      "title": "AvatarUI",
+      "source": "packages/AvatarUI/Package.swift"
+    },
+    {
+      "id": "module:BoostUI",
+      "kind": "module",
+      "title": "BoostUI",
+      "source": "packages/BoostUI/Package.swift"
+    },
+    {
+      "id": "module:BusinessUI",
+      "kind": "module",
+      "title": "BusinessUI",
+      "source": "packages/BusinessUI/Package.swift"
+    },
+    {
+      "id": "module:CalendarUI",
+      "kind": "module",
+      "title": "CalendarUI",
+      "source": "packages/CalendarUI/Package.swift"
+    },
+    {
+      "id": "module:CalendarUtils",
+      "kind": "module",
+      "title": "CalendarUtils",
+      "source": "packages/CalendarUtils/Package.swift"
+    },
+    {
+      "id": "module:CallVideoLayer",
+      "kind": "module",
+      "title": "CallVideoLayer",
+      "source": "packages/CallVideoLayer/Package.swift"
+    },
+    {
+      "id": "module:CallsUI",
+      "kind": "module",
+      "title": "CallsUI",
+      "source": "packages/CallsUI/Package.swift"
+    },
+    {
+      "id": "module:CaptureExclusion",
+      "kind": "module",
+      "title": "CaptureExclusion",
+      "source": "packages/CaptureExclusion/Package.swift"
+    },
+    {
+      "id": "module:ChangePhoneNumberUI",
+      "kind": "module",
+      "title": "ChangePhoneNumberUI",
+      "source": "packages/ChangePhoneNumberUI/Package.swift"
+    },
+    {
+      "id": "module:ChannelAdminUI",
+      "kind": "module",
+      "title": "ChannelAdminUI",
+      "source": "packages/ChannelAdminUI/Package.swift"
+    },
+    {
+      "id": "module:ChannelSettingsUI",
+      "kind": "module",
+      "title": "ChannelSettingsUI",
+      "source": "packages/ChannelSettingsUI/Package.swift"
+    },
+    {
+      "id": "module:ChatExportUI",
+      "kind": "module",
+      "title": "ChatExportUI",
+      "source": "packages/ChatExportUI/Package.swift"
+    },
+    {
+      "id": "module:ChatHistoryModel",
+      "kind": "module",
+      "title": "ChatHistoryModel",
+      "source": "packages/ChatHistoryModel/Package.swift"
+    },
+    {
+      "id": "module:ChatListUI",
+      "kind": "module",
+      "title": "ChatListUI",
+      "source": "packages/ChatListUI/Package.swift"
+    },
+    {
+      "id": "module:ChatModeTypes",
+      "kind": "module",
+      "title": "ChatModeTypes",
+      "source": "packages/ChatModeTypes/Package.swift"
+    },
+    {
+      "id": "module:ChatUI",
+      "kind": "module",
+      "title": "ChatUI",
+      "source": "packages/ChatUI/Package.swift"
+    },
+    {
+      "id": "module:ColorPalette",
+      "kind": "module",
+      "title": "ColorPalette",
+      "source": "packages/ColorPalette/Package.swift"
+    },
+    {
+      "id": "module:Colors",
+      "kind": "module",
+      "title": "Colors",
+      "source": "packages/Colors/Package.swift"
+    },
+    {
+      "id": "module:CommunityUI",
+      "kind": "module",
+      "title": "CommunityUI",
+      "source": "packages/CommunityUI/Package.swift"
+    },
+    {
+      "id": "module:ComponentsUI",
+      "kind": "module",
+      "title": "ComponentsUI",
+      "source": "packages/ComponentsUI/Package.swift"
+    },
+    {
+      "id": "module:ComposeUI",
+      "kind": "module",
+      "title": "ComposeUI",
+      "source": "packages/ComposeUI/Package.swift"
+    },
+    {
+      "id": "module:CrashRecoveryUI",
+      "kind": "module",
+      "title": "CrashRecoveryUI",
+      "source": "packages/CrashRecoveryUI/Package.swift"
+    },
+    {
+      "id": "module:CrashReports",
+      "kind": "module",
+      "title": "CrashReports",
+      "source": "packages/CrashReports/Package.swift"
+    },
+    {
+      "id": "module:CubeUI",
+      "kind": "module",
+      "title": "CubeUI",
+      "source": "packages/CubeUI/Package.swift"
+    },
+    {
+      "id": "module:CurrencyFormat",
+      "kind": "module",
+      "title": "CurrencyFormat",
+      "source": "packages/CurrencyFormat/Package.swift"
+    },
+    {
+      "id": "module:DataUsageUI",
+      "kind": "module",
+      "title": "DataUsageUI",
+      "source": "packages/DataUsageUI/Package.swift"
+    },
+    {
+      "id": "module:DateSelectorUI",
+      "kind": "module",
+      "title": "DateSelectorUI",
+      "source": "packages/DateSelectorUI/Package.swift"
+    },
+    {
+      "id": "module:DateUtils",
+      "kind": "module",
+      "title": "DateUtils",
+      "source": "packages/DateUtils/Package.swift"
+    },
+    {
+      "id": "module:DetectSpeech",
+      "kind": "module",
+      "title": "DetectSpeech",
+      "source": "packages/DetectSpeech/Package.swift"
+    },
+    {
+      "id": "module:DiceCache",
+      "kind": "module",
+      "title": "DiceCache",
+      "source": "packages/DiceCache/Package.swift"
+    },
+    {
+      "id": "module:DustLayer",
+      "kind": "module",
+      "title": "DustLayer",
+      "source": "packages/DustLayer/Package.swift"
+    },
+    {
+      "id": "module:EDSunriseSet",
+      "kind": "module",
+      "title": "EDSunriseSet",
+      "source": "packages/EDSunriseSet/Package.swift"
+    },
+    {
+      "id": "module:EditTagLabelUI",
+      "kind": "module",
+      "title": "EditTagLabelUI",
+      "source": "packages/EditTagLabelUI/Package.swift"
+    },
+    {
+      "id": "module:EmojiReplacements",
+      "kind": "module",
+      "title": "EmojiReplacements",
+      "source": "packages/EmojiReplacements/Package.swift"
+    },
+    {
+      "id": "module:EmojiSuggestions",
+      "kind": "module",
+      "title": "EmojiSuggestions",
+      "source": "packages/EmojiSuggestions/Package.swift"
+    },
+    {
+      "id": "module:EntertainmentUI",
+      "kind": "module",
+      "title": "EntertainmentUI",
+      "source": "packages/EntertainmentUI/Package.swift"
+    },
+    {
+      "id": "module:ExternalVideoUtils",
+      "kind": "module",
+      "title": "ExternalVideoUtils",
+      "source": "packages/ExternalVideoUtils/Package.swift"
+    },
+    {
+      "id": "module:FastBlur",
+      "kind": "module",
+      "title": "FastBlur",
+      "source": "packages/FastBlur/Package.swift"
+    },
+    {
+      "id": "module:FetchManager",
+      "kind": "module",
+      "title": "FetchManager",
+      "source": "packages/FetchManager/Package.swift"
+    },
+    {
+      "id": "module:FilePanels",
+      "kind": "module",
+      "title": "FilePanels",
+      "source": "packages/FilePanels/Package.swift"
+    },
+    {
+      "id": "module:FolderSharingUI",
+      "kind": "module",
+      "title": "FolderSharingUI",
+      "source": "packages/FolderSharingUI/Package.swift"
+    },
+    {
+      "id": "module:ForumSettingsUI",
+      "kind": "module",
+      "title": "ForumSettingsUI",
+      "source": "packages/ForumSettingsUI/Package.swift"
+    },
+    {
+      "id": "module:FoundationUtils",
+      "kind": "module",
+      "title": "FoundationUtils",
+      "source": "packages/FoundationUtils/Package.swift"
+    },
+    {
+      "id": "module:GZIP",
+      "kind": "module",
+      "title": "GZIP",
+      "source": "packages/GZIP/Package.swift"
+    },
+    {
+      "id": "module:GalleryUI",
+      "kind": "module",
+      "title": "GalleryUI",
+      "source": "packages/GalleryUI/Package.swift"
+    },
+    {
+      "id": "module:GeneralRows",
+      "kind": "module",
+      "title": "GeneralRows",
+      "source": "packages/GeneralRows/Package.swift"
+    },
+    {
+      "id": "module:GiftCraftingUI",
+      "kind": "module",
+      "title": "GiftCraftingUI",
+      "source": "packages/GiftCraftingUI/Package.swift"
+    },
+    {
+      "id": "module:GigagroupUI",
+      "kind": "module",
+      "title": "GigagroupUI",
+      "source": "packages/GigagroupUI/Package.swift"
+    },
+    {
+      "id": "module:GraphUI",
+      "kind": "module",
+      "title": "GraphUI",
+      "source": "packages/GraphUI/Package.swift"
+    },
+    {
+      "id": "module:GroupCallScreenUI",
+      "kind": "module",
+      "title": "GroupCallScreenUI",
+      "source": "packages/GroupCallScreenUI/Package.swift"
+    },
+    {
+      "id": "module:GroupsInCommonUI",
+      "kind": "module",
+      "title": "GroupsInCommonUI",
+      "source": "packages/GroupsInCommonUI/Package.swift"
+    },
+    {
+      "id": "module:HotKey",
+      "kind": "module",
+      "title": "HotKey",
+      "source": "packages/HotKey/Package.swift"
+    },
+    {
+      "id": "module:ImageCanvasUI",
+      "kind": "module",
+      "title": "ImageCanvasUI",
+      "source": "packages/ImageCanvasUI/Package.swift"
+    },
+    {
+      "id": "module:InAppPurchaseManager",
+      "kind": "module",
+      "title": "InAppPurchaseManager",
+      "source": "packages/InAppPurchaseManager/Package.swift"
+    },
+    {
+      "id": "module:InAppSettings",
+      "kind": "module",
+      "title": "InAppSettings",
+      "source": "packages/InAppSettings/Package.swift"
+    },
+    {
+      "id": "module:InAppVideoServices",
+      "kind": "module",
+      "title": "InAppVideoServices",
+      "source": "packages/InAppVideoServices/Package.swift"
+    },
+    {
+      "id": "module:InactiveChannelsUI",
+      "kind": "module",
+      "title": "InactiveChannelsUI",
+      "source": "packages/InactiveChannelsUI/Package.swift"
+    },
+    {
+      "id": "module:InlineMediaGrid",
+      "kind": "module",
+      "title": "InlineMediaGrid",
+      "source": "packages/InlineMediaGrid/Package.swift"
+    },
+    {
+      "id": "module:InlineStickerLayer",
+      "kind": "module",
+      "title": "InlineStickerLayer",
+      "source": "packages/InlineStickerLayer/Package.swift"
+    },
+    {
+      "id": "module:InlineStickers",
+      "kind": "module",
+      "title": "InlineStickers",
+      "source": "packages/InlineStickers/Package.swift"
+    },
+    {
+      "id": "module:InputDataUI",
+      "kind": "module",
+      "title": "InputDataUI",
+      "source": "packages/InputDataUI/Package.swift"
+    },
+    {
+      "id": "module:InputTextView",
+      "kind": "module",
+      "title": "InputTextView",
+      "source": "packages/InputTextView/Package.swift"
+    },
+    {
+      "id": "module:InputView",
+      "kind": "module",
+      "title": "InputView",
+      "source": "packages/InputView/Package.swift"
+    },
+    {
+      "id": "module:InstantPageUI",
+      "kind": "module",
+      "title": "InstantPageUI",
+      "source": "packages/InstantPageUI/Package.swift"
+    },
+    {
+      "id": "module:InviteLinksUI",
+      "kind": "module",
+      "title": "InviteLinksUI",
+      "source": "packages/InviteLinksUI/Package.swift"
+    },
+    {
+      "id": "module:KeyboardKey",
+      "kind": "module",
+      "title": "KeyboardKey",
+      "source": "packages/KeyboardKey/Package.swift"
+    },
+    {
+      "id": "module:LocalAnimations",
+      "kind": "module",
+      "title": "LocalAnimations",
+      "source": "packages/LocalAnimations/Package.swift"
+    },
+    {
+      "id": "module:Localization",
+      "kind": "module",
+      "title": "Localization",
+      "source": "packages/Localization/Package.swift"
+    },
+    {
+      "id": "module:LocationUI",
+      "kind": "module",
+      "title": "LocationUI",
+      "source": "packages/LocationUI/Package.swift"
+    },
+    {
+      "id": "module:MediaRecorderUI",
+      "kind": "module",
+      "title": "MediaRecorderUI",
+      "source": "packages/MediaRecorderUI/Package.swift"
+    },
+    {
+      "id": "module:MessageTextUtils",
+      "kind": "module",
+      "title": "MessageTextUtils",
+      "source": "packages/MessageTextUtils/Package.swift"
+    },
+    {
+      "id": "module:MessageUtils",
+      "kind": "module",
+      "title": "MessageUtils",
+      "source": "packages/MessageUtils/Package.swift"
+    },
+    {
+      "id": "module:MonetizationUI",
+      "kind": "module",
+      "title": "MonetizationUI",
+      "source": "packages/MonetizationUI/Package.swift"
+    },
+    {
+      "id": "module:NetworkLab",
+      "kind": "module",
+      "title": "NetworkLab",
+      "source": "packages/NetworkLab/Package.swift"
+    },
+    {
+      "id": "module:NumberPluralization",
+      "kind": "module",
+      "title": "NumberPluralization",
+      "source": "packages/NumberPluralization/Package.swift"
+    },
+    {
+      "id": "module:OCR",
+      "kind": "module",
+      "title": "OCR",
+      "source": "packages/OCR/Package.swift"
+    },
+    {
+      "id": "module:ObjcUtils",
+      "kind": "module",
+      "title": "ObjcUtils",
+      "source": "packages/ObjcUtils/Package.swift"
+    },
+    {
+      "id": "module:PasscodeUI",
+      "kind": "module",
+      "title": "PasscodeUI",
+      "source": "packages/PasscodeUI/Package.swift"
+    },
+    {
+      "id": "module:PasskeysUI",
+      "kind": "module",
+      "title": "PasskeysUI",
+      "source": "packages/PasskeysUI/Package.swift"
+    },
+    {
+      "id": "module:PassportUI",
+      "kind": "module",
+      "title": "PassportUI",
+      "source": "packages/PassportUI/Package.swift"
+    },
+    {
+      "id": "module:PaymentsUI",
+      "kind": "module",
+      "title": "PaymentsUI",
+      "source": "packages/PaymentsUI/Package.swift"
+    },
+    {
+      "id": "module:PeerInfoUI",
+      "kind": "module",
+      "title": "PeerInfoUI",
+      "source": "packages/PeerInfoUI/Package.swift"
+    },
+    {
+      "id": "module:PeerMediaUI",
+      "kind": "module",
+      "title": "PeerMediaUI",
+      "source": "packages/PeerMediaUI/Package.swift"
+    },
+    {
+      "id": "module:PeerModerationUI",
+      "kind": "module",
+      "title": "PeerModerationUI",
+      "source": "packages/PeerModerationUI/Package.swift"
+    },
+    {
+      "id": "module:PerfLab",
+      "kind": "module",
+      "title": "PerfLab",
+      "source": "packages/PerfLab/Package.swift"
+    },
+    {
+      "id": "module:PhoneInputUI",
+      "kind": "module",
+      "title": "PhoneInputUI",
+      "source": "packages/PhoneInputUI/Package.swift"
+    },
+    {
+      "id": "module:PhoneNumberUtils",
+      "kind": "module",
+      "title": "PhoneNumberUtils",
+      "source": "packages/PhoneNumberUtils/Package.swift"
+    },
+    {
+      "id": "module:PollResultsUI",
+      "kind": "module",
+      "title": "PollResultsUI",
+      "source": "packages/PollResultsUI/Package.swift"
+    },
+    {
+      "id": "module:PremiumStatusUI",
+      "kind": "module",
+      "title": "PremiumStatusUI",
+      "source": "packages/PremiumStatusUI/Package.swift"
+    },
+    {
+      "id": "module:PremiumUI",
+      "kind": "module",
+      "title": "PremiumUI",
+      "source": "packages/PremiumUI/Package.swift"
+    },
+    {
+      "id": "module:PreviewSenderUI",
+      "kind": "module",
+      "title": "PreviewSenderUI",
+      "source": "packages/PreviewSenderUI/Package.swift"
+    },
+    {
+      "id": "module:PrivateCallScreen",
+      "kind": "module",
+      "title": "PrivateCallScreen",
+      "source": "packages/PrivateCallScreen/Package.swift"
+    },
+    {
+      "id": "module:ProxyUI",
+      "kind": "module",
+      "title": "ProxyUI",
+      "source": "packages/ProxyUI/Package.swift"
+    },
+    {
+      "id": "module:ProxyUtils",
+      "kind": "module",
+      "title": "ProxyUtils",
+      "source": "packages/ProxyUtils/Package.swift"
+    },
+    {
+      "id": "module:PushToTalk",
+      "kind": "module",
+      "title": "PushToTalk",
+      "source": "packages/PushToTalk/Package.swift"
+    },
+    {
+      "id": "module:QRCodeUtils",
+      "kind": "module",
+      "title": "QRCodeUtils",
+      "source": "packages/QRCodeUtils/Package.swift"
+    },
+    {
+      "id": "module:QrStudioUI",
+      "kind": "module",
+      "title": "QrStudioUI",
+      "source": "packages/QrStudioUI/Package.swift"
+    },
+    {
+      "id": "module:QuickSwitcher",
+      "kind": "module",
+      "title": "QuickSwitcher",
+      "source": "packages/QuickSwitcher/Package.swift"
+    },
+    {
+      "id": "module:Reactions",
+      "kind": "module",
+      "title": "Reactions",
+      "source": "packages/Reactions/Package.swift"
+    },
+    {
+      "id": "module:ReportUI",
+      "kind": "module",
+      "title": "ReportUI",
+      "source": "packages/ReportUI/Package.swift"
+    },
+    {
+      "id": "module:RichTextEditorUI",
+      "kind": "module",
+      "title": "RichTextEditorUI",
+      "source": "packages/RichTextEditorUI/Package.swift"
+    },
+    {
+      "id": "module:RingBuffer",
+      "kind": "module",
+      "title": "RingBuffer",
+      "source": "packages/RingBuffer/Package.swift"
+    },
+    {
+      "id": "module:SceneEffects",
+      "kind": "module",
+      "title": "SceneEffects",
+      "source": "packages/SceneEffects/Package.swift"
+    },
+    {
+      "id": "module:SecureIdUtils",
+      "kind": "module",
+      "title": "SecureIdUtils",
+      "source": "packages/SecureIdUtils/Package.swift"
+    },
+    {
+      "id": "module:SelectColorUI",
+      "kind": "module",
+      "title": "SelectColorUI",
+      "source": "packages/SelectColorUI/Package.swift"
+    },
+    {
+      "id": "module:SelectCountryUI",
+      "kind": "module",
+      "title": "SelectCountryUI",
+      "source": "packages/SelectCountryUI/Package.swift"
+    },
+    {
+      "id": "module:SelectPeersUI",
+      "kind": "module",
+      "title": "SelectPeersUI",
+      "source": "packages/SelectPeersUI/Package.swift"
+    },
+    {
+      "id": "module:SessionsUI",
+      "kind": "module",
+      "title": "SessionsUI",
+      "source": "packages/SessionsUI/Package.swift"
+    },
+    {
+      "id": "module:SettingsUI",
+      "kind": "module",
+      "title": "SettingsUI",
+      "source": "packages/SettingsUI/Package.swift"
+    },
+    {
+      "id": "module:ShareUI",
+      "kind": "module",
+      "title": "ShareUI",
+      "source": "packages/ShareUI/Package.swift"
+    },
+    {
+      "id": "module:ShortPeerRow",
+      "kind": "module",
+      "title": "ShortPeerRow",
+      "source": "packages/ShortPeerRow/Package.swift"
+    },
+    {
+      "id": "module:SidebarUI",
+      "kind": "module",
+      "title": "SidebarUI",
+      "source": "packages/SidebarUI/Package.swift"
+    },
+    {
+      "id": "module:StarsUI",
+      "kind": "module",
+      "title": "StarsUI",
+      "source": "packages/StarsUI/Package.swift"
+    },
+    {
+      "id": "module:StatisticsUI",
+      "kind": "module",
+      "title": "StatisticsUI",
+      "source": "packages/StatisticsUI/Package.swift"
+    },
+    {
+      "id": "module:StickerSettingsUI",
+      "kind": "module",
+      "title": "StickerSettingsUI",
+      "source": "packages/StickerSettingsUI/Package.swift"
+    },
+    {
+      "id": "module:StoriesUI",
+      "kind": "module",
+      "title": "StoriesUI",
+      "source": "packages/StoriesUI/Package.swift"
+    },
+    {
+      "id": "module:Strings",
+      "kind": "module",
+      "title": "Strings",
+      "source": "packages/Strings/Package.swift"
+    },
+    {
+      "id": "module:Svg",
+      "kind": "module",
+      "title": "Svg",
+      "source": "packages/Svg/Package.swift"
+    },
+    {
+      "id": "module:SwiftMath",
+      "kind": "module",
+      "title": "SwiftMath",
+      "source": "packages/SwiftMath/Package.swift"
+    },
+    {
+      "id": "module:SystemPermissions",
+      "kind": "module",
+      "title": "SystemPermissions",
+      "source": "packages/SystemPermissions/Package.swift"
+    },
+    {
+      "id": "module:TGCurrencyFormatter",
+      "kind": "module",
+      "title": "TGCurrencyFormatter",
+      "source": "packages/TGCurrencyFormatter/Package.swift"
+    },
+    {
+      "id": "module:TGGifConverter",
+      "kind": "module",
+      "title": "TGGifConverter",
+      "source": "packages/TGGifConverter/Package.swift"
+    },
+    {
+      "id": "module:TGModernGrowingTextView",
+      "kind": "module",
+      "title": "TGModernGrowingTextView",
+      "source": "packages/TGModernGrowingTextView/Package.swift"
+    },
+    {
+      "id": "module:TGPassportMRZ",
+      "kind": "module",
+      "title": "TGPassportMRZ",
+      "source": "packages/TGPassportMRZ/Package.swift"
+    },
+    {
+      "id": "module:TGUIKit",
+      "kind": "module",
+      "title": "TGUIKit",
+      "source": "packages/TGUIKit/Package.swift"
+    },
+    {
+      "id": "module:TGVideoCameraMovie",
+      "kind": "module",
+      "title": "TGVideoCameraMovie",
+      "source": "packages/TGVideoCameraMovie/Package.swift"
+    },
+    {
+      "id": "module:TLottie",
+      "kind": "module",
+      "title": "TLottie",
+      "source": "packages/TLottie/Package.swift"
+    },
+    {
+      "id": "module:TelegramCallsCore",
+      "kind": "module",
+      "title": "TelegramCallsCore",
+      "source": "packages/TelegramCallsCore/Package.swift"
+    },
+    {
+      "id": "module:TelegramContext",
+      "kind": "module",
+      "title": "TelegramContext",
+      "source": "packages/TelegramContext/Package.swift"
+    },
+    {
+      "id": "module:TelegramIconsTheme",
+      "kind": "module",
+      "title": "TelegramIconsTheme",
+      "source": "packages/TelegramIconsTheme/Package.swift"
+    },
+    {
+      "id": "module:TelegramLinks",
+      "kind": "module",
+      "title": "TelegramLinks",
+      "source": "packages/TelegramLinks/Package.swift"
+    },
+    {
+      "id": "module:TelegramMedia",
+      "kind": "module",
+      "title": "TelegramMedia",
+      "source": "packages/TelegramMedia/Package.swift"
+    },
+    {
+      "id": "module:TelegramMediaResources",
+      "kind": "module",
+      "title": "TelegramMediaResources",
+      "source": "packages/TelegramMediaResources/Package.swift"
+    },
+    {
+      "id": "module:TelegramMediaUtils",
+      "kind": "module",
+      "title": "TelegramMediaUtils",
+      "source": "packages/TelegramMediaUtils/Package.swift"
+    },
+    {
+      "id": "module:TelegramTheme",
+      "kind": "module",
+      "title": "TelegramTheme",
+      "source": "packages/TelegramTheme/Package.swift"
+    },
+    {
+      "id": "module:TelegramUtils",
+      "kind": "module",
+      "title": "TelegramUtils",
+      "source": "packages/TelegramUtils/Package.swift"
+    },
+    {
+      "id": "module:TextRecognizing",
+      "kind": "module",
+      "title": "TextRecognizing",
+      "source": "packages/TextRecognizing/Package.swift"
+    },
+    {
+      "id": "module:ThemeSettings",
+      "kind": "module",
+      "title": "ThemeSettings",
+      "source": "packages/ThemeSettings/Package.swift"
+    },
+    {
+      "id": "module:Translate",
+      "kind": "module",
+      "title": "Translate",
+      "source": "packages/Translate/Package.swift"
+    },
+    {
+      "id": "module:TranslateUI",
+      "kind": "module",
+      "title": "TranslateUI",
+      "source": "packages/TranslateUI/Package.swift"
+    },
+    {
+      "id": "module:UniqueGiftBackground",
+      "kind": "module",
+      "title": "UniqueGiftBackground",
+      "source": "packages/UniqueGiftBackground/Package.swift"
+    },
+    {
+      "id": "module:UniqueGiftRenderer",
+      "kind": "module",
+      "title": "UniqueGiftRenderer",
+      "source": "packages/UniqueGiftRenderer/Package.swift"
+    },
+    {
+      "id": "module:VerifyAgeUI",
+      "kind": "module",
+      "title": "VerifyAgeUI",
+      "source": "packages/VerifyAgeUI/Package.swift"
+    },
+    {
+      "id": "module:WalletEngine",
+      "kind": "module",
+      "title": "WalletEngine",
+      "source": "packages/WalletEngine/Package.swift"
+    },
+    {
+      "id": "module:WalletUI",
+      "kind": "module",
+      "title": "WalletUI",
+      "source": "packages/WalletUI/Package.swift"
+    },
+    {
+      "id": "module:WallpaperUI",
+      "kind": "module",
+      "title": "WallpaperUI",
+      "source": "packages/WallpaperUI/Package.swift"
+    },
+    {
+      "id": "module:WebAppUI",
+      "kind": "module",
+      "title": "WebAppUI",
+      "source": "packages/WebAppUI/Package.swift"
+    },
+    {
+      "id": "module:WidgetUI",
+      "kind": "module",
+      "title": "WidgetUI",
+      "source": "packages/WidgetUI/Package.swift"
+    },
+    {
+      "id": "shortcut:chat_open_info",
+      "kind": "shortcut",
+      "title": "Open Info",
+      "keys": "→",
+      "section": "CHAT",
+      "source": "packages/SettingsUI/Sources/SettingsUI/ShortcutListController.swift"
+    },
+    {
+      "id": "shortcut:edit_media",
+      "kind": "shortcut",
+      "title": "Record Voice/Video Message",
+      "keys": "⌘R",
+      "section": "CHAT",
+      "source": "packages/SettingsUI/Sources/SettingsUI/ShortcutListController.swift"
+    },
+    {
+      "id": "shortcut:edit_message",
+      "kind": "shortcut",
+      "title": "Edit Last Message",
+      "keys": "↑",
+      "section": "CHAT",
+      "source": "packages/SettingsUI/Sources/SettingsUI/ShortcutListController.swift"
+    },
+    {
+      "id": "shortcut:fast_reply",
+      "kind": "shortcut",
+      "title": "Fast Reply",
+      "keys": "Double Click",
+      "section": "MOUSE",
+      "source": "packages/SettingsUI/Sources/SettingsUI/ShortcutListController.swift"
+    },
+    {
+      "id": "shortcut:global_search",
+      "kind": "shortcut",
+      "title": "Global Search",
+      "keys": "⇧⌘F",
+      "section": "SEARCH",
+      "source": "packages/SettingsUI/Sources/SettingsUI/ShortcutListController.swift"
+    },
+    {
+      "id": "shortcut:lock_passcode",
+      "kind": "shortcut",
+      "title": "Lock by Passcode",
+      "keys": "⌘L",
+      "section": "OTHERS",
+      "source": "packages/SettingsUI/Sources/SettingsUI/ShortcutListController.swift"
+    },
+    {
+      "id": "shortcut:markdown_bold",
+      "kind": "shortcut",
+      "title": "Bold",
+      "keys": "⌘B / **",
+      "section": "MARKDOWN",
+      "source": "packages/SettingsUI/Sources/SettingsUI/ShortcutListController.swift"
+    },
+    {
+      "id": "shortcut:markdown_italic",
+      "kind": "shortcut",
+      "title": "Italic",
+      "keys": "⌘I / __",
+      "section": "MARKDOWN",
+      "source": "packages/SettingsUI/Sources/SettingsUI/ShortcutListController.swift"
+    },
+    {
+      "id": "shortcut:markdown_monospace",
+      "kind": "shortcut",
+      "title": "Monospace",
+      "keys": "⇧⌘K / `",
+      "section": "MARKDOWN",
+      "source": "packages/SettingsUI/Sources/SettingsUI/ShortcutListController.swift"
+    },
+    {
+      "id": "shortcut:markdown_strikethrough",
+      "kind": "shortcut",
+      "title": "Strikethrough",
+      "keys": "~~",
+      "section": "MARKDOWN",
+      "source": "packages/SettingsUI/Sources/SettingsUI/ShortcutListController.swift"
+    },
+    {
+      "id": "shortcut:markdown_url",
+      "kind": "shortcut",
+      "title": "Hyperlink",
+      "keys": "⌘U",
+      "section": "MARKDOWN",
+      "source": "packages/SettingsUI/Sources/SettingsUI/ShortcutListController.swift"
+    },
+    {
+      "id": "shortcut:quick_search",
+      "kind": "shortcut",
+      "title": "Quick Search",
+      "keys": "⌘K",
+      "section": "SEARCH",
+      "source": "packages/SettingsUI/Sources/SettingsUI/ShortcutListController.swift"
+    },
+    {
+      "id": "shortcut:reply_to_message",
+      "kind": "shortcut",
+      "title": "Select Message To Reply",
+      "keys": "⌘↑ / ⌘↓",
+      "section": "CHAT",
+      "source": "packages/SettingsUI/Sources/SettingsUI/ShortcutListController.swift"
+    },
+    {
+      "id": "shortcut:schedule",
+      "kind": "shortcut",
+      "title": "Schedule message",
+      "keys": "Option click on 'Send Message'",
+      "section": "MOUSE",
+      "source": "packages/SettingsUI/Sources/SettingsUI/ShortcutListController.swift"
+    },
+    {
+      "id": "shortcut:search_in_chat",
+      "kind": "shortcut",
+      "title": "Search Messages",
+      "keys": "⌘F",
+      "section": "CHAT",
+      "source": "packages/SettingsUI/Sources/SettingsUI/ShortcutListController.swift"
+    },
+    {
+      "id": "shortcut:swipe_actions",
+      "kind": "shortcut",
+      "title": "Chat List Actions",
+      "keys": "Swipe Left or Right",
+      "section": "GESTURES",
+      "source": "packages/SettingsUI/Sources/SettingsUI/ShortcutListController.swift"
+    },
+    {
+      "id": "shortcut:swipe_navigation",
+      "kind": "shortcut",
+      "title": "Navigation Back",
+      "keys": "Swipe From Left To Right",
+      "section": "GESTURES",
+      "source": "packages/SettingsUI/Sources/SettingsUI/ShortcutListController.swift"
+    },
+    {
+      "id": "shortcut:swipe_reply",
+      "kind": "shortcut",
+      "title": "Reply",
+      "keys": "Swipe From Right To Left",
+      "section": "GESTURES",
+      "source": "packages/SettingsUI/Sources/SettingsUI/ShortcutListController.swift"
+    },
+    {
+      "id": "shortcut:swipe_stickers",
+      "kind": "shortcut",
+      "title": "Sticker/Emoji/GIF Panel",
+      "keys": "Swipe Left or Right",
+      "section": "GESTURES",
+      "source": "packages/SettingsUI/Sources/SettingsUI/ShortcutListController.swift"
+    },
+    {
+      "id": "shortcut:switch_account",
+      "kind": "shortcut",
+      "title": "Switch Account",
+      "keys": "⇧⌘M",
+      "section": "SEARCH",
+      "source": "packages/SettingsUI/Sources/SettingsUI/ShortcutListController.swift"
+    },
+    {
+      "id": "shortcut:toggle_camera",
+      "kind": "shortcut",
+      "title": "Toggle Camera",
+      "keys": "⌘E",
+      "section": "VIDEO CHAT",
+      "source": "packages/SettingsUI/Sources/SettingsUI/ShortcutListController.swift"
+    },
+    {
+      "id": "shortcut:toggle_screen",
+      "kind": "shortcut",
+      "title": "Toggle Screen Sharing",
+      "keys": "⌘T",
+      "section": "VIDEO CHAT",
+      "source": "packages/SettingsUI/Sources/SettingsUI/ShortcutListController.swift"
+    },
+    {
+      "id": "setting:appearance(0)",
+      "kind": "setting",
+      "title": "Appearance",
+      "section": "appearance",
+      "source": "packages/SettingsUI/Sources/SettingsUI/SettingsSearchableItems.swift"
+    },
+    {
+      "id": "setting:appearance(1)",
+      "kind": "setting",
+      "title": "TEXT SIZE",
+      "section": "appearance",
+      "source": "packages/SettingsUI/Sources/SettingsUI/SettingsSearchableItems.swift"
+    },
+    {
+      "id": "setting:appearance(2)",
+      "kind": "setting",
+      "title": "Chat Wallpaper",
+      "section": "appearance",
+      "source": "packages/SettingsUI/Sources/SettingsUI/SettingsSearchableItems.swift"
+    },
+    {
+      "id": "setting:appearance(5)",
+      "kind": "setting",
+      "title": "Auto-Night Mode",
+      "section": "appearance",
+      "source": "packages/SettingsUI/Sources/SettingsUI/SettingsSearchableItems.swift"
+    },
+    {
+      "id": "setting:appearance(6)",
+      "kind": "setting",
+      "title": "COLOR THEME",
+      "section": "appearance",
+      "source": "packages/SettingsUI/Sources/SettingsUI/SettingsSearchableItems.swift"
+    },
+    {
+      "id": "setting:data(0)",
+      "kind": "setting",
+      "title": "Data and Storage",
+      "section": "data",
+      "source": "packages/SettingsUI/Sources/SettingsUI/SettingsSearchableItems.swift"
+    },
+    {
+      "id": "setting:data(1)",
+      "kind": "setting",
+      "title": "Storage Usage",
+      "section": "data",
+      "source": "packages/SettingsUI/Sources/SettingsUI/SettingsSearchableItems.swift"
+    },
+    {
+      "id": "setting:data(2)",
+      "kind": "setting",
+      "title": "Keep Media",
+      "section": "data",
+      "source": "packages/SettingsUI/Sources/SettingsUI/SettingsSearchableItems.swift"
+    },
+    {
+      "id": "setting:data(3)",
+      "kind": "setting",
+      "title": "Clear Cache",
+      "section": "data",
+      "source": "packages/SettingsUI/Sources/SettingsUI/SettingsSearchableItems.swift"
+    },
+    {
+      "id": "setting:data(4)",
+      "kind": "setting",
+      "title": "Network Usage",
+      "section": "data",
+      "source": "packages/SettingsUI/Sources/SettingsUI/SettingsSearchableItems.swift"
+    },
+    {
+      "id": "setting:data(7)",
+      "kind": "setting",
+      "title": "Reset Auto-Download Settings",
+      "section": "data",
+      "source": "packages/SettingsUI/Sources/SettingsUI/SettingsSearchableItems.swift"
+    },
+    {
+      "id": "setting:data(8)",
+      "kind": "setting",
+      "title": "GIFs",
+      "section": "data",
+      "source": "packages/SettingsUI/Sources/SettingsUI/SettingsSearchableItems.swift"
+    },
+    {
+      "id": "setting:data(9)",
+      "kind": "setting",
+      "title": "Videos",
+      "section": "data",
+      "source": "packages/SettingsUI/Sources/SettingsUI/SettingsSearchableItems.swift"
+    },
+    {
+      "id": "setting:language(0)",
+      "kind": "setting",
+      "title": "Language",
+      "section": "language",
+      "source": "packages/SettingsUI/Sources/SettingsUI/SettingsSearchableItems.swift"
+    },
+    {
+      "id": "setting:language(index)",
+      "kind": "setting",
+      "title": "localization.localizedTitle",
+      "section": "language",
+      "source": "packages/SettingsUI/Sources/SettingsUI/SettingsSearchableItems.swift"
+    },
+    {
+      "id": "setting:notifications(0)",
+      "kind": "setting",
+      "title": "Notifications and Sounds",
+      "section": "notifications",
+      "source": "packages/SettingsUI/Sources/SettingsUI/SettingsSearchableItems.swift"
+    },
+    {
+      "id": "setting:notifications(18)",
+      "kind": "setting",
+      "title": "Include Groups",
+      "section": "notifications",
+      "source": "packages/SettingsUI/Sources/SettingsUI/SettingsSearchableItems.swift"
+    },
+    {
+      "id": "setting:notifications(19)",
+      "kind": "setting",
+      "title": "Include Channels",
+      "section": "notifications",
+      "source": "packages/SettingsUI/Sources/SettingsUI/SettingsSearchableItems.swift"
+    },
+    {
+      "id": "setting:notifications(2)",
+      "kind": "setting",
+      "title": "Show Message Text",
+      "section": "notifications",
+      "source": "packages/SettingsUI/Sources/SettingsUI/SettingsSearchableItems.swift"
+    },
+    {
+      "id": "setting:notifications(20)",
+      "kind": "setting",
+      "title": "Count Unread Messages",
+      "section": "notifications",
+      "source": "packages/SettingsUI/Sources/SettingsUI/SettingsSearchableItems.swift"
+    },
+    {
+      "id": "setting:notifications(21)",
+      "kind": "setting",
+      "title": "New Contacts",
+      "section": "notifications",
+      "source": "packages/SettingsUI/Sources/SettingsUI/SettingsSearchableItems.swift"
+    },
+    {
+      "id": "setting:notifications(22)",
+      "kind": "setting",
+      "title": "Reset All Notifications",
+      "section": "notifications",
+      "source": "packages/SettingsUI/Sources/SettingsUI/SettingsSearchableItems.swift"
+    },
+    {
+      "id": "setting:notifications(23)",
+      "kind": "setting",
+      "title": "All Accounts",
+      "section": "notifications",
+      "source": "packages/SettingsUI/Sources/SettingsUI/SettingsSearchableItems.swift"
+    },
+    {
+      "id": "setting:notifications(24)",
+      "kind": "setting",
+      "title": "Default Sound",
+      "section": "notifications",
+      "source": "packages/SettingsUI/Sources/SettingsUI/SettingsSearchableItems.swift"
+    },
+    {
+      "id": "setting:notifications(70)",
+      "kind": "setting",
+      "title": "Reactions",
+      "section": "notifications",
+      "source": "packages/SettingsUI/Sources/SettingsUI/SettingsSearchableItems.swift"
+    },
+    {
+      "id": "setting:notifications(71+Int32(i))",
+      "kind": "setting",
+      "title": "row.0",
+      "section": "notifications",
+      "source": "packages/SettingsUI/Sources/SettingsUI/SettingsSearchableItems.swift"
+    },
+    {
+      "id": "setting:notifications(base)",
+      "kind": "setting",
+      "title": "category.title",
+      "section": "notifications",
+      "source": "packages/SettingsUI/Sources/SettingsUI/SettingsSearchableItems.swift"
+    },
+    {
+      "id": "setting:notifications(base+1+Int32(i))",
+      "kind": "setting",
+      "title": "row.0",
+      "section": "notifications",
+      "source": "packages/SettingsUI/Sources/SettingsUI/SettingsSearchableItems.swift"
+    },
+    {
+      "id": "setting:privacy(0)",
+      "kind": "setting",
+      "title": "Privacy and Security",
+      "section": "privacy",
+      "source": "packages/SettingsUI/Sources/SettingsUI/SettingsSearchableItems.swift"
+    },
+    {
+      "id": "setting:privacy(1)",
+      "kind": "setting",
+      "title": "Blocked Users",
+      "section": "privacy",
+      "source": "packages/SettingsUI/Sources/SettingsUI/SettingsSearchableItems.swift"
+    },
+    {
+      "id": "setting:privacy(10)",
+      "kind": "setting",
+      "title": "DELETE MY ACCOUNT",
+      "section": "privacy",
+      "source": "packages/SettingsUI/Sources/SettingsUI/SettingsSearchableItems.swift"
+    },
+    {
+      "id": "setting:privacy(14)",
+      "kind": "setting",
+      "title": "Suggest Frequent Contacts",
+      "section": "privacy",
+      "source": "packages/SettingsUI/Sources/SettingsUI/SettingsSearchableItems.swift"
+    },
+    {
+      "id": "setting:privacy(15)",
+      "kind": "setting",
+      "title": "Delete All Cloud Drafts",
+      "section": "privacy",
+      "source": "packages/SettingsUI/Sources/SettingsUI/SettingsSearchableItems.swift"
+    },
+    {
+      "id": "setting:privacy(2)",
+      "kind": "setting",
+      "title": "Last Seen \u0026 Online",
+      "section": "privacy",
+      "source": "packages/SettingsUI/Sources/SettingsUI/SettingsSearchableItems.swift"
+    },
+    {
+      "id": "setting:privacy(3)",
+      "kind": "setting",
+      "title": "Profile Photos",
+      "section": "privacy",
+      "source": "packages/SettingsUI/Sources/SettingsUI/SettingsSearchableItems.swift"
+    },
+    {
+      "id": "setting:privacy(4)",
+      "kind": "setting",
+      "title": "Forwarded Messages",
+      "section": "privacy",
+      "source": "packages/SettingsUI/Sources/SettingsUI/SettingsSearchableItems.swift"
+    },
+    {
+      "id": "setting:privacy(5)",
+      "kind": "setting",
+      "title": "Calls",
+      "section": "privacy",
+      "source": "packages/SettingsUI/Sources/SettingsUI/SettingsSearchableItems.swift"
+    },
+    {
+      "id": "setting:privacy(6)",
+      "kind": "setting",
+      "title": "Groups \u0026 Channels",
+      "section": "privacy",
+      "source": "packages/SettingsUI/Sources/SettingsUI/SettingsSearchableItems.swift"
+    },
+    {
+      "id": "setting:privacy(7)",
+      "kind": "setting",
+      "title": "passcodeTitle",
+      "section": "privacy",
+      "source": "packages/SettingsUI/Sources/SettingsUI/SettingsSearchableItems.swift"
+    },
+    {
+      "id": "setting:privacy(8)",
+      "kind": "setting",
+      "title": "Two-Step Verification",
+      "section": "privacy",
+      "source": "packages/SettingsUI/Sources/SettingsUI/SettingsSearchableItems.swift"
+    },
+    {
+      "id": "setting:privacy(9)",
+      "kind": "setting",
+      "title": "Active Sessions",
+      "section": "privacy",
+      "source": "packages/SettingsUI/Sources/SettingsUI/SettingsSearchableItems.swift"
+    },
+    {
+      "id": "setting:profile(0)",
+      "kind": "setting",
+      "title": "Edit Profile",
+      "section": "profile",
+      "source": "packages/SettingsUI/Sources/SettingsUI/SettingsSearchableItems.swift"
+    },
+    {
+      "id": "setting:profile(1)",
+      "kind": "setting",
+      "title": "Bio",
+      "section": "profile",
+      "source": "packages/SettingsUI/Sources/SettingsUI/SettingsSearchableItems.swift"
+    },
+    {
+      "id": "setting:profile(2)",
+      "kind": "setting",
+      "title": "Change Number",
+      "section": "profile",
+      "source": "packages/SettingsUI/Sources/SettingsUI/SettingsSearchableItems.swift"
+    },
+    {
+      "id": "setting:profile(3)",
+      "kind": "setting",
+      "title": "Username",
+      "section": "profile",
+      "source": "packages/SettingsUI/Sources/SettingsUI/SettingsSearchableItems.swift"
+    },
+    {
+      "id": "setting:profile(4)",
+      "kind": "setting",
+      "title": "Add Account",
+      "section": "profile",
+      "source": "packages/SettingsUI/Sources/SettingsUI/SettingsSearchableItems.swift"
+    },
+    {
+      "id": "setting:profile(5)",
+      "kind": "setting",
+      "title": "Log Out",
+      "section": "profile",
+      "source": "packages/SettingsUI/Sources/SettingsUI/SettingsSearchableItems.swift"
+    },
+    {
+      "id": "setting:proxy(0)",
+      "kind": "setting",
+      "title": "Proxy",
+      "section": "proxy",
+      "source": "packages/SettingsUI/Sources/SettingsUI/SettingsSearchableItems.swift"
+    },
+    {
+      "id": "setting:proxy(1)",
+      "kind": "setting",
+      "title": "Add Proxy",
+      "section": "proxy",
+      "source": "packages/SettingsUI/Sources/SettingsUI/SettingsSearchableItems.swift"
+    },
+    {
+      "id": "setting:proxy(2)",
+      "kind": "setting",
+      "title": "Use for Calls",
+      "section": "proxy",
+      "source": "packages/SettingsUI/Sources/SettingsUI/SettingsSearchableItems.swift"
+    },
+    {
+      "id": "setting:stickers(0)",
+      "kind": "setting",
+      "title": "Stickers and Emoji",
+      "section": "stickers",
+      "source": "packages/SettingsUI/Sources/SettingsUI/SettingsSearchableItems.swift"
+    },
+    {
+      "id": "setting:stickers(1)",
+      "kind": "setting",
+      "title": "Suggest Stickers by Emoji",
+      "section": "stickers",
+      "source": "packages/SettingsUI/Sources/SettingsUI/SettingsSearchableItems.swift"
+    },
+    {
+      "id": "setting:stickers(3)",
+      "kind": "setting",
+      "title": "Trending Stickers",
+      "section": "stickers",
+      "source": "packages/SettingsUI/Sources/SettingsUI/SettingsSearchableItems.swift"
+    },
+    {
+      "id": "setting:stickers(4)",
+      "kind": "setting",
+      "title": "Archived Stickers",
+      "section": "stickers",
+      "source": "packages/SettingsUI/Sources/SettingsUI/SettingsSearchableItems.swift"
+    },
+    {
+      "id": "settings-row:about",
+      "kind": "settings-row",
+      "title": "about",
+      "source": "packages/SettingsUI/Sources/SettingsUI/AccountViewController.swift"
+    },
+    {
+      "id": "settings-row:accountRecord",
+      "kind": "settings-row",
+      "title": "accountRecord",
+      "source": "packages/SettingsUI/Sources/SettingsUI/AccountViewController.swift"
+    },
+    {
+      "id": "settings-row:activeSessions",
+      "kind": "settings-row",
+      "title": "activeSessions",
+      "source": "packages/SettingsUI/Sources/SettingsUI/AccountViewController.swift"
+    },
+    {
+      "id": "settings-row:addAccount",
+      "kind": "settings-row",
+      "title": "addAccount",
+      "source": "packages/SettingsUI/Sources/SettingsUI/AccountViewController.swift"
+    },
+    {
+      "id": "settings-row:appearance",
+      "kind": "settings-row",
+      "title": "appearance",
+      "source": "packages/SettingsUI/Sources/SettingsUI/AccountViewController.swift"
+    },
+    {
+      "id": "settings-row:ask",
+      "kind": "settings-row",
+      "title": "ask",
+      "source": "packages/SettingsUI/Sources/SettingsUI/AccountViewController.swift"
+    },
+    {
+      "id": "settings-row:attach",
+      "kind": "settings-row",
+      "title": "attach",
+      "source": "packages/SettingsUI/Sources/SettingsUI/AccountViewController.swift"
+    },
+    {
+      "id": "settings-row:business",
+      "kind": "settings-row",
+      "title": "business",
+      "source": "packages/SettingsUI/Sources/SettingsUI/AccountViewController.swift"
+    },
+    {
+      "id": "settings-row:dataAndStorage",
+      "kind": "settings-row",
+      "title": "dataAndStorage",
+      "source": "packages/SettingsUI/Sources/SettingsUI/AccountViewController.swift"
+    },
+    {
+      "id": "settings-row:faq",
+      "kind": "settings-row",
+      "title": "faq",
+      "source": "packages/SettingsUI/Sources/SettingsUI/AccountViewController.swift"
+    },
+    {
+      "id": "settings-row:filters",
+      "kind": "settings-row",
+      "title": "filters",
+      "source": "packages/SettingsUI/Sources/SettingsUI/AccountViewController.swift"
+    },
+    {
+      "id": "settings-row:general",
+      "kind": "settings-row",
+      "title": "general",
+      "source": "packages/SettingsUI/Sources/SettingsUI/AccountViewController.swift"
+    },
+    {
+      "id": "settings-row:giftPremium",
+      "kind": "settings-row",
+      "title": "giftPremium",
+      "source": "packages/SettingsUI/Sources/SettingsUI/AccountViewController.swift"
+    },
+    {
+      "id": "settings-row:info",
+      "kind": "settings-row",
+      "title": "info",
+      "source": "packages/SettingsUI/Sources/SettingsUI/AccountViewController.swift"
+    },
+    {
+      "id": "settings-row:language",
+      "kind": "settings-row",
+      "title": "language",
+      "source": "packages/SettingsUI/Sources/SettingsUI/AccountViewController.swift"
+    },
+    {
+      "id": "settings-row:notifications",
+      "kind": "settings-row",
+      "title": "notifications",
+      "source": "packages/SettingsUI/Sources/SettingsUI/AccountViewController.swift"
+    },
+    {
+      "id": "settings-row:passport",
+      "kind": "settings-row",
+      "title": "passport",
+      "source": "packages/SettingsUI/Sources/SettingsUI/AccountViewController.swift"
+    },
+    {
+      "id": "settings-row:premium",
+      "kind": "settings-row",
+      "title": "premium",
+      "source": "packages/SettingsUI/Sources/SettingsUI/AccountViewController.swift"
+    },
+    {
+      "id": "settings-row:privacy",
+      "kind": "settings-row",
+      "title": "privacy",
+      "source": "packages/SettingsUI/Sources/SettingsUI/AccountViewController.swift"
+    },
+    {
+      "id": "settings-row:proxy",
+      "kind": "settings-row",
+      "title": "proxy",
+      "source": "packages/SettingsUI/Sources/SettingsUI/AccountViewController.swift"
+    },
+    {
+      "id": "settings-row:set2Fa",
+      "kind": "settings-row",
+      "title": "set2Fa",
+      "source": "packages/SettingsUI/Sources/SettingsUI/AccountViewController.swift"
+    },
+    {
+      "id": "settings-row:set2FaAlert",
+      "kind": "settings-row",
+      "title": "set2FaAlert",
+      "source": "packages/SettingsUI/Sources/SettingsUI/AccountViewController.swift"
+    },
+    {
+      "id": "settings-row:setProfileColor",
+      "kind": "settings-row",
+      "title": "setProfileColor",
+      "source": "packages/SettingsUI/Sources/SettingsUI/AccountViewController.swift"
+    },
+    {
+      "id": "settings-row:setStatus",
+      "kind": "settings-row",
+      "title": "setStatus",
+      "source": "packages/SettingsUI/Sources/SettingsUI/AccountViewController.swift"
+    },
+    {
+      "id": "settings-row:stars",
+      "kind": "settings-row",
+      "title": "stars",
+      "source": "packages/SettingsUI/Sources/SettingsUI/AccountViewController.swift"
+    },
+    {
+      "id": "settings-row:stickers",
+      "kind": "settings-row",
+      "title": "stickers",
+      "source": "packages/SettingsUI/Sources/SettingsUI/AccountViewController.swift"
+    },
+    {
+      "id": "settings-row:stories",
+      "kind": "settings-row",
+      "title": "stories",
+      "source": "packages/SettingsUI/Sources/SettingsUI/AccountViewController.swift"
+    },
+    {
+      "id": "settings-row:ton",
+      "kind": "settings-row",
+      "title": "ton",
+      "source": "packages/SettingsUI/Sources/SettingsUI/AccountViewController.swift"
+    },
+    {
+      "id": "settings-row:update",
+      "kind": "settings-row",
+      "title": "update",
+      "source": "packages/SettingsUI/Sources/SettingsUI/AccountViewController.swift"
+    },
+    {
+      "id": "settings-row:wallet",
+      "kind": "settings-row",
+      "title": "wallet",
+      "source": "packages/SettingsUI/Sources/SettingsUI/AccountViewController.swift"
+    },
+    {
+      "id": "menu:Edit",
+      "kind": "menu",
+      "title": "Edit",
+      "source": "Telegram-Mac/en.lproj/MainMenu.xib"
+    },
+    {
+      "id": "menu:Edit › Copy",
+      "kind": "menu",
+      "title": "Copy",
+      "keys": "⌘C",
+      "section": "Edit",
+      "source": "Telegram-Mac/en.lproj/MainMenu.xib"
+    },
+    {
+      "id": "menu:Edit › Cut",
+      "kind": "menu",
+      "title": "Cut",
+      "keys": "⌘X",
+      "section": "Edit",
+      "source": "Telegram-Mac/en.lproj/MainMenu.xib"
+    },
+    {
+      "id": "menu:Edit › Delete",
+      "kind": "menu",
+      "title": "Delete",
+      "section": "Edit",
+      "source": "Telegram-Mac/en.lproj/MainMenu.xib"
+    },
+    {
+      "id": "menu:Edit › Paste",
+      "kind": "menu",
+      "title": "Paste",
+      "keys": "⌘V",
+      "section": "Edit",
+      "source": "Telegram-Mac/en.lproj/MainMenu.xib"
+    },
+    {
+      "id": "menu:Edit › Paste and Match Style",
+      "kind": "menu",
+      "title": "Paste and Match Style",
+      "keys": "⌥⇧⌘V",
+      "section": "Edit",
+      "source": "Telegram-Mac/en.lproj/MainMenu.xib"
+    },
+    {
+      "id": "menu:Edit › Redo",
+      "kind": "menu",
+      "title": "Redo",
+      "keys": "⇧⌘Z",
+      "section": "Edit",
+      "source": "Telegram-Mac/en.lproj/MainMenu.xib"
+    },
+    {
+      "id": "menu:Edit › Select All",
+      "kind": "menu",
+      "title": "Select All",
+      "keys": "⌘A",
+      "section": "Edit",
+      "source": "Telegram-Mac/en.lproj/MainMenu.xib"
+    },
+    {
+      "id": "menu:Edit › Spelling and Grammar",
+      "kind": "menu",
+      "title": "Spelling and Grammar",
+      "section": "Edit",
+      "source": "Telegram-Mac/en.lproj/MainMenu.xib"
+    },
+    {
+      "id": "menu:Edit › Spelling and Grammar › Check Document Now",
+      "kind": "menu",
+      "title": "Check Document Now",
+      "keys": "⌘;",
+      "section": "Edit › Spelling and Grammar",
+      "source": "Telegram-Mac/en.lproj/MainMenu.xib"
+    },
+    {
+      "id": "menu:Edit › Spelling and Grammar › Check Grammar With Spelling",
+      "kind": "menu",
+      "title": "Check Grammar With Spelling",
+      "section": "Edit › Spelling and Grammar",
+      "source": "Telegram-Mac/en.lproj/MainMenu.xib"
+    },
+    {
+      "id": "menu:Edit › Spelling and Grammar › Check Spelling While Typing",
+      "kind": "menu",
+      "title": "Check Spelling While Typing",
+      "section": "Edit › Spelling and Grammar",
+      "source": "Telegram-Mac/en.lproj/MainMenu.xib"
+    },
+    {
+      "id": "menu:Edit › Spelling and Grammar › Correct Spelling Automatically",
+      "kind": "menu",
+      "title": "Correct Spelling Automatically",
+      "section": "Edit › Spelling and Grammar",
+      "source": "Telegram-Mac/en.lproj/MainMenu.xib"
+    },
+    {
+      "id": "menu:Edit › Spelling and Grammar › Show Spelling and Grammar",
+      "kind": "menu",
+      "title": "Show Spelling and Grammar",
+      "keys": "⌘:",
+      "section": "Edit › Spelling and Grammar",
+      "source": "Telegram-Mac/en.lproj/MainMenu.xib"
+    },
+    {
+      "id": "menu:Edit › Substitutions",
+      "kind": "menu",
+      "title": "Substitutions",
+      "section": "Edit",
+      "source": "Telegram-Mac/en.lproj/MainMenu.xib"
+    },
+    {
+      "id": "menu:Edit › Substitutions › Data Detectors",
+      "kind": "menu",
+      "title": "Data Detectors",
+      "section": "Edit › Substitutions",
+      "source": "Telegram-Mac/en.lproj/MainMenu.xib"
+    },
+    {
+      "id": "menu:Edit › Substitutions › Show Substitutions",
+      "kind": "menu",
+      "title": "Show Substitutions",
+      "section": "Edit › Substitutions",
+      "source": "Telegram-Mac/en.lproj/MainMenu.xib"
+    },
+    {
+      "id": "menu:Edit › Substitutions › Smart Copy/Paste",
+      "kind": "menu",
+      "title": "Smart Copy/Paste",
+      "section": "Edit › Substitutions",
+      "source": "Telegram-Mac/en.lproj/MainMenu.xib"
+    },
+    {
+      "id": "menu:Edit › Substitutions › Smart Dashes",
+      "kind": "menu",
+      "title": "Smart Dashes",
+      "section": "Edit › Substitutions",
+      "source": "Telegram-Mac/en.lproj/MainMenu.xib"
+    },
+    {
+      "id": "menu:Edit › Substitutions › Smart Links",
+      "kind": "menu",
+      "title": "Smart Links",
+      "section": "Edit › Substitutions",
+      "source": "Telegram-Mac/en.lproj/MainMenu.xib"
+    },
+    {
+      "id": "menu:Edit › Substitutions › Smart Quotes",
+      "kind": "menu",
+      "title": "Smart Quotes",
+      "section": "Edit › Substitutions",
+      "source": "Telegram-Mac/en.lproj/MainMenu.xib"
+    },
+    {
+      "id": "menu:Edit › Substitutions › Text Replacement",
+      "kind": "menu",
+      "title": "Text Replacement",
+      "section": "Edit › Substitutions",
+      "source": "Telegram-Mac/en.lproj/MainMenu.xib"
+    },
+    {
+      "id": "menu:Edit › Transformations",
+      "kind": "menu",
+      "title": "Transformations",
+      "section": "Edit",
+      "source": "Telegram-Mac/en.lproj/MainMenu.xib"
+    },
+    {
+      "id": "menu:Edit › Transformations › Capitalize",
+      "kind": "menu",
+      "title": "Capitalize",
+      "section": "Edit › Transformations",
+      "source": "Telegram-Mac/en.lproj/MainMenu.xib"
+    },
+    {
+      "id": "menu:Edit › Transformations › Make Lower Case",
+      "kind": "menu",
+      "title": "Make Lower Case",
+      "section": "Edit › Transformations",
+      "source": "Telegram-Mac/en.lproj/MainMenu.xib"
+    },
+    {
+      "id": "menu:Edit › Transformations › Make Upper Case",
+      "kind": "menu",
+      "title": "Make Upper Case",
+      "section": "Edit › Transformations",
+      "source": "Telegram-Mac/en.lproj/MainMenu.xib"
+    },
+    {
+      "id": "menu:Edit › Undo",
+      "kind": "menu",
+      "title": "Undo",
+      "keys": "⌘Z",
+      "section": "Edit",
+      "source": "Telegram-Mac/en.lproj/MainMenu.xib"
+    },
+    {
+      "id": "menu:TelegramMac",
+      "kind": "menu",
+      "title": "TelegramMac",
+      "source": "Telegram-Mac/en.lproj/MainMenu.xib"
+    },
+    {
+      "id": "menu:TelegramMac › About Telegram",
+      "kind": "menu",
+      "title": "About Telegram",
+      "section": "TelegramMac",
+      "source": "Telegram-Mac/en.lproj/MainMenu.xib"
+    },
+    {
+      "id": "menu:TelegramMac › Check for Updates",
+      "kind": "menu",
+      "title": "Check for Updates",
+      "section": "TelegramMac",
+      "source": "Telegram-Mac/en.lproj/MainMenu.xib"
+    },
+    {
+      "id": "menu:TelegramMac › Hide",
+      "kind": "menu",
+      "title": "Hide",
+      "keys": "⌘W",
+      "section": "TelegramMac",
+      "source": "Telegram-Mac/en.lproj/MainMenu.xib"
+    },
+    {
+      "id": "menu:TelegramMac › Hide Others",
+      "kind": "menu",
+      "title": "Hide Others",
+      "keys": "⌥⌘H",
+      "section": "TelegramMac",
+      "source": "Telegram-Mac/en.lproj/MainMenu.xib"
+    },
+    {
+      "id": "menu:TelegramMac › Hide Telegram",
+      "kind": "menu",
+      "title": "Hide Telegram",
+      "keys": "⌘H",
+      "section": "TelegramMac",
+      "source": "Telegram-Mac/en.lproj/MainMenu.xib"
+    },
+    {
+      "id": "menu:TelegramMac › Preferences…",
+      "kind": "menu",
+      "title": "Preferences…",
+      "keys": "⌘,",
+      "section": "TelegramMac",
+      "source": "Telegram-Mac/en.lproj/MainMenu.xib"
+    },
+    {
+      "id": "menu:TelegramMac › Quick Switcher",
+      "kind": "menu",
+      "title": "Quick Switcher",
+      "keys": "⌘K",
+      "section": "TelegramMac",
+      "source": "Telegram-Mac/en.lproj/MainMenu.xib"
+    },
+    {
+      "id": "menu:TelegramMac › Quit Telegram",
+      "kind": "menu",
+      "title": "Quit Telegram",
+      "keys": "⌘Q",
+      "section": "TelegramMac",
+      "source": "Telegram-Mac/en.lproj/MainMenu.xib"
+    },
+    {
+      "id": "menu:TelegramMac › Show All",
+      "kind": "menu",
+      "title": "Show All",
+      "section": "TelegramMac",
+      "source": "Telegram-Mac/en.lproj/MainMenu.xib"
+    },
+    {
+      "id": "menu:View",
+      "kind": "menu",
+      "title": "View",
+      "source": "Telegram-Mac/en.lproj/MainMenu.xib"
+    },
+    {
+      "id": "menu:View › Enter Full Screen",
+      "kind": "menu",
+      "title": "Enter Full Screen",
+      "keys": "⌃⌘F",
+      "section": "View",
+      "source": "Telegram-Mac/en.lproj/MainMenu.xib"
+    },
+    {
+      "id": "menu:Window",
+      "kind": "menu",
+      "title": "Window",
+      "source": "Telegram-Mac/en.lproj/MainMenu.xib"
+    },
+    {
+      "id": "menu:Window › Bring All to Front",
+      "kind": "menu",
+      "title": "Bring All to Front",
+      "section": "Window",
+      "source": "Telegram-Mac/en.lproj/MainMenu.xib"
+    },
+    {
+      "id": "menu:Window › Minimize",
+      "kind": "menu",
+      "title": "Minimize",
+      "keys": "⌘M",
+      "section": "Window",
+      "source": "Telegram-Mac/en.lproj/MainMenu.xib"
+    },
+    {
+      "id": "menu:Window › Telegram",
+      "kind": "menu",
+      "title": "Telegram",
+      "keys": "⌘O",
+      "section": "Window",
+      "source": "Telegram-Mac/en.lproj/MainMenu.xib"
+    },
+    {
+      "id": "menu:Window › Zoom",
+      "kind": "menu",
+      "title": "Zoom",
+      "section": "Window",
+      "source": "Telegram-Mac/en.lproj/MainMenu.xib"
+    },
+    {
+      "id": "message-action:chatContextBan",
+      "kind": "message-action",
+      "title": "Ban",
+      "source": "packages/ChatUI/Sources/ChatUI/ChatMessageMenuItems.swift"
+    },
+    {
+      "id": "message-action:chatContextBlockGroup",
+      "kind": "message-action",
+      "title": "Block Group",
+      "source": "packages/ChatUI/Sources/ChatUI/ChatMessageMenuItems.swift"
+    },
+    {
+      "id": "message-action:chatContextBlockUser",
+      "kind": "message-action",
+      "title": "Block User",
+      "source": "packages/ChatUI/Sources/ChatUI/ChatMessageMenuItems.swift"
+    },
+    {
+      "id": "message-action:chatContextCancelEditing",
+      "kind": "message-action",
+      "title": "Cancel Editing",
+      "source": "packages/ChatUI/Sources/ChatUI/ChatMessageMenuItems.swift"
+    },
+    {
+      "id": "message-action:chatContextCopyMedia",
+      "kind": "message-action",
+      "title": "Copy Media",
+      "source": "packages/ChatUI/Sources/ChatUI/ChatMessageMenuItems.swift"
+    },
+    {
+      "id": "message-action:chatContextCopyText",
+      "kind": "message-action",
+      "title": "Copy Text",
+      "source": "packages/ChatUI/Sources/ChatUI/ChatMessageMenuItems.swift"
+    },
+    {
+      "id": "message-action:chatContextEditedAt",
+      "kind": "message-action",
+      "title": "edited %@",
+      "source": "packages/ChatUI/Sources/ChatUI/ChatMessageMenuItems.swift"
+    },
+    {
+      "id": "message-action:chatContextFolders",
+      "kind": "message-action",
+      "title": "Folders",
+      "source": "packages/ChatUI/Sources/ChatUI/ChatMessageMenuItems.swift"
+    },
+    {
+      "id": "message-action:chatContextForwardMore",
+      "kind": "message-action",
+      "title": "More...",
+      "source": "packages/ChatUI/Sources/ChatUI/ChatMessageMenuItems.swift"
+    },
+    {
+      "id": "message-action:chatContextHideAd",
+      "kind": "message-action",
+      "title": "Hide Ad",
+      "source": "packages/ChatUI/Sources/ChatUI/ChatMessageMenuItems.swift"
+    },
+    {
+      "id": "message-action:chatContextMenuAddTask",
+      "kind": "message-action",
+      "title": "Add a Task",
+      "source": "packages/ChatUI/Sources/ChatUI/ChatMessageMenuItems.swift"
+    },
+    {
+      "id": "message-action:chatContextReportFalsePositive",
+      "kind": "message-action",
+      "title": "Report False Positive",
+      "source": "packages/ChatUI/Sources/ChatUI/ChatMessageMenuItems.swift"
+    },
+    {
+      "id": "message-action:chatContextRestrict",
+      "kind": "message-action",
+      "title": "Restrict",
+      "source": "packages/ChatUI/Sources/ChatUI/ChatMessageMenuItems.swift"
+    },
+    {
+      "id": "message-action:chatContextSaveAllPhotos",
+      "kind": "message-action",
+      "title": "Save All Photos...",
+      "source": "packages/ChatUI/Sources/ChatUI/ChatMessageMenuItems.swift"
+    },
+    {
+      "id": "message-action:chatContextSaveMedia",
+      "kind": "message-action",
+      "title": "Save As...",
+      "source": "packages/ChatUI/Sources/ChatUI/ChatMessageMenuItems.swift"
+    },
+    {
+      "id": "message-action:chatContextSaveRingtoneAdd",
+      "kind": "message-action",
+      "title": "Save for Notifications",
+      "source": "packages/ChatUI/Sources/ChatUI/ChatMessageMenuItems.swift"
+    },
+    {
+      "id": "message-action:chatContextSaveRingtoneRemove",
+      "kind": "message-action",
+      "title": "Remove Tone",
+      "source": "packages/ChatUI/Sources/ChatUI/ChatMessageMenuItems.swift"
+    },
+    {
+      "id": "message-action:chatContextSaveSelectedPhotos",
+      "kind": "message-action",
+      "title": "Save Selected Photos...",
+      "source": "packages/ChatUI/Sources/ChatUI/ChatMessageMenuItems.swift"
+    },
+    {
+      "id": "message-action:chatContextScheduledReschedule",
+      "kind": "message-action",
+      "title": "Re-schedule",
+      "source": "packages/ChatUI/Sources/ChatUI/ChatMessageMenuItems.swift"
+    },
+    {
+      "id": "message-action:chatContextScheduledSendNow",
+      "kind": "message-action",
+      "title": "Send Now",
+      "source": "packages/ChatUI/Sources/ChatUI/ChatMessageMenuItems.swift"
+    },
+    {
+      "id": "message-action:chatContextSummarize",
+      "kind": "message-action",
+      "title": "Summarize",
+      "source": "packages/ChatUI/Sources/ChatUI/ChatMessageMenuItems.swift"
+    },
+    {
+      "id": "message-action:chatContextTodoDelete",
+      "kind": "message-action",
+      "title": "Delete Item",
+      "source": "packages/ChatUI/Sources/ChatUI/ChatMessageMenuItems.swift"
+    },
+    {
+      "id": "message-action:chatContextTodoEdit",
+      "kind": "message-action",
+      "title": "Edit Item",
+      "source": "packages/ChatUI/Sources/ChatUI/ChatMessageMenuItems.swift"
+    },
+    {
+      "id": "message-action:chatContextTranslate",
+      "kind": "message-action",
+      "title": "Translate",
+      "source": "packages/ChatUI/Sources/ChatUI/ChatMessageMenuItems.swift"
+    },
+    {
+      "id": "message-action:chatCopySelectedText",
+      "kind": "message-action",
+      "title": "Copy Selected Text",
+      "source": "packages/ChatUI/Sources/ChatUI/ChatMessageMenuItems.swift"
+    },
+    {
+      "id": "message-action:chatEphemeralMessageRevert",
+      "kind": "message-action",
+      "title": "Revert",
+      "source": "packages/ChatUI/Sources/ChatUI/ChatMessageMenuItems.swift"
+    },
+    {
+      "id": "message-action:chatMenuDeleteOption",
+      "kind": "message-action",
+      "title": "Delete Option",
+      "source": "packages/ChatUI/Sources/ChatUI/ChatMessageMenuItems.swift"
+    },
+    {
+      "id": "message-action:chatMenuReplyToOption",
+      "kind": "message-action",
+      "title": "Reply to Option",
+      "source": "packages/ChatUI/Sources/ChatUI/ChatMessageMenuItems.swift"
+    },
+    {
+      "id": "message-action:chatMessageContextQuote",
+      "kind": "message-action",
+      "title": "Quote",
+      "source": "packages/ChatUI/Sources/ChatUI/ChatMessageMenuItems.swift"
+    },
+    {
+      "id": "message-action:chatMessageMenuItemsSendMoney",
+      "kind": "message-action",
+      "title": "Send Money",
+      "source": "packages/ChatUI/Sources/ChatUI/ChatMessageMenuItems.swift"
+    },
+    {
+      "id": "message-action:chatMessageMenuItemsViewStats",
+      "kind": "message-action",
+      "title": "View Stats",
+      "source": "packages/ChatUI/Sources/ChatUI/ChatMessageMenuItems.swift"
+    },
+    {
+      "id": "message-action:chatMessageMenuSentAt",
+      "kind": "message-action",
+      "title": "Sent %1$@",
+      "source": "packages/ChatUI/Sources/ChatUI/ChatMessageMenuItems.swift"
+    },
+    {
+      "id": "message-action:chatMessageSponsoredAbout",
+      "kind": "message-action",
+      "title": "About This Ad",
+      "source": "packages/ChatUI/Sources/ChatUI/ChatMessageMenuItems.swift"
+    },
+    {
+      "id": "message-action:chatMessageSponsoredAdvertiser",
+      "kind": "message-action",
+      "title": "Advertiser info",
+      "source": "packages/ChatUI/Sources/ChatUI/ChatMessageMenuItems.swift"
+    },
+    {
+      "id": "message-action:chatMessageSponsoredReport",
+      "kind": "message-action",
+      "title": "Report Ad",
+      "source": "packages/ChatUI/Sources/ChatUI/ChatMessageMenuItems.swift"
+    },
+    {
+      "id": "message-action:chatMessageSponsoredWhat",
+      "kind": "message-action",
+      "title": "What are sponsored messages?",
+      "source": "packages/ChatUI/Sources/ChatUI/ChatMessageMenuItems.swift"
+    },
+    {
+      "id": "message-action:chatPollUnvote",
+      "kind": "message-action",
+      "title": "Retract Vote",
+      "source": "packages/ChatUI/Sources/ChatUI/ChatMessageMenuItems.swift"
+    },
+    {
+      "id": "message-action:contextCopy",
+      "kind": "message-action",
+      "title": "Copy",
+      "source": "packages/ChatUI/Sources/ChatUI/ChatMessageMenuItems.swift"
+    },
+    {
+      "id": "message-action:contextViewStickerSet",
+      "kind": "message-action",
+      "title": "View Sticker Set",
+      "source": "packages/ChatUI/Sources/ChatUI/ChatMessageMenuItems.swift"
+    },
+    {
+      "id": "message-action:factCheckContextEdit",
+      "kind": "message-action",
+      "title": "Edit Fact Check",
+      "source": "packages/ChatUI/Sources/ChatUI/ChatMessageMenuItems.swift"
+    },
+    {
+      "id": "message-action:galleryContextOriginal",
+      "kind": "message-action",
+      "title": "Original",
+      "source": "packages/ChatUI/Sources/ChatUI/ChatMessageMenuItems.swift"
+    },
+    {
+      "id": "message-action:galleryContextSaveVideo",
+      "kind": "message-action",
+      "title": "Save Video",
+      "source": "packages/ChatUI/Sources/ChatUI/ChatMessageMenuItems.swift"
+    },
+    {
+      "id": "message-action:messageContextCopyMessageLink1",
+      "kind": "message-action",
+      "title": "Copy Message Link",
+      "source": "packages/ChatUI/Sources/ChatUI/ChatMessageMenuItems.swift"
+    },
+    {
+      "id": "message-action:messageContextDelete",
+      "kind": "message-action",
+      "title": "Delete",
+      "source": "packages/ChatUI/Sources/ChatUI/ChatMessageMenuItems.swift"
+    },
+    {
+      "id": "message-action:messageContextEdit",
+      "kind": "message-action",
+      "title": "Edit",
+      "source": "packages/ChatUI/Sources/ChatUI/ChatMessageMenuItems.swift"
+    },
+    {
+      "id": "message-action:messageContextForward",
+      "kind": "message-action",
+      "title": "Forward",
+      "source": "packages/ChatUI/Sources/ChatUI/ChatMessageMenuItems.swift"
+    },
+    {
+      "id": "message-action:messageContextPin",
+      "kind": "message-action",
+      "title": "Pin",
+      "source": "packages/ChatUI/Sources/ChatUI/ChatMessageMenuItems.swift"
+    },
+    {
+      "id": "message-action:messageContextRemoveGif",
+      "kind": "message-action",
+      "title": "Remove GIF",
+      "source": "packages/ChatUI/Sources/ChatUI/ChatMessageMenuItems.swift"
+    },
+    {
+      "id": "message-action:messageContextReply1",
+      "kind": "message-action",
+      "title": "Reply",
+      "source": "packages/ChatUI/Sources/ChatUI/ChatMessageMenuItems.swift"
+    },
+    {
+      "id": "message-action:messageContextReport",
+      "kind": "message-action",
+      "title": "Report",
+      "source": "packages/ChatUI/Sources/ChatUI/ChatMessageMenuItems.swift"
+    },
+    {
+      "id": "message-action:messageContextSaveGif",
+      "kind": "message-action",
+      "title": "Add GIF",
+      "source": "packages/ChatUI/Sources/ChatUI/ChatMessageMenuItems.swift"
+    },
+    {
+      "id": "message-action:messageContextSelect",
+      "kind": "message-action",
+      "title": "Select",
+      "source": "packages/ChatUI/Sources/ChatUI/ChatMessageMenuItems.swift"
+    },
+    {
+      "id": "message-action:messageContextShare",
+      "kind": "message-action",
+      "title": "Share",
+      "source": "packages/ChatUI/Sources/ChatUI/ChatMessageMenuItems.swift"
+    },
+    {
+      "id": "message-action:messageContextUnpin",
+      "kind": "message-action",
+      "title": "Unpin",
+      "source": "packages/ChatUI/Sources/ChatUI/ChatMessageMenuItems.swift"
+    },
+    {
+      "id": "message-action:messageContextViewCommentsOther",
+      "kind": "message-action",
+      "title": "View %d Comments",
+      "source": "packages/ChatUI/Sources/ChatUI/ChatMessageMenuItems.swift"
+    },
+    {
+      "id": "message-action:messageContextViewRepliesOther",
+      "kind": "message-action",
+      "title": "View %d Replies",
+      "source": "packages/ChatUI/Sources/ChatUI/ChatMessageMenuItems.swift"
+    },
+    {
+      "id": "message-action:peerSavedMessages",
+      "kind": "message-action",
+      "title": "Saved Messages",
+      "source": "packages/ChatUI/Sources/ChatUI/ChatMessageMenuItems.swift"
+    },
+    {
+      "id": "chat-action:accountOpenInWindow",
+      "kind": "chat-action",
+      "title": "Open In Window",
+      "source": "packages/ChatListUI/Sources/ChatListUI/ChatListRowItem.swift"
+    },
+    {
+      "id": "chat-action:chatListContextClearHistory",
+      "kind": "chat-action",
+      "title": "Clear History",
+      "source": "packages/ChatListUI/Sources/ChatListUI/ChatListRowItem.swift"
+    },
+    {
+      "id": "chat-action:chatListContextDelete",
+      "kind": "chat-action",
+      "title": "Delete",
+      "source": "packages/ChatListUI/Sources/ChatListUI/ChatListRowItem.swift"
+    },
+    {
+      "id": "chat-action:chatListContextDeleteAndExit",
+      "kind": "chat-action",
+      "title": "Delete and Leave",
+      "source": "packages/ChatListUI/Sources/ChatListUI/ChatListRowItem.swift"
+    },
+    {
+      "id": "chat-action:chatListContextDeleteChat",
+      "kind": "chat-action",
+      "title": "Delete Chat",
+      "source": "packages/ChatListUI/Sources/ChatListUI/ChatListRowItem.swift"
+    },
+    {
+      "id": "chat-action:chatListContextHidePromo",
+      "kind": "chat-action",
+      "title": "Hide",
+      "source": "packages/ChatListUI/Sources/ChatListUI/ChatListRowItem.swift"
+    },
+    {
+      "id": "chat-action:chatListContextLeaveChannel",
+      "kind": "chat-action",
+      "title": "Leave Channel",
+      "source": "packages/ChatListUI/Sources/ChatListUI/ChatListRowItem.swift"
+    },
+    {
+      "id": "chat-action:chatListContextLeaveGroup",
+      "kind": "chat-action",
+      "title": "Leave Group",
+      "source": "packages/ChatListUI/Sources/ChatListUI/ChatListRowItem.swift"
+    },
+    {
+      "id": "chat-action:chatListContextMaskAsRead",
+      "kind": "chat-action",
+      "title": "Mark As Read",
+      "source": "packages/ChatListUI/Sources/ChatListUI/ChatListRowItem.swift"
+    },
+    {
+      "id": "chat-action:chatListContextMaskAsUnread",
+      "kind": "chat-action",
+      "title": "Mark As Unread",
+      "source": "packages/ChatListUI/Sources/ChatListUI/ChatListRowItem.swift"
+    },
+    {
+      "id": "chat-action:chatListContextPreview",
+      "kind": "chat-action",
+      "title": "Preview",
+      "source": "packages/ChatListUI/Sources/ChatListUI/ChatListRowItem.swift"
+    },
+    {
+      "id": "chat-action:chatListContextSound",
+      "kind": "chat-action",
+      "title": "Sound",
+      "source": "packages/ChatListUI/Sources/ChatListUI/ChatListRowItem.swift"
+    },
+    {
+      "id": "chat-action:chatListFilterAddToFolder",
+      "kind": "chat-action",
+      "title": "Add to folder...",
+      "source": "packages/ChatListUI/Sources/ChatListUI/ChatListRowItem.swift"
+    },
+    {
+      "id": "chat-action:chatListFilterRemoveFromFolder",
+      "kind": "chat-action",
+      "title": "Remove From Folder",
+      "source": "packages/ChatListUI/Sources/ChatListUI/ChatListRowItem.swift"
+    },
+    {
+      "id": "chat-action:chatListMute1Hour",
+      "kind": "chat-action",
+      "title": "For 1 Hour",
+      "source": "packages/ChatListUI/Sources/ChatListUI/ChatListRowItem.swift"
+    },
+    {
+      "id": "chat-action:chatListMute3Days",
+      "kind": "chat-action",
+      "title": "For 3 Days",
+      "source": "packages/ChatListUI/Sources/ChatListUI/ChatListRowItem.swift"
+    },
+    {
+      "id": "chat-action:chatListMute8Hours",
+      "kind": "chat-action",
+      "title": "For 8 Hours",
+      "source": "packages/ChatListUI/Sources/ChatListUI/ChatListRowItem.swift"
+    },
+    {
+      "id": "chat-action:chatListMuteForever",
+      "kind": "chat-action",
+      "title": "Forever",
+      "source": "packages/ChatListUI/Sources/ChatListUI/ChatListRowItem.swift"
+    },
+    {
+      "id": "chat-action:chatListMuteUntil",
+      "kind": "chat-action",
+      "title": "Mute Until...",
+      "source": "packages/ChatListUI/Sources/ChatListUI/ChatListRowItem.swift"
+    },
+    {
+      "id": "chat-action:chatListRemoveFromCommunity",
+      "kind": "chat-action",
+      "title": "Remove from Community",
+      "source": "packages/ChatListUI/Sources/ChatListUI/ChatListRowItem.swift"
+    },
+    {
+      "id": "chat-action:chatListRevealActionCollapse",
+      "kind": "chat-action",
+      "title": "Collapse",
+      "source": "packages/ChatListUI/Sources/ChatListUI/ChatListRowItem.swift"
+    },
+    {
+      "id": "chat-action:chatListRevealActionExpand",
+      "kind": "chat-action",
+      "title": "Expand",
+      "source": "packages/ChatListUI/Sources/ChatListUI/ChatListRowItem.swift"
+    },
+    {
+      "id": "chat-action:chatListSwipingArchive",
+      "kind": "chat-action",
+      "title": "Archive",
+      "source": "packages/ChatListUI/Sources/ChatListUI/ChatListRowItem.swift"
+    },
+    {
+      "id": "chat-action:chatListSwipingUnarchive",
+      "kind": "chat-action",
+      "title": "Unarchive",
+      "source": "packages/ChatListUI/Sources/ChatListUI/ChatListRowItem.swift"
+    },
+    {
+      "id": "chat-action:chatListUngroup",
+      "kind": "chat-action",
+      "title": "Ungroup",
+      "source": "packages/ChatListUI/Sources/ChatListUI/ChatListRowItem.swift"
+    },
+    {
+      "id": "chat-action:chatSavedMessagesViewAsChats",
+      "kind": "chat-action",
+      "title": "View as Chats",
+      "source": "packages/ChatListUI/Sources/ChatListUI/ChatListRowItem.swift"
+    },
+    {
+      "id": "chat-action:chatSavedMessagesViewAsMessages",
+      "kind": "chat-action",
+      "title": "View as Messages",
+      "source": "packages/ChatListUI/Sources/ChatListUI/ChatListRowItem.swift"
+    },
+    {
+      "id": "attach-action:chatInputAttachQuickReply",
+      "kind": "attach-action",
+      "title": "Quick Reply",
+      "source": "packages/ChatUI/Sources/ChatUI/ChatInputAttachView.swift"
+    },
+    {
+      "id": "attach-action:chatInputAttachViewMoney",
+      "kind": "attach-action",
+      "title": "Money",
+      "source": "packages/ChatUI/Sources/ChatUI/ChatInputAttachView.swift"
+    },
+    {
+      "id": "attach-action:editMessageEditCurrentPhoto",
+      "kind": "attach-action",
+      "title": "Edit",
+      "source": "packages/ChatUI/Sources/ChatUI/ChatInputAttachView.swift"
+    },
+    {
+      "id": "attach-action:inputAttachAudio",
+      "kind": "attach-action",
+      "title": "Audio",
+      "source": "packages/ChatUI/Sources/ChatUI/ChatInputAttachView.swift"
+    },
+    {
+      "id": "attach-action:inputAttachPopoverChecklist",
+      "kind": "attach-action",
+      "title": "Checklist",
+      "source": "packages/ChatUI/Sources/ChatUI/ChatInputAttachView.swift"
+    },
+    {
+      "id": "attach-action:inputAttachPopoverFile",
+      "kind": "attach-action",
+      "title": "File",
+      "source": "packages/ChatUI/Sources/ChatUI/ChatInputAttachView.swift"
+    },
+    {
+      "id": "attach-action:inputAttachPopoverGift",
+      "kind": "attach-action",
+      "title": "Gift Premium",
+      "source": "packages/ChatUI/Sources/ChatUI/ChatInputAttachView.swift"
+    },
+    {
+      "id": "attach-action:inputAttachPopoverLocation",
+      "kind": "attach-action",
+      "title": "Location",
+      "source": "packages/ChatUI/Sources/ChatUI/ChatInputAttachView.swift"
+    },
+    {
+      "id": "attach-action:inputAttachPopoverMusic",
+      "kind": "attach-action",
+      "title": "Audio File",
+      "source": "packages/ChatUI/Sources/ChatUI/ChatInputAttachView.swift"
+    },
+    {
+      "id": "attach-action:inputAttachPopoverPhoto",
+      "kind": "attach-action",
+      "title": "Photo",
+      "source": "packages/ChatUI/Sources/ChatUI/ChatInputAttachView.swift"
+    },
+    {
+      "id": "attach-action:inputAttachPopoverPhotoOrVideo",
+      "kind": "attach-action",
+      "title": "Photo Or Video",
+      "source": "packages/ChatUI/Sources/ChatUI/ChatInputAttachView.swift"
+    },
+    {
+      "id": "attach-action:inputAttachPopoverPicture",
+      "kind": "attach-action",
+      "title": "Camera",
+      "source": "packages/ChatUI/Sources/ChatUI/ChatInputAttachView.swift"
+    },
+    {
+      "id": "attach-action:inputAttachPopoverPoll",
+      "kind": "attach-action",
+      "title": "Poll",
+      "source": "packages/ChatUI/Sources/ChatUI/ChatInputAttachView.swift"
+    },
+    {
+      "id": "attach-action:inputAttachPopoverVideo",
+      "kind": "attach-action",
+      "title": "Video",
+      "source": "packages/ChatUI/Sources/ChatUI/ChatInputAttachView.swift"
+    },
+    {
+      "id": "attach-action:richTextEditorAttachTitle",
+      "kind": "attach-action",
+      "title": "Article",
+      "source": "packages/ChatUI/Sources/ChatUI/ChatInputAttachView.swift"
+    }
+  ]
+}

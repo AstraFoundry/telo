@@ -1,46 +1,27 @@
 # Public API
 
-Every slice exposes a public API through its root `index.ts`. Other slices must import only from this public API.
+> **Telo mapping.** A slice is one Go package; its public API is its exported identifiers. There are no barrel files.
 
 ## Rules
 
-- Each slice has one `index.ts` at its root.
-- All consumers import from the slice directory, never from internal files.
-- Re-export only what is intended for external use.
-- Do not re-export internals that may change frequently.
+- Export only what other slices use: the slice's `State` or `Page`, its `Render` or `View`, its `Env` or `Props`, and the registries the parity gate reads (`Items`, `AttachItems`).
+- Keep helpers unexported. A helper two slices need moves down a layer and is exported there.
+- A slice does not split into internal sub-packages that other slices could reach; when a slice grows, split it into two slices of the right layers.
+- Go's own `internal/` directories are not used inside `frontend/`; the layer rules already say who may import what.
 
 ## Example
 
-```ts
-// features/add-to-cart/index.ts
-export { AddToCartButton } from "./ui/AddToCartButton";
-export { useCartCount } from "./lib/useCartCount";
-export type { AddToCartPayload } from "./api/addToCart";
+```go
+// frontend/features/compose: the public API
+type Env struct { /* … */ }
+type Composer struct { /* … */ }
+func (cp *Composer) Render(c *ui.Context, env Env, chatID tg.ChatID)
+var AttachItems = []AttachItem{ /* … */ }
+
+// unexported: only compose uses it
+func (cp *Composer) renderPanel(c *ui.Context, env Env, ch tg.Chat)
 ```
 
-```ts
-// widgets/header/index.ts
-export { Header } from "./ui/Header";
-```
+## Shared
 
-## Import pattern
-
-```ts
-// ✅ Good
-import { AddToCartButton } from "features/add-to-cart";
-
-// ❌ Bad
-import { AddToCartButton } from "features/add-to-cart/ui/AddToCartButton";
-```
-
-Use path aliases (e.g., `features/...`, `shared/...`) so the public API rule is easy to follow.
-
-## Shared public API
-
-`shared` is also a slice in the lowest layer. Component primitives are exposed through the `shared/ui` barrel. `shared/lib` and `shared/config` have no barrels by convention: each file there is a single-purpose public module (e.g., `shared/lib/format-time`, `shared/config/copy`) and is imported directly by path. Do not deep-import a file inside another `shared` sub-module's internal directory structure; only top-level files of `shared/lib` and `shared/config` are public.
-
-```ts
-import { Button } from "shared/ui";
-import { formatTime } from "shared/lib/format-time";
-import { copy } from "shared/config/copy";
-```
+`shared` holds independent packages, each its own public API: `kit` (primitives), `theme` (tokens), `copy` (the catalog), `icons`, `config` (shortcuts, countries, emoji, links), `media` (image cache), `runtime` (the UI's boundary), `lib/timefmt`, `assets` and `testkit`.

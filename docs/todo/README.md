@@ -1,8 +1,5 @@
 # Todo
 
-Product gap checklists. These are execution ledgers, not architecture docs.
+Telo's gap list is the `planned` and `partial` entries of the parity ledger, each with a priority (`P0`, `P1`, `P2`) and the reason it is open: [`../telegram/parity/ledger.json`](../telegram/parity/ledger.json), explained in [`../telegram/parity.md`](../telegram/parity.md). `make parity` keeps it in step with the code, so no separate checklist is kept here.
 
-- [`gaps.md`](gaps.md) — daily-client and message-level assistant gaps, in execution waves.
-- [`client-parity.md`](client-parity.md) — fine-grained feature gap audit against open-source third-party clients, with TDLib 1.8.67 feasibility gate.
-- [`tdlib-migration.md`](tdlib-migration.md) — TDLib kernel refactor: packaging gate, port freeze, adapter waves, secret chats, verification, cutover.
-- [`alignment.md`](alignment.md) — Nicegram/Telegram reference mapping, BEUI export surface, and the per-wave acceptance matrix.
+The checklists of the Electron build (daily-client gaps, client parity, the TDLib migration and the Nicegram alignment) were retired with the Go rewrite; the ledger replaces them.

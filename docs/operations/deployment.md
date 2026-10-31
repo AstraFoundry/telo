@@ -5,20 +5,22 @@ Telo is distributed as a desktop application. There is no server deployment or c
 ## Local artifacts
 
 ```sh
-make build
-make package
+make build      # build/telo for this platform
+make package    # the packaged app under build/<os>-<arch>/
 ```
 
-The compiled app is written to `out/`; unpacked or installer artifacts are written to `release/`. Native `tdl` stays asar-unpacked. `libtdjson` is copied to `resources/tdlib-native` at pack time so the packaged process does not load it from pnpm's asar `node_modules`. Windows arm64 is unsupported. After packaging, `make tdlib-smoke` probes `authorizationStateWaitPhoneNumber` without a phone login. Tag releases run the same smoke on macOS, Windows x64, and Ubuntu.
+`make package` runs `mygo build` with `mygo.json` (name, identifier `si.astrafoundry.telo`, version, the `tg:` URL scheme) and links the Telegram API credentials and the Google OAuth client from the environment through `MYGO_LDFLAGS`. It ships `build/tdlib-native` as a resource beside the executable, where `bootstrap` loads `libtdjson`. It produces a signed `.app` and a `.dmg` on macOS (ad-hoc unless a signing identity is set), the executable and an NSIS installer (`telo-setup-<version>-<arch>.exe`) on Windows, and the executable, a `.tar.gz` with `install.sh` and a `.deb` on Linux. Windows arm64 is not supported: `prebuilt-tdlib` has no build for it.
 
-Packaged applications use `Telo` as the operating-system display name. Branding assets live under `build/`: `icon.icns` for macOS, `icon.ico` for Windows, and dimension-named PNG files under `build/icons/` for Linux. `icon-artwork.png` preserves the selected full-resolution artwork. `icon-source.png` and `icon.png` contain the normalized 1024×1024 rounded tile with transparent platform-safe margins used to derive the platform assets.
+The icon is `resources/icon.png`.
 
 ## CI
 
-Every pull request runs two Ubuntu jobs: `check` (format, lint, TypeScript, coverage-gated tests, Markdown) and `e2e` (Playwright against Electron under Xvfb). A tag matching `v*` starts a matrix build on macOS, Windows, and Ubuntu. Electron Builder creates native artifacts and GitHub Actions uploads them to the GitHub release associated with the tag.
+`.github/workflows/ci.yml` runs `make check` on Ubuntu, macOS and Windows for every pull request and push to `main`: gofmt, vet, generated code, FSD/DDD imports, the TDLib capability matrix, telegram-macos parity, the Go tests against the staged libtdjson (headless UI tests included), and the documentation. The Ubuntu job also uploads the UI snapshots (`make snapshots`) as an artifact for review.
 
-Signing credentials are optional in development and required for trusted production distribution. Configure Apple signing/notarization and Windows code-signing secrets in the repository before publishing to end users.
+A tag matching `v*` runs `.github/workflows/release.yml`: `make check` and `make package` on macOS, Windows and Ubuntu with the `TELO_TELEGRAM_API_ID`, `TELO_TELEGRAM_API_HASH` and `TELO_GOOGLE_OAUTH_CLIENT_ID` secrets, then attaches the artifacts to the tag's GitHub release.
+
+Signing is optional for development and required for trusted distribution. Set the macOS signing identity and notarization in `mygo.json` and configure Windows code signing before publishing to end users.
 
 ## Rollback
 
-Mark the affected GitHub release as a pre-release, restore the previous release as latest, and publish a patch tag after the fix passes `make check`.
+Mark the affected release as a pre-release, restore the previous release as latest, and publish a patch tag after the fix passes `make check`.

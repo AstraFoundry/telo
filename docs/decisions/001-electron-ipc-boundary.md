@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted.
+Superseded by [`006-mygo-native-desktop.md`](006-mygo-native-desktop.md): Telo is one Go process with no renderer or IPC.
 
 ## Decision
 

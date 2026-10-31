@@ -1,63 +1,53 @@
 # Layers
 
-FSD uses six layers. Each layer has a single responsibility and a strict downward dependency direction.
+> **Telo mapping.** Layers are directories under `frontend/` and slices are Go packages inside them; the generic examples below map as `components` → view functions, `stores` → `State` structs, `HTTP clients` → services on `shared/runtime`. The packages of each layer are listed in [`../project/architecture.md`](../project/architecture.md).
+
+FSD uses six layers. Each has a single responsibility and a strict downward dependency direction.
 
 ## `app`
 
-- Application initialization.
-- Global providers (theme, router, state store, i18n).
-- Global styles and CSS variables.
-- Routing entry point.
+- The root view: which page shows (onboarding, lock, workspace, settings), the theme, global shortcuts, toasts, notifications, the dock badge and the automation lifecycle.
 
-**Does not contain:** business logic, reusable UI, or page-specific code.
+**Does not contain:** business logic, reusable UI or page-specific code.
 
 ## `pages`
 
-- Surface components the `app` layer switches between (onboarding, workspace, settings); Telo has no URL router.
-- Reading surface parameters and passing them down.
-- Page-level layout skeleton (header / content / footer).
-- Composing widgets and features into a complete screen.
+- Surfaces the `app` layer switches between: `onboarding`, `lock`, `workspace`, `settings`. Telo has no router.
+- The page layout and its composition of widgets and features.
 
-**Does not contain:** reusable UI, business logic, or direct API calls. Keep pages thin.
+**Does not contain:** reusable UI, business logic or direct calls to Telegram. Keep pages thin.
 
 ## `widgets`
 
-- Self-contained UI blocks that belong to a page or a feature.
-- Examples: header, sidebar, dashboard card, order summary panel.
-- Can compose features and entities, but should remain focused on one visual block.
+- Self-contained blocks: the chat list, the conversation, the profile, the settings panes, the media viewer, the onboarding illustration and stepper.
+- May compose features and entities, but stay one visual block.
 
-**Does not contain:** application-wide state or routing logic.
+**Does not contain:** application-wide state or page switching.
 
 ## `features`
 
-- Complete user scenarios.
-- Examples: authentication, search, add to cart, submit feedback.
-- Contains UI, state, API calls, and utilities that belong to that scenario.
+- Complete user scenarios: signing in, composing, message actions, chat actions, search, the account menu, the agent panel.
+- Holds the scenario's view, state and calls through the runtime.
 
-**Does not contain:** generic primitives (those go in `shared`) or domain rules that belong to `entities`.
+**Does not contain:** generic primitives (`shared`) or domain rules (`entities` or the backend domain).
 
 ## `entities`
 
-- Domain data and rules.
-- Examples: `User`, `Order`, `Product`, `Comment`.
-- Contains types, factories, validation, and pure functions that operate on the entity.
-- Entity model stores may call the typed preload contract (`window.telo`, defined in `contracts/src`) directly; that IPC surface is the renderer's transport boundary, not an HTTP client.
+- UI-side models of domain data: `entities/chat` (the chat store: list, transcripts, composers, downloads) and `entities/onboarding` (the sign-in flow).
+- Entity stores call the services on `shared/runtime`; that is the UI's boundary to the backend, not an HTTP client.
 
-**Does not contain:** UI, HTTP clients, or framework-specific code beyond the preload contract.
+**Does not contain:** views.
 
 ## `shared`
 
-- Reusable primitives and utilities used by any layer.
-- Examples: `Button`, `Input`, `formatDate`, `httpClient`, theme tokens, i18n helpers.
+- Primitives and utilities any layer uses: `kit`, `theme`, `copy`, `icons`, `config`, `media`, `runtime`, `lib/timefmt`.
 
-**Does not contain:** business logic or references to specific entities/features.
+**Does not contain:** business logic or references to specific entities or features.
 
-## Layer dependency direction
+## Dependency direction
 
-Imports can only go downward:
-
-```
+```text
 app -> pages -> widgets -> features -> entities -> shared
 ```
 
-`shared` cannot import from any other layer. `entities` cannot import from `features` or above.
+`make arch` enforces it ([`import-rules.md`](import-rules.md)).
